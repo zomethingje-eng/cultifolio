@@ -88,6 +88,15 @@ export interface Year {
   grow: 'winter' | 'summer' | 'even' | 'cool';
   /** Under 120 mm a year: no rainy season to read. `growMonths` then holds the temperature rule's reading, the cooler half. */
   fog: boolean;
+  /**
+   * The wet season the rule would call winter has a month whose mean nightly low is below 0 °C: no growing
+   * season is read from it (round seventy-two; triage F1: 72 pages, Rubus parviflorus's "winter growing season" at a
+   * wet-season mean of 4.1 °C, Colchicum kurdicum's at −4.9 °C). `grow` still says which half of the year the rain
+   * falls in; every surface that names a growing season, and Today's resting months, read this first.
+   */
+  frozen: boolean;
+  /** The wet months, habitat time, whose mean nightly low is below 0 °C (empty unless `frozen`). */
+  frozenMonths: number[];
   /** 70% of the rain takes eight months or more: no short rainy season is read (a long rainy season may still be one). */
   spread: boolean;
   /** The rain has a sharp season but the temperature curve is flat (under 4 °C between the warmest and coldest month): the growing-season rule infers nothing from it. */
@@ -212,10 +221,14 @@ export function growingYear(months: Month[], lat: number | null | undefined): Ye
   // Winter or summer by the wet season's mean against the year's: within half a degree neither word is earned, and the
   // season is called even rather than given a half of the year it does not have.
   const grow: Year['grow'] = fog ? 'cool' : spread || flat ? 'even' : wetT < meanT - 0.5 ? 'winter' : wetT > meanT + 0.5 ? 'summer' : 'even';
+  // Winter only: a summer wet season whose shoulder month dips below freezing (Echinocereus coccineus's December at
+  // −0.5 °C beside a May to October monsoon) is still the warm half's rain, and 40 pages would lose a true reading.
+  const frozenMonths = grow === 'winter' ? wet.filter((m) => months[m - 1].tmin < 0) : [];
+  const frozen = frozenMonths.length > 0;
   const south = (lat ?? 0) < 0;
   const shiftable = !none && !flat && rangeT >= 4 && Math.abs(lat ?? 40) >= 10;
   const shifted = shiftable ? wet.map((m) => ((m + 5) % 12) + 1).sort((a, b) => a - b) : wet;
-  return { grow, fog, none, shiftable, spread, flat, growMonths: wet, shifted, south, wetMm, annualMm: annual, wetT, meanT, rangeT, driest, wettest };
+  return { grow, fog, frozen, frozenMonths, none, shiftable, spread, flat, growMonths: wet, shifted, south, wetMm, annualMm: annual, wetT, meanT, rangeT, driest, wettest };
 }
 
 // The reader's units, set at the top of cultivationSheet() from its input and read by every formatter below: one
@@ -363,6 +376,12 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
       s = `The rain rule reads a rainy season with no name: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within ${U === 'us' ? 'a degree Fahrenheit (half a degree Celsius)' : 'half a degree'} of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
       short = `Rain rule: a rainy season, ${forYou}, at the year's mean temperature, so called neither winter nor summer.`;
       lead = `A rainy season, ${yours}, neither the cool nor the warm half of the year.`;
+    } else if (year.frozen) {
+      // A wet season with nights below freezing is no growing season, whichever half of the year it falls in (round seventy-two; triage F1).
+      const fm = monthNames(year.frozenMonths);
+      s = `The rain rule reads a rainy season and no growing season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, the cooler part of the year, but the mean nightly low is below freezing in ${fm}, so the rule reads no growing season from it. ${hemi}`;
+      short = `Rain rule: a rainy season, ${forYou}, with mean nightly lows below freezing in ${fm}, so no growing season is read.`;
+      lead = `Wet winters: the rain comes ${yours}, with nights below freezing; no growing season read.`;
     } else {
       s = `The rain rule reads a ${year.grow} growing season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
       // The habitat's months once, and only when they differ from the reader's (round sixty; words 7).

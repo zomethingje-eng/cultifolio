@@ -3,7 +3,7 @@ import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
 import type { Reference } from '../reference';
 import { isOwnName, epithetKey, type OwnNames } from '../own-names';
-import { slip, slipStanding, transferTaken, type NameWord, type GbifNameMatch } from '../photo-kind';
+import { slip, slipStanding, transferTaken, placeholderPhoto, creditWithoutMail, type NameWord, type GbifNameMatch, type HeldNames } from '../photo-kind';
 // The slip rule is one rule, in `photo-kind.ts`, for iNaturalist and Commons alike (REVIEW-TRIAGE-70, S-B7, S-C9, S-F13).
 export { slipTaken, transferTaken, type NameWord } from '../photo-kind';
 
@@ -139,7 +139,23 @@ interface Observation {
   place_guess?: string;
   captive?: boolean;
   quality_grade?: string;
+  /** The observation's own taxon: the species, or a taxon below it that `taxon_id` takes in as a descendant. */
+  taxon?: { id?: number; name?: string; rank?: string };
   photos: ObsPhoto[];
+}
+
+/**
+ * Whether an observation's taxon below species is another species of the reference (round seventy-two): iNaturalist's
+ * `taxon_id` takes in every descendant, and it files taxa under a species that Kew accepts apart ("Epithelantha greggii
+ * polycephala" is Kew's Epithelantha polycephala; "Crassula exilis cooperi" Kew's Crassula cooperi), so their
+ * photographs reached the parent's page and led two of them. `held` is the reference's names, which hold such a name
+ * whole as another species' older name (`infraHolders`); `key` is the species being built.
+ */
+export function observedAsAnother(taxon: Observation['taxon'], key: number | undefined, held?: HeldNames | null): boolean {
+  const w = (taxon?.name ?? '').trim().split(/\s+/);
+  if (w.length < 3 || !held?.infraHolders) return false;
+  const others = held.infraHolders(w[0], w[1], w[w.length - 1]).filter((k) => k !== key);
+  return others.length > 0 && !held.infraHolders(w[0], w[1], w[w.length - 1]).includes(key ?? -1);
 }
 
 /**
@@ -148,7 +164,14 @@ interface Observation {
  * again on arrival. iNaturalist serves licensed photos from its AWS Open Data
  * bucket, which is the URL the API returns for them.
  */
-export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, perPage = 30): Promise<FetchResult<Photo[]>> {
+/**
+ * What `photos` reads an observation's taxon against: the species' key and the reference's names (`observedAsAnother`),
+ * and Kew's placement of names below species (`kew`, from `KewInfra.placedElsewhere` bound to this page; round
+ * seventy-two, C1), which names the species Kew places the taxon under, or null.
+ */
+export type PhotoOwner = { key?: number; held?: HeldNames | null; kew?: ((taxonName: string) => string | null) | null };
+
+export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, perPage = 30, own?: PhotoOwner): Promise<FetchResult<Photo[]>> {
   const url =
     `${INAT}/observations?taxon_id=${taxonId}&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research` +
     `&captive=${wild ? 'false' : 'true'}&order_by=votes&per_page=${perPage}`;
@@ -156,12 +179,18 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
   if (r.status !== 'ok') return r;
   const out: Photo[] = [];
   for (const o of r.data.results) {
+    if (observedAsAnother(o.taxon, own?.key, own?.held) || (o.taxon?.name && own?.kew?.(o.taxon.name))) continue;
     for (const p of o.photos) {
       const tag = licenceTag(p.license_code);
       if (!isOpen(tag) || (tag !== 'cc0' && tag !== 'by' && tag !== 'by-sa')) continue;
+      // iNaturalist's stand-in for a photograph it has not yet processed is no photograph (round seventy-two, F8).
+      if (placeholderPhoto(p.url)) continue;
       const base = p.url.replace(/\/square\.(\w+)$/, '');
       const ext = /\.(\w+)$/.exec(p.url)?.[1] ?? 'jpg';
       if (!p.attribution && tag !== 'cc0') continue; // no attribution line means no author to credit, which CC BY requires (round sixteen, 3)
+      // An e-mail address is never published as the author; with nothing else left, a CC BY or CC BY-SA photograph is not taken (C10).
+      const credit = p.attribution ? creditWithoutMail({ src: 'inat', licence: tag, attribution: p.attribution }) : null;
+      if (p.attribution && !credit) continue;
       out.push({
         src: 'inat',
         id: String(p.id),
@@ -170,7 +199,7 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
         width: p.original_dimensions?.width ?? undefined,
         height: p.original_dimensions?.height ?? undefined,
         licence: tag,
-        attribution: p.attribution ?? 'author not stated, CC0',
+        attribution: credit ?? 'author not stated, CC0',
         page: `https://www.inaturalist.org/observations/${o.id}`,
         captive: !wild,
         observedOn: o.observed_on ?? undefined,

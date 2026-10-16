@@ -17,7 +17,9 @@ describe('WCVP index', () => {
     for (const l of ['1|2|AFRICA|27|Southern Africa|NAM|Namibia|0|0|0', '1|2|AFRICA|27|Southern Africa|CPP|Cape Provinces|0|0|0', '1|8|NORTHERN AMERICA|76|Southwestern U.S.A.|CAL|California|1|0|0', '1|2|AFRICA|27|Southern Africa|BOT|Botswana|0|0|1']) w.addDist(parseWcvpDist(DIST_H, l));
     const got = w.distributions('Cotyledon pearsonii'); // the synonym finds the accepted record's range
     if (!got || got === 'ambiguous') throw new Error('expected rows');
-    expect(got.rows.map((r) => r.locationId)).toEqual(['TDWG:NAM', 'TDWG:CPP', 'TDWG:CAL']); // the doubtful one is dropped
+    // The doubtful one is served as such since round seventy-two (B5): listed apart by the build, never a range box.
+    expect(got.rows.map((r) => r.locationId)).toEqual(['TDWG:NAM', 'TDWG:CPP', 'TDWG:CAL', 'TDWG:BOT']);
+    expect(got.rows[3].establishmentMeans).toBe('DOUBTFUL');
     expect(got.rows[2].establishmentMeans).toBe('INTRODUCED');
     expect(got.rows[0].source).toMatch(/WCVP/);
     expect(got.kew).toEqual({ lifeform: 'succulent shrub', climate: 'desert or dry shrubland' }); // Kew's own words ride along

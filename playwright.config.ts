@@ -41,7 +41,10 @@ const projects: PlaywrightTestProject[] = [
 // Firefox answer thousands a second (round sixty-five; the all-engines rerun, tests/e2e/helpers/pace.ts): a plant added is
 // about 90 requests, six plants 370, an import of five 310. So an assertion that follows a write waits 10 s there, not
 // 5, and a test has 60 s; the writes of hundreds of plants and the example collection say their own (helpers/pace.ts).
-const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 } };
+// And no more than two WebKit workers at once, whatever the run's count (round seventy-two; the harness review): the
+// suite's Chromium projects may take four, but two WebKit pages writing IndexedDB at that pace already fill the PC's
+// share of one wrangler dev. PW_WEBKIT_WORKERS names another count.
+const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 }, workers: Number(process.env.PW_WEBKIT_WORKERS ?? 2) };
 // A WebKit test that fails keeps its trace (round seventy; triage-69 P1, IND-8): WebKit runs only on the owner's PC, and
 // a failure there that passes on its retry could be read only from its own run. Each action's DOM before and after and
 // the point it pressed are kept; the screencast is not, as it slows the engine whose timing is in question. Only a

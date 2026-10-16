@@ -91,7 +91,7 @@ describe('N4: the audit fails on a drop to no photographs or a turn to refused',
   it('the builder offers --keys and fails its run on a loss', () => {
     const src = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(src).toMatch(/args\.indexOf\('--keys'\)/);
-    expect(src).toMatch(/dropsBetween\(prevFile, d\)/);
+    expect(src).toMatch(/dropsBetween\(prevFile, d(?:, held)?\)/);
     expect(src).toMatch(/process\.exitCode = 1/);
   });
 });

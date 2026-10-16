@@ -23,7 +23,7 @@ export function seasonStrip(year: Year | null, months: Array<{ precipMm: number 
   const toReader = (m: number) => (flip ? ((m + 5) % 12) + 1 : m);
   const shaded = new Set(!year.none && !year.spread ? forReader(year, readerLat) : []);
   const dry = new Set(months.map((x, i) => (x.precipMm < 5 ? toReader(i + 1) : 0)).filter(Boolean));
-  const shadeIs = year.none || year.spread ? null : year.fog ? 'the cooler six months' : year.flat ? 'the rainy season (no growing season read: even temperatures)' : year.grow === 'even' ? 'the rainy season' : `the rainy season, read as a ${year.grow} growing season`;
+  const shadeIs = year.none || year.spread ? null : year.fog ? 'the cooler six months' : year.flat ? 'the rainy season (no growing season read: even temperatures)' : year.grow === 'even' ? 'the rainy season' : year.frozen ? 'the rainy season (no growing season read: nights below freezing)' : `the rainy season, read as a ${year.grow} growing season`;
   return {
     cells: Array.from({ length: 12 }, (_, i) => ({ m: i + 1, on: shaded.has(i + 1), dry: dry.has(i + 1) })),
     shadeIs: shaded.size ? shadeIs : null,

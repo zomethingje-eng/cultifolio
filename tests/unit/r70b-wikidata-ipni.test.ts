@@ -27,7 +27,7 @@ const kew = (canonical: string, rows: Array<[string, string, string, string]>) =
 function wd(o: { key: number; label: string; hits: string[]; items: Record<string, unknown>; records?: Record<string, unknown>; kew?: unknown; more?: Record<string, unknown> }, asked: string[] = []): JsonFetcher {
   const f = fixtureFetcher({
     ...(o.more ?? {}),
-    [`re:srsearch=haswbstatement%3AP846%3D${o.key}&`]: { query: { search: [] } },
+    [`re:srsearch=haswbstatement%3AP846%3D${o.key}(&|$)`]: { query: { search: [] } },
     [`${W}?action=wbsearchentities`]: { search: o.hits.map((id) => ({ id, label: o.label })) },
     ...Object.fromEntries(Object.entries(o.items).map(([id, e]) => [`re:wbgetentities&format=json&ids=${id}&`, { entities: { [id]: e } }])),
     ...Object.fromEntries(Object.entries(o.records ?? {}).map(([k, r]) => [`${G}/${k}`, r])),
@@ -151,7 +151,7 @@ describe('found by IPNI', () => {
   // No item carries the label (Wikidata labels it otherwise); one carries Kew's IPNI identifier for the name and author.
   // A constructed case: of the species read for this round, none had such an item (Harpephyllum caffrum has no Kew row at
   // all: Kew holds it as Harpephyllum afrum Bernh.).
-  const world = (hits: string[], ipni = '1-1') => wd({ key: 1, label: 'Aus bus', hits: [], items: { Q7: item('Aus bus L.', [], [ipni]), Q8: item('Aus bus L.', [], ['1-1']) }, kew: kew('Aus bus', [['Aus bus L.', 'L.', 'ACCEPTED', '1-1']]), more: { 're:srsearch=haswbstatement%3AP961%3D1-1&': { query: { search: hits.map((title) => ({ title })) } } } });
+  const world = (hits: string[], ipni = '1-1') => wd({ key: 1, label: 'Aus bus', hits: [], items: { Q7: item('Aus bus L.', [], [ipni]), Q8: item('Aus bus L.', [], ['1-1']) }, kew: kew('Aus bus', [['Aus bus L.', 'L.', 'ACCEPTED', '1-1']]), more: { 're:srsearch=haswbstatement%3AP961%3D1-1(&|$)': { query: { search: hits.map((title) => ({ title })) } } } });
   it('one item carrying Kew\'s identifier for the name and author is taken', async () => {
     expect(await crossIds(world(['Q7']), 'Aus bus', 1, [], { authorship: 'L.' })).toMatchObject({ status: 'ok', data: { wikidata: 'Q7' }, detail: "found by its IPNI identifier 1-1, Kew's for Aus bus L." }); // base: none
   });
@@ -198,7 +198,7 @@ describe('Kew\'s identifiers for a name and author', () => {
     const asked: string[] = [];
     const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: kew('Spiraea japonica', [['Spiraea japonica Raf.', 'Raf.', 'SYNONYM', '742321-1'], ['Spiraea japonica Cambess.', 'Cambess.', 'DOUBTFUL', '2993235-4'], ['Spiraea japonica L.f.', 'L.f.', 'ACCEPTED', '742319-1'], ['Spiraea japonica Siebold ex Blume', 'Siebold ex Blume', 'MISAPPLIED', '742320-1']]) }; }) as unknown as JsonFetcher;
     const { kewIpni } = gbif;
-    expect(await kewIpni(f, 'Spiraea japonica', 'L.fil.')).toEqual({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.', others: [{ id: '742321-1', label: 'Spiraea japonica Raf.' }, { id: '2993235-4', label: 'Spiraea japonica Cambess.' }], acceptedId: '742319-1' } }); // r71: acceptedId (S-B5)
+    expect(await kewIpni(f, 'Spiraea japonica', 'L.fil.')).toEqual({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.', labels: { '742319-1': 'Spiraea japonica L.f.' }, others: [{ id: '742321-1', label: 'Spiraea japonica Raf.' }, { id: '2993235-4', label: 'Spiraea japonica Cambess.' }], acceptedId: '742319-1' } }); // r71: acceptedId (S-B5); r72: labels (A)
     expect(asked).toEqual([`https://api.gbif.org/v1/species?datasetKey=${WCVP_DATASET}&name=Spiraea%20japonica&limit=50`]);
     // A misapplied name is never the species': with no row by the backbone's author, Kew's one accepted entry stands in.
     expect(await kewIpni(f, 'Spiraea japonica', 'Blume')).toMatchObject({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.' } });

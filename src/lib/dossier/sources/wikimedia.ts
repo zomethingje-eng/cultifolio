@@ -129,7 +129,7 @@ function oneByBasionym(found: ReadonlyArray<{ id: string; e: Entity }>): string 
 
 async function entityOf(f: JsonFetcher, id: string): Promise<FetchResult<Entity | null>> {
   const e = await mwGet<{ entities?: Record<string, Entity>; error?: unknown }>(f,
-    `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`
+    `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki`
   );
   if (e.status !== 'ok') return e;
   const err = mwError(e.data);
@@ -270,7 +270,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     return r;
   };
   if (gbifKey) {
-    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}&maxlag=5`);
+    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}`);
     if (q.status !== 'ok') return q;
     const bad = failed(q.data);
     if (bad) return bad;
@@ -285,7 +285,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   const notes: string[] = [];
   let two: string | undefined;
   {
-    const s = await mw<{ search?: Array<{ id: string; label: string; match?: { type?: string; text?: string } }> }>(`https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`);
+    const s = await mw<{ search?: Array<{ id: string; label: string; match?: { type?: string; text?: string } }> }>(`https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}`);
     if (s.status !== 'ok') return s;
     const bad = failed(s.data);
     if (bad) return bad;
@@ -384,7 +384,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     const k = await kewOf();
     if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
     if (k.status === 'ok' && k.data.ids.length) {
-      const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${k.data.ids.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${k.data.ids.map((i) => `P961=${i}`).join('|')}`)}&maxlag=5`);
+      const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${k.data.ids.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${k.data.ids.map((i) => `P961=${i}`).join('|')}`)}`);
       if (q.status !== 'ok') return q;
       const bad = failed(q.data);
       if (bad) return bad;
@@ -403,7 +403,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   // sixty-eight, third part). Two items that are not one the other's basionym is no answer.
   if (older.length) {
     let kewPick: string | undefined;
-    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${older.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${olderKeys.map((k) => `P846=${k}`).join('|')}`)}&maxlag=5`);
+    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${older.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${olderKeys.map((k) => `P846=${k}`).join('|')}`)}`);
     if (q.status !== 'ok') return q;
     const bad = failed(q.data);
     if (bad) return bad;
@@ -412,7 +412,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       // Wikidata often keeps the basionym as an item of its own (Q14943671, Echinocactus glaucescens), which the item for
       // the current placement names as its basionym (P566). An item another answer names so is that answer's older name,
       // not a second species: it is set aside, and what is left must still be one item.
-      const b = await mw<{ entities?: Record<string, Entity> }>(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims&maxlag=5`);
+      const b = await mw<{ entities?: Record<string, Entity> }>(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims`);
       if (b.status !== 'ok') return b;
       const berr = failed(b.data);
       if (berr) return berr;

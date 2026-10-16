@@ -18,9 +18,17 @@
 // the reason to name it (the server review of round sixty-three, R3 4: DEPLOY said so and the filter dropped them). An
 // engine named but not installed stops the script before the build, with the one line that installs it, rather than
 // after it with Playwright's longer message.
+//
+// Tiers (round seventy-two; the owner's process change 4): `--tier=` names how much a round needs, so a round that changed
+// only the corpus builder does not wait on Safari's engine, and the run before the public launch runs everything.
+//   --tier=corpus  the unit tests, then the browser suite in Chromium (desktop and phone), strict
+//   --tier=app     the unit tests, then every engine (Chromium, its phone, WebKit, WebKit's phone, Firefox), strict
+//   --tier=launch  svelte-check, the unit tests, then every engine, strict, at the two workers every earlier deploy passed at
+// Each step stops the script at its first failure and says which step it was. No `--tier` runs the browser suite alone, as before.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 let cli;
@@ -43,11 +51,25 @@ if (env.PW_REUSE) {
 const extra = [];
 const browsersArg = [];
 let inBrowsers = false;
+let tier = null;
 for (const a of process.argv.slice(2)) {
-  if (a.startsWith('--browsers=')) { browsersArg.push(a.slice('--browsers='.length)); inBrowsers = true; }
+  if (a.startsWith('--tier=')) { tier = a.slice('--tier='.length).toLowerCase(); inBrowsers = false; }
+  else if (a.startsWith('--browsers=')) { browsersArg.push(a.slice('--browsers='.length)); inBrowsers = true; }
   else if (inBrowsers && /^(webkit|firefox|phone-webkit|all)$/i.test(a)) browsersArg.push(a);
   else { extra.push(a); inBrowsers = false; }
 }
+const TIERS = { corpus: 'the unit tests, then Chromium (desktop and phone)', app: 'the unit tests, then every engine', launch: 'svelte-check, the unit tests, then every engine at two workers' };
+if (tier && !(tier in TIERS)) {
+  console.error(`predeploy: there is no tier "${tier}". Type one of: --tier=corpus (${TIERS.corpus}), --tier=app (${TIERS.app}), --tier=launch (${TIERS.launch})`);
+  process.exit(1);
+}
+// A tier sets the engines itself; an engine named beside it as well is a contradiction, said rather than guessed at.
+if (tier && (browsersArg.length || extra.some((a) => a.startsWith('--project')))) {
+  console.error(`predeploy: --tier=${tier} chooses the engines itself; leave out --browsers= and --project, or leave out --tier`);
+  process.exit(1);
+}
+if (tier === 'app' || tier === 'launch') browsersArg.push('all');
+if (tier === 'corpus') { extra.push('--project=chromium', '--project=phone'); delete env.PW_BROWSERS; }
 if (browsersArg.length) env.PW_BROWSERS = [env.PW_BROWSERS, ...browsersArg].filter(Boolean).join(',');
 const INSTALL = 'npx playwright install webkit firefox';
 const engines = namedEngines(env.PW_BROWSERS, extra);
@@ -57,14 +79,37 @@ if (missing.length) {
   console.error(`  ${INSTALL}`);
   process.exit(1);
 }
-const workers = extra.some((a) => a.startsWith('--workers') || a === '-j') ? [] : [`--workers=${process.env.PW_WORKERS || 2}`];
+// Four workers for Chromium unless told otherwise (round seventy-two; the harness review). What bounds the count is not the
+// PC's sixteen threads but three things: the one wrangler dev every test shares (a single workerd process renders every
+// page; eight workers timed page loads out in round sixty-two), smoke.spec.ts, whose 119 tests run in order in one worker
+// and are a quarter of the suite (past four workers the run waits on it, not on the rest), and Safari's engine, whose
+// IndexedDB answers about one request in 16 ms: playwright.config.ts holds WebKit to two workers of its own
+// (PW_WEBKIT_WORKERS). The launch run keeps the two every earlier deploy passed at.
+const workers = extra.some((a) => a.startsWith('--workers') || a === '-j') ? [] : [`--workers=${process.env.PW_WORKERS || (tier === 'launch' ? 2 : 4)}`];
 const filtered = projectsNamed(extra);
 // Its own option at the end: Playwright gathers every `--project`, and a bare word after one would be read as a project.
 const phoneToo = filtered.includes('webkit') && !filtered.includes('phone-webkit') ? ['--project=phone-webkit'] : [];
 if (phoneToo.length) filtered.push('phone-webkit');
 const args = [cli, 'test', '--fail-on-flaky-tests', ...workers, ...extra, ...phoneToo];
+if (tier) {
+  console.log(`predeploy: --tier=${tier}: ${TIERS[tier]}`);
+  const steps = [];
+  if (tier === 'launch') steps.push(['svelte-check', [binOf('@sveltejs/kit', 'svelte-kit.js'), 'sync'], [binOf('svelte-check', 'bin/svelte-check'), '--tsconfig', './tsconfig.json']]);
+  steps.push(['the unit tests', [binOf('vitest', 'vitest.mjs'), 'run']]);
+  for (const [what, ...cmds] of steps) {
+    console.log(`predeploy: ${what}`);
+    for (const c of cmds) {
+      const r = spawnSync(process.execPath, c, { stdio: 'inherit', env: { ...process.env } });
+      if (r.error || (r.status ?? 1) !== 0) {
+        console.log(`predeploy: ${what} failed (exit ${r.status ?? 'none'}); the browser suite was not run. Do not deploy; send back the lines above.`);
+        process.exit(r.status || 1);
+      }
+    }
+  }
+}
 console.log('predeploy: the browser suite, strict (a test that passes only on its retry fails the run)');
-if (filtered.length) console.log(`predeploy: only the projects named: ${filtered.join(', ')}${filtered.includes('chromium') && filtered.includes('phone') ? '' : '. This is not the whole run before a deploy; for that, name engines with --browsers= instead'}`);
+if (tier) console.log(`predeploy: ${tier === 'corpus' ? 'Chromium and the Chromium phone' : `Chromium, the Chromium phone, and ${engines.join(', ')}`}, ${workers[0] ?? 'the workers you named'}`);
+else if (filtered.length) console.log(`predeploy: only the projects named: ${filtered.join(', ')}${filtered.includes('chromium') && filtered.includes('phone') ? '' : '. This is not the whole run before a deploy; for that, name engines with --browsers= instead'}`);
 else console.log(engines.length ? `predeploy: Chromium, the Chromium phone, and ${engines.join(', ')}` : `predeploy: Chromium and the Chromium phone; for Safari's engine and Firefox as well, install them once (${INSTALL}) and run node scripts/predeploy.mjs --browsers=webkit,firefox`);
 const run = spawnSync(process.execPath, args, { stdio: 'inherit', env });
 if (run.error) {
@@ -106,6 +151,11 @@ function projectsNamed(argv) {
   }
   const known = /^(chromium|phone|webkit|phone-webkit|firefox)$|\*/;
   return [...new Set(words.map((x) => x.trim().toLowerCase()).filter((w) => known.test(w)))];
+}
+
+/** A package's command-line script, run with this Node (so `npx` and the shell are not needed, on Windows as elsewhere). */
+function binOf(pkg, file) {
+  return join(dirname(require.resolve(`${pkg}/package.json`)), file);
 }
 
 /** Whether Playwright's own build of an engine is on this machine (where `npx playwright install` puts it). */

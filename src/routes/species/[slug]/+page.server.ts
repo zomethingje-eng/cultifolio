@@ -9,6 +9,7 @@ import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
+import { addressGenus } from '$lib/ui/ref/notes';
 import type { PageServerLoad } from './$types';
 
 /** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
@@ -83,7 +84,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // genus is taken whole or only by the cultivated count (round forty-one, R15). An aloe grower's most common first
     // visit was a dead end that said nothing.
     const asked = nameFromSlug(params.slug);
-    const genus = asked.split(' ')[0] ?? '';
+    // A genus only when the address is shaped as a name: "not-a-plant-zzz" is no genus "Not" (round seventy-two; triage F12).
+    const genus = addressGenus(asked) ?? '';
     const index = c.idx;
     // And the reference's own nearest names, by the catalogue's search (the slips it forgives, and since round sixty the
     // way growers write names: a variety the reference files under its species is offered that species, as the search's
@@ -177,7 +179,11 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const e = byName.get(plain(n));
     return e && e.key !== key ? [{ name: n, slug: e.slug, authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
   });
+  // The other page whose Kew entry gives this page its range, when the dossier names one (round seventy-two; triage B3, F13).
+  const viaKey = Number((d.distribution as { via?: { page?: string } }).via?.page);
+  const viaEntry = Number.isFinite(viaKey) && viaKey !== key ? byKey.get(viaKey) : undefined;
   return {
+    viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
     /** English common names, the index's choice first (round sixty-one; decision 7). */
     commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */

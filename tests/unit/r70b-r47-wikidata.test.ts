@@ -23,7 +23,7 @@ const kew = (canonical: string, rows: Array<[string, string, string, string]>) =
 function wd(o: { key: number; label: string; hits: string[]; items: Record<string, unknown>; records?: Record<string, unknown>; kew?: unknown; more?: Record<string, unknown> }): JsonFetcher {
   return fixtureFetcher({
     ...(o.more ?? {}),
-    [`re:srsearch=haswbstatement%3AP846%3D${o.key}&`]: { query: { search: [] } },
+    [`re:srsearch=haswbstatement%3AP846%3D${o.key}(&|$)`]: { query: { search: [] } },
     [`${W}?action=wbsearchentities`]: { search: o.hits.map((id) => ({ id, label: o.label })) },
     ...Object.fromEntries(Object.entries(o.items).map(([id, e]) => [`re:wbgetentities&format=json&ids=${id}&`, { entities: { [id]: e } }])),
     ...Object.fromEntries(Object.entries(o.records ?? {}).map(([k, r]) => [`${G}/${k}`, r])),

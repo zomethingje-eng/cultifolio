@@ -403,10 +403,13 @@ describe('E8: the retry of a run that did not reach the server', () => {
       if (photoPut(String(input), init?.method ?? 'GET')) throw new DOMException('signal timed out', 'TimeoutError');
       return real(input, init);
     }) as typeof fetch;
-    for (let i = 0; i < 3; i++) await B.sync.run().catch(() => {});
+    // Each run when the last one's wait is over (round seventy-two: a run before then sends no photograph).
+    vi.useFakeTimers({ now: Date.now(), toFake: ['Date'] });
+    for (let i = 0; i < 3; i++) { await B.sync.run().catch(() => {}); if (i < 2) vi.setSystemTime(B.sync.retryAt! + 1); }
     globalThis.fetch = real;
     expect(asked.filter((ms) => ms >= 60_000)).toEqual([120_000, 240_000, 480_000]); // base: [60,000, 60,000, 60,000]
     expect(checkAgainWords(B.sync.retryAt)).toBe('again in about 8 minutes');
+    vi.setSystemTime(B.sync.retryAt! + 1);
     await B.sync.run().catch(() => {}); // the photograph goes
     expect(B.sync.unreached).toBeNull();
     expect(B.sync.retryAt).toBeNull();

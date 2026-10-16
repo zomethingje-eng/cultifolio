@@ -108,6 +108,11 @@ test('/propagation/new?parent=<a shared number> picks neither plant; by id, it p
 });
 
 test('Undo of a removal, pressed after opening another plant, brings back the removed one (records review guard)', async ({ page }) => {
+  // A toast goes at a navigation more than 600 ms after it was raised (toast.svelte.ts, onNavigate), so this guard passed
+  // only when the redirect to /plants and the opening of 2026-0002 both landed within 600 ms of the removal: in WebKit
+  // under the PC's four-worker run they took 1.3 s and the Undo was gone (round seventy-two, the owner's --tier=app run).
+  // What the guard tests is which plant the Undo brings back, so Date.now() is held still and the toast stays; timers run.
+  await page.clock.setFixedTime(Date.now());
   await page.goto('/plants'); await ready(page);
   await inject(page, [...plant('r-a', '2026-0001', 'Copiapoa cinerea'), ...plant('r-b', '2026-0002', 'Copiapoa humilis')], Date.now() - 3_600_000);
   await page.goto('/plants/2026-0001'); await ready(page);

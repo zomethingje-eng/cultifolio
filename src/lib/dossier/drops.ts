@@ -13,8 +13,12 @@
  * Round seventy's second pass (triage-69 B6, R47-5): a Wikidata item that changed, and an IPNI identifier that newly
  * disagrees with the POWO one.
  */
+import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
+
 type Row = { status?: string; detail?: string } | undefined;
 export interface Dossierish {
+  key?: number;
+  name?: { scientific: string; synonyms?: string[]; kew?: { synonyms?: string[]; acceptedElsewhere?: string[] } };
   photos?: unknown[];
   climate?: { status?: string };
   upstream?: Record<string, Row>;
@@ -61,9 +65,19 @@ function lostParts(prev: Dossierish, next: Dossierish): string[] {
   return out;
 }
 
-/** The losses from `prev` to `next`, as lines to print; empty when nothing was lost. */
-export function dropsBetween(prev: Dossierish, next: Dossierish): string[] {
-  const out: string[] = [...photoDrops(prev.photos?.length ?? 0, next.photos?.length ?? 0), ...lostParts(prev, next)];
+/**
+ * The photographs a page shows of a dossier, as the Worker reads it (round seventy-two): the stored count said Adenia
+ * tisserantii "dropped to none (2 before)" when its two stored photographs were Coimbra herbarium sheets the page never
+ * showed, and a page whose every shown photograph went while hidden ones stayed would not be flagged at all.
+ */
+const shownCount = (d: Dossierish, held?: HeldNames | null): number => {
+  const ps = (d.photos ?? []) as Parameters<typeof shownPhotos>[0];
+  return d.name ? shownPhotos(ps.filter((p) => p && typeof p.url === 'string'), kindNamesOf(d, held)).length : ps.length;
+};
+
+/** The losses from `prev` to `next`, as lines to print; empty when nothing was lost. `held` is the reference's names, as the page reads them. */
+export function dropsBetween(prev: Dossierish, next: Dossierish, held?: HeldNames | null): string[] {
+  const out: string[] = [...photoDrops(shownCount(prev, held), shownCount(next, held)), ...lostParts(prev, next)];
   if (refusedish(next.climate?.status) && !refusedish(prev.climate?.status)) out.push(`climate turned ${next.climate?.status} (${prev.climate?.status ?? 'none'} before)`);
   for (const [k, u] of Object.entries(next.upstream ?? {})) {
     if (k === 'climate') continue;

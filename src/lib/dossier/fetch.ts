@@ -169,7 +169,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         const wait = asked ?? 4000 * attempt;
         clearTimeout(timer);
         // Say so on a terminal, so a run that is waiting out a throttle does not look hung.
-        if (typeof process !== 'undefined' && process.stdout?.isTTY) process.stdout.write(`\n  ${host} ${res.status}: waiting ${Math.round(wait / 1000)} s (retry ${attempt} of ${RETRIES})…`);
+        if (typeof process !== 'undefined' && (process.stdout?.isTTY || process.env?.CORPUS_STEP)) process.stdout.write(`\n  ${host} ${res.status}: waiting ${Math.round(wait / 1000)} s (retry ${attempt} of ${RETRIES})…`);
         await new Promise((r) => setTimeout(r, wait));
         return makeFetcher(fetchImpl)<T>(url, { ...opts, attempt });
       }

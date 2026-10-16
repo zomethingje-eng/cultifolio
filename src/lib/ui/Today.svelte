@@ -90,7 +90,7 @@
       const sh = sheets.get(speciesSlug(a.taxonName));
       if (!sh || sh.climate.status !== 'ok') continue;
       const year = growingYear(sh.climate.months, sh.habitatLat);
-      if (!year || year.none || year.grow === 'even') continue;
+      if (!year || year.none || year.grow === 'even' || year.frozen) continue;
       if (!forReader(year, lat).includes(month)) out.set(a.id, year.fog ? 'cool' : 'rain');
     }
     return out;

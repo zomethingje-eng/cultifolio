@@ -1,3 +1,4 @@
+import type { RangeVia } from '../range-via';
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import { licenceTag, isOpen, type LicenceTag } from '$core/licence';
 import { ownByAuthor, plainlyAnother, inFamily } from '../authors';
@@ -214,6 +215,9 @@ export interface DistributionAnswer {
   otherAuthor?: string;
   /** Kew files the species' own row under an entry of another name, whose range this is (round seventy-one; S-B4). */
   synonymOf?: SynonymOf;
+  /** Where the range comes from (round seventy-two, B3), and the day of Kew's files it was read from (B1). */
+  rangeVia?: RangeVia;
+  kewFile?: string;
 }
 
 /**
@@ -222,13 +226,13 @@ export interface DistributionAnswer {
  * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
  */
 export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; synonymOf?: DistributionAnswer['synonymOf'] }>(`${GBIF}/species/${key}/distributions?limit=200`);
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; synonymOf?: DistributionAnswer['synonymOf']; rangeVia?: RangeVia; kewFile?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
   // Kew's rows of the species' words by another author, which are another name (round seventy; triage-69 B4): said in the record.
   const other = r.data.otherAuthor ? { otherAuthor: r.data.otherAuthor } : {};
   if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
   if (r.data.olderAmbiguous) return { status: 'ambiguous', detail: `${r.data.otherAuthor ? `${r.data.otherAuthor}; ` : 'Kew holds no entry under this name, and '}${r.data.olderAmbiguous}: not taken` };
-  const syn = r.data.synonymOf ? { synonymOf: r.data.synonymOf } : {};
+  const syn = { ...(r.data.synonymOf ? { synonymOf: r.data.synonymOf } : {}), ...(r.data.rangeVia ? { rangeVia: r.data.rangeVia } : {}), ...(r.data.kewFile ? { kewFile: r.data.kewFile } : {}) };
   if (r.data.held) return { status: 'ok', data: { rows: [], wcvp: true, kew: r.data.kew, held: r.data.held, ...syn } };
   const wcvp = (r.data.results ?? []).filter(isWcvpRow);
   if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}), ...syn, ...other } };
@@ -256,7 +260,7 @@ export const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
  * at all, and then nothing can be checked against Kew. A refusal is the answer.
  */
 export async function kewIpni(f: JsonFetcher, name: string, authorship?: string, family?: string): Promise<FetchResult<KewIds>> {
-  const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string; acceptedKey?: number; accepted?: string; family?: string }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
+  const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string; acceptedKey?: number; accepted?: string; family?: string; taxonID?: string | number }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
   if (r.status === 'none') return { status: 'ok', data: { ids: [] } };
   if (r.status !== 'ok') return r;
   // A hybrid's row is another name, though GBIF's canonical form drops the sign (Kew's "Rubus ×parviflorus Sudre" for
@@ -284,11 +288,16 @@ export async function kewIpni(f: JsonFetcher, name: string, authorship?: string,
   // the owner's run: Parrycactus flavovirens is Kew's synonym of Ferocactus flavovirens; `kewEntryIpni`).
   const acceptedKeys = [...new Set(rows.flatMap((x) => (/synonym/i.test(x.taxonomicStatus ?? '') && x.acceptedKey ? [x.acceptedKey] : [])))];
   const acceptedId = plant.filter((x) => /^accepted$/i.test(x.taxonomicStatus ?? '')).flatMap((x) => ipni(x) ?? [])[0];
-  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}), ...(acceptedId ? { acceptedId } : {}) } };
+  // Each number's own name and author, so a page that links a number can cite the name it links (round seventy-two, A:
+  // Ixora coccinea linked Kew's 753844-1, "Ixora coccinea L.", and cited the backbone's "Comm. ex Lam.").
+  const labels = Object.fromEntries(plant.flatMap((x) => { const id = ipni(x); return id ? [[id, x.scientificName] as const] : []; }));
+  // And each number's row in Kew's own file (GBIF's copy keeps WCVP's plant_name_id as its taxonID), for `name.cited`.
+  const plantIds = Object.fromEntries(plant.flatMap((x) => { const id = ipni(x); return id && x.taxonID ? [[id, String(x.taxonID)] as const] : []; }));
+  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(ids.length ? { labels } : {}), ...(Object.keys(plantIds).length ? { plantIds } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}), ...(acceptedId ? { acceptedId } : {}) } };
 }
 
 /** Kew's identifiers for a name and author, as `kewIpni` answers. */
-export type KewIds = { ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[]; acceptedId?: string };
+export type KewIds = { ids: string[]; label?: string; labels?: Record<string, string>; plantIds?: Record<string, string>; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[]; acceptedId?: string };
 
 /**
  * The IPNI and POWO numbers a page links (round seventy-one; self-review 70 S-B5, triage-70): Kew's number for the name
@@ -302,10 +311,26 @@ export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds): { i
   const powoNum = item.powo?.replace(/^urn:lsid:ipni\.org:names:/, '');
   const pick = (k.ids.length ? [item.ipni, powoNum, k.acceptedId, k.ids[0]].find((n) => !!n && k.ids.includes(n)) : undefined);
   const other = new Set((k.others ?? []).map((o) => o.id));
-  const ipni = pick ?? (item.ipni && !other.has(item.ipni) ? item.ipni : undefined);
+  // A number ending "-4" is Kew's own, for a name IPNI does not hold: a POWO address, never an IPNI one (round
+  // seventy-two, A: Echinocereus marksianus linked https://www.ipni.org/n/2782687-4 in place of its item's 87937-2).
+  const kept = item.ipni && !other.has(item.ipni) ? item.ipni : undefined;
+  const ipni = pick && !WCVP_ONLY.test(pick) ? pick : kept && !WCVP_ONLY.test(kept) ? kept : undefined;
   const powo = pick ? `urn:lsid:ipni.org:names:${pick}` : powoNum && !other.has(powoNum) ? item.powo : undefined;
   return { ipni, powo, changed: ipni !== item.ipni || powo !== item.powo };
 }
+
+/**
+ * The record's words for a relinking (`kewLinks`): "IPNI and POWO linked by Kew's number for X (the item's: …)", and where
+ * no number is left because Kew holds the words only under another author, that (round seventy-two, A: Ceropegia
+ * macrocarpa (Sprenger) Bruyns, whose item gave Kew's number for J.N.Haage & E.Schmidt's unplaced homonym).
+ */
+export function kewLinksNote(k: KewIds, l: { ipni?: string; powo?: string }, was: string): string {
+  if (!l.ipni && !l.powo && !k.ids.length && k.others?.length) return `Kew holds this name only under another author (${k.others.map((o) => o.label).join('; ')}); no POWO link (the item's: ${was})`;
+  return `IPNI and POWO linked by Kew's number${k.label ? ` for ${k.label}` : ''}${l.ipni ? '' : ', none'} (the item's: ${was})`;
+}
+
+/** Kew's number for a name IPNI does not hold (WCVP's own, "-4"): it opens a POWO page but no IPNI record. */
+export const WCVP_ONLY = /-4$/;
 
 /** GBIF's backbone, whose usages of a name `usages` reads. */
 export const BACKBONE = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
@@ -352,6 +377,8 @@ export interface GbifOccurrence {
   coordDecimals?: number;
   /** Set on records served from a GBIF occurrence download: its DOI, which the dossier cites. */
   downloadDoi?: string;
+  /** The day GBIF made that download (round seventy-two, B1). */
+  downloadDay?: string;
   /** DWCA downloads: 'StillImage' when the record carries images (their rows are in multimedia.txt). */
   mediaType?: string;
   media?: Array<{ type?: string; identifier?: string; license?: string; rightsHolder?: string; creator?: string; references?: string }>;

@@ -583,7 +583,23 @@ const prefix = (q: string, w: string) => w.startsWith(q);
  * common names' hits, the headline holding every word. A name typed as a name is never put after another for its
  * common name ("c" is Conophytum before Copiapoa, whatever their headlines).
  */
+/**
+ * The generic nouns a species is never headed by (`englishNames`), as the search reads a word: "bulb", "cactus", "lily" and
+ * the rest, a plural "s" allowed. Written once, here; /about/how lists them.
+ */
+export const GENERIC_NOUNS: ReadonlySet<string> = new Set(['bulb', 'buttercup', 'cactus', 'cherry', 'daisy', 'fern', 'flower', 'grass', 'herb', 'lily', 'orchid', 'palm', 'plant', 'poppy', 'primrose', 'shrub', 'succulent', 'tree', 'vine', 'weed']);
+/** A common name that is one generic noun alone, as words (`words`). */
+const genericAlone = (cn: string[]) => cn.length === 1 && (GENERIC_NOUNS.has(cn[0]) || (cn[0].endsWith('s') && GENERIC_NOUNS.has(cn[0].slice(0, -1))));
+/**
+ * How near a hit is. A common name that is one generic noun and nothing more ("Cactus") is no evidence of which species was
+ * meant: matched exactly, it comes after every whole-word and headline match, never first (round seventy-two; triage F9:
+ * "cactus" answered the two Copiapoa a source calls "Cactus" before every named cactus).
+ */
 function closeness(p: Prepared<unknown>, qs: string[], g: number): number {
+  const c = closenessOf(p, qs, g);
+  return c <= 1 && !same(p.nameWords, qs) && !p.synWords.some((s) => same(s, qs)) && p.commonNames.some((cn) => same(cn, qs)) && p.commonNames.filter((cn) => same(cn, qs)).every(genericAlone) ? 3.5 : c;
+}
+function closenessOf(p: Prepared<unknown>, qs: string[], g: number): number {
   const common = g === Group.Common;
   if (common && p.headed && same(p.commonNames[0], qs)) return 0;
   if (same(p.nameWords, qs)) return 1;

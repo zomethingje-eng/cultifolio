@@ -166,7 +166,7 @@ test('unknown species is a 404 with a way forward: what the reference holds of t
   await expect(page.locator('.err a', { hasText: 'add it as a plant' })).toHaveAttribute('href', '/plants/new?species=Nonsensia%20fakeii');
   // A genus the reference holds and takes whole: the count, and that the name as written is not on the list (round fifty-eight: never "Kew does not accept", which no source said).
   await page.goto('/species/copiapoa-fakeii');
-  await expect(page.locator('.err')).toContainText('The reference has 2 Copiapoa species, taking the genus whole');
+  await expect(page.locator('.err')).toContainText('The reference has 2 Copiapoa species, a genus the list takes whole');
   await expect(page.locator('.err')).not.toContainText('does not accept');
   // A slip in the name offers the species it nearly is; an address in capitals is the species; a genus alone is its row (round fifty-eight).
   await page.goto('/species/copiapoa-cinera');

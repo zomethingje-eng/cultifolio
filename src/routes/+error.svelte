@@ -36,7 +36,7 @@
         <p>The reference has no {sp.genus}: it is built from a fixed list of names, and none of this genus is on it. <a href="/about/how#list">Which species are here →</a></p>
       {:else}
         <!-- What the list is, as a fact about the list: not "Kew does not accept", which no source said here (round fifty-eight). -->
-        <p>The reference has {sp.inGenus} {sp.genus}{sp.inGenus === 1 ? '' : ' species'}{sp.wholeGenus ? `, taking the genus whole as Kew's WCVP lists its accepted species, and this name as written is not among them` : `: the genus is not taken whole, only the species of it most often recorded as cultivated on iNaturalist`}. <a href="/about/how#list">Which species are here →</a></p>
+        <p>The reference has {sp.inGenus} {sp.genus}{sp.inGenus === 1 ? '' : ' species'}{sp.wholeGenus ? `, a genus the list takes whole, and this name as written is not among them` : `: the genus is not taken whole, only the species of it most often recorded as cultivated on iNaturalist`}. <a href="/about/how#list">Which species are here →</a></p>
       {/if}
       {#if sp.suggest?.length}
         <!-- The catalogue's own search, which retries on the first two words when the whole name finds nothing (round sixty). -->

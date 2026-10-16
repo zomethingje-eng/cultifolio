@@ -18,8 +18,9 @@ import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription, SynonymOf } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
-import { authorKey, authorsAgree, ownByAuthor, inFamily } from './authors';
+import { authorKey, authorsAgree, ownByAuthor, inFamily, plainlyAnother, parentheticalAuthor } from './authors';
 import { spellingKey } from './epithet';
+import type { RangeVia } from './range-via';
 
 /* ------------------------------------------------------------------ WCVP */
 
@@ -44,6 +45,8 @@ export interface WcvpDist {
   introduced: boolean;
   extinct: boolean;
   doubtful: boolean;
+  /** The level-2 region, for a row Kew gives no level-3 area (Agave calodonta's "Mexico"; round seventy-two, B8). */
+  region?: string;
 }
 
 /** Split one pipe-delimited WCVP line by a header. Quotes are not used in these files. */
@@ -64,7 +67,7 @@ export const parseWcvpName = (h: string[], line: string): WcvpName => {
 
 export const parseWcvpDist = (h: string[], line: string): WcvpDist => {
   const r = wcvpRow(h, line);
-  return { id: r.plant_name_id, l3: r.area_code_l3, area: r.area, introduced: r.introduced === '1', extinct: r.extinct === '1', doubtful: r.location_doubtful === '1' };
+  return { id: r.plant_name_id, l3: r.area_code_l3, area: r.area, introduced: r.introduced === '1', extinct: r.extinct === '1', doubtful: r.location_doubtful === '1', ...(r.region ? { region: r.region } : {}) };
 };
 
 /**
@@ -79,7 +82,37 @@ export const wcvpKey = (name: string) => name.toLowerCase().replace(/×\s*/g, ''
 export { authorsAgree, sameNameAuthor } from './authors';
 
 /** Kew's range for one accepted entry: rows in the shape gbif.distributions() reads (none when Kew states none), its descriptions, and the entry. */
-export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName; synonymOf?: SynonymOf };
+export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName; synonymOf?: SynonymOf; rangeVia?: RangeVia };
+
+/**
+ * The day of Kew's files (round seventy-two, B1): README_WCVP.xlsx says "Extracted: 04/06/2026" (day first, as its own
+ * "[accessed 04 Jun 2026]" shows). Undefined when the text does not say it; the loader then takes the file's own date.
+ */
+export function wcvpExtractedDay(readmeText: string): string | undefined {
+  const m = /Extracted:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(readmeText);
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : undefined;
+}
+
+/**
+ * The day of a GBIF download (B1): its key begins with the day GBIF made it ("0006100-260916113435855" is 2026-09-16), else
+ * the day it was fetched. The records are as GBIF held them on that day, not on the build's.
+ */
+export function downloadDay(meta: { key?: string; fetched?: string }): string | undefined {
+  const m = /^\d+-(\d{2})(\d{2})(\d{2})\d*$/.exec(meta.key ?? '');
+  if (m) return `20${m[1]}-${m[2]}-${m[3]}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(meta.fetched ?? '') ? meta.fetched!.slice(0, 10) : undefined;
+}
+
+/** Levenshtein distance, for the near-spelling rule only (`nearSpellings`). */
+function editDistance(a: string, b: string): number {
+  let p = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const q = [i];
+    for (let j = 1; j <= b.length; j++) q.push(Math.min(p[j] + 1, q[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+    p = q;
+  }
+  return p[b.length];
+}
 
 /** An entry's name as the record cites it, with its authors: "Erythrina afra Thunb.". */
 export const entryLabel = (n: WcvpName) => `${n.name}${n.authors ? ` ${n.authors}` : ''}`;
@@ -96,10 +129,24 @@ export class WcvpIndex {
   private dist = new Map<string, WcvpDist[]>(); // accepted plant_name_id → rows
   /** The accepted ids the second pass keeps rows for: an entry outside them has a range this index never read. */
   private loaded = new Set<string>();
+  /** Entries Kew files names under that are not "Accepted": artificial hybrids (Delphinium × barlowii; round seventy-two, B8). */
+  private hybrids = new Map<string, WcvpName>();
+  /** The reference's own species names, lower case, when the loader is given them: the near-spelling rule never reads a name the reference holds. */
+  private reference: Set<string> | null = null;
+  /** The day of Kew's files this index was read from (B1); undefined when not known. */
+  fileDay?: string;
+  setReference(names: Iterable<string>): void {
+    this.reference = new Set([...names].map(wcvpKey));
+  }
+  /** The entry a row is filed under: itself when Kew accepts it, else its accepted entry, an artificial hybrid included. */
+  private entryOf(n: WcvpName): WcvpName {
+    return n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? this.hybrids.get(n.acceptedId) ?? n);
+  }
 
   /** First pass: keep every row whose name is wanted, and every accepted row (small: ~350k) so synonyms can resolve. */
   addName(n: WcvpName, wanted: (name: string) => boolean): void {
     if (n.status === 'Accepted') this.byId.set(n.id, n);
+    else if (n.status === 'Artificial Hybrid' && n.acceptedId === n.id) this.hybrids.set(n.id, n);
     const k = wcvpKey(n.name);
     // Asked with the hybrid sign taken out, so "× Gasteraloe beguinii" is wanted by its genus and not by "×".
     if (wanted(n.name.replace(/×\s*/g, '').trim())) {
@@ -174,7 +221,7 @@ export class WcvpIndex {
    * taken, for the record. With no author from the backbone, nothing can be compared: every row under the words is
    * read, as before.
    */
-  ownRows(name: string, authorship?: string, family?: string): { rows: WcvpName[]; others: WcvpName[] } {
+  ownRows(name: string, authorship?: string, family?: string): { rows: WcvpName[]; others: WcvpName[]; spelt?: boolean } {
     const exact = this.rowsOf(name) ?? [];
     if (!authorKey(authorship)) return { rows: exact, others: [] };
     const usable = (rs: WcvpName[]) => rs.filter((r) => !/misapplied/i.test(r.status));
@@ -183,9 +230,46 @@ export class WcvpIndex {
     const byAuthor = (rs: WcvpName[]) => ownByAuthor(usable(rs), authorship, (r) => r.authors);
     const accepted = usable(exact).filter((r) => r.status === 'Accepted');
     const own = byAuthor(exact);
-    const found = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
-    const rows = inFamily(found, usable(exact), family, (r) => (r.status === 'Accepted' ? r : (this.byId.get(r.acceptedId) ?? r)).family);
-    return { rows, others: exact.filter((r) => !rows.includes(r)) };
+    let spelt = false;
+    const found = own.length ? own : (() => {
+      const v = byAuthor(this.otherSpellings(name));
+      if (v.length) { spelt = true; return v; }
+      if (accepted.length === 1) return accepted;
+      // Kew spells the name otherwise than any rule of `spellingKey` reads, by the same author (round seventy-two, B7):
+      // Reicheocactus famatimensis is Kew's famatinensis, Weingartia fidaiana Kew's fidana, Melocactus lemairei Kew's lemarii.
+      const near = exact.length ? [] : this.nearSpellings(name, authorship!);
+      if (near.length) spelt = true;
+      return near;
+    })();
+    const rows = inFamily(found, usable(exact), family, (r) => this.entryOf(r).family);
+    return { rows, others: exact.filter((r) => !rows.includes(r)), ...(spelt && rows.length ? { spelt: true } : {}) };
+  }
+  /**
+   * Kew's rows of the name spelt otherwise, held to every one of these (round seventy-two, B7, as triaged): Kew holds no
+   * row of the page's own words; one epithet in the genus, of six letters or more, lies within two letters' edit of the
+   * page's; its row's author is the page's by `ownByAuthor` (the basionym's author in its brackets agreeing, for
+   * Melocactus lemairei "(Monv. ex Lem.) Miq." and Kew's lemarii "(Monv. ex Lem.) Miq. ex Lem."); all its rows lead to one
+   * entry; and the reference holds no species of that spelling (two pages would then share one range).
+   */
+  private nearSpellings(name: string, authorship: string): WcvpName[] {
+    const w = wcvpKey(name).split(' ');
+    if (w.length !== 2 || w[1].length < 6) return [];
+    const near = new Map<string, WcvpName[]>();
+    for (const rows of [...this.byName.values(), ...this.acceptedNames().values()]) for (const r of rows) {
+      const rw = wcvpKey(r.name).split(' ');
+      if (rw.length !== 2 || rw[0] !== w[0] || rw[1] === w[1] || /misapplied/i.test(r.status) || editDistance(rw[1], w[1]) > 2) continue;
+      const k = rw.join(' ');
+      const arr = near.get(k) ?? [];
+      if (!arr.includes(r)) arr.push(r);
+      near.set(k, arr);
+    }
+    if (near.size !== 1) return [];
+    const [[spelling, rows]] = [...near];
+    if (this.reference?.has(spelling)) return [];
+    // The basionym too: Bisnaga hamatacantha (Muehlenpf.) Orcutt is not Kew's Bisnaga haematacantha (Monv. ex Salm-Dyck)
+    // Orcutt, another plant by the same combining author (the dry run on the corpus, round seventy-two).
+    const own = ownByAuthor(rows, authorship, (r) => r.authors).filter((r) => parentheticalAuthor(r.authors) === parentheticalAuthor(authorship));
+    return new Set(own.map((r) => this.entryOf(r).id)).size === 1 ? own : [];
   }
   /** Whether Kew holds the species' own name (`ownRows`): only when it does not are the older names looked up. */
   holds(name: string, authorship?: string, family?: string): boolean {
@@ -204,7 +288,7 @@ export class WcvpIndex {
    * backbone followed) is found among the accepted rows.
    */
   accepted(name: string, authorship?: string, family?: string): WcvpName | 'ambiguous' | undefined {
-    const entryOf = (n: WcvpName) => (n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? n));
+    const entryOf = (n: WcvpName) => this.entryOf(n);
     if (authorKey(authorship)) {
       const { rows } = this.ownRows(name, authorship, family);
       const ends = new Map(rows.map((r) => [entryOf(r).id, entryOf(r)]));
@@ -261,9 +345,11 @@ export class WcvpIndex {
   /** One accepted entry's range, read by its id (IND-9: never looked up again by name); null when this index did not read it. */
   rangeOf(entry: WcvpName): WcvpRange | null {
     if (!this.loaded.has(entry.id)) return null;
-    const rows = (this.dist.get(entry.id) ?? []).filter((d) => !d.doubtful);
+    // A region Kew records as doubtfully present is served as such (round seventy-two, B5): the page lists it apart, and no
+    // record is tested against it; a row with no level-3 area names its level-2 region (Agave calodonta's "Mexico", B8).
+    const rows = this.dist.get(entry.id) ?? [];
     return {
-      rows: rows.map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area, establishmentMeans: d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
+      rows: rows.map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area || d.region || '', establishmentMeans: d.doubtful ? 'DOUBTFUL' : d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
       kew: { lifeform: entry.lifeform, climate: entry.climate },
       entry
     };
@@ -278,10 +364,26 @@ export class WcvpIndex {
     if (!a) return null;
     if (a === 'ambiguous') return 'ambiguous';
     const range = this.rangeOf(a);
-    if (!range || !authorKey(authorship) || wcvpKey(a.name) === wcvpKey(name)) return range;
+    if (!range) return range;
+    // Where the range comes from, as a field (round seventy-two, B3): `distribution.via`.
+    const at = { entry: entryLabel(a), name: a.name, ...(this.fileDay ? { file: this.fileDay } : {}) };
+    const own: RangeVia = { kind: 'own', ...at, ...(a.status === 'Unplaced' ? { unplaced: true } : {}) };
+    if (!authorKey(authorship)) return { ...range, rangeVia: own };
+    const { rows, spelt } = this.ownRows(name, authorship, family);
+    if (wcvpKey(a.name) === wcvpKey(name)) {
+      // Kew's entry of these words, reached by no row whose author is the backbone's: the one entry Kew accepts by the
+      // words, or the entry the family rule or the species rule moved to (B2: Ixora coccinea "Comm. ex Lam." showed Kew's
+      // Ixora coccinea L.'s range, and Fragaria virginiana Duchesne Miller's species', and nothing said whose).
+      const agreed = ownByAuthor(rows, authorship, (r) => r.authors).some((r) => this.entryOf(r).id === a.id);
+      return { ...range, rangeVia: agreed ? own : { kind: 'kew-entry', ...at } };
+    }
     // The own row the entry was reached by, when it is another name's entry: said (S-B4).
-    const own = this.ownRows(name, authorship, family).rows.find((r) => r.status !== 'Accepted' && r.acceptedId === a.id);
-    return own ? { ...range, synonymOf: { row: entryLabel(own), status: own.status, entry: entryLabel(a), entryName: a.name } } : range;
+    const syn = rows.find((r) => r.status !== 'Accepted' && r.acceptedId === a.id && wcvpKey(r.name) === wcvpKey(name));
+    if (syn) return { ...range, synonymOf: { row: entryLabel(syn), status: syn.status, entry: entryLabel(a), entryName: a.name }, rangeVia: { kind: 'synonym-of', ...at, row: entryLabel(syn), status: syn.status.toLowerCase() } };
+    // Kew's row of the name as Kew spells it: an Accepted entry of other words, or a synonym row of them (B7).
+    const spelling = rows.find((r) => r.acceptedId === a.id || r.id === a.id);
+    if (spelt && spelling && spelling.status !== 'Accepted') return { ...range, synonymOf: { row: entryLabel(spelling), status: spelling.status, entry: entryLabel(a), entryName: a.name }, rangeVia: { kind: 'synonym-of', ...at, row: entryLabel(spelling), status: spelling.status.toLowerCase() } };
+    return { ...range, rangeVia: spelt ? { kind: 'spelling', ...at } : own };
   }
   /**
    * When Kew holds no row at all under the backbone's name, its range under one of the species' older names (round
@@ -296,7 +398,7 @@ export class WcvpIndex {
    *     "Erythrina afra Thunb.", reached by "Erythrina fissa C.Presl".
    * Same-type names are not required: Erythrina caffra reaches Kew's E. afra only through heterotypic names (S-A1).
    */
-  viaOlderNames(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>): (WcvpRange & { via: string }) | { ambiguous: string } | null {
+  viaOlderNames(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>): (WcvpRange & { via: string; rangeVia: RangeVia }) | { ambiguous: string } | null {
     const hits = new Map<string, { entry: WcvpName; via: string }>(); // accepted id → the entry, and the older name it was reached by
     for (const o of older) {
       if (/pro.?parte/i.test(o.status ?? '')) continue;
@@ -315,7 +417,7 @@ export class WcvpIndex {
     const [hit] = hits.values();
     if (!hit || !/^species$/i.test(hit.entry.rank)) return null;
     const got = this.rangeOf(hit.entry);
-    return got?.rows.length ? { ...got, via: hit.via } : null;
+    return got?.rows.some((r) => r.establishmentMeans !== 'DOUBTFUL') ? { ...got, via: hit.via, rangeVia: { kind: 'older-name', entry: entryLabel(hit.entry), name: hit.entry.name, row: hit.via, ...(this.fileDay ? { file: this.fileDay } : {}) } } : null;
   }
   get size(): number {
     return this.byName.size;
@@ -401,6 +503,8 @@ export class OccIndex {
   private strings = new Map<string, string>();
   /** The download's DOI, when known: every record served carries it so the dossier can cite it. */
   doi?: string;
+  /** The day GBIF made the download (`downloadDay`): the records are as GBIF held them then (round seventy-two, B1). */
+  day?: string;
   /**
    * gbifID → owner key for observation records that carry images, a few dozen per species, so multimedia.txt can be read
    * for them. Kept live: a record is added when it enters a species' media sample and removed when a better hash evicts it.
@@ -485,7 +589,8 @@ export class OccIndex {
       coordinateUncertaintyInMeters: r[10] || undefined,
       coordDecimals: r[11] >= 0 ? r[11] : undefined,
       coordinatePrecision: r[12] || undefined,
-      downloadDoi: this.doi
+      downloadDoi: this.doi,
+      ...(this.day ? { downloadDay: this.day } : {})
     }));
   }
   get species(): number {
@@ -636,8 +741,10 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       if (got) {
         stats.wcvp++;
         // Kew holds the name and states no range for it: that is the answer, never a reason to look under older names (round sixty-nine; triage-68 M2).
-        const syn = got.synonymOf ? { synonymOf: got.synonymOf } : {};
-        if (!got.rows.length) return { status: 'ok', data: { results: [], held: entryLabel(got.entry), kew: got.kew, ...syn } as unknown as T };
+        // Where the range comes from and the day of Kew's files, passed on (round seventy-two, B1, B3).
+        const syn = { ...(got.synonymOf ? { synonymOf: got.synonymOf } : {}), ...(got.rangeVia ? { rangeVia: got.rangeVia } : {}), ...(src.wcvp.fileDay ? { kewFile: src.wcvp.fileDay } : {}) };
+        // Only doubtful regions, or none: Kew holds the name with no range (an artificial hybrid said so: Delphinium × cultorum, B8).
+        if (!got.rows.some((r) => r.establishmentMeans !== 'DOUBTFUL')) return { status: 'ok', data: { results: [], held: `${entryLabel(got.entry)}${got.entry.status === 'Artificial Hybrid' ? ', an artificial hybrid' : ''}`, kew: got.kew, ...syn } as unknown as T };
         return { status: 'ok', data: { results: got.rows, kew: got.kew, ...syn } as unknown as T };
       }
       // No row of the species' own name (`ownRows`: none under its words by its author, or under another spelling): one of
@@ -646,7 +753,11 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       // name, said in the record, never Kew's answer for this species (round seventy; triage-69 B4, S-B4).
       if (sp && !src.wcvp.holds(sp.name, sp.authorship, sp.family)) {
         const others = src.wcvp.ownRows(sp.name, sp.authorship, sp.family).others;
-        const otherAuthor = others.length ? `Kew holds ${sp.name} only under another author (${others.map(entryLabel).join('; ')}), which is another name` : undefined;
+        // "Another name" only where the row is plainly another author's (`plainlyAnother`, the rule the links read): Kew's
+        // "Monsonia mossamedensis Welw. ex Oliv." is GBIF's "Welw.", one name the author rule does not read as the species'
+        // own (round seventy-two, B: four pages called their own name another).
+        const plainly = others.filter((r) => plainlyAnother(sp.authorship, r.authors)), cited = others.filter((r) => !plainly.includes(r));
+        const otherAuthor = others.length ? [plainly.length ? `Kew holds ${sp.name} only under another author (${plainly.map(entryLabel).join('; ')}), which is another name` : '', cited.length ? `Kew cites ${sp.name} otherwise (${cited.map(entryLabel).join('; ')}), and its row is not read as this species' own` : ''].filter(Boolean).join('; ') : undefined;
         const syn = await readSynonyms(f, key);
         const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? []) : null;
         if (via && 'ambiguous' in via) {
@@ -655,7 +766,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         }
         if (via) {
           stats.wcvp++;
-          return { status: 'ok', data: { results: via.rows, kew: via.kew, entry: entryLabel(via.entry), via: via.via, ...(otherAuthor ? { otherAuthor } : {}) } as unknown as T };
+          return { status: 'ok', data: { results: via.rows, kew: via.kew, entry: entryLabel(via.entry), via: via.via, rangeVia: via.rangeVia, ...(src.wcvp.fileDay ? { kewFile: src.wcvp.fileDay } : {}), ...(otherAuthor ? { otherAuthor } : {}) } as unknown as T };
         }
         if (otherAuthor) {
           // Nothing of Kew's is this species': GBIF's own answer is asked for the national checklists, without the WCVP rows

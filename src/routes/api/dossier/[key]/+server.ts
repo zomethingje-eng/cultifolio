@@ -19,6 +19,10 @@ export const GET: RequestHandler = async ({ params, platform, fetch, getClientAd
   const stop = await limited(platform, getClientAddress, 'reference');
   if (stop) return stop;
   const c = await corpusNow(platform, fetch);
+  // A key the index does not list has no page, whatever the bucket still holds under it (round seventy-two; E): the
+  // upload copies and never deletes, so the dossier of a species since dropped from the corpus (a synonym followed, a
+  // duplicate merged) was served here as a page for good, and every unknown key cost an R2 read.
+  if (!indexMaps(c.idx).byKey.has(key)) error(404, 'no species page for that key');
   const d = await getDossier(platform, fetch, key, c).catch(() => undefined);
   if (!d) {
     const listed = indexMaps(c.idx).byKey.has(key);

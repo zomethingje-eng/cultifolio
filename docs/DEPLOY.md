@@ -52,7 +52,7 @@ must print `0`.
 npm run deploy
 ```
 
-That runs `svelte-check`, the unit tests, the build, `wrangler deploy` and then `scripts/live-check.mjs` against `https://cultifolio.com` (another deployment sets `LIVE_CHECK_ORIGIN=https://your.site` in the environment, or passes the origin as the script's argument; the species page it checks is the first in the site's own sitemap unless `LIVE_CHECK_SPECIES=<slug>` names one; a deploy whose `/api/corpus` answers the fixture id fails the check, because that is a Worker with no corpus in R2), in that order, and stops at the first failure. The live check is the set of requests made by hand after every deploy since round fifteen: the name service three times (200 each, and it says whether the edge answered), the two headers on a prerendered page, a species page, the offline page and an API route, the beacon check, the reference under a stale corpus id (must be `no-store`), a forecast, and the vault route's 400 on a JSON null. Since round sixty-two every build ends with `scripts/check-bundle.mjs` (run by `scripts/attach-do.mjs`): it records a hash of the sources and fails the build when the root layout imports a module under src/lib/backup/ or src/lib/ui/grow/ (bar the few grow modules it draws on purpose, named in the script with their reasons), read by module path from the sources the build was made from and from the build's own entries, so the unit test's skip on a stale build no longer matters. Before a deploy, run the browser suite once in strict mode on a quiet machine: `node scripts/predeploy.mjs` starts its own fresh server, runs every browser test with `CI_STRICT=1` on two workers (`PW_WORKERS` to change it), and exits non-zero on any failure or on a test that passes only on its retry. Since round sixty-seven a plain `npx playwright test` is strict as well: a test that passes only on its retry fails the run. That server asks no outside service (`--var E2E_OFFLINE:1`, from `playwright.config.ts`), so a PC that can reach GBIF runs the suite as the sandbox does. The strict run also runs the tests tagged `@phone` on a Chromium phone at Safari's page size on an iPhone (390 x 664, touch, Safari's user agent; round sixty-three). Safari's engine and Firefox run when named: install them once with `npx playwright install webkit firefox`, then `node scripts/predeploy.mjs --browsers=all` (or `--browsers=webkit`; `PW_BROWSERS=webkit,firefox` in the environment does the same). Naming WebKit also runs the phone tests on the real iPhone profile in WebKit. `--project webkit` is Playwright's filter: it runs Safari's engine alone (its desktop tests and, added by the script, its phone tests), with no Chromium and no Chromium phone, so it checks one engine and is not the run before a deploy; the script says so when it starts. An engine named but not installed stops the script before the build, with that install line. Tests that need Chromium's own features (a CDP session, a Chrome profile's text size, a layout-shift reading, `page.pdf`) are listed in `tests/e2e/helpers/engines.ts` or tagged `@chromium`, and are left out of WebKit and Firefox. The run starts only when the local server has answered its front page (`webServer.url`), not when its port opens, so no test pays the server's start. Each browser test that makes a sync vault does so from its own documentation address (`tests/e2e/helpers/address.ts`), so the five-a-day limit per address is never met by accident. It can be run alone with `npm run live-check`, or against a preview with `node scripts/live-check.mjs https://<worker>.workers.dev`. A failure after `wrangler deploy` means the new version is live and wrong: roll back (section 6) before reading further. The first deploy creates the Worker at `cultifolio.<account>.workers.dev`; the custom domain is added once in the dashboard (Workers → cultifolio → Settings → Domains & Routes → add `cultifolio.com`), after which every deploy serves both.
+That runs `svelte-check`, the unit tests, the build, `wrangler deploy` and then `scripts/live-check.mjs` against `https://cultifolio.com` (another deployment sets `LIVE_CHECK_ORIGIN=https://your.site` in the environment, or passes the origin as the script's argument; the species page it checks is the first in the site's own sitemap unless `LIVE_CHECK_SPECIES=<slug>` names one; a deploy whose `/api/corpus` answers the fixture id fails the check, because that is a Worker with no corpus in R2), in that order, and stops at the first failure. The live check is the set of requests made by hand after every deploy since round fifteen: the name service three times (200 each, and it says whether the edge answered), the two headers on a prerendered page, a species page, the offline page and an API route, the beacon check, the reference under a stale corpus id (must be `no-store`), a forecast, and the vault route's 400 on a JSON null. Since round sixty-two every build ends with `scripts/check-bundle.mjs` (run by `scripts/attach-do.mjs`): it records a hash of the sources and fails the build when the root layout imports a module under src/lib/backup/ or src/lib/ui/grow/ (bar the few grow modules it draws on purpose, named in the script with their reasons), read by module path from the sources the build was made from and from the build's own entries, so the unit test's skip on a stale build no longer matters. Before a deploy, run the browser suite once in strict mode on a quiet machine: `node scripts/predeploy.mjs` starts its own fresh server, runs every browser test with `CI_STRICT=1` on four workers (`PW_WORKERS` to change it; WebKit is held to two of its own, `PW_WEBKIT_WORKERS`), and exits non-zero on any failure or on a test that passes only on its retry. A round names its tier: `node scripts/predeploy.mjs --tier=corpus` after a round that changed only the corpus builder (the unit tests, then Chromium and the Chromium phone), `--tier=app` after a round that changed pages or the app (the unit tests, then every engine), and `--tier=launch` once before the public launch (svelte-check, the unit tests, then every engine on two workers). Each stops at its first failing step and says which. Since round sixty-seven a plain `npx playwright test` is strict as well: a test that passes only on its retry fails the run. That server asks no outside service (`--var E2E_OFFLINE:1`, from `playwright.config.ts`), so a PC that can reach GBIF runs the suite as the sandbox does. The strict run also runs the tests tagged `@phone` on a Chromium phone at Safari's page size on an iPhone (390 x 664, touch, Safari's user agent; round sixty-three). Safari's engine and Firefox run when named: install them once with `npx playwright install webkit firefox`, then `node scripts/predeploy.mjs --browsers=all` (or `--browsers=webkit`; `PW_BROWSERS=webkit,firefox` in the environment does the same). Naming WebKit also runs the phone tests on the real iPhone profile in WebKit. `--project webkit` is Playwright's filter: it runs Safari's engine alone (its desktop tests and, added by the script, its phone tests), with no Chromium and no Chromium phone, so it checks one engine and is not the run before a deploy; the script says so when it starts. An engine named but not installed stops the script before the build, with that install line. Tests that need Chromium's own features (a CDP session, a Chrome profile's text size, a layout-shift reading, `page.pdf`) are listed in `tests/e2e/helpers/engines.ts` or tagged `@chromium`, and are left out of WebKit and Firefox. The run starts only when the local server has answered its front page (`webServer.url`), not when its port opens, so no test pays the server's start. Each browser test that makes a sync vault does so from its own documentation address (`tests/e2e/helpers/address.ts`), so the five-a-day limit per address is never met by accident. It can be run alone with `npm run live-check`, or against a preview with `node scripts/live-check.mjs https://<worker>.workers.dev`. A failure after `wrangler deploy` means the new version is live and wrong: roll back (section 6) before reading further. The first deploy creates the Worker at `cultifolio.<account>.workers.dev`; the custom domain is added once in the dashboard (Workers → cultifolio → Settings → Domains & Routes → add `cultifolio.com`), after which every deploy serves both.
 
 `SYNC_OPEN` is `"1"` in `wrangler.jsonc`: any vault can sync. Set to `"0"` in the file and deployed, a new vault is still made (and still counts toward an address's five a day) but its sync is refused with a 402, while vaults made before keep syncing (never delete it: `keep_vars` keeps a deployed variable the file no longer names, and a dashboard value is replaced by the file's on the next deploy, so the file is the one place that decides `SYNC_OPEN`). The vault-creation counters live in a Durable Object (`COUNTERS`, class `Counters`; `scripts/attach-do.mjs` exports the class from the built worker after every build), so a burst of creations is counted exactly; without the binding the KV counters bound approximately. The binding and its migration are these two entries in `wrangler.jsonc`, after `kv_namespaces`:
 
@@ -121,6 +121,114 @@ Open the site in a private window and walk it: a species you know (the climate, 
 Then the three things the code cannot do for you: confirm in the dashboard that the R2 bucket is private (no public bucket URL, no r2.dev subdomain), that the KV namespace holds `bytes:` and `rl:` keys after the sync test, which proves the binding is the real one, and that the `cloudflareinsights` check in section 2 prints `0`.
 
 ## 5. Refreshing the corpus later
+
+**The corpus step is one command (round seventy-two).** `node scripts/corpus-step.mjs` runs the round's plan (`scripts/corpus-plan.txt`) in order: a backup, the fills, the rebuilds, `--index`, the upload and the live check. Everything it prints also goes to `corpus-step.log` in the project folder, and each finished step is recorded in `corpus-step.json`, so the same command carries on where it stopped. It stops with one sentence and the command to type next. The day's answers of GBIF, Wikidata, Kew and the rest are kept in `cache\upstream\` for that day only, so running it again the same day asks only what did not answer; the folder can be deleted at any time. Type it with `node`, not `npm run`: under `npm run`, Ctrl-C asks "Terminate batch job (Y/N)?" (either answer is safe). The steps below are round seventy-two's; the next section's two rclone lines and `--keep-list` are what the command runs, kept for reference.
+
+### Round seventy-two's corpus step, after `npm run deploy`
+
+It takes a few hours, most of it waiting politely on GBIF and iNaturalist. Keep the PC from sleeping while it runs; if it sleeps, run the same command again.
+
+**Step 1. Open cmd in the project folder.** The quotes are needed because the folder's path has a space in it.
+
+```
+cd /d "C:\path\to\AI Work\cultifolio"
+```
+
+**Step 2. Start the corpus step.**
+
+```
+node scripts/corpus-step.mjs
+```
+
+It first runs `svelte-kit sync`, then copies `static\s\v2` to `backups\v2-<the corpus id>` (`backups\v2-4c784c5dc7ca2448` for round seventy-one's corpus; a minute or two), then runs the fills one after another. Each step starts with a line like `=== 2026-10-16 09:12:03  step 3 of 19: dossier --fill kew-links`.
+
+**Whenever it stops, read its last sentence.** There are four kinds of stop:
+
+- "a source did not answer … Run the same command again in an hour or so". Nothing is lost. Wait, then type `node scripts/corpus-step.mjs` again.
+- "Review before going on: …" or "some species lost what the build before had". Read what it names, as the steps below say, then type `node scripts/corpus-step.mjs --go-on`.
+- "it failed", "a dossier on disk could not be read", or "the index now holds fewer species than before". Do not go on. Open `corpus-step.log` (`notepad corpus-step.log`) and paste its last forty lines back.
+- "Stopped by Ctrl-C". Type `node scripts/corpus-step.mjs` to carry on.
+
+`node scripts/corpus-step.mjs --status` lists the steps and which are done, and changes nothing.
+
+**Step 3. Review: the species to rebuild.** The command stops after `--list-rebuild`. Open both lists:
+
+```
+notepad rebuild-wd.txt
+notepad rebuild-keys.txt
+```
+
+Good looks like this:
+
+- `rebuild-wd.txt` holds about sixteen lines:
+  - the nine Wikidata changes round seventy-one could not make: Raphionacme linearis, Peperomia monticola, Tulipa clusiana, Othonna rosea, Convolvulus cneorum, Gunnera manicata, Salvia azurea and Agave ghiesbreghtii ("Wikidata item none → Q…"), and Agave variegata ("Q15523250 → Q391952");
+  - seven pages whose Wikidata row had said "not answered" since earlier rounds: Reicheocactus famatimensis, Vera-duthiea zebrina, Manfreda arceliensis, Othonna divaricata, Urginea grandiflora, Cissus wilmsii and Agave wendtii (each "none → Q…").
+- `rebuild-keys.txt` holds about five: Reicheocactus famatimensis, Melocactus lemairei, Weingartia fidaiana, Ceropegia hadramautica and Delphinium cultorum.
+
+If either list has dozens of lines, stop and paste it back. Otherwise go on:
+
+```
+node scripts/corpus-step.mjs --go-on
+```
+
+**Step 4. Review: drops, if the rebuild stops for them.** A rebuild that loses something the page had before writes `drops.txt` and stops.
+
+```
+notepad drops.txt
+```
+
+Good: every line names one of the species just rebuilt, and the loss is the change the round meant. Agave variegata may lose iNaturalist photographs that came from Manfreda variegata's taxon; a Wikidata identifier changing to the new item is expected. Not good: a species losing all its photographs, its range or its summary for no reason you can see. Paste those lines back and do not go on. If every line is expected:
+
+```
+node scripts/corpus-step.mjs --go-on
+```
+
+**Step 5. Review: before the upload.** After `--index` it stops with a sentence like "corpus on disk 1a2b…, was 4c784c5dc7ca2448; 8947 species; 8940 dossiers differ from the backup …; drops.txt not there".
+
+Good looks like this:
+
+- 8947 species, or the same number as before the step. The command itself stops if the index shrank.
+- Most dossiers differ from the backup this round, because Kew's names and the range sources are written into nearly every page.
+- No line in `corpus-step.log` says "could not be read".
+- `drops.txt` is not there, or holds only lines you read in step 4.
+
+Look over the lines each fill printed in `corpus-step.log` (`notepad corpus-step.log`): each says how many pages it changed. Then upload:
+
+```
+node scripts/corpus-step.mjs --go-on
+```
+
+**Step 6. Upload and live check (no review).** The command does the rest:
+
+1. It copies everything but the manifest.
+2. It checks with `rclone check` that the bucket holds every file as it is on disk, and only then copies the manifest.
+3. It lists the bucket's dossiers the index does not list into `bucket-unlisted.txt`. This is a report only: nothing is deleted.
+4. It runs the live check, and then waits until the site serves the corpus on disk.
+
+It ends with "the site serves corpus …, the one on disk" and "every step is done". A handful of keys in `bucket-unlisted.txt` (pages followed to another name in earlier rounds) is expected. If the check fails, the manifest was not uploaded and the site still serves the corpus before; paste the end of the log back.
+
+**Step 7. A day or more later: the prune.**
+
+```
+node scripts/corpus-step.mjs --prune
+```
+
+It reads the live manifest from the bucket, checks the site serves it, checks the bucket holds every file it names, and makes a dry run. Then it stops with a sentence like "the bucket's p/ holds 600 files; keep.txt keeps 256 (…); named by none: 344, of which 344 more than a day old would be deleted now. Every file the live manifest names is in the bucket."
+
+Good: the kept number is between about 139 and 280, and the deleted number is what is left of the files. Each corpus uploaded since the last prune leaves about 117. If it stopped instead, saying the site serves another corpus or the bucket lacks a file, delete nothing and paste the sentence back. If it is good:
+
+```
+node scripts/corpus-step.mjs --prune --go-on
+```
+
+**To go back to the corpus before the step:**
+
+```
+rmdir /s /q static\s\v2
+xcopy /e /i /q backups\v2-4c784c5dc7ca2448 static\s\v2
+```
+
+Then upload it with the two rclone lines under "The upload" below, and check it with `npm run live-check`.
 
 The order of operations for a corpus refresh is always: build or fill on the PC, `npm run dossier -- --index`, the upload below. `--index` writes `static/s/v2/index.json` (the names file a rederive reads, and the Worker's fallback when the bucket holds no manifest), `static/s/v2/manifest.json`, and, under `static/s/v2/p/`, each of the build's products as a file named by the md5 of its content: the index again, the entries and the sheets of every bucket, the search's postings (64 files that say which species each short key of a word can match; `src/lib/core/postings.ts`), the short answers (`short.json`: the whole index's first hundred hits for every key of one or two letters, so a first keystroke costs a lookup; round fifty-eight) and the nine catalogues' rows. The manifest maps each product's name to its hash and so to its file; the Worker reads the manifest, takes the corpus id, the bucket count and the index from it, and reads every product of a request from the one manifest it began with. A manifest that does not name every product its counts call for is not adopted (round fifty-eight), so a half-written one leaves the corpus held before in place. The upload needs no deploy: `/api/corpus` reports the manifest's id and every reference request from a device carries it, so the Worker's own cache (the Cache API: held pages for a minute, search answers for a day, both keyed by the corpus id), each device's worker cache and the browser cache turn over on their own (the Worker re-reads the manifest within a minute). Cloudflare's edge does not keep a Worker's answers on its own; only what the Worker puts in the Cache API is kept. Dossiers (`/api/dossier/<key>`) are read from their fixed, overwritten place, not by hash, so they are answered `no-store`.
 

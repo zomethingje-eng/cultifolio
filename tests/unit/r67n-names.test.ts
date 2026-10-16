@@ -24,7 +24,8 @@ describe('N3: the headline rule', () => {
   });
   it('a single generic noun is set back after every fuller name, and shown only when there is no other', () => {
     expect(shown([eng('Buttercup', { sources: 4, preferred: true }), eng('Golden trumpet', { sources: 2 })], 'Allamanda cathartica')).toBe('Golden trumpet');
-    expect(shown([eng('Cactus')], 'Copiapoa cinerascens')).toBe('Cactus'); // guard: nothing fuller
+    // Round seventy-two (triage F9): with nothing fuller, a generic noun is no headline either; it stays searchable (r72f-search).
+    expect(shown([eng('Cactus')], 'Copiapoa cinerascens')).toBeUndefined();
     expect(genericNoun('Cherry')).toBe(true);
     expect(genericNoun('cacti')).toBe(false);
     expect(genericNoun('Cherries')).toBe(false);

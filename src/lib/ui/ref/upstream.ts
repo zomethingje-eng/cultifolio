@@ -60,3 +60,15 @@ export function climateDetail(detail: string | undefined, upstream: Up): string 
   const st = upstream[m[1] === 'occurrence' ? 'gbif.occurrences' : 'wcvp.distribution']?.status;
   return st === 'refused' ? detail.replace('did not answer', 'refused the request') : detail;
 }
+
+/**
+ * The register links Wikidata gives a page (POWO, IPNI, World Flora Online, Wikipedia), when Wikidata did not answer or
+ * refused: said where the links are, as "not checked", never left as a shorter list that reads as "none" (rule 2; round
+ * seventy-two, F: 19 of 8,947 pages, Agave wendtii among them, showed "GBIF iNaturalist" and nothing else). Null when
+ * Wikidata answered, had nothing, or was not asked.
+ */
+export function registersNotChecked(upstream: Up): string | null {
+  const st = upstream.wikidata?.status;
+  if (st !== 'error' && st !== 'refused') return null;
+  return `Wikidata ${notAnswered(st)} when this page was built, so the links it gives (POWO, IPNI, World Flora Online, Wikipedia) were not checked; any shown here are kept from an earlier build.`;
+}

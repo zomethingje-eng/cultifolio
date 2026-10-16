@@ -22,6 +22,9 @@ import { referenceOf } from './reference';
 import { heldElsewhereIn } from './corpus-run';
 import { keptIds, ipniPowoDisagree } from './drops';
 import { plainlyAnother } from './authors';
+import { entryLabel } from './bulk';
+import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
+import { viaSource, viaDetail, synonymWords, wcvpBase, settleRange, withPage, HOMONYM_CHECKED, type RangeVia } from './range-via';
 
 type Up = Record<string, { status: string; at?: string; detail?: string }>;
 const day = (now: string) => now.slice(0, 10);
@@ -147,12 +150,16 @@ export async function fillKewLinks(store: DossierStore, f: JsonFetcher, now = ()
   for (const file of store.files()) {
     let d: LinkDossier;
     try { d = store.read<LinkDossier>(file); } catch { continue; }
-    if (!d.ids?.ipni && !d.ids?.powo) continue;
+    // A page with no number is read too (round seventy-two, A): 138 pages Kew holds by their name and author linked no
+    // POWO or IPNI at all, because their item carried none, or there was no item.
     if (done.has(String(d.key))) { c.before++; continue; }
     const k = await gbif.kewIpni(f, d.name.scientific, d.name.authorship ?? undefined, d.name.family ?? undefined);
     if (k.status !== 'ok') { progress?.save([...done]); return { ...c, failed: k.status === 'none' ? 'none' : k.detail }; }
     c.read++;
     done.add(String(d.key));
+    // What was read is kept every fifty dossiers, so a run cut off by Ctrl-C or a crash resumes near where it was (round
+    // seventy-two: the progress was saved only when GBIF refused, and an interrupted run asked all 8,795 again).
+    if (c.read % 50 === 0) progress?.save([...done]);
     const l = gbif.kewLinks({ ipni: d.ids.ipni ?? undefined, powo: d.ids.powo ?? undefined }, k.data);
     if (!l.changed) continue;
     const was = `IPNI ${d.ids.ipni ?? 'none'}, POWO ${d.ids.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'}`;
@@ -160,7 +167,7 @@ export async function fillKewLinks(store: DossierStore, f: JsonFetcher, now = ()
     if (l.ipni) d.links.ipni = `https://www.ipni.org/n/${l.ipni}`; else delete d.links.ipni;
     if (l.powo) d.links.powo = `https://powo.science.kew.org/taxon/${l.powo}`; else delete d.links.powo;
     const row = d.upstream.wikidata;
-    const note = `IPNI and POWO linked by Kew's number${k.data.label ? ` for ${k.data.label}` : ''}${l.ipni ? '' : ', none'} (the item's: ${was}; ${day(now())})`;
+    const note = gbif.kewLinksNote(k.data, l, `${was}; ${day(now())}`);
     d.upstream.wikidata = row ? { ...row, detail: [row.detail, note].filter(Boolean).join('; ') } : { status: 'ok', at: now(), detail: note };
     store.write(file, d);
     c.changed++;
@@ -399,7 +406,9 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
   const done = new Set(progress?.read ?? []);
   const held = new Map(Object.entries(progress?.changed ?? {}));
   const save = () => progress?.save({ read: [...done], changed: Object.fromEntries(held) });
-  const withItem: Array<{ file: string; q: string; key: number }> = [];
+  // Every item with an answered row is placed in the batches of fifty, asked or not, so a batch is the same request on
+  // every run of a day and the day's answers serve it (round seventy-two): only the batches holding an item to ask are sent.
+  const withItem: Array<{ file: string; q: string; key: number; ask: boolean }> = [];
   const reprove: string[] = [];
   for (const file of store.files()) {
     let d: WdDossier;
@@ -407,6 +416,8 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     const row = d.upstream?.wikidata;
     const disagree = ipniPowoDisagree(d.ids);
     if (disagree) c.disagree.push(`${d.name.scientific} [${d.key}]: ${disagree}`);
+    const placed = d.ids?.wikidata && row?.status === 'ok' ? { file, q: d.ids.wikidata, key: d.key, ask: false } : null;
+    if (placed) withItem.push(placed);
     if ((row?.detail ?? '').includes(REPROVED)) { c.before++; continue; }
     // A run stopped by Wikidata's lag resumes (round seventy, the owner's run): what it read stands, and what it found
     // changed is said again without asking.
@@ -414,17 +425,23 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     const was = held.get(mark);
     if (was) { c.changed++; c.lines.push(was.line); c.rebuild.push(was.rebuild); continue; }
     if (done.has(mark)) { c.byKey++; continue; }
-    if (d.ids?.wikidata && row?.status === 'ok') withItem.push({ file, q: d.ids.wikidata, key: d.key });
+    if (placed) placed.ask = true;
     else if (!d.ids?.wikidata && REFUSED_BY_LABEL.test(row?.detail ?? '')) reprove.push(file);
+    // Wikidata not answering the build (its lag, a failure), with identifiers kept or none: asked again here, where only a
+    // build asked before (round seventy-two, the dry run: the ten species of rebuild-wd.txt, rebuilt while Wikidata lagged,
+    // kept their rows "not answered", and no fill or list named them again; nineteen species in all).
+    else if (row?.status === 'error' || row?.status === 'refused') reprove.push(file);
   }
   for (let i = 0; i < withItem.length; i += 50) {
     const part = withItem.slice(i, i + 50);
-    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${[...new Set(part.map((p) => p.q))].join('|')}&props=claims&maxlag=5`;
+    if (!part.some((p) => p.ask)) continue;
+    const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${[...new Set(part.map((p) => p.q))].join('|')}&props=claims`;
     const r = await patiently(() => mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f, url), (x) => x.status === 'ok' && isLagged(mwError(x.data)));
     if (r.status !== 'ok') return stopped({ ...c, failed: 'detail' in r ? r.detail : r.status });
     const err = mwError(r.data);
     if (err) return stopped({ ...c, failed: `wikidata ${err}` });
     for (const p of part) {
+      if (!p.ask) continue;
       c.read++;
       const keys = (r.data.entities?.[p.q]?.claims?.P846 ?? []).map((x) => Number(x.mainsnak?.datavalue?.value));
       if (keys.includes(p.key)) { c.byKey++; done.add(`${p.key}:${p.q}`); }
@@ -435,22 +452,40 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     const d = store.read<WdDossier>(file);
     const st = await sameTypeOfRows(f, d.key);
     if ('failed' in st) return stopped({ ...c, failed: st.failed });
-    const x = await patiently(() => crossIds(f, d.name.scientific, d.key, st.rows, { authorship: d.name.authorship, family: d.name.family }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
+    // Kew's numbers for the name and author, shared with the proof, as a build shares them (round seventy-two).
+    const kewAsk: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {};
+    const x = await patiently(() => crossIds(f, d.name.scientific, d.key, st.rows, { authorship: d.name.authorship, family: d.name.family, kew: kewAsk }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
     if (x.status === 'refused' || x.status === 'error' || x.status === 'skipped') return stopped({ ...c, failed: `${x.by === 'gbif' ? 'GBIF, checking an item' : 'Wikidata'}: ${x.detail}` });
     const was = d.ids.wikidata;
     const got = x.status === 'ok' ? x.data.wikidata : undefined;
     if (x.status === 'ok' && x.data.wikidata === was) {
+      // IPNI and POWO by Kew's number for the name and author, as a build links them (S-B5), never the item's own: the
+      // fill wrote the item's back over what --fill kew-links had set (round seventy-two, the dry run: Ceropegia
+      // penduliflora's 77357237-1 became the item's 77211853-1, and its record lost the line saying so).
+      if (!kewAsk.r && (x.data.ipni || x.data.powo)) kewAsk.r = await gbif.kewIpni(f, d.name.scientific, d.name.authorship ?? undefined, d.name.family ?? undefined);
+      if (kewAsk.r && kewAsk.r.status !== 'ok' && kewAsk.r.status !== 'none') return stopped({ ...c, failed: `GBIF, reading Kew's numbers: ${kewAsk.r.detail}` });
+      const kl = kewAsk.r?.status === 'ok' ? gbif.kewLinks(x.data, kewAsk.r.data) : null;
+      const kewNote = kl?.changed && kewAsk.r?.status === 'ok' ? `; IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''}${kl.ipni ? '' : ', none'} (the item's: IPNI ${x.data.ipni ?? 'none'}, POWO ${x.data.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'})` : '';
+      if (kl) { x.data.ipni = kl.ipni; x.data.powo = kl.powo; }
       d.ids.powo = x.data.powo; d.ids.ipni = x.data.ipni; d.ids.wfo = x.data.wfo;
       for (const [k, v, url] of [['powo', x.data.powo, 'https://powo.science.kew.org/taxon/'], ['ipni', x.data.ipni, 'https://www.ipni.org/n/'], ['wfo', x.data.wfo, 'https://www.worldfloraonline.org/taxon/']] as const) {
         if (v) d.links[k] = `${url}${v}`;
         else delete d.links[k];
       }
-      d.upstream.wikidata = { status: 'ok', at: now(), detail: `${x.detail ?? 'found by its GBIF key'}; ${REPROVED} ${day(now())}` };
+      d.upstream.wikidata = { status: 'ok', at: now(), detail: `${x.detail ?? 'found by its GBIF key'}; ${REPROVED} ${day(now())}${kewNote}` };
       store.write(file, d);
       c.stands++;
       continue;
     }
-    if (!got && !was) continue; // still no item: nothing changed
+    if (!got && !was) {
+      // Still no item: nothing on the page changes but the record, which said Wikidata had not answered (round seventy-two).
+      if (d.upstream.wikidata?.status === 'error' || d.upstream.wikidata?.status === 'refused') {
+        d.upstream.wikidata = { status: x.status === 'ambiguous' ? 'ambiguous' : 'none', at: now(), detail: `${'detail' in x && x.detail ? x.detail : NO_ITEM}; ${REPROVED} ${day(now())}` };
+        store.write(file, d);
+        c.stands++;
+      }
+      continue;
+    }
     c.changed++;
     const now_ = got ? `${got} (${x.detail ?? 'found by its GBIF key'})` : `no item (${x.status}: ${'detail' in x && x.detail ? x.detail : NO_ITEM})`;
     const line = `${d.name.scientific} [${d.key}]: ${was ?? 'no item'} → ${now_}`;
@@ -500,73 +535,129 @@ async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Arra
   return { rows: gbif.sameTypeNames({ key, basionymKey: sp.status === 'ok' ? sp.data.basionymKey : undefined }, all).map((r) => ({ key: r.key, name: r.name })), all, authorship };
 }
 
-/* ---------------------------------------------------------------- --list-rebuild --bulk: Kew's rows by author */
+/* ---------------------------------------------------------------- --list-rebuild --bulk: the page against the rule */
+
+/** A stored older name ("Echinocactus dietrichianus C.F.Först.") as words and author, as `viaOlderNames` reads GBIF's rows. */
+export function olderNameOf(s: string): { name: string; authorship?: string } {
+  const t = s.trim().split(/\s+/);
+  const n = t[0] === '×' ? 3 : t[1] === '×' ? 3 : 2;
+  const infra = /^(?:subsp\.|ssp\.|var\.|f\.|forma|nothosubsp\.|nothovar\.|subvar\.)$/.test(t[n] ?? '') ? 2 : 0;
+  return { name: t.slice(0, n + infra).join(' '), ...(t.length > n + infra ? { authorship: t.slice(n + infra).join(' ') } : {}) };
+}
+
+/** Kew's answer for a stored page, as a build with `--bulk` would read it: its own name, else its stored older names. */
+function kewAnswer(d: RangeDossier, wcvp: Pick<WcvpIndex, 'distributions'> & Partial<Pick<WcvpIndex, 'viaOlderNames' | 'holds'>>): ReturnType<WcvpIndex['distributions']> {
+  const got = wcvp.distributions(d.name.scientific, d.name.authorship, d.name.family);
+  if (got || !wcvp.viaOlderNames || !wcvp.holds || wcvp.holds(d.name.scientific, d.name.authorship, d.name.family)) return got;
+  const via = wcvp.viaOlderNames((d.name.synonyms ?? []).map(olderNameOf));
+  return via && !('ambiguous' in via) ? via : via ? 'ambiguous' : null;
+}
+
+/** Round seventy-one's homonym-key rule ran on every build from its corpus step on (2026-10-15): a key it read then was checked. */
+const KEW_NAME_SINCE = '2026-10-15';
 
 /**
- * The species whose Kew entry the round-seventy rule reads differently (triage-69 B4, S-B4, S-B5, step 4), from Kew's own
- * files: a row of the species' words by another author was taken (Ceropegia macrocarpa (Sprenger) Bruyns took "Ceropegia
- * macrocarpa J.N.Haage & E.Schmidt", and its lack of a range), or Kew holds the species under another spelling of its
- * epithet (Cyphostemma congoensis as C. congoense). A range feeds the records tested against it and the habitat
- * climate, which only a build reads again with the climate grid, so these species are rebuilt, never patched.
+ * The species to rebuild because their page is not what the rule now reads from Kew's files (round seventy-two, B9 with
+ * D4): before, the list compared round sixty-nine's rule with today's and named the same 55 pages after every rebuild,
+ * all of them finished. Now each page is compared with the rule only:
+ *   - its stored native range is not the one Kew's files give (by its name, or by its stored older names);
+ *   - its range is a national checklist's, or none, where Kew's files now answer (Delphinium cultorum, held under an
+ *     artificial hybrid; the names Kew spells otherwise, B7);
+ *   - a homonym key no build has read since the rule (`homonymChecked`, or a build of the rule's round).
+ * A range feeds the records tested against it and the habitat climate, which only a build reads again with the climate
+ * grid, so these species are rebuilt, never patched. A second run after the rebuild lists none of them.
  */
-export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'accepted' | 'legacyAccepted'> & Partial<Pick<WcvpIndex, 'distributions' | 'ownRows'>>): string[] {
+export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'distributions'> & Partial<Pick<WcvpIndex, 'ownRows' | 'viaOlderNames' | 'holds'>>): string[] {
   const out: string[] = [];
-  const id = (e: ReturnType<WcvpIndex['accepted']>) => (e === 'ambiguous' ? 'ambiguous' : e ? `${e.name} ${e.authors ?? ''}`.trim() : 'none');
   for (const file of store.files()) {
     let d: RangeDossier;
     try { d = store.read(file); } catch { continue; }
     if (!d.name?.authorship) continue;
-    const before = id(wcvp.legacyAccepted(d.name.scientific, d.name.authorship));
-    const after = id(wcvp.accepted(d.name.scientific, d.name.authorship, d.name.family));
-    if (before !== after) { out.push(`${d.key} ${d.name.scientific}\tKew's entry for ${d.name.scientific} ${d.name.authorship} was ${before}, is now ${after}`); continue; }
-    // A species on a homonym key (round seventy-one; S-B2): an orphan key (no synonym stored) whose author is plainly not
-    // Kew's one accepted entry for the words; a rebuild asks GBIF whether it holds the words by Kew's author elsewhere,
-    // and if so cites Kew's author and reads GBIF's names by it (`kewName`). Some listed are Kew citing an author
-    // otherwise ("St.Hil.", "A.St.-Hil."), which the rebuild leaves as they are.
+    const label = `${d.key} ${d.name.scientific}`;
+    // A homonym key not yet read by the rule (round seventy-one; S-B2).
     const own = wcvp.ownRows?.(d.name.scientific, d.name.authorship, d.name.family).rows ?? [];
-    if (!d.name.synonyms?.length && own.length === 1 && own[0].status === 'Accepted' && plainlyAnother(d.name.authorship, own[0].authors)) { out.push(`${d.key} ${d.name.scientific}\ton a homonym key: the backbone's ${d.name.authorship} is not Kew's ${own[0].authors}`); continue; }
-    // The page as stored against the rule as it reads Kew's files now (round seventy-one; S-B8: Ixora coccinea was read
-    // the same way by both rules, wrongly, and its page was never listed). Only a range Kew's files answer is compared.
+    const sp = d.upstream?.['gbif.species'];
+    const checked = !!d.name.cited || HOMONYM_CHECKED.test(sp?.detail ?? '') || /is cited as Kew/.test(sp?.detail ?? '') || (sp?.status === 'ok' && !/carried from build of/.test(sp.detail ?? '') && (sp.at ?? '') >= KEW_NAME_SINCE);
+    if (!checked && !d.name.synonyms?.length && own.length === 1 && own[0].status === 'Accepted' && plainlyAnother(d.name.authorship, own[0].authors)) { out.push(`${label}\ton a homonym key not yet read: the backbone's ${d.name.authorship} is not Kew's ${own[0].authors}`); continue; }
     if (!d.distribution) continue;
-    const got = wcvp.distributions?.(d.name.scientific, d.name.authorship, d.name.family);
-    if (!got || got === 'ambiguous') continue;
-    const now = nativeCodes(got.rows), stored = storedCodes(d);
-    if (now !== stored) out.push(`${d.key} ${d.name.scientific}\tthe stored native range is not Kew's for ${after} (${stored || 'none'} stored, ${now || 'none'} now)`);
+    const got = kewAnswer(d, wcvp);
+    const stored = storedCodes(d);
+    const fromKew = !/^(?:national checklists|not available)/.test(d.distribution.source ?? '');
+    if (got === 'ambiguous') { if (stored) out.push(`${label}\tKew's files no longer give one entry; ${stored} stored`); continue; }
+    if (!got) continue;
+    const now = nativeCodes(got.rows);
+    if (now !== stored) out.push(`${label}\tthe stored native range is not Kew's for ${got.entry.name} ${got.entry.authors ?? ''}`.trimEnd() + ` (${stored || 'none'} stored, ${now || 'none'} now)`);
+    else if (!fromKew) out.push(`${label}\tthe stored range is not Kew's, and Kew's files hold the name (${got.rangeVia?.entry ?? got.entry.name})`);
   }
   return out;
 }
 
-type RangeDossier = Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string; family?: string; synonyms?: string[] }; distribution?: { native?: Array<{ code?: string }>; source?: string }; upstream?: Up };
+type RangeDossier = Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string; family?: string; synonyms?: string[]; cited?: unknown }; distribution?: { native?: Array<{ code?: string; name?: string }>; introduced?: Array<{ code?: string; name?: string }>; extinct?: Array<{ code?: string; name?: string }>; doubtful?: Array<{ code?: string; name: string; box?: unknown }>; source?: string; via?: RangeVia }; upstream?: Record<string, { status: string; at: string; detail?: string; asOf?: string }> };
 /** The native regions of Kew's rows, as codes in order: what a build would store. */
 const nativeCodes = (rows: ReadonlyArray<{ locationId?: string; establishmentMeans?: string }>) => [...new Set(rows.filter((r) => r.establishmentMeans === 'NATIVE').map((r) => /([A-Z]{3})$/.exec(r.locationId ?? '')?.[1] ?? '?'))].sort().join(',');
 /** The native regions a dossier stores, as codes in order. */
 const storedCodes = (d: RangeDossier) => [...new Set((d.distribution?.native ?? []).map((x) => x.code ?? '?'))].sort().join(',');
+/** A Kew row as the build stores its region. */
+const regionOf = (r: { locationId?: string; locality?: string }) => { const code = tdwgCode(r.locationId, r.locality); return { ...(code ? { code } : {}), name: code ? tdwgLabel(code) : (r.locality ?? '?'), ...(code && TDWG3[code] ? { box: TDWG3[code] } : {}) }; };
 
-export type RangeSourceCounts = { said: number; before: number; differs: string[] };
+export type RangeSourceCounts = { said: number; before: number; differs: string[]; doubtful: number; named: number; asOf: number; written: number; lines: string[] };
 
 /**
- * `--fill range-source --bulk <dir>` (round seventy-one; self-review 70 S-B4, triage-70): a range Kew gives through the
- * species' own row filed under an entry of another name now says so ("Kew holds Ceropegia mixta (Masson) Bruyns as a
- * synonym of Orbea variegata (L.) Haw.; the range is Orbea variegata's"), where the stored range is the one Kew's files
- * give, so no rebuild is needed: about 480 pages, five of them showing another reference species' range. A stored range
- * that is not Kew's now is left and listed (`--list-rebuild` lists it too). Offline: Kew's files only.
+ * `--fill range-source --bulk <dir>` (round seventy-one; self-review 70 S-B4; round seventy-two, B1 to B8): on a stored page
+ * whose native range is the one Kew's files give, writes what a build with `--bulk` now writes, without a rebuild:
+ *   - `distribution.via` and the range source from it, with the day of Kew's files (never "via GBIF" for a file read),
+ *     settled against the name the page cites (A's `name.cited`: Kew's entry by another author is said only while the
+ *     page cites another);
+ *   - the record's words for a synonym row, Kew's entry by another author, Kew's spelling, an unplaced name;
+ *   - the regions Kew records as doubtfully present, and a region's name where Kew gives only its level-2 region;
+ *   - `asOf` on the range's record (Kew's file day) and on the records' (the download's day, where its DOI is the one given).
+ * A stored range that is not Kew's now is left and listed (`--list-rebuild` lists it too). Offline: Kew's files only.
  */
-export function fillRangeSource(store: DossierStore, wcvp: Pick<WcvpIndex, 'distributions'>): RangeSourceCounts {
-  const c: RangeSourceCounts = { said: 0, before: 0, differs: [] };
+export function fillRangeSource(store: DossierStore, wcvp: Pick<WcvpIndex, 'distributions'> & Partial<Pick<WcvpIndex, 'viaOlderNames' | 'holds' | 'fileDay'>>, o: { download?: { doi: string; day: string } } = {}): RangeSourceCounts {
+  const c: RangeSourceCounts = { said: 0, before: 0, differs: [], doubtful: 0, named: 0, asOf: 0, written: 0, lines: [] };
+  const keyOf = new Map<string, number>();
+  for (const file of store.files()) { try { const d = store.read<RangeDossier>(file); keyOf.set(d.name.scientific.toLowerCase(), d.key); } catch { /* passed by */ } }
+  const reference = { keyOf: (n: string) => keyOf.get(n.toLowerCase()) };
   for (const file of store.files()) {
     let d: RangeDossier;
     try { d = store.read(file); } catch { continue; }
-    if (!d.name?.authorship || !d.distribution) continue;
-    const got = wcvp.distributions(d.name.scientific, d.name.authorship, d.name.family);
-    if (!got || got === 'ambiguous' || !got.synonymOf) continue;
-    const source = `WCVP (Govaerts, RBG Kew): ${gbif.synonymOfWords(got.synonymOf)}`;
-    if (d.distribution.source === source) { c.before++; continue; }
-    if (nativeCodes(got.rows) !== storedCodes(d)) { c.differs.push(`${d.key} ${d.name.scientific}\tits stored native range is not that of Kew's ${got.synonymOf.entry}: rebuild`); continue; }
-    d.distribution.source = source;
-    const row = d.upstream?.['wcvp.distribution'];
-    if (row) d.upstream!['wcvp.distribution'] = { ...row, detail: `${gbif.synonymOfWords(got.synonymOf)}${got.rows.length ? '' : ', with no native range'}` };
-    store.write(file, d);
-    c.said++;
+    const was = JSON.stringify(d);
+    const occ = d.upstream?.['gbif.occurrences'];
+    if (o.download && occ && !occ.asOf && occ.detail === `GBIF occurrence download https://doi.org/${o.download.doi}`) {
+      d.upstream!['gbif.occurrences'] = { ...occ, detail: `${occ.detail}, of ${o.download.day}`, asOf: o.download.day };
+      c.asOf++;
+    }
+    const got = d.name?.authorship && d.distribution && /^WCVP\b/.test(d.distribution.source ?? '') && !/: (?:homonyms|not taken)/.test(d.distribution.source ?? '') ? kewAnswer(d, wcvp) : null;
+    if (got && got !== 'ambiguous' && d.distribution) {
+      if (nativeCodes(got.rows) !== storedCodes(d)) c.differs.push(`${d.key} ${d.name.scientific}\tits stored native range is not that of Kew's ${got.rangeVia?.entry ?? got.entry.name}: rebuild`);
+      else {
+        const dist = d.distribution;
+        const present = got.rows.some((r) => r.establishmentMeans !== 'DOUBTFUL');
+        const via = got.rangeVia ? withPage(got.rangeVia, d.key, reference) : undefined;
+        if (via) {
+          const before = dist.source;
+          dist.via = via;
+          dist.source = present ? viaSource(via) : `${wcvpBase(via.file)}: Kew holds ${entryLabel(got.entry)}${got.entry.status === 'Artificial Hybrid' ? ', an artificial hybrid' : ''}, with no native range`;
+          const row = d.upstream?.['wcvp.distribution'];
+          if (row) {
+            const words = via.kind === 'synonym-of' ? `${synonymWords(via)}${present ? '' : ', with no native range'}` : via.kind === 'older-name' ? row.detail : viaDetail(via, d.name.authorship);
+            const next = { ...row, ...(words ? { detail: words } : {}), ...(wcvp.fileDay ? { asOf: wcvp.fileDay } : {}) };
+            if (!words) delete next.detail;
+            d.upstream!['wcvp.distribution'] = next;
+          }
+          settleRange(d as Parameters<typeof settleRange>[0]);
+          if (dist.source !== before) { c.said++; if (c.lines.length < 2000) c.lines.push(`${d.key} ${d.name.scientific}\t${dist.source}`); } else c.before++;
+        }
+        const doubtful = got.rows.filter((r) => r.establishmentMeans === 'DOUBTFUL').map(regionOf);
+        if (doubtful.length && JSON.stringify(dist.doubtful ?? []) !== JSON.stringify(doubtful)) { dist.doubtful = doubtful; c.doubtful++; }
+        // A region stored with no name, where Kew gives only its level-2 region (Agave calodonta's "Mexico", B8).
+        for (const [k, means] of [['native', 'NATIVE'], ['introduced', 'INTRODUCED'], ['extinct', 'EXTINCT']] as const) {
+          const named = got.rows.filter((r) => r.establishmentMeans === means && !tdwgCode(r.locationId, r.locality)).map((r) => r.locality ?? '');
+          for (const reg of dist[k] ?? []) if (!reg.code && !reg.name && named.length) { reg.name = named.shift()!; c.named++; }
+        }
+      }
+    }
+    if (JSON.stringify(d) !== was) { store.write(file, d); c.written++; }
   }
   return c;
 }
@@ -583,14 +674,20 @@ export * from './summary-fill';
  * kept identifiers name no build. With Kew's files, `kewRebuildList` adds those whose Kew entry the author rule reads
  * differently.
  */
+/** The first day GBIF's synonyms were read page by page (round sixty-nine): a list of fifty since then is GBIF's own. */
+const SYNONYMS_PAGED = '2026-10-12';
+
 export function rebuildList(store: DossierStore): string[] {
   const out: string[] = [];
   for (const file of store.files()) {
     let d: Pick<Dossier, 'key' | 'distribution'> & { name: { scientific: string; synonyms?: string[] }; upstream?: Record<string, { status?: string; detail?: string }> };
     try { d = store.read(file); } catch { continue; }
     const why: string[] = [];
-    if (/under the name |, reached by /.test(d.distribution?.source ?? '')) why.push('range taken under an older name');
-    if ((d.name.synonyms?.length ?? 0) === 50) why.push('50 synonyms stored, the old single page');
+    // Only a page built before the rule (round seventy-two, B9, D4): round sixty-eight's older-name wording, and a list of fifty
+    // stored by a build before GBIF's synonyms were paged (round sixty-nine, 2026-10-11). Round sixty-nine's ", reached by"
+    // pages are compared with Kew's files by `--list-rebuild --bulk`, and named only when they differ.
+    if (/under the name /.test(d.distribution?.source ?? '')) why.push('range taken under an older name');
+    if ((d.name.synonyms?.length ?? 0) === 50 && !((d as { built?: string }).built! >= SYNONYMS_PAGED)) why.push('50 synonyms stored, the old single page');
     // Identifiers kept through a Wikidata that did not answer, in round sixty-eight's words, which name no build: the
     // next build cannot tell their age, so it carries nothing (round seventy; triage-69 S-B7, Mammillaria gigantea).
     if (keptIds(d.upstream?.wikidata) && !/identifiers of the build of \d{4}-\d{2}-\d{2} are kept/.test(d.upstream?.wikidata?.detail ?? '')) why.push('identifiers kept from a build the record does not name');

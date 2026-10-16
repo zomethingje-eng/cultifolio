@@ -358,6 +358,25 @@ describe('a species the index lists whose page cannot be read (round sixty; A6)'
     expect([a.status, a.headers?.get('cache-control')]).toEqual([503, 'no-store']);
     expect(await ask('424242')).toMatchObject({ status: 404 });
   });
+  it('round seventy-two (E): a dossier the bucket still holds under a key the index no longer lists is not served, nor read', async () => {
+    const p = productsOf(X);
+    const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)], [dossierPath(5384013), FIXTURE_DOSSIER], [dossierPath(424242), FIXTURE_DOSSIER]]);
+    const plat = platformOf(b);
+    const read: string[] = [];
+    const get = b.get;
+    b.get = async (k: string) => { read.push(k); return get(k); };
+    const { GET } = await import('../../src/routes/api/dossier/[key]/+server');
+    const ask = async (key: string) => {
+      try {
+        return await GET({ params: { key }, platform: plat, fetch: noStatic, getClientAddress: () => '1.2.3.5', url: new URL(`https://x/api/dossier/${key}`) } as never);
+      } catch (e) {
+        return e as { status: number };
+      }
+    };
+    expect((await ask('5384013')).status).toBe(200); // guard: a listed key is served
+    expect(await ask('424242')).toMatchObject({ status: 404 }); // r72base: 200, the dropped species' old page
+    expect(read).not.toContain(dossierPath(424242));
+  });
 });
 
 describe('/api/dossier (round sixty; B11, the harness review, 10)', () => {

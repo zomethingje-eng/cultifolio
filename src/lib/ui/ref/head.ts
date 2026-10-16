@@ -192,8 +192,11 @@ export function noneInRange(outside: number | null | undefined): { tone: 'warn' 
  * Why the name's author is not GBIF's, for a species on a homonym key (round seventy-one; agent B's need, S-B2): the
  * record of the backbone row says the name is cited as Kew accepts it, and the page says so under the name. Null otherwise.
  */
-export function kewCitedNote(upstream: Record<string, { detail?: string } | undefined>): string | null {
+export function kewCitedNote(upstream: Record<string, { detail?: string } | undefined>, name?: { scientific: string; authorship?: string; cited?: { gbif: string; kew: string } }): string | null {
+  // The structured field first (round seventy-two, A; F13): the backbone's citation, and Kew's, which the page shows.
+  if (name?.cited) return `GBIF's backbone cites this name as ${name.scientific}${name.cited.gbif.trim() ? ` ${name.cited.gbif.trim()}` : ', with no author'}; the page cites it as Kew's World Checklist cites the entry it links.`;
+  // A dossier built before: its record's sentence.
   const d = upstream['gbif.species']?.detail?.trim();
-  if (!d || !/is cited as Kew accepts it/.test(d)) return null;
+  if (!d || !/is cited as Kew (?:accepts|cites) it/.test(d)) return null;
   return /[.!?]$/.test(d) ? d : `${d}.`;
 }

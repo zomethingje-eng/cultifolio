@@ -111,6 +111,6 @@ describe('--list-rebuild, more', () => {
   it('a species on a homonym key is listed (S-B2)', async () => {
     const { kewRebuildList } = await import('$dossier/corpus-fills');
     const docs = { a: { key: 1, name: { scientific: 'Orbea variegata', authorship: 'Kük.', family: 'Apocynaceae' }, distribution: { native: [{ code: 'CPP' }] } } };
-    expect(kewRebuildList({ files: () => ['a'], read: <T,>() => structuredClone(docs.a) as T, write: () => {} }, mixta())).toEqual(["1 Orbea variegata\ton a homonym key: the backbone's Kük. is not Kew's (L.) Haw."]);
+    expect(kewRebuildList({ files: () => ['a'], read: <T,>() => structuredClone(docs.a) as T, write: () => {} }, mixta())).toEqual(["1 Orbea variegata\ton a homonym key not yet read: the backbone's Kük. is not Kew's (L.) Haw."]);
   });
 });

@@ -19,7 +19,7 @@ import { heroOf, oneCopyEach, inatPhotoId, isSpecimenMedia } from './dedupe';
 import { spellingKey } from './epithet';
 import { commonsTileOf } from './photo-size';
 import { ownNames as ownNamesRule } from './own-names';
-import { authorsAgree } from './authors';
+import { authorsAgree, parentheticalAuthor, exAuthor, publishingAuthor } from './authors';
 import { splitCommonsCredit } from './photo-credit';
 import type { JsonFetcher, FetchResult } from './fetch';
 
@@ -39,6 +39,14 @@ export interface HeldNames {
   epithets(genus: string): readonly string[];
   /** The key of the species whose accepted name this genus and epithet is (by `spellingKey`), or null (round seventy, second pass; REVIEW-TRIAGE-69 C6). */
   accepted(genus: string, epithet: string): number | null;
+  /**
+   * Whether a species of the reference has this genus in its accepted name (round seventy-two): "Cactus", "Croton",
+   * "Bahia" and "Palma" are genera only of older names, and words of an English title or a place ("Pariette Cactus",
+   * "Melocactus braunii Bahia Brasil"). Optional, for a hand-made `HeldNames`; absent, every genus counts as before.
+   */
+  acceptedGenus?(genus: string): boolean;
+  /** The keys of the species holding this name below species (genus, epithet, last epithet) as an older name (round seventy-two). */
+  infraHolders?(genus: string, epithet: string, infra: string): readonly number[];
 }
 
 /** The species' names a title is read against: its own and its older names, as the dossier keeps them (authors allowed); its key and the reference's names when known. */
@@ -49,6 +57,18 @@ export interface KindNames {
   held?: HeldNames | null;
   /** The species' author, which tells GBIF's second spelling of this name from another species (`slipStanding`). */
   authorship?: string | null;
+  /**
+   * What Kew's file says of the species' names (`name.kew`, A's offline Kew fill; round seventy-two, C4): its synonym
+   * binomials, read as the species' own older names, and the stored older names Kew accepts as species of their own, no
+   * longer read as the species'. Absent on a dossier the fill has not read: nothing is added or taken away.
+   */
+  kew?: { synonyms?: readonly string[] | null; acceptedElsewhere?: readonly string[] | null } | null;
+}
+
+/** The names a dossier's photographs are read against, as the page, the index and the fills read them (round seventy-two). */
+export function kindNamesOf(d: { key?: number; name?: { scientific: string; synonyms?: readonly string[] | null; authorship?: string | null; kew?: KindNames['kew'] } | null }, held?: HeldNames | null): KindNames | null {
+  if (!d.name) return null;
+  return { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held, authorship: d.name.authorship ?? undefined, ...(d.name.kew ? { kew: d.name.kew } : {}) };
 }
 
 /**
@@ -69,8 +89,11 @@ export function heldNamesOf(entries: readonly HeldSource[]): HeldNames {
   const by = new Map<string, number[]>();
   const words = new Map<string, Set<string>>();
   const acc = new Map<string, number>();
+  const accGenera = new Set<string>();
+  const infra = new Map<string, number[]>();
   for (const e of entries) {
     const a = nameOf(e.name);
+    if (a) accGenera.add(a.genus.toLowerCase());
     if (a && !a.infra) acc.set(`${a.genus.toLowerCase()} ${spellingKey(a.epithet)}`, e.key);
     for (const n of [e.name, ...(e.syn ?? []), ...(e.older ?? [])]) {
       const b = nameOf(n);
@@ -78,7 +101,12 @@ export function heldNamesOf(entries: readonly HeldSource[]): HeldNames {
       const g = b.genus.toLowerCase();
       (words.get(g) ?? words.set(g, new Set()).get(g)!).add(b.epithet.toLowerCase());
       // An older name below species ("Babiana stricta var. purpurea") is held only whole: its first two words are another species' name (S-C6).
-      if (b.infra) continue;
+      if (b.infra) {
+        const ik = `${g} ${spellingKey(b.epithet)} ${spellingKey(b.infra)}`;
+        const is = infra.get(ik) ?? infra.set(ik, []).get(ik)!;
+        if (!is.includes(e.key)) is.push(e.key);
+        continue;
+      }
       const k = `${g} ${spellingKey(b.epithet)}`;
       const ks = by.get(k) ?? by.set(k, []).get(k)!;
       if (!ks.includes(e.key)) ks.push(e.key);
@@ -88,7 +116,9 @@ export function heldNamesOf(entries: readonly HeldSource[]): HeldNames {
     holders: (genus, epithet) => by.get(`${genus.toLowerCase()} ${spellingKey(epithet)}`) ?? [],
     hasGenus: (genus) => words.has(genus.toLowerCase()),
     epithets: (genus) => [...(words.get(genus.toLowerCase()) ?? [])],
-    accepted: (genus, epithet) => acc.get(`${genus.toLowerCase()} ${spellingKey(epithet)}`) ?? null
+    accepted: (genus, epithet) => acc.get(`${genus.toLowerCase()} ${spellingKey(epithet)}`) ?? null,
+    acceptedGenus: (genus) => accGenera.has(genus.toLowerCase()),
+    infraHolders: (genus, epithet, inf) => infra.get(`${genus.toLowerCase()} ${spellingKey(epithet)} ${spellingKey(inf)}`) ?? []
   };
   heldMemo.set(entries, out);
   return out;
@@ -256,8 +286,12 @@ export function olderNameIsOwn(n: KindNames, b: { genus: string; epithet: string
 const ownNames = (n: KindNames | null | undefined): Name[] => {
   if (!n) return [];
   const first = nameOf(n.scientific);
-  const older = (n.synonyms ?? []).map(nameOf).filter((b): b is Name => !!b && olderNameIsOwn(n, b));
-  return first ? [first, ...older] : older;
+  // An older name Kew accepts as a species of its own is that species', not this one's (round seventy-two, C4; A2).
+  const apart = new Set((n.kew?.acceptedElsewhere ?? []).map((x) => { const b = nameOf(x); return b ? `${lower(b.genus)} ${spellingKey(b.epithet)}${b.infra ? ` ${spellingKey(b.infra)}` : ''}` : ''; }));
+  const keyOf = (b: Name) => `${lower(b.genus)} ${spellingKey(b.epithet)}${b.infra ? ` ${spellingKey(b.infra)}` : ''}`;
+  const older = [...(n.synonyms ?? []), ...(n.kew?.synonyms ?? [])].map(nameOf).filter((b): b is Name => !!b && !apart.has(keyOf(b)) && olderNameIsOwn(n, b));
+  const seen = new Set<string>();
+  return (first ? [first, ...older] : older).filter((b) => { const k = keyOf(b); if (seen.has(k)) return false; seen.add(k); return true; });
 };
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const genusRe = (g: string) => `[${g[0]}${g[0].toLowerCase()}]${esc(g.slice(1))}`;
@@ -359,21 +393,38 @@ function readings(raw: string, n: KindNames, ctx: ReadCtx = {}): Verdict[] {
   const tokens = [...title.matchAll(/[A-Za-z]+(?:-[a-z]+)*|×/g)].map((m) => ({ w: m[0], at: m.index!, end: m.index! + m[0].length }));
   const gap = (j: number) => title.slice(tokens[j - 1].end, tokens[j].at);
   /** The lower-case words that follow token i, through spaces, underscores and full stops: an epithet and what may follow it. */
+  /** Tokens read as the epithet of a genus before them: never read again as a genus run on into a word (round seventy-two). */
+  const used = new Set<number>();
   const after = (i: number) => {
     const out: string[] = [];
+    let first = -1;
+    const keep = (j: number, w: string) => { if (first < 0) first = j; out.push(w); };
     for (let j = i + 1; j < tokens.length && out.length < 3; j++) {
       if (!/^[\s_.]*$/.test(gap(j)) || (j === i + 1 && !gap(j))) break;
       if (out.length === 0 && (tokens[j].w === '×' || tokens[j].w === 'x')) continue;
       // An epithet written with a capital, the species' own ("Aizoaceae Gibbaeum Dispar", "Haworthia Semiviva"; S-C6) or
       // one the reference holds in this genus ("Lithops Karasmontana"), is read as written small.
-      if (out.length === 0 && /^[A-Z][a-z-]+$/.test(tokens[j].w) && (ownKeys.has(spellingKey(lower(tokens[j].w))) || heldIn(tokens[i].w, lower(tokens[j].w)))) { out.push(lower(tokens[j].w)); continue; }
+      if (out.length === 0 && /^[A-Z][a-z-]+$/.test(tokens[j].w) && (ownKeys.has(spellingKey(lower(tokens[j].w))) || heldIn(tokens[i].w, lower(tokens[j].w)))) { keep(j, lower(tokens[j].w)); continue; }
       if (!/^[a-z][a-z-]*$/.test(tokens[j].w)) break;
-      out.push(tokens[j].w);
+      keep(j, tokens[j].w);
     }
-    return out;
+    return Object.assign(out, { first });
+  };
+  /**
+   * Whether a genus named alone is another plant in the picture (round seventy-two): only a genus of an accepted name of
+   * the reference ("Cactus", "Croton", "Bahia" are genera of older names only, and "Pariette Cactus", "Chinese Croton",
+   * "Melocactus braunii Bahia Brasil" are English or a place), and not the last word of an English name before it
+   * ("Autumn Crocus (Meadow Saffron)" on Colchicum neapolitanum, "Golden Lotus Banana (Ensete lasiocarpum)").
+   */
+  const bareCounts = (i: number) => {
+    const w = tokens[i].w;
+    if (n.held?.acceptedGenus && !n.held.acceptedGenus(w)) return false;
+    const prev = i > 0 && /^[ \t]+$/.test(gap(i)) ? tokens[i - 1].w : '';
+    return !(/^[A-Z][a-z]+$/.test(prev) && !n.held?.hasGenus(prev) && !genera.has(lower(prev)));
   };
   const out: Verdict[] = [];
   for (let i = 0; i < tokens.length; i++) {
+    if (used.has(i)) continue;
     const w = tokens[i].w;
     const g = lower(w);
     const isOwn = genera.has(g) && (w === g || w === genera.get(g));
@@ -381,10 +432,10 @@ function readings(raw: string, n: KindNames, ctx: ReadCtx = {}): Verdict[] {
     if (isOwn || isRef) {
       const next = after(i);
       const v = readBinomial(genera.get(g) ?? w, next, n, own, ctx);
-      if (v) out.push(v);
+      if (v) { out.push(v); if (next.first >= 0) used.add(next.first); }
       // Another genus of the reference named alone is another plant in the picture ("… and Yucca"; R47-3, C7).
       // A word that is also the species' own epithet is the species named by its epithet ("Pachyphytum 120221" on Dudleya pachyphytum).
-      else if (isRef && !next.length && BARE_GENUS && !own.some((b) => spellingKey(b.epithet) === spellingKey(w))) out.push('another');
+      else if (isRef && !next.length && BARE_GENUS && !own.some((b) => spellingKey(b.epithet) === spellingKey(w)) && bareCounts(i)) out.push('another');
       continue;
     }
     // A name with a rank in a genus neither the species' nor the reference's ("… and Osteomeles anthyllidifolia var.
@@ -556,8 +607,66 @@ export function commonsFirstByEpithet<P extends { src?: string; id: string; widt
   return out;
 }
 
-type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null };
+type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null };
 const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
+/**
+ * iNaturalist's stand-in for a photograph it has not processed (`/attachment_defaults/local_photos/large.png`): a grey
+ * placeholder, not a photograph of anything, on a host the page's policy does not allow (www.inaturalist.org), so it
+ * showed as "did not load" in Pseudophoenix sargentii's gallery and counted among its photographs (round seventy-two, F8).
+ */
+export const placeholderPhoto = (u: string | undefined) => !!u && /\/attachment_defaults\//.test(u);
+
+/**
+ * An iNaturalist or GBIF credit with any e-mail address taken out (round seventy-two, C10): three credits (two pages)
+ * published an address as the author. Null when no author is left under CC BY or CC BY-SA, which is then not published (rule 4); the line unchanged when it holds
+ * no address. Commons' credits are read by `readCommonsPhoto`, which already drops an address.
+ */
+export function creditWithoutMail(p: { src?: string; licence?: string; attribution: string }): string | null {
+  if (!MAIL_IN.test(p.attribution)) return p.attribution;
+  const needsAuthor = p.licence === 'by' || p.licence === 'by-sa';
+  const inat = /^\(c\)\s*(.*?)(,\s*(?:some|all|no) rights reserved.*)$/i.exec(p.attribution);
+  const gbif = /^(.*?)(,\s*(?:CC0|CC BY-SA|CC BY|Public domain)\b.*)$/i.exec(p.attribution);
+  const m = p.src === 'inat' ? inat : p.src === 'gbif' ? gbif : (inat ?? gbif);
+  if (!m) return needsAuthor ? null : p.attribution.replace(MAIL_ALL, ' ').replace(/\s+/g, ' ').trim();
+  const who = withoutMail(m[1]);
+  if (!who) return needsAuthor ? null : `${m === inat ? '(c) author not stated' : 'author not stated'}${m[2]}`;
+  return `${m === inat ? '(c) ' : ''}${who}${m[2]}`;
+}
+const MAIL_IN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+const MAIL_ALL = /\s*[<(]?\s*(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*[>)]?/g;
+const withoutMail = (s: string) => s.replace(MAIL_ALL, ' ').replace(/\s+/g, ' ').replace(/^[\s,;]+|[\s,;]+$/g, '').trim();
+
+/** One photograph however a dossier holds it: iNaturalist's photo id (from iNaturalist or through GBIF), a Commons title, else its address. */
+export const photoIdentity = (p: { src?: string; id: string; url: string }): string => { const i = inatPhotoId(p.url); return i ? `inat:${i}` : p.src === 'commons' ? `commons:${p.id}` : `url:${p.url}`; };
+
+/**
+ * Photographs two or more species' pages would show (round seventy-two, C5): the same iNaturalist photograph attached to
+ * two observations of different plants (cut twigs of several species led Sassafras albidum), and survey-plot photographs
+ * a council filed under the occurrences of three species. Written by `--index` as `shared` (the other pages' keys) on
+ * each such photograph, which no page then shows. `shown` is each dossier's photographs as the page reads them without
+ * the mark. Returns, by key, the identities to mark with the other keys.
+ */
+export function sharedPhotos(shown: ReadonlyArray<{ key: number; photos: ReadonlyArray<{ src?: string; id: string; url: string }> }>): Map<number, Map<string, number[]>> {
+  const holders = new Map<string, Set<number>>();
+  for (const d of shown) for (const p of d.photos) { const k = photoIdentity(p); (holders.get(k) ?? holders.set(k, new Set()).get(k)!).add(d.key); }
+  const out = new Map<number, Map<string, number[]>>();
+  for (const [id, keys] of holders) {
+    if (keys.size < 2) continue;
+    for (const k of keys) (out.get(k) ?? out.set(k, new Map()).get(k)!).set(id, [...keys].filter((x) => x !== k).sort((a, b) => a - b));
+  }
+  return out;
+}
+/** A dossier's photographs with `shared` written from `sharedPhotos` (set, changed or removed); whether anything changed. */
+export function markShared(photos: Array<{ src?: string; id: string; url: string; shared?: number[] }>, marks: Map<string, number[]> | undefined): boolean {
+  let changed = false;
+  for (const p of photos) {
+    const want = marks?.get(photoIdentity(p));
+    const had = p.shared;
+    if (want?.length) { if (!had || had.join(',') !== want.join(',')) { p.shared = want; changed = true; } }
+    else if (had) { delete p.shared; changed = true; }
+  }
+  return changed;
+}
 
 /**
  * The photographs a page shows and the index counts: a photograph whose address or thumbnail is not a web address left
@@ -567,14 +676,21 @@ const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
  * Commons' credit cleaned and its licence re-read; Commons files holding the species' epithet first. Every other
  * source's photograph is left exactly as it is.
  */
-export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: KindNames | null): P[] {
+export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: KindNames | null, o: { shared?: boolean } = {}): P[] {
   const out: P[] = [];
   // GBIF media of a herbarium sheet, a museum's drawing or a micrograph (a record that is not an observation of the living
   // plant, `specimen`, or an image on a herbarium's own host) is not shown (self-review 70, S-C4; REVIEW-TRIAGE-70).
-  const kept = oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb) && !isSpecimenMedia(p)));
+  // iNaturalist's placeholder is no photograph (F8); one that two species' pages hold is shown on neither (C5; `o.shared`
+  // false reads the photographs as if unmarked, for `--index` to mark them).
+  const kept = oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb) && !placeholderPhoto(p.url) && !placeholderPhoto(p.thumb) && !isSpecimenMedia(p) && (o.shared === false || !p.shared?.length)));
   const inat = new Set(kept.map((p) => inatPhotoId(p.url)).filter((x): x is string => !!x));
   for (const p of kept) {
-    if (p.src !== 'commons') out.push(p);
+    if (p.src !== 'commons') {
+      // An e-mail address is never published as an author (C10).
+      const credit = creditWithoutMail(p);
+      if (credit === p.attribution) out.push(p);
+      else if (credit) out.push({ ...p, attribution: credit });
+    }
     // A Commons copy of an iNaturalist photograph the page holds: by the number its name ends with, or by the photograph
     // its source names (`inat`, kept by the build and the fill; self-review 70, S-C5).
     else if (inat.has(commonsInatCopy(p.id) ?? '') || (p.inat && inat.has(p.inat))) continue;
@@ -607,10 +723,19 @@ export const leadOf = <P extends PhotoLike>(photos: readonly P[], names?: KindNa
  * where Commons answers (the build, `--fill commons-kind`) and kept with the photograph as `kind`, which the read obeys.
  */
 const SPECIMEN_SOURCE = /collections\.nmnh\.si\.edu\/search\/botany|sweetgum\.nybg\.org|specimens\.kew\.org|plants\.jstor\.org|oxalis\.br\.fgov\.be|mediaphoto\.mnhn\.fr|herbarium|herbier|herbar|data\.rbge\.org\.uk\/herb|\/specimens?\//i;
-const SPECIMEN_WORDS = /\b(?:herbarium|pressed|mounted|dried|type|voucher)\s+(?:specimens?|sheets?)\b|\bspecimens?\s+(?:from|in|of)\s+(?:the\s+)?[^.]{0,80}?\b(?:museum|herbarium|herbier|herbarium)\b|\bherbarium sheet\b/i;
+const SPECIMEN_WORDS = /\b(?:herbarium|pressed|mounted|dried|type|voucher)\s+(?:specimens?|sheets?)\b|\bspecimens?\s+(?:from|in|of)\s+(?:the\s+)?[^.]{0,80}?\b(?:herbarium|herbier)\b|\bherbarium sheet\b/i;
+/**
+ * A specimen "in the … Museum" is a sheet only where the description also says pressed, mounted, dried, preserved or
+ * herbarium, or the museum is one of natural history (round seventy-two, C8): Agave titanota's "specimen in the Food and
+ * Agriculture Museum" is a living plant on show, hidden as a herbarium sheet; Commiphora myrrha's "specimen from the
+ * Smithsonian National Museum of Natural History" stays a sheet.
+ */
+const MUSEUM_SPECIMEN = /\bspecimens?\s+(?:from|in|of)\s+(?:the\s+)?[^.]{0,80}?\bmuseum\b/i;
+const MUSEUM_SHEET = /\b(?:pressed|mounted|dried|preserved|herbari\w*|natural history)\b/i;
 export function sourceKind(credit?: string | null, description?: string | null): string | null {
   if (SPECIMEN_SOURCE.test(credit ?? '')) return 'a herbarium sheet (by its source)';
-  if (SPECIMEN_WORDS.test((description ?? '').replace(/<[^>]+>/g, ' '))) return 'a herbarium sheet (by its description)';
+  const text = (description ?? '').replace(/<[^>]+>/g, ' ');
+  if (SPECIMEN_WORDS.test(text) || (MUSEUM_SPECIMEN.test(text) && MUSEUM_SHEET.test(text))) return 'a herbarium sheet (by its description)';
   return null;
 }
 
@@ -650,7 +775,7 @@ const authorOf = (m: { scientificName?: string; canonicalName?: string; authorsh
  *   - neither holds it: a slip, this species'.
  * Pure: the caller asks the sources (`askSlip` does). `own.authorship` must be stated for GBIF's second spelling to count.
  */
-export function slipStanding(name: string, own: SlipOwn, kew: readonly KewNameRow[], gbif: GbifNameMatch | null): { own: boolean; why: string } {
+export function slipStanding(name: string, own: SlipOwn, kew: readonly KewNameRow[], gbif: GbifNameMatch | null, gbifAccepted?: GbifNameMatch | null): { own: boolean; why: string } {
   const n = bin(name);
   const ownNames = new Set([own.scientific, ...(own.synonyms ?? [])].map(bin));
   const rows = kew.filter((r) => bin(r.canonicalName ?? r.scientificName) === n && !/misapplied/i.test(r.taxonomicStatus ?? ''));
@@ -661,11 +786,49 @@ export function slipStanding(name: string, own: SlipOwn, kew: readonly KewNameRo
   if (rows.some((r) => r.accepted && ownNames.has(bin(r.accepted)))) return { own: true, why: `Kew holds ${name} as a synonym of this species` };
   if (gbif && gbif.matchType === 'EXACT' && bin(gbif.canonicalName) === n) {
     if (own.key != null && (gbif.speciesKey === own.key || gbif.acceptedUsageKey === own.key || gbif.usageKey === own.key)) return { own: true, why: `GBIF holds ${name} as this species` };
+    // Round seventy-two: GBIF's record is one of this species' names (its accepted name or an older one) by the same
+    // author, spelt otherwise (ICN Art. 61), whatever GBIF's status for it: GBIF keeps "Parodia leninghausii (F.Haage)
+    // F.H.Brandt" as a species beside "Parodia lenninghausii (F.Haage) F.H.Brandt ex Eggli & Hofacker", and "Brachystelma
+    // barberiae Harv." as a synonym of a doubtful record, beside this species' older name "Brachystelma barberae Harv.".
+    const spelt = speltOtherwise(gbif, own);
+    if (spelt) return { own: true, why: `GBIF's ${gbif.scientificName ?? name} is ${spelt}, by its own author, spelt otherwise` };
+    // And a GBIF synonym of such a record (Notocactus leninghausii, GBIF's synonym of Parodia leninghausii).
+    const via = gbifAccepted && gbifAccepted.usageKey === gbif.acceptedUsageKey ? speltOtherwise(gbifAccepted, own) : null;
+    if (via) return { own: true, why: `GBIF holds ${gbif.scientificName ?? name} as a synonym of ${gbifAccepted!.scientificName}, which is ${via}, spelt otherwise` };
     const theirs = authorOf(gbif);
     if (/^accepted$/i.test(gbif.status ?? '') && /^species$/i.test(gbif.rank ?? '') && authorsAgree(theirs, own.authorship ?? undefined)) return { own: true, why: `GBIF's ${gbif.scientificName ?? name} is this species' name by its own author, spelt otherwise` };
     return { own: false, why: `GBIF holds ${gbif.scientificName ?? name} as ${/^accepted$/i.test(gbif.status ?? '') ? 'a species' : `${(gbif.status ?? 'a name').toLowerCase()} of another species`}` };
   }
   return { own: true, why: `neither Kew nor GBIF holds ${name}: a slip of this species' epithet` };
+}
+
+/**
+ * Two citations of one author (round seventy-two): `authorsAgree`, or the same basionym author and an "A ex B" cited by
+ * its first author alone, "(F.Haage) F.H.Brandt" for "(F.Haage) F.H.Brandt ex Eggli & Hofacker" (ICN Art. 46.4).
+ */
+function sameAuthor(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  if (authorsAgree(a, b)) return true;
+  if (parentheticalAuthor(a) !== parentheticalAuthor(b)) return false;
+  const ea = exAuthor(a), eb = exAuthor(b);
+  return (!!ea && ea === publishingAuthor(b)) || (!!eb && eb === publishingAuthor(a));
+}
+
+/** Which of the species' names a GBIF record is, in the same genus, its epithet the same or one slip apart, by the same author; null when none. */
+function speltOtherwise(m: GbifNameMatch, own: SlipOwn): string | null {
+  const name = nameOf((m.canonicalName ?? '').trim());
+  if (!name || name.infra) return null;
+  const author = authorOf(m);
+  const names: Array<{ full: string; n: Name; author?: string | null }> = [];
+  const self = nameOf(own.scientific);
+  if (self && !self.infra) names.push({ full: 'this species\' name', n: self, author: own.authorship });
+  for (const s of own.synonyms ?? []) {
+    const b = nameOf(s);
+    if (!b || b.infra) continue;
+    names.push({ full: `its older name ${b.genus} ${b.epithet}`, n: b, author: s.trim().split(/\s+/).slice(2).join(' ') || null });
+  }
+  const hit = names.find((x) => lower(x.n.genus) === lower(name.genus) && (lower(x.n.epithet) === lower(name.epithet) || slip(x.n.epithet, name.epithet)) && sameAuthor(author, x.author));
+  return hit ? hit.full : null;
 }
 
 const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
@@ -680,7 +843,15 @@ export async function askSlip(f: JsonFetcher, name: string, own: SlipOwn): Promi
   if (k.status !== 'ok' && k.status !== 'none') return k;
   const g = await f<GbifNameMatch>(`https://api.gbif.org/v1/species/match?strict=true&kingdom=Plantae&name=${encodeURIComponent(name)}`);
   if (g.status !== 'ok' && g.status !== 'none') return g;
-  return { status: 'ok', data: slipStanding(name, own, k.status === 'ok' ? (k.data.results ?? []) : [], g.status === 'ok' ? g.data : null) };
+  // A synonym's accepted record, one request more, read only where the match is a synonym of a key not this species' (round seventy-two).
+  const m = g.status === 'ok' ? g.data : null;
+  let accepted: GbifNameMatch | null = null;
+  if (m && m.matchType === 'EXACT' && m.acceptedUsageKey && m.acceptedUsageKey !== own.key && m.speciesKey !== own.key) {
+    const a = await f<{ key?: number; scientificName?: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; rank?: string }>(`https://api.gbif.org/v1/species/${m.acceptedUsageKey}`);
+    if (a.status !== 'ok' && a.status !== 'none') return a;
+    if (a.status === 'ok') accepted = { usageKey: a.data.key, scientificName: a.data.scientificName, canonicalName: a.data.canonicalName, authorship: a.data.authorship, status: a.data.taxonomicStatus, rank: a.data.rank };
+  }
+  return { status: 'ok', data: slipStanding(name, own, k.status === 'ok' ? (k.data.results ?? []) : [], m, accepted) };
 }
 
 /**

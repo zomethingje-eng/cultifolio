@@ -13,8 +13,8 @@ import type { BuildOptions } from './build';
 import type { HeldNames } from './photo-kind';
 
 /**
- * The start of a corpus run: Wikidata's maxlag is waited out, as MediaWiki asks of a batch client (round sixty-eight),
- * and a lag spell is watched for (round sixty-nine; triage-68 M10). The script calls `after` with each species' Wikidata row.
+ * The start of a corpus run: a maxlag answer is waited out, as MediaWiki asks of a batch client (round sixty-eight; since
+ * round seventy-two only Commons is asked with maxlag, Wikidata's being its query service's), and a lag spell is watched for (round sixty-nine; triage-68 M10). The script calls `after` with each species' Wikidata row.
  */
 export function startCorpusRun() {
   mwWait.tries = MAXLAG_TRIES;

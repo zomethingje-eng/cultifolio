@@ -92,14 +92,16 @@ describe('Kew\'s rows of the species\' own name, by author and by spelling', () 
 describe('the corpus step: the species whose Kew entry the rule reads differently are listed for a rebuild', () => {
   it('Ceropegia macrocarpa and Cyphostemma congoensis are, Mammillaria grusonii is not', () => {
     const docs: Record<string, unknown> = {
-      '9263110.json': { key: 9263110, name: { scientific: 'Ceropegia macrocarpa', authorship: '(Sprenger) Bruyns' } },
-      '4052649.json': { key: 4052649, name: { scientific: 'Cyphostemma congoensis', authorship: '(Hort.) Desc.' } },
-      '8429321.json': { key: 8429321, name: { scientific: 'Mammillaria grusonii', authorship: 'Ruenge' } }
+      // Round seventy-two (B9): the page is compared with the rule, so each carries the range a build before stored.
+      '9263110.json': { key: 9263110, name: { scientific: 'Ceropegia macrocarpa', authorship: '(Sprenger) Bruyns' }, distribution: { native: [], source: 'not available' } },
+      '4052649.json': { key: 4052649, name: { scientific: 'Cyphostemma congoensis', authorship: '(Hort.) Desc.' }, distribution: { native: [], source: 'not available' } },
+      '8429321.json': { key: 8429321, name: { scientific: 'Mammillaria grusonii', authorship: 'Ruenge' }, distribution: { native: [{ code: 'MXE' }], source: 'WCVP (Govaerts, RBG Kew) via GBIF' } }
     };
     const store = { files: () => Object.keys(docs), read: <T,>(k: string) => docs[k] as T, write: () => {} };
+    // Ceropegia macrocarpa's stored "none" is the rule's; Cyphostemma congoensis's is not (round seventy-two, B9: the list
+    // compares the page with the rule, not round sixty-nine's rule with today's).
     expect(kewRebuildList(store, kew())).toEqual([
-      "9263110 Ceropegia macrocarpa\tKew's entry for Ceropegia macrocarpa (Sprenger) Bruyns was Ceropegia macrocarpa J.N.Haage & E.Schmidt, is now none",
-      "4052649 Cyphostemma congoensis\tKew's entry for Cyphostemma congoensis (Hort.) Desc. was none, is now Cyphostemma congoense (Anon.) Desc."
+      "4052649 Cyphostemma congoensis\tthe stored native range is not Kew's for Cyphostemma congoense (Anon.) Desc. (none stored, ZAI now)"
     ]); // base: no kewRebuildList
   });
   it('the script lists them with --list-rebuild --bulk', () => {

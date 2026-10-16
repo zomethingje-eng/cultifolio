@@ -1,0 +1,39 @@
+# Round seventy-two's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
+# One step a line:
+#   backup                       static/s/v2 copied to backups/v2-<corpus id> (once a corpus)
+#   dossier <arguments>          the builder: npm run dossier -- <arguments>
+#   if-exists <file> <step>      the step only when the file is there
+#   review <what to read>        a stop: read it, then `node scripts/corpus-step.mjs --go-on`
+#   upload                       the two rclone lines, with a check of the bucket between them, then the bucket's
+#                                dossiers the index does not list reported (bucket-unlisted.txt; nothing deleted)
+#   live-check                   npm run live-check, then the site must serve the corpus on disk
+# Each builder step that stops unfinished (a source not answering) exits 3, and the next run starts it again; each
+# picks up where it stopped. The day's answers are kept in cache/upstream/, so a rerun the same day asks again only
+# what did not answer.
+backup
+# Wikidata, without the query service's lag (D): lists round 71's nine changes and seven rows long "not answered"
+# in rebuild-wd.txt (16 on the dry run).
+dossier --fill wikidata
+# Kew's numbers for the name and author (8,795 GBIF requests, about 40 minutes; resumable).
+dossier --fill kew-links
+# A's Kew fill, offline: name.kew and name.cited. After --fill kew-links, since a page cites the name whose number it
+# links (and kew-links takes Cochemiea matehualensis's POWO link back first).
+dossier --fill kew-names --bulk bulk
+# B's list compares each page with the rule (about 5 species).
+dossier --list-rebuild --bulk bulk
+review rebuild-wd.txt and rebuild-keys.txt in the project folder list the species the next two steps rebuild online (about 16 and 5).
+if-exists rebuild-wd.txt dossier --keys rebuild-wd.txt --grid climate --bulk bulk
+if-exists rebuild-keys.txt dossier --keys rebuild-keys.txt --grid climate --bulk bulk
+# B's range sources, offline: distribution.via and Kew's file day.
+dossier --fill range-source --bulk bulk
+# C's iNaturalist sets against Kew's rows below species (about 1,500 requests, 35 minutes).
+dossier --fill inat --bulk bulk
+dossier --fill gbif-basis
+dossier --fill gbif-open
+dossier --fill commons
+dossier --fill commons-kind
+dossier --fill summaries
+dossier --index
+review Read drops.txt if it is there, and in corpus-step.log the lines each step printed of what it changed.
+upload
+live-check

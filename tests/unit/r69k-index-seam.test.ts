@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 describe('the corpus builder uses the photograph rules of the read', () => {
   const s = readFileSync('scripts/build-dossiers.ts', 'utf8');
   it('the index entry leads and counts with shownPhotos', () => {
-    expect(s).toMatch(/const shown = shownPhotos\(d\.photos, \{ scientific: d\.name\.scientific, synonyms: d\.name\.synonyms \?\? \[\], key: d\.key, held \}\);\s*const hero = heroOf\(shown\);/);
+    expect(s).toMatch(/const shown = shownPhotos\(d\.photos, (?:\{ scientific: d\.name\.scientific, synonyms: d\.name\.synonyms \?\? \[\], key: d\.key, held \}|kindNamesOf\(d, held\))\);\s*const hero = heroOf\(shown\);/);
     expect(s).toContain('photos: shown.length };');
     expect(s).toContain('const held = heldNamesOf(out);');
   });

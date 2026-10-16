@@ -6,7 +6,7 @@
 import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow } from '../src/lib/dossier/bulk';
+import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow, wcvpExtractedDay, downloadDay } from '../src/lib/dossier/bulk';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 
@@ -21,12 +21,31 @@ async function eachLine(path: string, each: (line: string, i: number) => void): 
  * the exact names) so a name the backbone resolves to a synonym or a sister
  * species in the same genus still finds its range without an API call.
  */
-export async function loadWcvp(dir: string, names: string[]): Promise<WcvpIndex | null> {
+/**
+ * The day of Kew's files in `dir` (round seventy-two, B1), for every step that reads them: README_WCVP.xlsx's "Extracted:"
+ * line, read from the workbook's shared strings with the same tar or unzip the occurrence reader uses; else the day of
+ * wcvp_names.csv itself. Undefined when neither can be read.
+ */
+export function wcvpFileDay(dir: string): string | undefined {
+  const readme = `${dir}/README_WCVP.xlsx`, names = `${dir}/wcvp_names.csv`;
+  if (existsSync(readme)) {
+    const [cmd, cmdArgs] = process.platform === 'win32' || !hasCmd('unzip') ? ['tar', ['-xOf', readme, 'xl/sharedStrings.xml']] : ['unzip', ['-p', readme, 'xl/sharedStrings.xml']];
+    const r = spawnSync(cmd, cmdArgs, { encoding: 'utf8', maxBuffer: 1 << 24 });
+    const day = r.status === 0 ? wcvpExtractedDay(r.stdout) : undefined;
+    if (day) return day;
+  }
+  return existsSync(names) ? statSync(names).mtime.toISOString().slice(0, 10) : undefined;
+}
+
+export async function loadWcvp(dir: string, names: string[], reference?: Iterable<string>): Promise<WcvpIndex | null> {
   const namesCsv = `${dir}/wcvp_names.csv`, distCsv = `${dir}/wcvp_distribution.csv`;
   if (!existsSync(namesCsv) || !existsSync(distCsv)) return null;
   const genera = new Set(names.map((n) => n.split(' ')[0].toLowerCase()));
   const wanted = (name: string) => genera.has(name.split(' ')[0].toLowerCase());
   const idx = new WcvpIndex();
+  idx.fileDay = wcvpFileDay(dir);
+  // The reference's own names, so Kew's spelling of a name is never read as another page's (B7).
+  if (reference) idx.setReference(reference);
   let h: string[] = [];
   console.log(`  WCVP names (${mb(statSync(namesCsv).size)})…`);
   await eachLine(namesCsv, (line, i) => {
@@ -34,7 +53,7 @@ export async function loadWcvp(dir: string, names: string[]): Promise<WcvpIndex 
     else if (line) idx.addName(parseWcvpName(h, line), wanted);
   });
   const keep = idx.acceptedIds();
-  console.log(`  ${idx.size} names in ${genera.size} genera; WCVP distributions (${mb(statSync(distCsv).size)})…`);
+  console.log(`  Kew's files of ${idx.fileDay ?? 'a day not known'}; ${idx.size} names in ${genera.size} genera; WCVP distributions (${mb(statSync(distCsv).size)})…`);
   await eachLine(distCsv, (line, i) => {
     if (i === 0) h = line.replace(/^﻿/, '').split('|');
     else if (line) {
@@ -107,7 +126,11 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
     what = `${zip} (${mb(statSync(zip).size)} zipped, ${mm.records} streamed with ${st.how})`;
   } else return null;
   const idx = new OccIndex(cap, wanted);
-  if (existsSync(meta)) idx.doi = (JSON.parse(readFileSync(meta, 'utf8')) as { doi?: string }).doi;
+  if (existsSync(meta)) {
+    const m = JSON.parse(readFileSync(meta, 'utf8')) as { doi?: string; key?: string; fetched?: string };
+    idx.doi = m.doi;
+    idx.day = downloadDay(m);
+  }
   let h: string[] = [];
   let n = 0;
   console.log(`  GBIF occurrences from ${what}${wanted ? `, keeping ${wanted.size} species` : ''}…`);

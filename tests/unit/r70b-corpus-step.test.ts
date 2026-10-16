@@ -64,10 +64,12 @@ describe('--fill wikidata', () => {
     const asked: string[] = [];
     const c = await fillWikidata(store(docs), world(asked), () => '2026-10-13T00:00:00Z');
     expect(c).toMatchObject({ read: 3, byKey: 1, stands: 1, changed: 2, before: 0 });
-    expect(asked.filter((u) => /wbgetentities.*ids=Q5168360\|Q146400\|Q391952&props=claims&/.test(u))).toHaveLength(1); // fifty items a request
+    expect(asked.filter((u) => /wbgetentities.*ids=Q5168360\|Q146400\|Q391952&props=claims(&|$)/.test(u))).toHaveLength(1); // fifty items a request
     expect(docs['5384013.json']).toEqual(before['5384013.json']); // found by its own key: left alone
     const sol = docs['9150405.json'] as D;
-    expect(sol.upstream.wikidata).toEqual({ status: 'ok', at: '2026-10-13T00:00:00Z', detail: `found by its label; its IPNI identifier 30048260-2 is Kew's for Solanum nigrum L.; ${REPROVED} 2026-10-13` });
+    expect(sol.upstream.wikidata).toEqual({ status: 'ok', at: '2026-10-13T00:00:00Z', detail: `found by its label; its IPNI identifier 30048260-2 is Kew's for Solanum nigrum L.; ${REPROVED} 2026-10-13; IPNI and POWO linked by Kew's number for Solanum nigrum L. (the item's: IPNI 30048260-2, POWO none)` });
+    // Round seventy-two: linked by Kew's numbers as a build links them, so POWO is Kew's for the name and author too.
+    expect(sol.ids.powo).toBe('urn:lsid:ipni.org:names:30048260-2');
     expect(sol.ids.inat).toBe(79141); // what --fill inat-ids checks is left to it
     expect(docs['7720070.json']).toEqual(before['7720070.json']); // changed: left as it is until rebuilt
     expect(docs['3172612.json']).toEqual(before['3172612.json']);
@@ -93,7 +95,7 @@ describe('--fill wikidata', () => {
   it('the script runs it as --fill wikidata and writes rebuild-wd.txt', () => {
     const script = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(script).toMatch(/if \(fill === 'wikidata'\) return fillWikidataStep\(\);/);
-    expect(script).toMatch(/const c = await fillWikidata\(diskStore\(\), makeFetcher\(\), undefined, \{/); // round seventy, the owner's run: with what a stopped run read
+    expect(script).toMatch(/const c = await fillWikidata\(diskStore\(\), upstream\(\), undefined, \{/); // round seventy, the owner's run: with what a stopped run read; round seventy-two: through the day's answers (`upstream`)
     expect(script).toMatch(/writeFileSync\('rebuild-wd\.txt', c\.rebuild\.join/);
   });
 });

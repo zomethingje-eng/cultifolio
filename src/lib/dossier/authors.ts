@@ -69,6 +69,14 @@ export function sameNameAuthor(a?: string, b?: string): boolean {
 export const withoutInitials = (a: string) => a.replace(/\b(?:[A-Z][a-z]?\.\s*)+(?=[A-Z][a-z])/g, '');
 /** The basionym's author, inside the parentheses, without its ex-author: "(Engelm.) Lem." is "engelm". */
 export const parentheticalAuthor = (a?: string) => authorKey((/^\s*\(([^)]*)\)/.exec(a ?? '')?.[1] ?? '').replace(/^.*\bex\s+/, ''));
+/**
+ * The basionym's author with and without its ex-author (round seventy-two, A): "(Backeb. ex Spine)" is "spine" and
+ * "backeb", for Kew cites the basionym Neolloydia matehualensis as Backeb.'s and GBIF as "Backeb. ex Spine".
+ */
+export const basionymAuthors = (a?: string): string[] => {
+  const inside = /^\s*\(([^)]*)\)/.exec(a ?? '')?.[1] ?? '';
+  return [...new Set([authorKey(inside.replace(/^.*\bex\s+/, '')), authorKey(inside.replace(/\s+ex\s+.*$/, ''))].filter(Boolean))];
+};
 /** The ex-author of the combination, outside the parentheses: "Welw. ex Hiern" is "welw". */
 export const exAuthor = (a?: string) => authorKey(/^(?:\s*\([^)]*\)\s*)?(.*?)\s+ex\s+/.exec(a ?? '')?.[1] ?? '');
 const same = (x: string, y: string) => !!x && x === y;
@@ -96,7 +104,11 @@ export function ownByAuthor<T>(rows: readonly T[], authorship: string | undefine
     (b) => authorsAgree(a, b) && parentheticalAuthor(a) === parentheticalAuthor(b),
     (b) => sameNameAuthor(a, b),
     (b) => same(publishingAuthor(withoutInitials(a)), publishingAuthor(withoutInitials(b))),
-    (b) => same(parentheticalAuthor(a), parentheticalAuthor(b))
+    (b) => same(parentheticalAuthor(a), parentheticalAuthor(b)),
+    // 5. the basionym's author either side of an "ex" in one citation's parentheses and not the other's (round
+    //    seventy-two, A): GBIF's "(Backeb. ex Spine)", cut off after the parenthesis, is Kew's "(Backeb.) M.H.J.van der
+    //    Meer" for Cochemiea matehualensis.
+    (b) => { const x = basionymAuthors(a), y = basionymAuthors(b); return x.length > 1 !== y.length > 1 && x.some((p) => y.includes(p)); }
   ];
   for (const read of readings) {
     const hit = rows.filter((r) => { const b = authorsOf(r); return !!b && read(b); });
@@ -120,8 +132,17 @@ export function plainlyAnother(authorship: string | undefined, b: string | undef
   if (same(exAuthor(authorship), whole(b)) || same(exAuthor(b), whole(authorship))) return false;
   // A person of the one citation outside its brackets is among the other's: one name cited two ways (Castanospermum
   // australe "A.Cunn. ex Mudie" and "A.Cunn. & C.Fraser"). A person does not publish one name twice.
-  const people = (x?: string) => new Set((x ?? '').replace(/^\s*\([^)]*\)\s*/, '').split(/\s*(?:&|,|\bex\b|\bet\b)\s*/).map((p) => authorKey(withoutInitials(p.trim()))).filter((p) => p.length > 2 && !/^(?:hort|anon|auct|hortorum)$/.test(p)));
+  const split = (x: string) => new Set(x.split(/\s*(?:&|,|\bex\b|\bet\b)\s*/).map((p) => authorKey(withoutInitials(p.trim()))).filter((p) => p.length > 2 && !/^(?:hort|anon|auct|hortorum)$/.test(p)));
+  const people = (x?: string) => split((x ?? '').replace(/^\s*\([^)]*\)\s*/, ''));
   const pa = people(authorship);
+  // A backbone citation cut off after its parentheses names no one outside them, so it shared no one with any row and
+  // was "plainly another" than all of them (round seventy-two, B6). The basionym's people are compared instead, inside the
+  // parentheses on both sides: "(Peckover)" stays plainly another than "Peckover", a name Peckover published directly.
+  if (!pa.size) {
+    const inside = (x?: string) => split(/^\s*\(([^)]*)\)/.exec(x ?? '')?.[1] ?? '');
+    const ia = inside(authorship);
+    return ![...inside(b)].some((p) => ia.has(p));
+  }
   return ![...people(b)].some((p) => pa.has(p));
 }
 

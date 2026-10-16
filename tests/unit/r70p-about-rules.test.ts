@@ -67,7 +67,7 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
     expect(raw('src/lib/dossier/fetch.ts')).toMatch(/'www\.ipni\.org': 1100,/);
     expect(raw('src/lib/dossier/sources/wikimedia.ts')).toMatch(/https:\/\/www\.ipni\.org\/api\/1\/n\//);
     const f = fixtureFetcher({
-      're:srsearch=haswbstatement%3AP846%3D7555524&': { query: { search: [] } },
+      're:srsearch=haswbstatement%3AP846%3D7555524(&|$)': { query: { search: [] } },
       [`${W}?action=wbsearchentities`]: { search: [{ id: 'Q15605262', label: 'Peperomia monticola' }] },
       're:wbgetentities&format=json&ids=Q15605262&': { entities: { Q15605262: item('Peperomia monticola', ['4183999'], ['679160-1']) } },
       'https://api.gbif.org/v1/species/4183999': { key: 4183999, scientificName: 'Peperomia monticola Hook.fil.', canonicalName: 'Peperomia monticola', authorship: 'Hook.fil.', rank: 'SPECIES', taxonomicStatus: 'HETEROTYPIC_SYNONYM', kingdom: 'Plantae', acceptedKey: 4188553, speciesKey: 4188553 },

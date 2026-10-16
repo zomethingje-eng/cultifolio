@@ -45,7 +45,9 @@ describe('a range Kew files under one of the species\' older names', () => {
     });
     const f = bulkFetcher(base, { wcvp: kew() });
     const r = await distributions(f as JsonFetcher, 9476326);
-    expect(r).toMatchObject({ status: 'ok', data: { wcvp: true, entry: 'Aeonium tabuliforme (Haw.) Webb & Berthel.', via: 'Aeonium tabuliforme (Haw.) Webb & Berthel.' } }); // base: national checklists, no range
+    // Since round seventy-two (B7) Kew's spelling of the name, by the same author and basionym, is the species' own row:
+    // the same entry and range, said as Kew's spelling rather than as an older name.
+    expect(r).toMatchObject({ status: 'ok', data: { wcvp: true, rangeVia: { kind: 'spelling', entry: 'Aeonium tabuliforme (Haw.) Webb & Berthel.' } } }); // base: national checklists, no range
     if (r.status === 'ok') expect(r.data.rows.map((x) => x.locationId)).toEqual(['TDWG:CNY']);
   });
 });

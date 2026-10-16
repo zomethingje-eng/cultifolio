@@ -193,7 +193,8 @@ describe('C: the kinds a Commons file is shown as none of', () => {
     expect(commonsKind('File:Aloe vera 1.jpg', n, ['Aloe vera', 'Aloe ferox'])).toBeNull(); // guard
   });
   it('"a pressed, mounted or museum specimen (…) or one whose source is a herbarium\'s or museum\'s specimen record, or whose description calls it one"', () => {
-    expect(s.text).toMatch(/or one whose source is a herbarium's or museum's specimen record, or whose description calls it one/);
+    // Round seventy-two (C8): the description's words are named, and a plant on show in a museum is shown.
+    expect(s.text).toMatch(/or one whose source is a herbarium's or museum's specimen record, or whose description calls it a herbarium, pressed, mounted, dried or preserved specimen, or a specimen of a natural-history museum \(a plant on show in another museum is shown\)/);
     expect(commonsKind('File:Aloe vera 1.jpg', n, { kind: 'a pressed or mounted specimen' })).not.toBeNull(); // the kind the fill reads from the source (C's r71c-photographs)
   });
   it('"known by the photograph Commons names as its source or by the number at the end of its name"', () => {
@@ -250,7 +251,8 @@ describe('E: what the server keeps, the listing, the kept 429 and the keep-data 
   it('the listing, the kept 429 and the keep-data keys are said; their rules are driven by E\'s r71e-server, r71e-sync and r71e-keep-ask', () => {
     const f = aboutText('formats');
     expect(f).toMatch(/the server finishes a listing, and settles it, even when the device has gone;/);
-    expect(f).toMatch(/a shorter refusal met by such a log batch \(a 503, or a request window's 429\) stops that sync but leaves the day's wait standing/);
+    // Round seventy-two (E5): the shorter refusal is kept beside the day's.
+    expect(f).toMatch(/a shorter refusal met by such a log batch \(a 503, or a request window's 429\) leaves the day's wait standing and is kept beside it/);
     const h = aboutText('how');
     expect(h).toMatch(/once there was a plant to keep, whichever page asked\)/);
     expect(h).toMatch(/is read from the browser's own record, which asks nothing,/);
@@ -265,7 +267,8 @@ describe('F: the species address, the records, the search order', () => {
     expect(sharedNameMessage('Vernonia praealta', [{ name: 'Vernonia gigantea', authors: ['(L.) Michx.'] }, { name: 'Vernonia noveboracensis', authors: ['(L.) Michx.'] }]), s.where).toMatch(new RegExp(`${words}$`));
   });
   it('the records paragraph: "where every record lies outside the range it says the range and the records disagree"', () => {
-    expect(aboutText('how')).toMatch(/the page counts those it discards, and where every record lies outside the range it says the range and the records disagree/);
+    // Round seventy-two (B10): one stray record is no disagreement.
+    expect(aboutText('how')).toMatch(/the page counts those it discards, and where every record lies outside the range it says so, and, where two or more do, that the range and the records disagree/);
     expect(noneInRange(49).text).toMatch(/the range and the records disagree/);
   });
   it('/formats: an older name typed whole before a genus the query only begins ("Tecoma speciosa")', () => {

@@ -344,3 +344,16 @@ export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, to
   });
   return { n, first, dayFirst, monthFirst, yearFirst };
 }
+
+/**
+ * Whether the sheet's date question is put, with how many dates it is about and the one it names (round seventy-two; E).
+ * A short date whose year could come first or last is left unread unless the sheet's choice reads it, and round
+ * seventy-one put the question only when some date read two ways with its year last (`n`): a sheet whose short dates
+ * read one way only with the year last (19-05-23, 23-12-10; every year-first date of 2013 on, and a day-first 25/12/23)
+ * was never asked, and none of its dates could be read. Such a sheet is asked too, by the dates year first would read.
+ */
+export function dateQuestion(a: { n: number; first: string | null; yearFirst: { n: number; first: string | null } }): { n: number; first: string; twoWays: boolean } | null {
+  if (a.n && a.first) return { n: a.n, first: a.first, twoWays: true };
+  if (a.yearFirst.n && a.yearFirst.first) return { n: a.yearFirst.n, first: a.yearFirst.first, twoWays: false };
+  return null;
+}

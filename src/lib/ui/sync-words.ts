@@ -47,7 +47,9 @@ export function syncWords(raw: string | null | undefined): SyncWords | null {
  * of photographs ("…changes to your records still go"): under that refusal, and under the day's upload allowance, a
  * record's changes still go (the day's, those in sync bundles of 16 KB or less).
  */
-export function refusalKept(r: { day?: boolean; photos?: boolean }): string {
+export function refusalKept(r: { day?: boolean; photos?: boolean; small?: { until: number } }, now = Date.now()): string {
+  // A shorter refusal met under the day's holds every upload until it ends (round seventy-two; E5).
+  if (r.day && r.small && r.small.until > now) return 'Your changes are kept here meanwhile, and changes from your other devices still come in.';
   if (r.photos) return 'Photographs are kept here meanwhile; changes to your records still go, and changes from your other devices still come in.';
   if (r.day) return 'Photographs, and sync bundles of changes over 16 KB, are kept here meanwhile; smaller bundles of changes still go, and changes from your other devices still come in.';
   return 'Your changes are kept here meanwhile, and changes from your other devices still come in.';

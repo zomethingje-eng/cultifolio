@@ -21,7 +21,7 @@
   import { parseName } from '$core/names';
   import { entriesFor, searchCatalogue } from '$lib/ui/index.svelte';
   import { parsePaste } from '$lib/import/paste';
-  import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, readDate, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
+  import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, dateQuestion, readDate, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
   import { checkNames, checkKey, nameVerdict, type NameCheck, type Lookup } from '$lib/import/check';
   import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
@@ -103,15 +103,18 @@
    * the self-review's D4: "Day first (10 April)" for 10-04-15 hid that it would be read as 2015), and year first's when
    * a cell could be written so ("10-04-15 is 15 April 2010").
    */
+  /** Whether the date question is put, and of how many dates (round seventy-two; E: a sheet of 19-05-23 was never asked). */
+  const dq = $derived(dateQuestion(amb));
   const ambWords = $derived.by(() => {
-    if (!amb.first) return null;
+    const first = amb.first ?? amb.yearFirst.first;
+    if (!first) return null;
     const mon = (n: number) => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][n - 1];
     const said = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${+d.slice(8)} ${mon(+d.slice(5, 7))} ${d.slice(0, 4)}` : null);
     const today = localDate();
-    const dmy = said(readDate(amb.first, today, 'dmy').d), mdy = said(readDate(amb.first, today, 'mdy').d);
+    const dmy = said(readDate(first, today, 'dmy').d), mdy = said(readDate(first, today, 'mdy').d);
     if (!dmy || !mdy) return null;
     const yf = amb.yearFirst.first ? said(readDate(amb.yearFirst.first, today, 'ymd').d) : null;
-    return { text: amb.first, dmy, mdy, ymd: yf ? (amb.yearFirst.first === amb.first ? yf : `${amb.yearFirst.first} is ${yf}`) : null };
+    return { text: first, dmy, mdy, ymd: yf ? (amb.yearFirst.first === first ? yf : `${amb.yearFirst.first} is ${yf}`) : null };
   });
   function setMap(f: Field, v: string) {
     const next: Mapping = { ...mapping };
@@ -434,9 +437,9 @@
           {#if unmapped.own.length}<p class="small muted">{unmapped.own.join(' and ')}: the sheet's own links to its batches and records, which mean nothing in another collection, so not imported.</p>{/if}
         </div>
       {/if}
-      {#if amb.n}
+      {#if dq}
         <fieldset class="full dates" id="imp-dates">
-          <legend class="small">{amb.n === 1 ? 'One date' : `${amb.n} dates`} in this sheet, like {ambWords?.text ?? amb.first}, could be read day first or month first{amb.yearFirst.n ? ', or with the year first' : ''}. How are they written?</legend>
+          <legend class="small">{dq.n === 1 ? 'One date' : `${dq.n} dates`} in this sheet, like {ambWords?.text ?? dq.first}, {dq.twoWays ? `could be read day first or month first${amb.yearFirst.n ? ', or with the year first' : ''}` : 'could be written with its two-digit year first or last'}. How are they written?</legend>
           <p class="small" id="imp-dates-hint">{ambHint}</p>
           <label class="check"><input type="radio" name="imp-date-order" value="dmy" bind:group={dateOrder} /> Day first{ambWords ? ` (${ambWords.dmy})` : ''}</label>
           <label class="check"><input type="radio" name="imp-date-order" value="mdy" bind:group={dateOrder} /> Month first{ambWords ? ` (${ambWords.mdy})` : ''}</label>

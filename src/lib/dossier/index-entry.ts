@@ -41,6 +41,7 @@ export interface NameScope {
 
 import { canonicalSynonym } from '../core/names';
 import { words as searchWords } from '../core/postings';
+import { GENERIC_NOUNS } from '../core/search';
 
 /**
  * A species' older names as the index carries them (round thirty-one, 3): as binomials (or a variety or subspecies), other-genus
@@ -127,7 +128,7 @@ export function namesOf(value: string): string[] {
  * word is. One dataset's "Cherry" for Malpighia emarginata and one row's "Cactus" for two Copiapoa species were headlines
  * (round sixty-seven; triage-66 N3, S-B3, S-B11). A fixed list, written here and on /about/how.
  */
-export const GENERIC_NOUNS: ReadonlySet<string> = new Set(['bulb', 'buttercup', 'cactus', 'cherry', 'daisy', 'fern', 'flower', 'grass', 'herb', 'lily', 'orchid', 'palm', 'plant', 'poppy', 'primrose', 'shrub', 'succulent', 'tree', 'vine', 'weed']);
+export { GENERIC_NOUNS }; // the list is the search's too (round seventy-two; triage F9), so it lives in core
 /** Whether a name is one generic noun (`GENERIC_NOUNS`), in any case, hyphens apart, a plural "s" allowed. */
 export function genericNoun(spelling: string): boolean {
   const ts = tokensOf(spelling.trim());
@@ -274,7 +275,12 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
   });
   // GBIF's order last: each name's place is its first place in GBIF's list, which no two names share, so nothing after it could decide.
   named.sort((a, b) => a.tier - b.tier || b.sources - a.sources || Number(b.preferred) - Number(a.preferred) || a.at - b.at);
-  const names = named.map((n) => firstUp(n.spelling));
+  let names = named.map((n) => firstUp(n.spelling));
+  // A generic noun is never a headline (round seventy-two; triage F9: Copiapoa cinerascens and C. serpentisulcata were
+  // "Cactus", and led the search for "cactus"). Where nothing fuller is given, no English name is shown; the noun stays
+  // searchable as a spelling (`indexNames`), ranked after every fuller name (`$core/search`).
+  if (names.length && genericNoun(names[0])) names = names.filter((n) => !genericNoun(n));
+  if (!names.length) return {};
   return names.length > 1 ? { common: names[0], commons: names.slice(1) } : { common: names[0] };
 }
 

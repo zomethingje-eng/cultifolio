@@ -11,7 +11,8 @@
  * and backed off); an error leaves that dossier as it was, to be asked on the next run. Kept apart from
  * build-dossiers.ts, which runs its build when imported, so a test can drive it against fixtures with no network.
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { writeAtomic } from './write-atomic';
 import { vernacular } from '../src/lib/dossier/sources/gbif';
 import type { JsonFetcher } from '../src/lib/dossier/fetch';
 
@@ -72,7 +73,7 @@ export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: ()
     d.name.vernacular = r.status === 'ok' ? r.data : [];
     d.upstream = d.upstream ?? {};
     d.upstream['gbif.vernacular'] = { status: r.status, at, detail: `${NAMES_MARK} ${at.slice(0, 10)}${truncated ? `; truncated: the first ${truncated} rows only` : ''}` };
-    writeFileSync(path, JSON.stringify(d));
+    writeAtomic(path, JSON.stringify(d));
     run.done++;
     if (truncated) run.truncated++;
     opts.progress?.(run.done + run.kept, files.length);

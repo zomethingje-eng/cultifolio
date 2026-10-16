@@ -50,7 +50,7 @@ describe('the build of a species on a homonym key', () => {
     t[`${GBIF}/species/5384013`] = { ...(t[`${GBIF}/species/5384013`] as object), scientificName: 'Copiapoa cinerea Kük.', authorship: 'Kük.' };
     t['https://api.inaturalist.org/v1/taxa?q='] = { results: [] };
     if (orphan) t[`${GBIF}/species/5384013/synonyms`] = { results: [] };
-    t[`${GBIF}/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Copiapoa%20cinerea`] = { results: [{ key: 1, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', canonicalName: 'Copiapoa cinerea', authorship: '(Phil.) Britton & Rose', taxonomicStatus: 'ACCEPTED', family: 'Cactaceae', references: 'https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:1-1' }] };
+    t[`${GBIF}/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Copiapoa%20cinerea`] = { results: [{ key: 1, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', canonicalName: 'Copiapoa cinerea', authorship: '(Phil.) Britton & Rose', taxonomicStatus: 'ACCEPTED', family: 'Cactaceae', taxonID: '42', references: 'https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:1-1' }] };
     t[`${GBIF}/species?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&name=Copiapoa%20cinerea`] = { results: [{ key: 5384013, scientificName: 'Copiapoa cinerea Kük.', canonicalName: 'Copiapoa cinerea', authorship: 'Kük.', taxonomicStatus: 'ACCEPTED', rank: 'SPECIES' }, { key: 777, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', canonicalName: 'Copiapoa cinerea', authorship: '(Phil.) Britton & Rose', taxonomicStatus: 'HETEROTYPIC_SYNONYM', acceptedKey: 888, accepted: 'Copiapoa grisea Hort.', rank: 'SPECIES' }] };
     t[`${GBIF}/species/888/synonyms`] = { results: [{ key: 777, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', canonicalName: 'Copiapoa cinerea', rank: 'SPECIES' }, { key: 779, scientificName: 'Echinocactus griseus Phil.', canonicalName: 'Echinocactus griseus', rank: 'SPECIES' }] };
     t[`${GBIF}/species/888/vernacularNames`] = { results: [] };
@@ -67,10 +67,16 @@ describe('the build of a species on a homonym key', () => {
     expect(r.dossier.name.vernacular.map((v) => v.name)).toContain('Grey copiapoa');
     expect(r.dossier.upstream['gbif.species'].detail).toMatch(/GBIF's key 5384013 is Copiapoa cinerea Kük\.; Kew accepts Copiapoa cinerea \(Phil\.\) Britton & Rose, and the name is cited as Kew accepts it; its synonyms and common names are read from GBIF's Copiapoa cinerea \(Phil\.\) Britton & Rose \(777\), which GBIF files under Copiapoa grisea Hort\. \(888\) too/);
     expect(r.dossier.upstream['gbif.vernacular'].detail).toMatch(/1 read from GBIF's/);
+    expect(r.dossier.name.cited).toEqual({ gbif: 'Kük.', kew: '42' }); // round 72, A: the homonym key's fields too
   });
-  it('a key with synonyms of its own is no orphan, and keeps the backbone\'s author (guard: Diospyros kaki L.f., 26 synonyms, Kew\'s Thunb.)', async () => {
+  it('a key with synonyms of its own is no orphan and borrows nothing, but cites the name it links (round 72, A: Diospyros kaki linked Kew\'s Thunb. and cited L.f.)', async () => {
     const r = await buildDossier('Copiapoa cinerea', { fetcher: world(false), builtBy: 'node', skip: ['commons', 'openalex', 'wikipedia'] });
-    expect(r.ok && r.dossier.name.authorship).toBe('Kük.');
+    if (!r.ok) throw new Error('no dossier');
+    expect(r.dossier.name.authorship).toBe('(Phil.) Britton & Rose'); // r72base: 'Kük.', beside a link to Kew's 1-1
+    expect(r.dossier.ids.powo).toBe('urn:lsid:ipni.org:names:1-1');
+    expect(r.dossier.name.vernacular.map((v) => v.name)).not.toContain('Grey copiapoa');
+    expect(r.dossier.upstream['gbif.species'].detail).toMatch(/GBIF's key 5384013 is Copiapoa cinerea Kük\.; the page links Kew's Copiapoa cinerea \(Phil\.\) Britton & Rose, and the name is cited as Kew cites it/);
+    expect(r.dossier.name.cited).toEqual({ gbif: 'Kük.', kew: '42' }); // r72base: no field
   });
 });
 
@@ -109,7 +115,7 @@ describe('what is not a homonym key (S-B2 guards)', () => {
     w.addName(parseWcvpName(H, '1|Accepted|Rosaceae|Rubus parviflorus|Nutt.|1|Species'), () => true);
     const doc = (synonyms: string[]) => ({ key: 7872219, name: { scientific: 'Rubus parviflorus', authorship: 'Kük.', family: 'Rosaceae', synonyms } });
     const list = (d: unknown) => kewRebuildList({ files: () => ['a'], read: <T,>() => structuredClone(d) as T, write: () => {} }, w);
-    expect(list(doc([]))).toEqual(["7872219 Rubus parviflorus\ton a homonym key: the backbone's Kük. is not Kew's Nutt."]);
+    expect(list(doc([]))).toEqual(["7872219 Rubus parviflorus\ton a homonym key not yet read: the backbone's Kük. is not Kew's Nutt."]);
     expect(list(doc(['Rubus nutkanus Moc. ex Ser.']))).toEqual([]);
   });
 });

@@ -10,7 +10,7 @@ import type { Dossier, Photo } from './schema';
 import type { DossierStore } from './corpus-run';
 import { commonsPhotos, commonsCategories, strikesOut, inatSource } from './sources/commons';
 import { mwGet, mwError } from './sources/wikimedia';
-import { commonsKind, slipsToAsk, askSlip, sourceKind, type HeldNames, type KindNames } from './photo-kind';
+import { commonsKind, slipsToAsk, askSlip, sourceKind, kindNamesOf, type HeldNames, type KindNames } from './photo-kind';
 import { commonsAuthor, commonsCredit, splitCommonsCredit } from './photo-credit';
 
 export type CommonsFill = { added: number } | { none: true } | { failed: string };
@@ -99,12 +99,26 @@ export type KindCounts = {
 };
 
 type KindAnswer = { categories: string[]; struck: boolean; inat: string | null; artist: string | null; kind: string | null } | 'missing';
-type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[]; authorship?: string }; photos?: Photo[] };
+type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[]; authorship?: string; kew?: KindNames['kew'] }; photos?: Photo[] };
 /**
  * A Commons photograph the fill asks for: one without its categories, or (round seventy-one; self-review 70, S-C5, S-C9,
  * S-C11) one whose source, slips and credit have not been read since; `sourceRead` marks it done, so a rerun resumes.
  */
 const needsKind = (p: Photo) => p.src === 'commons' && (!Array.isArray(p.categories) || !p.sourceRead);
+/**
+ * Round seventy-two: a file read before whose title still holds a slip not taken as the species' is asked again, so a
+ * rule read again (`slipStanding`, GBIF's second spelling by the same author) reaches the files an earlier fill left out:
+ * Parodia lenninghausii's five and Ceropegia barberae's one. A handful of files, a few requests each, every run.
+ */
+const needsAsking = (p: Photo, names: KindNames, held?: HeldNames | null) => needsKind(p) || (p.src === 'commons' && !!held && slipsToAsk(p.id, names, p.slips).length > 0) || kindToReadAgain(p, names);
+/**
+ * Round seventy-two (C8): a file left out only by what its description said is read again, so the narrower museum rule
+ * (`sourceKind`) reaches the files read before it: Agave titanota's "specimen in the Food and Agriculture Museum". A file
+ * its title or categories leave out anyway is not asked. A file still read as a sheet is asked again by every fill: a
+ * handful, one request.
+ */
+const kindToReadAgain = (p: Photo, names: KindNames) => p.src === 'commons' && /by its description/.test(p.kind ?? '') && !commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips });
+const namesOf = (d: Stored, held?: HeldNames | null): KindNames => kindNamesOf(d, held)!;
 
 export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, held?: HeldNames | null, progress?: (c: KindCounts) => void): Promise<KindCounts> {
   const c: KindCounts = { files: 0, before: 0, requests: 0, asked: 0, read: 0, missing: 0, unchecked: 0, dossiers: 0, hidden: 0, lines: [], slipsAsked: 0, slipsOwn: 0, slipsUnchecked: 0, copies: 0, credits: 0, shownAgain: 0 };
@@ -112,10 +126,11 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
   const wanted = new Map<string, string[]>();
   for (const file of store.files()) {
     const d = store.read<Stored>(file);
+    const names = namesOf(d, held);
     for (const p of d.photos ?? []) {
       if (p.src !== 'commons') continue;
       c.files++;
-      if (!needsKind(p)) { c.before++; continue; }
+      if (!needsAsking(p, names, held)) { c.before++; continue; }
       (wanted.get(p.id) ?? wanted.set(p.id, []).get(p.id)!).push(file);
     }
   }
@@ -146,10 +161,12 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
   const files = new Set(titles.filter((t) => answers.has(t)).flatMap((t) => wanted.get(t)!));
   for (const file of files) {
     const d = store.read<Stored>(file);
-    const names: KindNames = { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held, authorship: d.name.authorship };
+    const names = namesOf(d, held);
+    // A file asked again every fill (a sheet by its description, a slip still refused) writes nothing when nothing changed (round seventy-two).
+    const was0 = JSON.stringify(d);
     let changed = false;
     for (const p of d.photos ?? []) {
-      if (!needsKind(p)) continue;
+      if (!needsAsking(p, names, held)) continue;
       const a = answers.get(p.id);
       if (!a) continue;
       if (a === 'missing') { c.lines.push(`${d.key}\t${d.name.scientific}\tno longer on Commons (left as it is)\t${p.id}`); continue; }
@@ -186,7 +203,7 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       if (why && !was) { c.hidden++; c.lines.push(`${d.key}\t${d.name.scientific}\t${why}\t${p.id}`); }
       if (!why && was) { c.shownAgain++; c.lines.push(`${d.key}\t${d.name.scientific}\tnow shown (was: ${was})\t${p.id}`); }
     }
-    if (changed) { store.write(file, d); c.dossiers++; }
+    if (changed && JSON.stringify(d) !== was0) { store.write(file, d); c.dossiers++; }
   }
   return c;
 }

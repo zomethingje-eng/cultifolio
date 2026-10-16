@@ -18,10 +18,11 @@ import { WcvpIndex, parseWcvpName, parseWcvpDist, bulkFetcher, MediaIndex } from
 import { spellingKey } from '$dossier/epithet';
 import { commonsKind, commonsInatCopy, heldNamesOf } from '$dossier/photo-kind';
 import { proofByItem } from '$dossier/summary-proof';
-import { crossIds, patiently, mwWait, lagSpell } from '$dossier/sources/wikimedia';
+import { crossIds } from '$dossier/sources/wikimedia';
 import * as gbif from '$dossier/sources/gbif';
 import { fillInatIds } from '$dossier/corpus-fills';
 import type { JsonFetcher } from '$dossier/fetch';
+import { recordedFetcher } from './helpers/recorded';
 
 /* ---- Kew's own file, as `bulk-load.ts` reads it (wcvp_names.csv of 2026-06-04, the rows these cases touch) ---- */
 const H = 'plant_name_id|ipni_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|infraspecific_rank|infraspecies|parenthetical_author|primary_author|publication_author|place_of_publication|volume_and_page|first_published|nomenclatural_remarks|geographic_area|lifeform_description|climate_description|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id|hybrid_formula|reviewed'.split('|');
@@ -146,7 +147,7 @@ describe('"An article Wikipedia reaches through a redirect is quoted only when" 
 
 /* ---- Wikidata, with the answers of 2026-10-13 (agent B's fixtures/r70b-wikidata-items.json) ---- */
 const WD: Record<string, unknown> = JSON.parse(readFileSync('tests/unit/fixtures/r70b-wikidata-items.json', 'utf8'));
-const wd = (async (url: string) => WD[url] ?? { status: 'refused', detail: `no fixture: ${url}` }) as unknown as JsonFetcher;
+const wd = recordedFetcher(WD);
 async function item(key: number) {
   const sp = await gbif.species(wd, key);
   const syn = await gbif.synonyms(wd, key);
@@ -233,30 +234,16 @@ describe('"An id iNaturalist has made inactive is followed" (70b, 70c), "A taxon
   });
 });
 
-describe('"When Wikidata does not answer" (70c): the lag, waited out once in a run', () => {
+describe('"When Wikidata does not answer" (70c, then 72): no lag waited for, a refusal asked again', () => {
   const s = said('how', 'When Wikidata does not answer');
-  it('the first species that finds Wikidata lagged waits it out in rounds; within a spell of lagged species, one does not', async () => {
-    // FAILED on r71base: the sentence said "after its lag is waited out" of every species.
-    expect(s.text, s.where).toMatch(/the first species of a run to find it lagging waits the lag out, and one after a species that stayed lagged does not/);
-    const sleep = mwWait.sleep;
-    let asks = 0;
-    mwWait.sleep = async () => {};
-    try {
-      const spell = lagSpell(5);
-      const lagged = (r: string) => r === 'lag';
-      // The first: asked in rounds until Wikidata answers.
-      asks = 0;
-      expect(await (mwWait.patient ? patiently(async () => (++asks < 3 ? 'lag' : 'ok'), lagged) : Promise.resolve('lag'))).toBe('ok');
-      expect(asks).toBe(3);
-      // One that stayed lagged: the next is not patient.
-      spell.after({ status: 'error', detail: 'wikidata maxlag: 7.2 seconds lagged' });
-      expect(mwWait.patient).toBe(false);
-      spell.after({ status: 'ok' });
-      expect(mwWait.patient).toBe(true);
-    } finally {
-      mwWait.sleep = sleep;
-      mwWait.patient = false;
-      mwWait.tries = 1;
+  it('the sentence says what the merged reads do: no maxlag on a Wikidata read, a refusal or a busy answer asked again up to five times', () => {
+    // Round seventy-two (triage maxlag, F14): the sentence is D's; the reads themselves are driven by r72d-wikidata-unlagged.
+    expect(s.text, s.where).toMatch(/its items are read without waiting on the lag of its query service, which no read of an item depends on, and a refusal or a busy answer is asked again after the wait it names, up to five times/);
+    expect(s.text, s.where).not.toMatch(/waits the lag out/);
+    expect(readFileSync('src/lib/dossier/fetch.ts', 'utf8')).toMatch(/RETRIES = 5\b/);
+    for (const f of ['src/lib/dossier/sources/wikimedia.ts', 'src/lib/dossier/corpus-fills.ts']) {
+      const wikidataUrls = readFileSync(f, 'utf8').split('\n').filter((l) => /wikidata\.org/.test(l));
+      expect(wikidataUrls.filter((l) => /maxlag/.test(l)), f).toEqual([]);
     }
   });
 });

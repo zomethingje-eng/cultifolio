@@ -181,7 +181,7 @@
     const sh = sheets.get(speciesSlug(a.taxonName));
     if (!sh || sh.climate.status !== 'ok') return null;
     const year = growingYear(sh.climate.months, sh.habitatLat);
-    if (!year || year.none || year.grow === 'even') return null;
+    if (!year || year.none || year.grow === 'even' || year.frozen) return null;
     // The reader's hemisphere as the species page and the labels read it: the site, else the first place with coordinates (round sixty; the self-review's 10).
     if (forReader(year, readerLat(collection.locations)).includes(Number(today.slice(5, 7)))) return null;
     return year.fog ? 'cool' : 'rain';

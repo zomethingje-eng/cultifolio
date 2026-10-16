@@ -7,7 +7,7 @@
   import { page } from '$app/state';
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, noneInRange, kewCitedNote, OG_ALT } from '$lib/ui/ref/head';
+  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -25,7 +25,9 @@
   import { photoAt, photoOf, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
-  import { notAnswered, climateDetail } from '$lib/ui/ref/upstream';
+  import { notAnswered, climateDetail, registersNotChecked } from '$lib/ui/ref/upstream';
+  import { climateReason, outsideOnly } from '$dossier/range-via';
+  import { citedNote, rangeNote, olderNames, summaryOlderName } from '$lib/ui/ref/notes';
   import { firstSentences, clip } from '$core/text';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -54,7 +56,12 @@
   // record's author (round seventy-one; S-F3).
   const wasAuthors = $derived((data.namedElsewhere ?? []).find((x) => x.name.toLowerCase() === (data.was ?? '').toLowerCase())?.authors ?? []);
   const elsewhere = $derived(new Set((data.namedElsewhere ?? []).map((x) => x.name)));
-  const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))].filter((x) => !elsewhere.has(x)));
+  const allOlder = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))].filter((x) => !elsewhere.has(x)));
+  // Read from the dossier's structured fields when it has them, else from the sentences it was built with (round seventy-two; triage F13, A2).
+  const older = $derived(olderNames(allOlder, d.name as never));
+  const synonyms = $derived(older.older);
+  const cited = $derived(citedNote(d.name as never, d.upstream));
+  const viaNote = $derived(rangeNote(d.distribution as never, d.name));
   /*
    * The head says what only this page has: with a climate, the title names it and the description is the page's own
    * figures with their sources; without one, the name alone and a line naming only what the page holds. Never the
@@ -101,7 +108,7 @@
     }
     // Every record outside the range: said, with the count, since a range and records that disagree are the page's to say
     // (round seventy-one; S-F4: Ixora coccinea's 1,749 records and Ceropegia penduliflora's 49 read "none in range").
-    if (!o.nOpenInRange && !o.nRestrictedInRange) return noneInRange(o.nOutsideRange);
+    if (!o.nOpenInRange && !o.nRestrictedInRange) return outsideOnly(o.nOutsideRange);
     const all = o.nOpenInRange + o.nRestrictedInRange;
     const where = o.rangeTested === false ? 'not tested against the range (stated at country level only)' : 'inside the native range';
     if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate across the range is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
@@ -401,7 +408,7 @@
       <!-- The group is the archetype table's listing of the genus, said as that, never as what the plant is (round
            seventy-one; S-F7: Euphorbia peplus, a weedy annual, read "· cactus or succulent"). -->
       <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null].filter(Boolean).join(' · ')}{#if sheet.arch}{' · '}<a class="grouped" id="group-chip" href="#s-cultivation">{groupLine(sheet.arch)}</a>{/if}</p>
-      {#if kewCitedNote(d.upstream)}<p class="small muted" id="kew-cited">{kewCitedNote(d.upstream)}</p>{/if}
+      {#if cited}<p class="small muted" id="kew-cited">{cited}</p>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
       {#if d.climate.status !== 'ok' || (!photos.length && photoGaps)}
         <div class="pills">
@@ -470,7 +477,7 @@
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
     <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
-    <p class="small muted">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>, {d.summary.licence}.</p>
+    <p class="small muted">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>, {d.summary.licence}{#if summaryOlderName(d.summary.title, d.name)}; {summaryOlderName(d.summary.title, d.name)}{/if}.</p>
   {:else if refused('wikipedia')}
     <h2 class="sec" id="s-summary">Summary</h2>
     <div class="notice"><b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.</div>
@@ -594,7 +601,7 @@
   {:else if d.climate.status === 'refused'}
     <div class="notice"><b>Not checked.</b> {sentence(climDetail, 'An upstream source did not answer when this page was built')} This is not a statement that no climate exists.</div>
   {:else}
-    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km, or to no stated accuracy and fewer than three decimals or by something other than a person's observation, and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
+    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(climateReason(d.climate.detail), 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km, or to no stated accuracy and fewer than three decimals or by something other than a person's observation, and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
   {/if}
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
@@ -606,7 +613,8 @@
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <!-- A range Kew files under another of the species' names says which (round sixty-eight). -->
-    {#if d.distribution.native.length && /under the name |, reached by /.test(d.distribution.source)}<div class="wide"><b>Range source</b>{d.distribution.source}<span class="small muted"> · Kew holds no entry under this page's name; the range is the one Kew entry the species' older names lead to, reached by the older name named here, whose author agrees with Kew's</span></div>{/if}
+    {#if viaNote}<div class="wide" id="range-via"><b>Range source</b>{viaNote.text}{#if data.viaPage}{' '}(<a href="/species/{data.viaPage.slug}"><i>{data.viaPage.name}</i></a>, a page of its own here){/if}{#if viaNote.clause}<span class="small muted"> · {viaNote.clause}</span>{/if}</div>{/if}
+    {#if d.distribution.doubtful?.length}<div><b>Doubtfully present in</b>{d.distribution.doubtful.map((r) => r.name).join(', ')}<span class="small muted"> · recorded by WCVP as doubtfully present: not part of the range records are tested against</span></div>{/if}
     {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted">{' · '}quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
@@ -686,10 +694,14 @@
   {#if synonyms.length}
     <p class="small muted names"><b>Also known as</b> {synonyms.slice(0, 5).join('; ')}{synonyms.length > 5 ? ` and ${synonyms.length - 5} more` : ''}{synonyms.slice(0, 5).join('; ').endsWith('.') && synonyms.length <= 5 ? '' : '.'} <span class="faint">(GBIF Backbone)</span></p>
   {/if}
+  {#if older.kewAccepts.length}
+    <p class="small muted names" id="kew-accepts"><b>Kew accepts as species of their own</b> {older.kewAccepts.join('; ')}: older names in GBIF's record of this species that Kew's World Checklist accepts as other species. <span class="faint">(WCVP, RBG Kew{(d.name as { kew?: { file?: string } }).kew?.file ? `, file of ${(d.name as { kew?: { file?: string } }).kew?.file}` : ''})</span></p>
+  {/if}
   {#if data.namedElsewhere?.length}
     <p class="small muted names" id="named-elsewhere"><b>Under another author</b> {#each data.namedElsewhere as o, i (o.name)}{i ? '; ' : ''}{o.authors.length ? o.authors.map((a) => `${o.name} ${a}`).join(' and ') : `${o.name}, with no author in the record,`} is an older name of this species, not <a href="/species/{o.slug}"><i>{o.name}</i></a>, a species of the reference{/each}. <span class="faint">(GBIF Backbone)</span></p>
   {/if}
   <div class="links">
+    {#if registersNotChecked(d.upstream)}<NotChecked inline what="Registers" why={registersNotChecked(d.upstream) ?? ''} />{/if}
     {#each Object.entries(d.links) as [k, url]}
       <a href={url} rel="noopener">{k === 'gbif' ? 'GBIF' : k === 'powo' ? 'POWO' : k === 'ipni' ? 'IPNI' : k === 'wfo' ? 'WFO' : k === 'wikidata' ? 'Wikidata' : k === 'wikipedia' ? 'Wikipedia' : k === 'inat' ? 'iNaturalist' : k.toUpperCase()}</a>
     {/each}

@@ -175,7 +175,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       } catch (e) {
         return { status: 'refused', detail: `climate grid unavailable: ${e instanceof Error ? e.message : String(e)}` };
       }
-      if (read.length < 3) return { status: 'none', detail: `only ${read.length} distinct land cell${read.length === 1 ? '' : 's'} of the climate grid hold${read.length === 1 ? 's' : ''} an in-range record${sea ? ` (${sea} at sea or ice)` : ''}; three are needed for an envelope` };
+      // The points are the in-range records placed to within 10 km (`forClimate`), and the words say so: "only 1 distinct
+      // land cell holds an in-range record" was false of Pachypodium succulentum's 468 records, 467 of them placed worse
+      // (round seventy-two, B: 912 of the 1,073 pages with this reason).
+      if (read.length < 3) return { status: 'none', detail: `only ${read.length} distinct land cell${read.length === 1 ? '' : 's'} of the climate grid hold${read.length === 1 ? 's' : ''} an in-range record placed to within 10 km${sea ? ` (${sea} at sea or ice)` : ''}; three are needed for an envelope` };
       // A species with records on both sides of the equator in strength has no one calendar: a January median over both
       // sides is a month no place has. Only cells poleward of 10° count as being on a side (within 10° of the equator
       // there is no temperature season to reverse, as /about/how says of the rain rule; an Andean species from 5° N to

@@ -81,6 +81,6 @@ describe('the day a dossier last changed in substance', () => {
     const s = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(s).toContain('d.changed = stampOnBuild(d, prevFile, sha1);');
     expect(s).toContain('const changed = dayNumber(d.changed?.on);');
-    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
+    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n(?: {2}markSharedPhotos\([^\n]*\);\n)? {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
   });
 });

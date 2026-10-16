@@ -26,3 +26,14 @@ corpus.zip
 .pc.md5
 keep.txt
 live-manifest.json
+/backups/
+/corpus-step.json
+/corpus-step.*.json
+/corpus-step.log
+/corpus-step.json.tmp
+/fill-*-progress.json
+/drops.txt
+/rebuild-*.txt
+/ipni-powo.txt
+/cache/
+/bucket-unlisted.txt

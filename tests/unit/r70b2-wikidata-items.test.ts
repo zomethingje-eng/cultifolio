@@ -19,9 +19,10 @@ import { readFileSync } from 'node:fs';
 import { crossIds } from '$dossier/sources/wikimedia';
 import * as gbif from '$dossier/sources/gbif';
 import type { JsonFetcher } from '$dossier/fetch';
+import { recordedFetcher } from './helpers/recorded';
 
 const ANSWERS: Record<string, unknown> = JSON.parse(readFileSync('tests/unit/fixtures/r70b-wikidata-items.json', 'utf8'));
-const f = (async (url: string) => ANSWERS[url] ?? { status: 'refused', detail: `no fixture: ${url}` }) as unknown as JsonFetcher;
+const f = recordedFetcher(ANSWERS);
 
 /** crossIds as the build asks it: the species' GBIF key, its same-type older names, the backbone's authorship. */
 async function item(key: number) {
@@ -63,7 +64,7 @@ describe('the reading under them (guards)', () => {
     expect(k.status === 'ok' && k.data.ids).toEqual(['1014461-1']);
   });
   it('two items left by the older names and neither Kew\'s accepted entry\'s are still no answer', async () => {
-    const strip = (u: string) => (u.includes('action=wbsearchentities') ? { status: 'ok', data: { search: [] } } : u.includes('ids=Q14943408|Q309595|Q109398281&props=claims') ? { status: 'ok', data: { entities: { Q14943408: { claims: {} }, Q309595: { claims: {} }, Q109398281: { claims: {} } } } } : ANSWERS[u] ?? { status: 'refused', detail: 'no fixture' });
+    const strip = (u: string) => (u.includes('action=wbsearchentities') ? { status: 'ok', data: { search: [] } } : u.includes('ids=Q14943408|Q309595|Q109398281&props=claims') ? { status: 'ok', data: { entities: { Q14943408: { claims: {} }, Q309595: { claims: {} }, Q109398281: { claims: {} } } } } : f(u));
     const g = (async (u: string) => strip(u)) as unknown as JsonFetcher;
     const sp = await gbif.species(g, 3946677);
     const syn = await gbif.synonyms(g, 3946677);

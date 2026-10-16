@@ -6,7 +6,7 @@
  */
 import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { dedupePhotos } from './dedupe';
-import { shownPhotos, type HeldNames } from './photo-kind';
+import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
 import * as v from 'valibot';
 
 /** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
@@ -22,7 +22,9 @@ export type UpstreamStatus = v.InferOutput<typeof UpstreamStatus>;
 export const Upstream = v.object({
   status: UpstreamStatus,
   at: v.string(),
-  detail: v.optional(v.string())
+  detail: v.optional(v.string()),
+  /** The day of the source's data when it was read from a file (Kew's files, a GBIF download), not asked on `at` (round seventy-two, B1). */
+  asOf: v.optional(v.string())
 });
 
 export const BoxSchema = v.object({ s: v.number(), w: v.number(), n: v.number(), e: v.number() });
@@ -47,7 +49,15 @@ export const NameBlock = v.object({
   order: v.optional(v.string()),
   classification: v.optional(v.array(v.object({ rank: v.string(), name: v.string(), key: v.optional(v.number()) }))),
   synonyms: v.array(v.string()),
-  vernacular: v.array(Vernacular)
+  vernacular: v.array(Vernacular),
+  /**
+   * Kew's names for the page's plant, read offline from Kew's file by `--fill kew-names` (round seventy-two, A): the entry
+   * Kew accepts (plant_name_id, or '' where Kew's rows do not decide), Kew's other names for it (words only), the stored
+   * older names Kew accepts as species of their own, and the day of Kew's file. Absent: not read, never "none".
+   */
+  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string() })),
+  /** Present when the page cites Kew's author for the number it links: the backbone's citation, and Kew's row cited (plant_name_id). */
+  cited: v.optional(v.object({ gbif: v.string(), kew: v.string() }))
 });
 
 export const Ids = v.object({
@@ -90,6 +100,8 @@ export const Distribution = v.object({
   reported: v.optional(v.array(Region)),
   /** Regions where WCVP records the plant as extinct: history, not habitat; never a range box. */
   extinct: v.optional(v.array(Region)),
+  /** Regions where WCVP records the plant as doubtfully present: listed apart, never a range box (round seventy-two, B5). */
+  doubtful: v.optional(v.array(Region)),
   /** Kew's own one-line descriptions from WCVP: the life form and the climate class. Quoted, not derived. */
   kew: v.optional(v.object({ lifeform: v.optional(v.string()), climate: v.optional(v.string()) })),
   /** WCVP lists the name more than once and authorship did not decide: why no range is attached. */
@@ -97,7 +109,9 @@ export const Distribution = v.object({
   source: v.string(),
   boxes: v.array(BoxSchema),
   /** True only when the native regions come from WCVP with native status stated. Habitat climate is derived only then. */
-  verified: v.optional(v.boolean())
+  verified: v.optional(v.boolean()),
+  /** Where the range comes from (round seventy-two, B3; `range-via.ts`): read by the page instead of the source's sentence. */
+  via: v.optional(v.object({ kind: v.picklist(['own', 'older-name', 'synonym-of', 'kew-entry', 'spelling']), entry: v.string(), page: v.optional(v.string()), name: v.optional(v.string()), row: v.optional(v.string()), status: v.optional(v.string()), unplaced: v.optional(v.boolean()), file: v.optional(v.string()) }))
 });
 
 const Lat = v.pipe(v.number(), v.minValue(-90), v.maxValue(90));
@@ -243,7 +257,9 @@ export const Photo = v.object({
   /** For a Commons file: what its source or description says it is when that is not a photograph of the living plant ("a herbarium sheet (by its source)"; `sourceKind`, S-C2). The read leaves it out. */
   kind: v.optional(v.string()),
   /** For a Commons file: true once `--fill commons-kind` has read its source and slips (round seventy-one), so a rerun passes it by. */
-  sourceRead: v.optional(v.boolean())
+  sourceRead: v.optional(v.boolean()),
+  /** The keys of the other species' pages that hold this same photograph, written by `--index` (round seventy-two, C5): no page shows it. */
+  shared: v.optional(v.array(v.number()))
 });
 
 export const Paper = v.object({
@@ -322,7 +338,7 @@ export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
     // A Commons file that is not a photograph of the species, or whose licence or author the rules do not read, is left
     // out here, and the rest have Commons' credit cleaned, so the deploy corrects every page (round sixty-nine; triage-68 K1-K3).
-    photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), d.name ? { scientific: d.name.scientific, synonyms: d.name.synonyms, key: d.key, held } : null),
+    photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), kindNamesOf(d, held)),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),

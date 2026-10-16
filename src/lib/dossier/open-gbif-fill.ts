@@ -14,13 +14,24 @@ export type OpenFill = { added: number } | { none: true } | { failed: string };
 /** What a dossier records when GBIF has no openly licensed photograph for it: a later fill passes it by, so a stopped fill resumes. */
 export const OPEN_NONE = 'no GBIF record under an open licence has a photograph';
 
+/**
+ * What a dossier records when GBIF's openly licensed records have photographs and none can be shown (under CC BY, none
+ * names its author: `photosFromMedia`): settled as none, as above (round seventy-two: eight species of 85 were asked
+ * again on every run, and the fill's count left them out).
+ */
+export const OPEN_NONE_SHOWN = 'GBIF records under an open licence have photographs, none naming the author its licence requires';
+
 /** Whether this fill has already asked for this dossier and been told there is none. */
-export const askedOpen = (d: Pick<Dossier, 'upstream'>) => d.upstream?.['gbif.media']?.detail === OPEN_NONE;
+export const askedOpen = (d: Pick<Dossier, 'upstream'>) => d.upstream?.['gbif.media']?.detail === OPEN_NONE || d.upstream?.['gbif.media']?.detail === OPEN_NONE_SHOWN;
 
 export async function fillOpenGbif(d: Pick<Dossier, 'key' | 'photos' | 'upstream'>, f: JsonFetcher, now = () => new Date().toISOString()): Promise<OpenFill> {
   const m = await gbif.media(f, d.key);
   if (m.status === 'ok') {
     const fresh = photosFromMedia(m.data);
+    if (!fresh.length) {
+      d.upstream['gbif.media'] = { status: 'none', at: now(), detail: OPEN_NONE_SHOWN };
+      return { none: true };
+    }
     d.photos = mergeGbifPhotos(d.photos ?? [], fresh);
     d.upstream['gbif.media'] = { status: 'ok', at: now(), detail: 'GBIF records under an open licence (CC0, CC BY)' };
     return { added: fresh.length };
