@@ -1,0 +1,23 @@
+Loading bulk files from bulk/…
+  WCVP names (287 MB)…
+  Kew's files of 2026-06-04; 9144 names in 12 genera; WCVP distributions (135 MB)…
+  no occurrence.zip: occurrences will come from the API
+Building 12 species…
+[1/12] ✓ Pinguicula simulans [10741014] 0 photos, 0 open/1 restricted in range, climate none (12812 ms)
+[2/12] ✓ Paubrasilia echinata [9119360] 48 photos, 342 open/344 restricted in range, climate pending — refused: openalex:refused (api.openalex.org 429: asked to wait 322 minutes; not asked again until then) (16915 ms)
+[3/12] ✓ Polemonium reptans [2927849] 56 photos, 87 open/709 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (14684 ms)
+[4/12] ✓ Allium ampeloprasum [2856037] 54 photos, 78 open/591 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (16231 ms)
+[5/12] ✓ Syngonium angustatum [2867888] 70 photos, 23 open/68 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (15811 ms)
+[6/12] ✓ Romulea gigantea [2743932] 12 photos, 12 open/3 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (13133 ms)
+[7/12] ✓ Lachenalia sessiliflora [2775184] 8 photos, 13 open/14 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (11361 ms)
+[8/12] ✓ Ceropegia clavigera [9571029] 22 photos, 65 open/36 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (9173 ms)
+[9/12] ✓ Haworthia decipiens [2779722] 14 photos, 63 open/101 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (11911 ms)
+[10/12] ✓ Bulbine semenaliundata [5304908] 0 photos, 2 open/0 restricted in range, climate none — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (11080 ms)
+[11/12] ✓ Drosera stricticaulis [3190771] 57 photos, 192 open/128 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (13767 ms)
+[12/12] ✓ Erigeron philadelphicus [3119285] 69 photos, 82 open/692 restricted in range, climate pending — refused: openalex:refused (api.openalex.org rate-limiting; not asked again for a while) (13627 ms)
+Reading Kew's names for 12 dossiers from bulk/wcvp_names.csv…
+  12 dossiers read, 12 changed: 1 cite Kew's author, 1 list older names Kew accepts as species of their own, 0 common names dropped as scientific names.
+  12 dossiers changed since their last stamp (or never stamped): the day each last changed written into the file, for the sitemap
+
+12 built, 0 kept of 12; index now 12 species → static/s/v2/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)
+bulk: 12 distributions, 0 occurrence sets and 0 photograph sets from the files, 174 requests to the APIs

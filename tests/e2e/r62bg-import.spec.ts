@@ -47,9 +47,11 @@ test('r62bg 1: a Leave answered Cancel is called off: the button comes back at o
   await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect.poll(() => asked).toBe('beforeunload');
   // At once, not after 4 s under "Leaving…" (base: disabled and "Leaving…" for 4 s), where the browser says the Cancel
-  // (Chromium's `navigateerror`); Safari's engine did not, and another engine is given the page's 3 s for a "Leave site?" that
-  // is still showing (`leaveDemo`; round sixty-four, the all-engines run).
-  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: browserName === 'chromium' ? 1500 : 4500 });
+  // (Chromium's `navigateerror`). Safari's engine does not say it (round sixty-four, the all-engines run), and there the
+  // button came back on the page's 3 s timer, which a loaded machine runs late; since round seventy-five it comes back at
+  // the first press on the page after the question (`leaveDemo`), so in another engine the test presses the heading first.
+  if (browserName !== 'chromium') await page.locator('h1.sci').click();
+  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: 1500 });
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('main')).toContainText('12');
   expect(await page.evaluate(() => sessionStorage.getItem('cultifolio.demo'))).toBe('1');

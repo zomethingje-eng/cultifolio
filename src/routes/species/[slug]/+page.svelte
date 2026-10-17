@@ -88,7 +88,10 @@
     })
   );
   // A range of more than a few regions stacks a dozen lines deep in one narrow cell of the fact grid beside a blank row; the cell, and the marker's beside it, take the whole row instead.
-  const longRange = $derived(d.distribution.native.length > 4);
+  // Every region the cell lists counts, the introduced and the reported with the native (round seventy-five): okra's three
+  // native regions and some eighty introduced ran as one long narrow column beside the marker, the rest of the row empty.
+  const longList = (n: number) => n > 4;
+  const longRange = $derived(longList(d.distribution.native.length + d.distribution.introduced.length + (d.distribution.native.length ? 0 : (d.distribution.reported?.length ?? 0))));
   // The glossary's plain words in what the reader sees: "species page", not "dossier"; "across the range", not "envelope" (round fifty-eight; the accessibility review).
   const evidence = $derived.by(() => {
     const o = d.occurrences;
@@ -636,8 +639,8 @@
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <!-- A range Kew files under another of the species' names says which (round sixty-eight). -->
     {#if viaNote}<div class="wide" id="range-via"><b>Range source</b>{viaNote.text}{#if data.viaPage}{' '}(<a href="/species/{data.viaPage.slug}"><i>{data.viaPage.name}</i></a>, a page of its own here){/if}{#if viaNote.clause}<span class="small muted"> · {viaNote.clause}</span>{/if}</div>{/if}
-    {#if d.distribution.doubtful?.length}<div><b>Doubtfully present in</b>{d.distribution.doubtful.map((r) => r.name).join(', ')}<span class="small muted"> · recorded by WCVP as doubtfully present: not part of the range records are tested against</span></div>{/if}
-    {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
+    {#if d.distribution.doubtful?.length}<div class:wide={longList(d.distribution.doubtful.length)}><b>Doubtfully present in</b>{d.distribution.doubtful.map((r) => r.name).join(', ')}<span class="small muted"> · recorded by WCVP as doubtfully present: not part of the range records are tested against</span></div>{/if}
+    {#if d.distribution.extinct?.length}<div class:wide={longList(d.distribution.extinct.length)}><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted">{' · '}quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km, or with no stated accuracy (admitted only as a person's observation to three decimals), and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>

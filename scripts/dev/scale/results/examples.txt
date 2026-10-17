@@ -1,0 +1,274 @@
+== inat>=2 or living>=2: 58279 species; today kept 4892; falls out 4031
+  falls out, by family: Asparagaceae 701, Apocynaceae 600, Iridaceae 319, Crassulaceae 306, Aizoaceae 296, Vitaceae 215, Cactaceae 207, Asphodelaceae 175, Burseraceae 159, Amaryllidaceae 146, Droseraceae 117, Nepenthaceae 95, Moraceae 93, Passifloraceae 84, Lentibulariaceae 74
+  out: Acharagma aguirreanum (Cactaceae)  inat 1  living 0
+  out: Aeonium stuessyi (Crassulaceae)  inat 0  living 0
+  out: Manfreda umbrophila (Asparagaceae)  inat 0  living 0
+  out: Albuca pendulina (Asparagaceae)  inat 0  living 0
+  out: Antimima hallii (Aizoaceae)  inat 0  living 0
+  out: Babiana auriculata (Iridaceae)  inat 0  living 0
+  out: Brunsvigia natalensis (Amaryllidaceae)  inat 0  living 0
+  out: Ceropegia aquamontana (Apocynaceae)  inat 0  living 0
+  out: Ceropegia damannii (Apocynaceae)  inat 0  living 0
+  out: Stapelianthus insignis (Apocynaceae)  inat 1  living 1
+  out: Ceropegia mirabilis (Apocynaceae)  inat 0  living 0
+  out: Orbea maculata (Apocynaceae)  inat 0  living 1
+  out: Ceropegia turricula (Apocynaceae)  inat 0  living 0
+  out: Colchicum kackarense (Colchicaceae)  inat 0  living 0
+  out: Commiphora lacerata (Burseraceae)  inat 0  living 0
+  out: Conophytum joubertii (Aizoaceae)  inat 1  living 0
+  out: Crassula hunua (Crassulaceae)  inat 1  living 0
+  out: Cyphostemma cornus-africani (Vitaceae)  inat 0  living 0
+  out: Cyphostemma odontadenium (Vitaceae)  inat 0  living 0
+  out: Cyrtanthus labiatus (Amaryllidaceae)  inat 0  living 0
+  out: Dorstenia astyanactis (Moraceae)  inat 0  living 0
+  out: Drimia decipiens (Asparagaceae)  inat 0  living 0
+  out: Drosera coccipetala (Droseraceae)  inat 0  living 0
+  out: Dudleya parva (Crassulaceae)  inat 0  living 0
+  out: Echeveria xochipalensis (Crassulaceae)  inat 0  living 0
+  out: Geissorhiza brehmii (Iridaceae)  inat 0  living 0
+  out: Gethyllis fimbriatula (Amaryllidaceae)  inat 0  living 0
+  out: Haworthiopsis sordida (Asphodelaceae)  inat 0  living 0
+  out: Lachenalia macgregoriorum (Asparagaceae)  inat 0  living 0
+  out: Ledebouria lilacina (Asparagaceae)  inat 0  living 0
+  out: Mesembryanthemum amabile (Aizoaceae)  inat 0  living 0
+  out: Momordica denticulata (Cucurbitaceae)  inat 0  living 0
+  out: Nepenthes hamiguitanensis (Nepenthaceae)  inat 1  living 0
+  out: Operculicarya capuronii (Anacardiaceae)  inat 0  living 0
+  out: Parodia gladiata (Cactaceae)  inat 0  living 0
+  out: Portulacaria longipedunculata (Didiereaceae)  inat 0  living 0
+  out: Romulea hirta (Iridaceae)  inat 0  living 1
+  out: Scilla lochiae (Asparagaceae)  inat 0  living 0
+  out: Stephania andamanica (Menispermaceae)  inat 0  living 0
+  out: Talinum lineare (Talinaceae)  inat 0  living 0
+  out: Tylecodon tribblei (Crassulaceae)  inat 0  living 0
+  comes in, by family: Fabaceae 4080, Asteraceae 3966, Orchidaceae 3744, Poaceae 1874, Myrtaceae 1569, Lamiaceae 1392, Rosaceae 1337, Ericaceae 1305, Brassicaceae 935, Malvaceae 845, Proteaceae 837, Euphorbiaceae 804, Bromeliaceae 797, Ranunculaceae 768, Apiaceae 712, Araceae 705, Rubiaceae 700, Cyperaceae 695, Cactaceae 660, Plantaginaceae 654
+  in (most observed): Hibiscus × rosa-sinensis (Malvaceae)  inat 63298  living 147
+  in (most observed): Picea pungens (Pinaceae)  inat 30935  living 2493
+  in (most observed): Liquidambar styraciflua (Altingiaceae)  inat 26539  living 5048
+  in (most observed): Pelargonium × hybridum (Geraniaceae)  inat 26245  living 56
+  in (most observed): Platycladus orientalis (Cupressaceae)  inat 22495  living 237
+  in (most observed): Picea abies (Pinaceae)  inat 22250  living 4521
+  in (most observed): Taxodium distichum (Cupressaceae)  inat 21690  living 618
+  in (most observed): Citrus × aurantium (Rutaceae)  inat 18872  living 360
+  in (most observed): Viola × wittrockiana (Violaceae)  inat 17822  living 20
+  in (most observed): Metasequoia glyptostroboides (Cupressaceae)  inat 17078  living 905
+  in (most observed): Loropetalum chinense (Hamamelidaceae)  inat 16504  living 18
+  in (most observed): Cupressus sempervirens (Cupressaceae)  inat 16401  living 3852
+  in (most observed): Brassica oleracea (Brassicaceae)  inat 16063  living 6807
+  in (most observed): Citrus × limon (Rutaceae)  inat 15855  living 191
+  in (most observed): Pinus strobus (Pinaceae)  inat 15133  living 900
+  in (most observed): Thuja occidentalis (Cupressaceae)  inat 15005  living 1588
+  in (most observed): Canna × hybrida (Cannaceae)  inat 14915  living 12
+  in (most observed): Fagus sylvatica (Fagaceae)  inat 14727  living 30969
+  in (most observed): Platanus × hispanica (Platanaceae)  inat 14690  living 58540
+  in (most observed): Petunia × atkinsiana (Solanaceae)  inat 14527  living 2
+  in (most observed): Taxus baccata (Taxaceae)  inat 14205  living 7330
+  in (most observed): Platanus occidentalis (Platanaceae)  inat 13650  living 49
+  in (most observed): Sequoia sempervirens (Cupressaceae)  inat 13142  living 147
+  in (most observed): Zea mays (Poaceae)  inat 12573  living 62789
+  in (most observed): Salix babylonica (Salicaceae)  inat 11892  living 186
+  in (most observed): Cedrus deodara (Pinaceae)  inat 11609  living 159
+  in (most observed): Ulmus parvifolia (Ulmaceae)  inat 11475  living 48
+  in (most observed): Magnolia × soulangeana (Magnoliaceae)  inat 11126  living 173
+  in (most observed): Sequoiadendron giganteum (Cupressaceae)  inat 10718  living 362
+  in (most observed): Quercus robur (Fagaceae)  inat 10598  living 131887
+  in (most observed): Celosia argentea (Amaranthaceae)  inat 10485  living 135
+  in (most observed): Betula nigra (Betulaceae)  inat 10144  living 126
+  in (most observed): Juniperus chinensis (Cupressaceae)  inat 9883  living 332
+  in (most observed): Iris × germanica (Iridaceae)  inat 9664  living 490
+  in (most observed): Quercus rubra (Fagaceae)  inat 9549  living 27229
+  in (most observed): Cedrus atlantica (Pinaceae)  inat 9278  living 329
+  in (most observed): Cryptomeria japonica (Cupressaceae)  inat 8971  living 323
+  in (most observed): Zelkova serrata (Ulmaceae)  inat 8892  living 501
+  in (most observed): Betula pendula (Betulaceae)  inat 8593  living 53874
+  in (most observed): Quercus palustris (Fagaceae)  inat 8256  living 3824
+  in (least observed): Wolffiella oblonga (Araceae)  inat 0  living 12
+  in (least observed): Soroseris umbrella (Asteraceae)  inat 0  living 2
+  in (least observed): Acacia platycarpa (Fabaceae)  inat 0  living 15
+  in (least observed): Senecio vulneraria (Asteraceae)  inat 0  living 2
+  in (least observed): Erysimum metlesicsii (Brassicaceae)  inat 0  living 4
+  in (least observed): Epidendrum polychromum (Orchidaceae)  inat 0  living 3
+  in (least observed): Tacazzea apiculata (Apocynaceae)  inat 0  living 2
+  in (least observed): Pteris pellucida (Pteridaceae)  inat 0  living 2
+  in (least observed): Allocasuarina helmsii (Casuarinaceae)  inat 0  living 12
+  in (least observed): Zornia sericea (Fabaceae)  inat 0  living 2
+  in (least observed): Goodenia panduriformis (Goodeniaceae)  inat 0  living 3
+  in (least observed): Astragalus roemeri (Fabaceae)  inat 0  living 2
+  in (least observed): Gentianella serotina (Gentianaceae)  inat 0  living 6
+  in (least observed): Mendoncia costaricana (Acanthaceae)  inat 0  living 2
+  in (least observed): Boechera cusickii (Brassicaceae)  inat 0  living 2
+== inat>=1 or living>=1: 81848 species; today kept 5653; falls out 3270
+  falls out, by family: Asparagaceae 597, Apocynaceae 511, Iridaceae 274, Aizoaceae 233, Crassulaceae 227, Vitaceae 206, Asphodelaceae 138, Burseraceae 137, Cactaceae 123, Amaryllidaceae 103, Droseraceae 83, Moraceae 78, Passifloraceae 69, Asteraceae 61, Cucurbitaceae 60
+  out: Adenia acuta (Passifloraceae)  inat 0  living 0
+  out: Agave bahamana (Asparagaceae)  inat 0  living 0
+  out: Albuca candida (Asparagaceae)  inat 0  living 0
+  out: Albuca recurva (Asparagaceae)  inat 0  living 0
+  out: Antimima hallii (Aizoaceae)  inat 0  living 0
+  out: Anacampseros prominens (Anacampserotaceae)  inat 0  living 0
+  out: Bulbine alveolata (Asphodelaceae)  inat 0  living 0
+  out: Duvalia angustiloba (Apocynaceae)  inat 0  living 0
+  out: Ceropegia cufodontii (Apocynaceae)  inat 0  living 0
+  out: Orbea huillensis (Apocynaceae)  inat 0  living 0
+  out: Ceropegia manoharii (Apocynaceae)  inat 0  living 0
+  out: Ceropegia praetermissa (Apocynaceae)  inat 0  living 0
+  out: Ceropegia tavalla (Apocynaceae)  inat 0  living 0
+  out: Colchicum circinatum (Colchicaceae)  inat 0  living 0
+  out: Commiphora eminii (Burseraceae)  inat 0  living 0
+  out: Commiphora sphaerophylla (Burseraceae)  inat 0  living 0
+  out: Crassula depressa (Crassulaceae)  inat 0  living 0
+  out: Cyphostemma bambuseti (Vitaceae)  inat 0  living 0
+  out: Cyphostemma leandrii (Vitaceae)  inat 0  living 0
+  out: Cyphostemma stegosaurus (Vitaceae)  inat 0  living 0
+  out: Dicrocaulon humile (Aizoaceae)  inat 0  living 0
+  out: Dorstenia involuta (Moraceae)  inat 0  living 0
+  out: Drimia kniphofioides (Asparagaceae)  inat 0  living 0
+  out: Drosera gunniana (Droseraceae)  inat 0  living 0
+  out: Echeveria islasiae (Crassulaceae)  inat 0  living 0
+  out: Ferraria parva (Iridaceae)  inat 0  living 0
+  out: Geissorhiza nana (Iridaceae)  inat 0  living 0
+  out: Haemanthus dasyphyllus (Amaryllidaceae)  inat 0  living 0
+  out: Lachenalia doleritica (Asparagaceae)  inat 0  living 0
+  out: Lapeirousia purpurea (Iridaceae)  inat 0  living 0
+  out: Massonia triflora (Asparagaceae)  inat 0  living 0
+  out: Mesembryanthemum schenckii (Aizoaceae)  inat 0  living 0
+  out: Monsonia senegalensis (Geraniaceae)  inat 0  living 0
+  out: Nolina caxcana (Asparagaceae)  inat 0  living 0
+  out: Othonna undulosa (Asteraceae)  inat 0  living 0
+  out: Pseudobombax andicola (Malvaceae)  inat 0  living 0
+  out: Romulea hantamensis (Iridaceae)  inat 0  living 0
+  out: Scilla gracillima (Asparagaceae)  inat 0  living 0
+  out: Sparaxis roxburghii (Iridaceae)  inat 0  living 0
+  out: Talinum dauphinense (Talinaceae)  inat 0  living 0
+  out: Tylecodon florentii (Crassulaceae)  inat 0  living 0
+  comes in, by family: Orchidaceae 6262, Fabaceae 5654, Asteraceae 5643, Poaceae 2676, Myrtaceae 1970, Lamiaceae 1962, Rosaceae 1802, Ericaceae 1760, Brassicaceae 1225, Euphorbiaceae 1206, Bromeliaceae 1185, Rubiaceae 1182, Malvaceae 1175, Proteaceae 1083, Cyperaceae 1066, Araceae 1060, Apiaceae 1029, Ranunculaceae 1005, Gesneriaceae 945, Plantaginaceae 873
+  in (most observed): Hibiscus × rosa-sinensis (Malvaceae)  inat 63298  living 147
+  in (most observed): Picea pungens (Pinaceae)  inat 30935  living 2493
+  in (most observed): Liquidambar styraciflua (Altingiaceae)  inat 26539  living 5048
+  in (most observed): Pelargonium × hybridum (Geraniaceae)  inat 26245  living 56
+  in (most observed): Platycladus orientalis (Cupressaceae)  inat 22495  living 237
+  in (most observed): Picea abies (Pinaceae)  inat 22250  living 4521
+  in (most observed): Taxodium distichum (Cupressaceae)  inat 21690  living 618
+  in (most observed): Citrus × aurantium (Rutaceae)  inat 18872  living 360
+  in (most observed): Viola × wittrockiana (Violaceae)  inat 17822  living 20
+  in (most observed): Metasequoia glyptostroboides (Cupressaceae)  inat 17078  living 905
+  in (most observed): Loropetalum chinense (Hamamelidaceae)  inat 16504  living 18
+  in (most observed): Cupressus sempervirens (Cupressaceae)  inat 16401  living 3852
+  in (most observed): Brassica oleracea (Brassicaceae)  inat 16063  living 6807
+  in (most observed): Citrus × limon (Rutaceae)  inat 15855  living 191
+  in (most observed): Pinus strobus (Pinaceae)  inat 15133  living 900
+  in (most observed): Thuja occidentalis (Cupressaceae)  inat 15005  living 1588
+  in (most observed): Canna × hybrida (Cannaceae)  inat 14915  living 12
+  in (most observed): Fagus sylvatica (Fagaceae)  inat 14727  living 30969
+  in (most observed): Platanus × hispanica (Platanaceae)  inat 14690  living 58540
+  in (most observed): Petunia × atkinsiana (Solanaceae)  inat 14527  living 2
+  in (most observed): Taxus baccata (Taxaceae)  inat 14205  living 7330
+  in (most observed): Platanus occidentalis (Platanaceae)  inat 13650  living 49
+  in (most observed): Sequoia sempervirens (Cupressaceae)  inat 13142  living 147
+  in (most observed): Zea mays (Poaceae)  inat 12573  living 62789
+  in (most observed): Salix babylonica (Salicaceae)  inat 11892  living 186
+  in (most observed): Cedrus deodara (Pinaceae)  inat 11609  living 159
+  in (most observed): Ulmus parvifolia (Ulmaceae)  inat 11475  living 48
+  in (most observed): Magnolia × soulangeana (Magnoliaceae)  inat 11126  living 173
+  in (most observed): Sequoiadendron giganteum (Cupressaceae)  inat 10718  living 362
+  in (most observed): Quercus robur (Fagaceae)  inat 10598  living 131887
+  in (most observed): Celosia argentea (Amaranthaceae)  inat 10485  living 135
+  in (most observed): Betula nigra (Betulaceae)  inat 10144  living 126
+  in (most observed): Juniperus chinensis (Cupressaceae)  inat 9883  living 332
+  in (most observed): Iris × germanica (Iridaceae)  inat 9664  living 490
+  in (most observed): Quercus rubra (Fagaceae)  inat 9549  living 27229
+  in (most observed): Cedrus atlantica (Pinaceae)  inat 9278  living 329
+  in (most observed): Cryptomeria japonica (Cupressaceae)  inat 8971  living 323
+  in (most observed): Zelkova serrata (Ulmaceae)  inat 8892  living 501
+  in (most observed): Betula pendula (Betulaceae)  inat 8593  living 53874
+  in (most observed): Quercus palustris (Fagaceae)  inat 8256  living 3824
+  in (least observed): Zygophyllum album (Zygophyllaceae)  inat 0  living 1
+  in (least observed): Dracocephalum diversifolium (Lamiaceae)  inat 0  living 1
+  in (least observed): Zeuxine oblonga (Orchidaceae)  inat 0  living 6
+  in (least observed): Acacia conspersa (Fabaceae)  inat 0  living 1
+  in (least observed): Senecio vulneraria (Asteraceae)  inat 0  living 2
+  in (least observed): Epidendrum polychromum (Orchidaceae)  inat 0  living 3
+  in (least observed): Rubus papuanus (Rosaceae)  inat 0  living 1
+  in (least observed): Verbascum calycinum (Scrophulariaceae)  inat 0  living 1
+  in (least observed): Allocasuarina helmsii (Casuarinaceae)  inat 0  living 12
+  in (least observed): Zornia sericea (Fabaceae)  inat 0  living 2
+  in (least observed): Goodenia panduriformis (Goodeniaceae)  inat 0  living 3
+  in (least observed): Gentianella serotina (Gentianaceae)  inat 0  living 6
+  in (least observed): Mendoncia costaricana (Acanthaceae)  inat 0  living 2
+  in (least observed): Boechera cusickii (Brassicaceae)  inat 0  living 2
+  in (least observed): Daphne axilliflora (Thymelaeaceae)  inat 0  living 1
+== iNaturalist names refused, most observed first
+  54118	Acer palmatum	rows lead to two or more species
+  40042	Aloe vera	rows lead to two or more species
+  38032	Cordyline fruticosa	rows lead to two or more species
+  28936	Ixora coccinea	rows lead to two or more species
+  25270	Crassula ovata	rows lead to two or more species
+  20228	Lavandula angustifolia	rows lead to two or more species
+  17837	Melaleuca citrina	rows lead to two or more species
+  17791	Spiraea japonica	rows lead to two or more species
+  13470	Euonymus japonicus	rows lead to two or more species
+  12413	Hydrangea paniculata	rows lead to two or more species
+  12023	Salvia microphylla	rows lead to two or more species
+  11995	Ficus microcarpa	rows lead to two or more species
+  11281	Allamanda cathartica	rows lead to two or more species
+  9883	Juniperus chinensis	rows lead to two or more species
+  9045	Vinca major	rows lead to two or more species
+  8676	Begonia × semperflorens-cultorum	no Kew row of these words
+  8256	Quercus palustris	rows lead to two or more species
+  7310	Cuphea hyssopifolia	rows lead to two or more species
+  6724	Ficus pumila	rows lead to two or more species
+  6468	Euonymus alatus	rows lead to two or more species
+  6463	Pinus nigra	rows lead to two or more species
+  6437	Quercus macrocarpa	rows lead to two or more species
+  6363	Echium candicans	rows lead to two or more species
+  6314	Aloe maculata	rows lead to two or more species
+  6134	Solanum melongena	rows lead to two or more species
+  5707	Verbena bonariensis	rows lead to two or more species
+  5440	Euphorbia trigona	rows lead to two or more species
+  5372	Polygala myrtifolia	rows lead to two or more species
+  5355	Bauhinia purpurea	rows lead to two or more species
+  5079	Populus nigra	rows lead to two or more species
+  4547	Thunbergia erecta	rows lead to two or more species
+  4513	Quercus ilex	rows lead to two or more species
+  4435	Lonicera japonica	rows lead to two or more species
+  4309	Acalypha hispida	rows lead to two or more species
+  4303	Ficus macrophylla	rows lead to two or more species
+  4242	Aquilegia canadensis	rows lead to two or more species
+  4196	Camellia sasanqua	rows lead to two or more species
+  4143	Centaurea montana	rows lead to two or more species
+  4132	Alstroemeria aurea	rows lead to two or more species
+  3806	Bambusa vulgaris	rows lead to two or more species
+  3796	Ulmus pumila	rows lead to two or more species
+  3383	Pittosporum undulatum	rows lead to two or more species
+  3367	Agave angustifolia	rows lead to two or more species
+  3331	Iberis sempervirens	rows lead to two or more species
+  3207	Myrtus communis	rows lead to two or more species
+  3182	Ficus religiosa	rows lead to two or more species
+  3109	Rosa multiflora	rows lead to two or more species
+  3084	Cyperus alternifolius	rows lead to two or more species
+  3077	Quercus agrifolia	rows lead to two or more species
+  3063	Syzygium paniculatum	rows lead to two or more species
+  3024	Eugenia uniflora	rows lead to two or more species
+  2993	Clusia rosea	rows lead to two or more species
+  2936	Pinus resinosa	rows lead to two or more species
+  2877	Agave desmetiana	rows lead to two or more species
+  2780	Gladiolus × hortulanus	rows only unplaced, misapplied or not leading to a species
+  2705	Leucospermum × hybridum	no Kew row of these words
+  2687	Cerastium tomentosum	rows lead to two or more species
+  2686	Anethum graveolens	rows lead to two or more species
+  2636	Quercus glauca	rows lead to two or more species
+  2538	Acacia dealbata	rows lead to two or more species
+== today unmatched
+Harpephyllum caffrum
+Ceropegia ananthapuramensis
+Bisnaga hamatacantha
+Tylecodon cacaliodes
+Conophytum tomasii
+Monsonia lheritieri
+Ceropegia hadramautica
+Cyphostemma degraerii
+Ceropegia macrocarpa
+Dorstenia poinsettifolia
+Ceropegia marnierana
+Aphelandra squarrosa
+Ceropegia linophylla
+Handroanthus impetiginosum

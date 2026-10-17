@@ -1,0 +1,63 @@
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-8947.json",
+ "species": 8947,
+ "names": {
+  "shards": 128,
+  "keys": 102958,
+  "bytes": 2917222,
+  "gz": 1288214,
+  "maxShard": 24874
+ },
+ "core": {
+  "bytes": 1869702,
+  "gz": 502060
+ },
+ "show": {
+  "blocks": 35,
+  "bytes": 1320992,
+  "gz": 310858,
+  "maxBlock": 45684
+ }
+}
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-50000.json",
+ "species": 50000,
+ "names": {
+  "shards": 512,
+  "keys": 568190,
+  "bytes": 16853098,
+  "gz": 7720904,
+  "maxShard": 36747
+ },
+ "core": {
+  "bytes": 10340735,
+  "gz": 3099249
+ },
+ "show": {
+  "blocks": 196,
+  "bytes": 7452898,
+  "gz": 1739539,
+  "maxBlock": 46048
+ }
+}
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-100000.json",
+ "species": 100000,
+ "names": {
+  "shards": 1024,
+  "keys": 1153924,
+  "bytes": 34386935,
+  "gz": 16047621,
+  "maxShard": 37349
+ },
+ "core": {
+  "bytes": 21013170,
+  "gz": 6380769
+ },
+ "show": {
+  "blocks": 391,
+  "bytes": 15011640,
+  "gz": 3505983,
+  "maxBlock": 46048
+ }
+}

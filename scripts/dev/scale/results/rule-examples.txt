@@ -1,0 +1,147 @@
+== rule50: sum>=3 with today: 54212 species; today kept 8923; out 0; in 45289
+  in, by family: Fabaceae 3447, Asteraceae 3310, Orchidaceae 3030, Poaceae 1565, Myrtaceae 1395, Lamiaceae 1192, Rosaceae 1170, Ericaceae 1116, Brassicaceae 771, Proteaceae 739, Malvaceae 712, Ranunculaceae 678, Bromeliaceae 672, Euphorbiaceae 658, Cactaceae 595, Cyperaceae 589, Plantaginaceae 582, Araceae 579, Apiaceae 571, Rubiaceae 566, Iridaceae 520, Amaryllidaceae 517, Solanaceae 508, Primulaceae 494, Asparagaceae 493
+  in: Triticum aestivum (Poaceae)  inat 4262  living 228774
+  in: Oryza sativa (Poaceae)  inat 2717  living 191443
+  in: Hordeum vulgare (Poaceae)  inat 1581  living 154834
+  in: Quercus robur (Fagaceae)  inat 10598  living 131887
+  in: Zea mays (Poaceae)  inat 12573  living 62789
+  in: Platanus × hispanica (Platanaceae)  inat 14690  living 58540
+  in: Triticum turgidum (Poaceae)  inat 98  living 71987
+  in: Hibiscus × rosa-sinensis (Malvaceae)  inat 63298  living 147
+  in: Betula pendula (Betulaceae)  inat 8593  living 53874
+  in: Carpinus betulus (Betulaceae)  inat 3925  living 56324
+  in: Fagus sylvatica (Fagaceae)  inat 14727  living 30969
+  in: Pinus sylvestris (Pinaceae)  inat 8101  living 33519
+  in: Cicer arietinum (Fabaceae)  inat 280  living 39541
+  in: Quercus rubra (Fagaceae)  inat 9549  living 27229
+  in: Cenchrus americanus (Poaceae)  inat 352  living 34760
+  in: Picea pungens (Pinaceae)  inat 30935  living 2493
+  in: Liquidambar styraciflua (Altingiaceae)  inat 26539  living 5048
+  in: Tilia × euchlora (Malvaceae)  inat 138  living 27137
+  in: Picea abies (Pinaceae)  inat 22250  living 4521
+  in: Pelargonium × hybridum (Geraniaceae)  inat 26245  living 56
+  in: Avena sativa (Poaceae)  inat 1088  living 23818
+  in: Brassica oleracea (Brassicaceae)  inat 16063  living 6807
+  in: Platycladus orientalis (Cupressaceae)  inat 22495  living 237
+  in: Taxodium distichum (Cupressaceae)  inat 21690  living 618
+  in: Corylus colurna (Betulaceae)  inat 1986  living 20080
+  in: Thymus serpylloides (Lamiaceae)  inat 4  living 6
+  in: Primula glomerata (Primulaceae)  inat 0  living 10
+  in: Mosla dianthera (Lamiaceae)  inat 10  living 0
+  in: Achnatherum virescens (Poaceae)  inat 3  living 7
+  in: Clusia major (Clusiaceae)  inat 7  living 3
+  in: Fritillaria chitralensis (Liliaceae)  inat 0  living 10
+  in: Dendrobium bellatulum (Orchidaceae)  inat 5  living 5
+  in: Bulbophyllum imbricatum (Orchidaceae)  inat 3  living 7
+  in: Dennstaedtia cicutaria (Dennstaedtiaceae)  inat 4  living 6
+  in: Neoastelia spectabilis (Asteliaceae)  inat 0  living 10
+  in: Hakea gilbertii (Proteaceae)  inat 0  living 10
+  in: Sundacarpus amarus (Podocarpaceae)  inat 3  living 7
+  in: Trifolium polyphyllum (Fabaceae)  inat 4  living 6
+  in: Neoregelia tristis (Bromeliaceae)  inat 1  living 9
+  in: Sprengelia incarnata (Ericaceae)  inat 1  living 9
+  in: Onosma thracica (Boraginaceae)  inat 0  living 3
+  in: Schoepfia jasminodora (Schoepfiaceae)  inat 3  living 0
+  in: Cotoneaster hissaricus (Rosaceae)  inat 0  living 3
+  in: Clematis urophylla (Ranunculaceae)  inat 3  living 0
+  in: Mandevilla fragrans (Apocynaceae)  inat 3  living 0
+  in: Verbena montevidensis (Verbenaceae)  inat 3  living 0
+  in: Hibbertia spanantha (Dilleniaceae)  inat 0  living 3
+  in: Euphrasia pseudokerneri (Orobanchaceae)  inat 0  living 3
+  in: Crepis granatensis (Asteraceae)  inat 3  living 0
+  in: Torricellia tiliifolia (Torricelliaceae)  inat 3  living 0
+  in: Epidendrum polychromum (Orchidaceae)  inat 0  living 3
+  in: Euphorbia falcata (Euphorbiaceae)  inat 2  living 1
+  in: Quercus segoviensis (Fagaceae)  inat 3  living 0
+  in: Goodenia panduriformis (Goodeniaceae)  inat 0  living 3
+  in: Melaleuca transversa (Myrtaceae)  inat 1  living 2
+== rule100: 97184 species; today kept 8923; out 0; in 88261
+  in, by family: Fabaceae 6957, Orchidaceae 6785, Asteraceae 6613, Poaceae 2895, Ericaceae 2325, Myrtaceae 2324, Rosaceae 2194, Lamiaceae 2121, Malvaceae 1397, Brassicaceae 1390, Proteaceae 1390, Bromeliaceae 1377, Plantaginaceae 1305, Rubiaceae 1241, Euphorbiaceae 1235, Apiaceae 1215, Ranunculaceae 1186, Araceae 1122, Cactaceae 1122, Cyperaceae 1112, Gesneriaceae 1101, Iridaceae 1082, Arecaceae 962, Apocynaceae 947, Solanaceae 888
+  in: Triticum aestivum (Poaceae)  inat 4262  living 228774
+  in: Oryza sativa (Poaceae)  inat 2717  living 191443
+  in: Hordeum vulgare (Poaceae)  inat 1581  living 154834
+  in: Quercus robur (Fagaceae)  inat 10598  living 131887
+  in: Zea mays (Poaceae)  inat 12573  living 62789
+  in: Platanus × hispanica (Platanaceae)  inat 14690  living 58540
+  in: Triticum turgidum (Poaceae)  inat 98  living 71987
+  in: Hibiscus × rosa-sinensis (Malvaceae)  inat 63298  living 147
+  in: Betula pendula (Betulaceae)  inat 8593  living 53874
+  in: Carpinus betulus (Betulaceae)  inat 3925  living 56324
+  in: Fagus sylvatica (Fagaceae)  inat 14727  living 30969
+  in: Pinus sylvestris (Pinaceae)  inat 8101  living 33519
+  in: Cicer arietinum (Fabaceae)  inat 280  living 39541
+  in: Quercus rubra (Fagaceae)  inat 9549  living 27229
+  in: Cenchrus americanus (Poaceae)  inat 352  living 34760
+  in: Picea pungens (Pinaceae)  inat 30935  living 2493
+  in: Liquidambar styraciflua (Altingiaceae)  inat 26539  living 5048
+  in: Tilia × euchlora (Malvaceae)  inat 138  living 27137
+  in: Picea abies (Pinaceae)  inat 22250  living 4521
+  in: Pelargonium × hybridum (Geraniaceae)  inat 26245  living 56
+  in: Avena sativa (Poaceae)  inat 1088  living 23818
+  in: Brassica oleracea (Brassicaceae)  inat 16063  living 6807
+  in: Platycladus orientalis (Cupressaceae)  inat 22495  living 237
+  in: Taxodium distichum (Cupressaceae)  inat 21690  living 618
+  in: Corylus colurna (Betulaceae)  inat 1986  living 20080
+  in: Stolonochloa pygmaea (Poaceae)  inat 1  living 2
+  in: Dianthus virgineus (Caryophyllaceae)  inat 1  living 2
+  in: Begonia taliensis (Begoniaceae)  inat 1  living 2
+  in: Fargesia denudata (Poaceae)  inat 0  living 3
+  in: Pyrrosia abbreviata (Polypodiaceae)  inat 0  living 3
+  in: Linaria popovii (Plantaginaceae)  inat 3  living 0
+  in: Eremophila tetraptera (Scrophulariaceae)  inat 3  living 0
+  in: Tulbaghia alliacea (Amaryllidaceae)  inat 2  living 1
+  in: Asyneuma trichostegium (Campanulaceae)  inat 0  living 3
+  in: Impatiens hongkongensis (Balsaminaceae)  inat 3  living 0
+  in: Magnolia decidua (Magnoliaceae)  inat 3  living 0
+  in: Ibatia maritima (Apocynaceae)  inat 1  living 2
+  in: Streptocarpus roseoalbus (Gesneriaceae)  inat 0  living 3
+  in: Ecuadendron acosta-solisianum (Fabaceae)  inat 3  living 0
+  in: Reynosia uncinata (Rhamnaceae)  inat 3  living 0
+  in: Gyrocheilos microtrichus (Gesneriaceae)  inat 0  living 0
+  in: Nitraria sphaerocarpa (Nitrariaceae)  inat 0  living 0
+  in: Nicotiana palssoniae (Solanaceae)  inat 0  living 0
+  in: Lotus sanguineus (Fabaceae)  inat 0  living 0
+  in: Asphodelus viscidulus (Asphodelaceae)  inat 0  living 0
+  in: Penstemon reidmoranii (Plantaginaceae)  inat 0  living 0
+  in: Rhododendron sajanense (Ericaceae)  inat 0  living 0
+  in: Symplocarpus nabekuraensis (Araceae)  inat 0  living 0
+  in: Helosciadium × longipedunculatum (Apiaceae)  inat 0  living 0
+  in: Nothofagus stylosa (Nothofagaceae)  inat 0  living 0
+  in: Acacia pachyphylla (Fabaceae)  inat 0  living 0
+  in: Aloe fibrosa (Asphodelaceae)  inat 0  living 0
+  in: Woodwardia magnifica (Aspleniaceae)  inat 0  living 0
+  in: Calotis xanthosioidea (Asteraceae)  inat 0  living 0
+  in: Myrmephytum moniliforme (Rubiaceae)  inat 0  living 0
+== today without cultivation evidence (sum<3): 4273
+  by family: Asparagaceae 743, Apocynaceae 626, Crassulaceae 342, Iridaceae 332, Aizoaceae 317, Cactaceae 238, Vitaceae 218, Asphodelaceae 181, Burseraceae 163, Amaryllidaceae 157, Droseraceae 127, Nepenthaceae 101, Moraceae 95, Passifloraceae 85, Colchicaceae 82, Lentibulariaceae 78, Asteraceae 71, Cucurbitaceae 68, Menispermaceae 62, Gesneriaceae 58
+  Acharagma aguirreanum (Cactaceae)  inat 1  living 0
+  Agave grisea (Asparagaceae)  inat 0  living 0
+  Albuca hallii (Asparagaceae)  inat 1  living 0
+  Antimima ivori (Aizoaceae)  inat 0  living 0
+  Babiana papyracea (Iridaceae)  inat 0  living 0
+  Orbea abayensis (Apocynaceae)  inat 1  living 0
+  Ceropegia differens (Apocynaceae)  inat 0  living 0
+  Ceropegia longifolia (Apocynaceae)  inat 0  living 0
+  Ceropegia pruinosior (Apocynaceae)  inat 0  living 0
+  Ceropegia wallichii (Apocynaceae)  inat 0  living 0
+  Commiphora buruxa (Burseraceae)  inat 0  living 0
+  Conophytum carpianum (Aizoaceae)  inat 0  living 0
+  Crassula morrumbalensis (Crassulaceae)  inat 0  living 0
+  Cyphostemma kapiriense (Vitaceae)  inat 0  living 0
+  Cyrtanthus fergusoniae (Amaryllidaceae)  inat 1  living 0
+  Dorstenia embergeri (Moraceae)  inat 0  living 0
+  Drimia serotina (Asparagaceae)  inat 0  living 0
+  Dudleya candida (Crassulaceae)  inat 1  living 0
+  Echinocereus spinigemmatus (Cactaceae)  inat 1  living 1
+  Geissorhiza melanthera (Iridaceae)  inat 0  living 0
+  Haworthia maculata (Asphodelaceae)  inat 1  living 0
+  Lachenalia namibiensis (Asparagaceae)  inat 0  living 0
+  Massonia angustifolia (Asparagaceae)  inat 1  living 0
+  Mesembryanthemum viridiflorum (Aizoaceae)  inat 0  living 0
+  Nepenthes longiptera (Nepenthaceae)  inat 2  living 0
+  Othonna obtusiloba (Asteraceae)  inat 0  living 0
+  Pinguicula orthoceras (Lentibulariaceae)  inat 0  living 0
+  Romulea monophylla (Iridaceae)  inat 0  living 0
+  Sinningia gerdtiana (Gesneriaceae)  inat 0  living 0
+  Talinum boivinianum (Talinaceae)  inat 0  living 0
+  Yavia cryptocarpa (Cactaceae)  inat 1  living 0

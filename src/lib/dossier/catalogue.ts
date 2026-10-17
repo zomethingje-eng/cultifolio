@@ -12,9 +12,15 @@ import tdwg from '$dossier/tdwg3.json';
  */
 export const BYS = ['genus', 'origin', 'family'] as const;
 export type By = (typeof BYS)[number];
-export type Chip = 'all' | 'climate' | 'noclimate';
+/**
+ * The chips: every species, those with a habitat climate, those without, and (round seventy-five, the owner's decision)
+ * the species of the most-grown genera, ranked by iNaturalist's observations of plants marked captive or cultivated. The
+ * set of genera is given by the caller (`$lib/server/catalogue`, from `scripts/most-grown-genera.txt`); the corpus build
+ * writes files for the first three only (`CHIPS`), and "grown" is derived from the index on the server.
+ */
+export type Chip = 'all' | 'climate' | 'noclimate' | 'grown';
 export const byOf = (v: string | null): By => ((BYS as readonly string[]).includes(v ?? '') ? (v as By) : 'genus');
-export const chipOf = (v: string | null): Chip => (v === 'climate' || v === 'noclimate' ? v : 'all');
+export const chipOf = (v: string | null): Chip => (v === 'climate' || v === 'noclimate' || v === 'grown' ? v : 'all');
 
 export type Item = {
   key: number;
@@ -63,20 +69,31 @@ type Box = [string, string, number, number, number, number];
 const boxByName = new Map((tdwg as Box[]).map((r) => [r[1], { s: r[2], w: r[3], n: r[4], e: r[5] }]));
 
 const built = new WeakMap<IndexEntry[], Map<string, Catalogue>>();
+/** A kept catalogue's key: the grouping and the chip, and under "grown" which set of genera, so two sets never share one. */
+const setIds = new WeakMap<ReadonlySet<string>, number>();
+let nextSetId = 0;
+function keyOf(by: By, chip: Chip, grown?: ReadonlySet<string>): string {
+  if (chip !== 'grown') return `${by}:${chip}`;
+  if (!grown) return `${by}:grown:none`;
+  let id = setIds.get(grown);
+  if (id === undefined) setIds.set(grown, (id = nextSetId++));
+  return `${by}:grown:${id}`;
+}
 
-export function catalogueOf(index: IndexEntry[], by: By, chip: Chip): Catalogue {
+export function catalogueOf(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<string>): Catalogue {
   let perIndex = built.get(index);
   if (!perIndex) built.set(index, (perIndex = new Map()));
-  const k = `${by}:${chip}`;
+  const k = keyOf(by, chip, grown);
   const hit = perIndex.get(k);
   if (hit) return hit;
-  const c = build(index, by, chip);
+  const c = build(index, by, chip, grown);
   perIndex.set(k, c);
   return c;
 }
 
 /** What a catalogue file the build writes holds: the rows and their index, without the per-row species (round fifty-three, 2). */
 export type CatalogueRows = Pick<Catalogue, 'rows' | 'letters' | 'letterAt' | 'total' | 'withClimate'>;
+/** The chips the corpus build writes a file for: "grown" is derived on the server, from the index and the ranking's file. */
 export const CHIPS: Chip[] = ['all', 'climate', 'noclimate'];
 export const catalogueFile = (by: By, chip: Chip) => `catalogue/${by}-${chip}.json`;
 /** The rows alone, as the file carries them. */
@@ -84,23 +101,25 @@ export const rowsOnly = (c: Catalogue): CatalogueRows => ({ rows: c.rows, letter
 
 /** The group a species falls in under a grouping. */
 const groupKey = (c: Item, by: By): string => (by === 'genus' ? genusOf(c.name) : by === 'family' ? (c.family ?? 'Family not stated') : groupFor(c.origin));
-const shownUnder = (list: Item[], chip: Chip) => (chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : list);
+/** The species under a chip; under "grown", those of the genera given (none when no set is given). */
+const shownUnder = (list: Item[], chip: Chip, grown?: ReadonlySet<string>) => (chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : chip === 'grown' ? list.filter((c) => !!grown?.has(genusOf(c.name))) : list);
 /** One row's species, sorted, from the index alone: for the row the front page opens when the rows came from the build's file (round fifty-three, 2). */
-export function rowItems(index: IndexEntry[], by: By, chip: Chip, id: string): Item[] | undefined {
+export function rowItems(index: IndexEntry[], by: By, chip: Chip, id: string, grown?: ReadonlySet<string>): Item[] | undefined {
   // Grouped once per index, grouping and chip, then looked up: every opened row slugified the whole index on every
   // render, 11 to 22 ms at nine thousand species, on a page with no rate limit (round fifty-nine; the corpus review, 5).
   let byIndex = rowGroups.get(index);
   if (!byIndex) rowGroups.set(index, (byIndex = new Map()));
-  let groups = byIndex.get(`${by}:${chip}`);
+  const k = keyOf(by, chip, grown);
+  let groups = byIndex.get(k);
   if (!groups) {
     groups = new Map();
-    for (const c of shownUnder(catalogueItems(index), chip)) {
+    for (const c of shownUnder(catalogueItems(index), chip, grown)) {
       const g = slugify(groupKey(c, by));
       const xs = groups.get(g);
       if (xs) xs.push(c); else groups.set(g, [c]);
     }
     for (const xs of groups.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-    byIndex.set(`${by}:${chip}`, groups);
+    byIndex.set(k, groups);
   }
   return groups.get(id);
 }
@@ -128,9 +147,9 @@ export function catalogueItems(index: IndexEntry[]): Item[] {
   return list;
 }
 
-function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
+function build(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<string>): Catalogue {
   const list = catalogueItems(index);
-  const shown = shownUnder(list, chip);
+  const shown = shownUnder(list, chip, grown);
   // The catalogue is browsed as closed groups, one open at a time (`?open=`): a genus is what a grower thinks in, so it is
   // the default; origin keeps its little map; family is for those who think that way.
   const keyOf = (c: Item): string => groupKey(c, by);

@@ -1,0 +1,150 @@
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-8947.json",
+ "entries": 8947,
+ "textMB": 5.6,
+ "baseHeapMB": 4.4,
+ "coldMs": 522,
+ "coldHeapMB": 42.8,
+ "steps": [
+  {
+   "step": "decode UTF-8 (R2 text())",
+   "ms": 22,
+   "heapMB": 11.2
+  },
+  {
+   "step": "JSON.parse (text then let go)",
+   "ms": 42,
+   "heapMB": 9.3
+  },
+  {
+   "step": "bySlug map",
+   "ms": 3,
+   "heapMB": 9.8
+  },
+  {
+   "step": "indexMaps (key, name, genus, older names)",
+   "ms": 200,
+   "heapMB": 21.5
+  },
+  {
+   "step": "heldNamesOf (first dossier read)",
+   "ms": 227,
+   "heapMB": 41.6
+  },
+  {
+   "step": "search genera (first search)",
+   "ms": 10,
+   "heapMB": 41.7
+  },
+  {
+   "step": "catalogue items (home page)",
+   "ms": 4,
+   "heapMB": 42.8
+  },
+  {
+   "step": "prepare whole index (a missing posting file)",
+   "ms": 324,
+   "heapMB": 74.1
+  }
+ ]
+}
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-50000.json",
+ "entries": 50000,
+ "textMB": 31.1,
+ "baseHeapMB": 4.4,
+ "coldMs": 2504,
+ "coldHeapMB": 220.7,
+ "steps": [
+  {
+   "step": "decode UTF-8 (R2 text())",
+   "ms": 118,
+   "heapMB": 62.3
+  },
+  {
+   "step": "JSON.parse (text then let go)",
+   "ms": 226,
+   "heapMB": 50.7
+  },
+  {
+   "step": "bySlug map",
+   "ms": 15,
+   "heapMB": 52.5
+  },
+  {
+   "step": "indexMaps (key, name, genus, older names)",
+   "ms": 951,
+   "heapMB": 109.3
+  },
+  {
+   "step": "heldNamesOf (first dossier read)",
+   "ms": 1123,
+   "heapMB": 214.1
+  },
+  {
+   "step": "search genera (first search)",
+   "ms": 31,
+   "heapMB": 214.2
+  },
+  {
+   "step": "catalogue items (home page)",
+   "ms": 14,
+   "heapMB": 220.7
+  },
+  {
+   "step": "prepare whole index (a missing posting file)",
+   "ms": 1230,
+   "heapMB": 394
+  }
+ ]
+}
+{
+ "file": "/tmp/claude-0/rev75/S-s/idx/index-100000.json",
+ "entries": 100000,
+ "textMB": 63,
+ "baseHeapMB": 4.4,
+ "coldMs": 5776,
+ "coldHeapMB": 445.7,
+ "steps": [
+  {
+   "step": "decode UTF-8 (R2 text())",
+   "ms": 239,
+   "heapMB": 126.1
+  },
+  {
+   "step": "JSON.parse (text then let go)",
+   "ms": 469,
+   "heapMB": 102.6
+  },
+  {
+   "step": "bySlug map",
+   "ms": 31,
+   "heapMB": 106.1
+  },
+  {
+   "step": "indexMaps (key, name, genus, older names)",
+   "ms": 2459,
+   "heapMB": 220.7
+  },
+  {
+   "step": "heldNamesOf (first dossier read)",
+   "ms": 2388,
+   "heapMB": 432.6
+  },
+  {
+   "step": "search genera (first search)",
+   "ms": 78,
+   "heapMB": 432.7
+  },
+  {
+   "step": "catalogue items (home page)",
+   "ms": 28,
+   "heapMB": 445.7
+  },
+  {
+   "step": "prepare whole index (a missing posting file)",
+   "ms": 2997,
+   "heapMB": 797.4
+  }
+ ]
+}

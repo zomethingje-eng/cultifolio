@@ -181,7 +181,7 @@ export function newGeneration(): void {
 export function generationStale(): boolean {
   try { return (sessionStorage.getItem(TAB_GEN) ?? '') !== generation(); } catch { return false; }
 }
-/** Set as a sample tab goes on Leave, so the next page deletes the sample and says how that went. */
+/** Set by the first page after a Leave (app.html, from the address and Leave's token), so that page deletes the sample and says how that went. */
 const LEFT = 'cultifolio.sampleLeft';
 /**
  * Leave's one-use token (round sixty-nine; triage-68 X1; S-C1): Leave writes it in the tab's session storage and the
@@ -324,37 +324,45 @@ function tellOthers(): void {
   try { const c = new BroadcastChannel(LIFE); c.postMessage('closed'); c.close(); } catch { /* no other tab to tell */ }
 }
 /**
- * Before the navigation is asked for, the flag goes and the next page is told to delete the sample; a Leave called off
- * puts both back (round sixty-two, the first deploy). Done at `pagehide`, as the first pass had it, it lost a race one
- * time in five in Chromium: the next page commits, and its first script reads the tab's storage, before the old page's
- * `pagehide` runs, so it opened in the sample again with the sample kept. The tab's own copies of the settings go at
- * `pagehide` still, when the page is really going (a Leave called off keeps them), and the next page reads none of them.
+ * Until round seventy-five the flag went, and the delete mark was set, before the navigation was asked for, and a Leave
+ * called off put both back (round sixty-two, the first deploy): done at `pagehide`, as the first pass had it, it lost a
+ * race one time in five in Chromium, the next page's first script reading the tab's storage before the old page's
+ * `pagehide` ran. The address has carried Leave's token since round sixty-nine, and the first script reads it before
+ * anything else, so the next page needs nothing from this one but the token (`readyToLeave`).
  */
 /** The address the first page after a Leave is opened at carries `left=` and Leave's token; the page takes it off its address once read. */
 export const LEFT_PARAM = 'left';
+/**
+ * Leave's one-use token, written in the tab's storage; the address carries it. Nothing else is written here (round
+ * seventy-five; the harness, H): the flag, the delete mark, the new generation and the word to the other tabs are all the
+ * next page's, which only Leave's own address reaches (app.html's first script, then `finishLeaving`). Before, this took
+ * the flag off and set the delete mark, a `pagehide` listener did the rest, and a Leave called off had to put the flag
+ * back: by the Navigation API's `navigateerror` where the browser says a Cancel, and otherwise by a timer that guessed
+ * the Cancel from a "Leave site?" still showing after 3 seconds. Where neither had decided before the next load, a reload
+ * after the Cancel opened the grower's own collection and that page deleted the example with the visitor's edit (held
+ * to that order in tests/e2e/r75h-leave.spec.ts; the likeliest reading of r62bg 1's one failure in Firefox on the
+ * owner's PC, round seventy-four). A Cancel now leaves nothing to undo, however fast or slow the machine.
+ */
 function readyToLeave(): string {
   const token = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-  try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); sessionStorage.setItem(LEAVING, token); } catch { /* the leftover is then deleted on a later load */ }
+  try { sessionStorage.setItem(LEAVING, token); } catch { /* the address alone still takes the tab out; the delete waits for a later load */ }
   return token;
-}
-function stayInSample(): void {
-  try { sessionStorage.setItem(KEY, '1'); sessionStorage.removeItem(LEFT); } catch { /* the tab then loads outside the sample next time */ }
 }
 
 /**
- * Leave the sample (round sixty-two; A9): the tab navigates first, and only when the page is really going (`pagehide`)
- * does it leave the sample; the next page, outside it, deletes the sample's database (`finishLeaving`). A page that asks
- * "Leave site?" (an unsaved form) and is answered Cancel stays a working sample tab: before, the database was closed and
- * the flag cleared first, and the tab was left with neither. Returns once the navigation is asked for, with the way to
- * call the Leave off.
+ * Leave the sample (round sixty-two; A9): the tab navigates to `to` with Leave's token in the address, and the page that
+ * address opens leaves the sample: its first script (app.html) takes the flag off and marks the delete, and it deletes
+ * the sample's database (`finishLeaving`). A page that asks "Leave site?" (an unsaved form) and is answered Cancel stays
+ * a working sample tab. Returns once the navigation is asked for, with the way to say the Leave was called off.
  *
  * A Leave the page stays through is no Leave (round sixty-two, second pass; triage-outside 1, the verification grower
- * review, 4): the `pagehide` listener stayed armed after a Cancel, so the next reload or closing the tab left the sample,
- * deleted it with the visitor's records and sent the other sample tabs home. It is taken off, and `onStay` called, as
- * soon as the page is known to stay: the browser says the navigation was called off (the Navigation API's
- * `navigateerror`, which a "Leave site?" answered Cancel raises); or, in a browser without it, the page asked "Leave
- * site?" and is still showing 3 seconds later; or, in any browser, it is still showing 10 seconds later. A navigation
- * slower than that lands in the sample, which is still whole; Leave is pressed again.
+ * review, 4). Since round seventy-five that rests on nothing this page decides: the page writes only the token, so a
+ * Cancel, a reload after it or the tab closed leave the sample whole whenever they come (`readyToLeave`). What this page
+ * still decides is when the button comes back from "Leaving…" (`onStay`): at once where the browser says a Cancel (the
+ * Navigation API's `navigateerror`), at the first press or key on the page after it asked "Leave site?" (the question is
+ * answered: a page cannot be pressed while it is asked), after 3 seconds with "Leave site?" asked and the page showing,
+ * and after 10 seconds in any case. A guess wrong either way costs only the button's words: a page that goes after all
+ * still leaves by its address, and Leave pressed again is a Leave again.
  */
 /** `to` with `left=<token>` in its query, before any `#`: `/places#add` is `/places?left=<token>#add` (round sixty-seven; triage-66 V1, the top bar's "+" on Places; the token, round sixty-nine, triage-68 X1). */
 export function leftAddress(to: string, token = 'sample'): string {
@@ -367,38 +375,29 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
   let armed = true;
   const timers: Array<ReturnType<typeof setTimeout>> = [];
   const nav = (globalThis as { navigation?: EventTarget }).navigation;
-  const off = (t: string, f: (e: Event) => void, on: EventTarget | undefined = undefined) => { try { (on ?? globalThis).removeEventListener(t, f); } catch { /* nothing was listening */ } };
-  const disarm = () => { armed = false; off('pagehide', hide); off('beforeunload', asked); off('navigateerror', stay, nav); for (const t of timers) clearTimeout(t); };
-  function hide() {
-    if (!armed) return;
-    disarm();
-    clearFlag();
-    newGeneration(); // a tab away now (another site, the back-forward cache, discarded) opens the grower's own when it comes back (triage-68 X2)
-    tellOthers();
-    // Brought back from the back-forward cache after it left: it is no longer the sample's tab, so it loads afresh.
-    addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) location.reload(); }, { once: true });
-  }
+  const off = (t: string, f: (e: Event) => void, on: EventTarget | undefined = undefined, capture = false) => { try { (on ?? globalThis).removeEventListener(t, f, capture); } catch { /* nothing was listening */ } };
+  const disarm = () => { armed = false; off('pagehide', disarm); off('beforeunload', asked); off('navigateerror', stay, nav); off('pointerdown', touched, undefined, true); off('keydown', touched, undefined, true); for (const t of timers) clearTimeout(t); };
   function stay() {
     if (!armed) return;
     disarm();
-    stayInSample();
     onStay?.();
   }
   /** After the page's own listeners (added before this one): whether it will ask "Leave site?". */
   let prompted = false;
   function asked(e: Event) { const b = e as BeforeUnloadEvent; if (b.defaultPrevented || (typeof b.returnValue === 'string' && b.returnValue !== '')) prompted = true; }
+  /** The page pressed after it asked "Leave site?": the question was answered, and the page is still here. */
+  function touched() { if (prompted) stay(); }
   const showing = () => typeof document === 'undefined' || document.visibilityState === 'visible';
-  addEventListener('pagehide', hide);
+  addEventListener('pagehide', disarm); // going: the next page leaves the sample by its address, and this one decides nothing more
   addEventListener('beforeunload', asked);
-  try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the timers below */ }
+  addEventListener('pointerdown', touched, true);
+  addEventListener('keydown', touched, true);
+  try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the press and the timers below */ }
   const token = readyToLeave();
-  // The address says it too (`left=<token>`), and the next page's first script reads it before anything else (app.html):
-  // the tab's storage set just above can be undone by the timers below while the page still goes (r62g 8), the address cannot.
   location.href = leftAddress(to, token);
-  // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns; a browser without the Navigation API is given 3 seconds.
-  // So is one with it that does not say a Cancel that way: in Safari's engine the button stayed "Leaving…" past the 1.5 s
-  // the browser test allows, so it waited for the 10 s below (round sixty-four; the all-engines run). The address carries
-  // `left=` and the token whatever this decides, so a page that does go still leaves the sample.
+  // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns. Safari's engine
+  // does not say it (round sixty-four; the all-engines run), nor a browser without the Navigation API: there the button
+  // comes back at the first press after the question, or after 3 seconds with the question asked, or after 10 in any case.
   timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
   timers.push(setTimeout(() => { if (showing()) stay(); }, 10_000));
   return stay;
@@ -437,6 +436,7 @@ export async function finishLeaving(waitMs = 10_000): Promise<'deleted' | 'block
   if (PAGE_IN_DEMO) return null;
   try { if (sessionStorage.getItem(LEFT) !== '1') return null; sessionStorage.removeItem(LEFT); } catch { return null; }
   newGeneration(); // the example is going: no tab away now opens it again on its own (triage-68 X2)
+  tellOthers(); // and the example's open tabs let go of it now, as Leave's page used to tell them as it went (round seventy-five)
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
   if (!locks) return deleteSample(waitMs); // no locks: the browser's own hold on an open database is all there is
   return new Promise((done) => {

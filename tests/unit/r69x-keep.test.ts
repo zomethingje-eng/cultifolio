@@ -50,7 +50,9 @@ describe('"Keep it as my own" (X3)', () => {
     expect(holds).toEqual([true]); // set aside before the navigation: no "Leave site?" (base: the guard asked)
     expect(asked).toHaveLength(1);
     expect(asked[0]).toMatch(/^\/plants\/new\?kept=1&left=[a-z0-9]+$/);
-    for (const v of ['Mesa', '42', 'Visitor', 'Copiapoa', 'KK']) expect(asked[0]).not.toContain(v); // base: ?species=…, the rest dropped
+    // Read without the random leave token, which can itself spell "42" (it did, once, in round seventy-five's merge run).
+    const typedPart = asked[0].replace(/&left=[a-z0-9]+$/, '');
+    for (const v of ['Mesa', '42', 'Visitor', 'Copiapoa', 'KK']) expect(typedPart).not.toContain(v); // base: ?species=…, the rest dropped
     expect(JSON.parse(session.m.get(DRAFT)!)).toEqual({ form: 'plant', fields: typed, place: { name: 'Bench 1', kind: 'bench' } });
   });
   it('the grower\'s form reads it once, and only when its address says one is waiting', async () => {

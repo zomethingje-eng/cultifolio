@@ -1,5 +1,6 @@
 import { defineConfig, devices, type PlaywrightTestProject } from '@playwright/test';
 import { CHROMIUM_ONLY, enginesNamed } from './tests/e2e/helpers/engines';
+import { engineWorkers } from './scripts/engine-pace.mjs';
 // Offline means offline for the service worker too: without this, a worker's own fetches ignore `context.setOffline` and
 // a page that should say "reference not reached" quietly gets its data through the worker.
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
@@ -44,16 +45,27 @@ const projects: PlaywrightTestProject[] = [
 // And no more than two WebKit workers at once, whatever the run's count (round seventy-two; the harness review): the
 // suite's Chromium projects may take four, but two WebKit pages writing IndexedDB at that pace already fill the PC's
 // share of one wrangler dev. PW_WEBKIT_WORKERS names another count.
-const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 }, workers: Number(process.env.PW_WEBKIT_WORKERS ?? 2) };
+// The counts are scripts/engine-pace.mjs's, which predeploy prints from (round seventy-five).
+const OWN_WORKERS = engineWorkers(process.env);
+const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 }, workers: OWN_WORKERS.webkit };
 // A WebKit test that fails keeps its trace (round seventy; triage-69 P1, IND-8): WebKit runs only on the owner's PC, and
 // a failure there that passes on its retry could be read only from its own run. Each action's DOM before and after and
 // the point it pressed are kept; the screencast is not, as it slows the engine whose timing is in question. Only a
 // failed attempt's trace is kept (test-results/<test>/trace.zip; `npx playwright show-trace` opens it); PW_WEBKIT_TRACE
 // names another mode (`on`, `on-first-retry`, `off`).
 const WEBKIT_TRACE = { mode: (process.env.PW_WEBKIT_TRACE ?? 'retain-on-failure') as 'on' | 'off' | 'retain-on-failure' | 'on-first-retry', screenshots: false, snapshots: true, sources: false };
+// Firefox is held to two workers as well (round seventy-five; the harness, H). In round seventy-four's four strict runs on
+// the owner's PC, nine tests were flaky once each, never the same one twice, and five of them were Firefox's, which ran at
+// the run's four while WebKit was held to two. Its pace is Chromium's (its assertions keep their 5 s and its tests their
+// 30 s); only how many of its pages share the one wrangler dev at once changes. PW_FIREFOX_WORKERS names another count.
+const FIREFOX_PACE = { workers: OWN_WORKERS.firefox };
+// A Firefox test that fails keeps its trace too (round seventy-five): r60 11's `page.goto: <unknown error>` and smoke-2's
+// Water that left no line were each seen once on the owner's PC and never here, where there is no Firefox, and nothing
+// of their run was kept but the last page's snapshot. PW_FIREFOX_TRACE names another mode.
+const FIREFOX_TRACE = { ...WEBKIT_TRACE, mode: (process.env.PW_FIREFOX_TRACE ?? 'retain-on-failure') as typeof WEBKIT_TRACE.mode };
 if (engines.has('webkit')) projects.push({ name: 'webkit', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'webkit', trace: WEBKIT_TRACE }, ...WEBKIT_PACE });
 if (engines.has('phone-webkit')) projects.push({ name: 'phone-webkit', grep: PHONE, grepInvert: CHROMIUM_ONLY, use: { ...iPhone, trace: WEBKIT_TRACE }, ...WEBKIT_PACE });
-if (engines.has('firefox')) projects.push({ name: 'firefox', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'firefox' } });
+if (engines.has('firefox')) projects.push({ name: 'firefox', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'firefox', trace: FIREFOX_TRACE }, ...FIREFOX_PACE });
 export default defineConfig({
   testDir: 'tests/e2e',
   // wrangler dev's workerd occasionally drops a connection mid-run (a "Broken pipe" in its log; the page sees net::ERR_ABORTED on a

@@ -4,6 +4,25 @@ import { smokeSetup, ready, addPlant, more, WEBKIT_OFFLINE } from './helpers/smo
 
 smokeSetup();
 
+/**
+ * The line Water records, with what the page was doing if it does not come in 5 s (round seventy-five): the write still
+ * under way (the button's `aria-disabled` is set from the tap until the write returns), a refusal said on the page, or
+ * nothing at all (the tap reached no handler). Which of the three settles smoke-2's one Firefox failure on the owner's PC.
+ */
+async function watered(page: import('@playwright/test').Page) {
+  try {
+    await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
+  } catch (e) {
+    const state = await page.evaluate(() => ({
+      writing: document.querySelector('#water-now')?.getAttribute('aria-disabled') ?? 'no button',
+      refused: document.querySelector('#write-error')?.textContent?.trim() ?? null,
+      toast: document.querySelector('.toast')?.textContent?.trim() ?? null,
+      ready: document.documentElement.dataset.ready ?? null
+    })).catch(() => null);
+    throw new Error(`Water left no "Watered" line in 5 s; the page then: ${JSON.stringify(state)}\n${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 /* ---------------------------------------------------------------- honesty and accessibility, from the QA pass */
 
 test('a refused source is a distinct state on every surface: species page, front tile, plant tile', async ({ page }) => {
@@ -247,8 +266,14 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page.locator('.hero.failed .ph')).toContainText('photograph did not load');
   // a log entry: × then Remove?; the plant: Remove then Yes
   await page.goto(`/plants/${acc}`);
+  // The page settled before the tap (round seventy-five): hydrated, and the species' sheet answered, so the reference's
+  // photograph has been asked for, failed and taken its space back. In Firefox on the owner's PC the tap once left no
+  // line and no toast on a page that looked drawn; that was not reproduced here (no Firefox), and the line now says
+  // which it was if it comes again (`watered`).
+  await ready(page);
+  await expect(page.locator('#species-link')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: 'Water', exact: true }).click(); // one tap, no form (round forty-nine, 3)
-  await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
+  await watered(page);
   await page.locator('.tlrow', { hasText: 'Watered' }).getByRole('button', { name: 'Remove this entry' }).click();
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
   await page.locator('.tlrow', { hasText: 'Watered' }).getByRole('button', { name: 'Remove?' }).click();
@@ -604,6 +629,7 @@ test('hovering a species link on a page about your own plants sends nothing; the
   await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('a.tile', { hasText: 'Copiapoa' }).first()).toBeVisible();
   await page.locator('a.tile', { hasText: 'Copiapoa' }).first().hover(); // an own tile
   await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
@@ -611,8 +637,14 @@ test('hovering a species link on a page about your own plants sends nothing; the
   // the public catalogue still preloads on hover: a visitor's browsing is not the collection
   await page.getByRole('button', { name: /^All / }).click(); // the catalogue
   await page.locator('.grow', { hasText: 'Welwitschia' }).click();
-  await page.locator('a.tile', { hasText: 'Welwitschia' }).first().hover();
-  await expect.poll(() => data.some((u) => u.includes('/species/welwitschia-mirabilis')), { timeout: 5000 }).toBe(true);
+  // Hovered again on each poll: the genus's tiles are drawn as its rows arrive, and a tile redrawn under a still pointer
+  // gets no new hover (round seventy-five: 1 run in the merge's strict run, 8 of 8 alone).
+  const tile = page.locator('a.tile', { hasText: 'Welwitschia' }).first();
+  await expect.poll(async () => {
+    await page.mouse.move(0, 0);
+    await tile.hover();
+    return data.some((u) => u.includes('/species/welwitschia-mirabilis'));
+  }, { timeout: 10_000 }).toBe(true);
 });
 
 // The service worker answers these requests itself once it controls the page, and only Chromium lets a route see a worker's own fetch (the config's worker network events): in Firefox the route never saw them and the real server answered. The test is about the pages' words, not the shell (round sixty-four; the Firefox run).

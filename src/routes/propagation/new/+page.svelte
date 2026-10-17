@@ -267,7 +267,7 @@
 
   <!-- `reserve`: the name check's words arrive in room kept for them, so "Start batch" below does not move under a press (round seventy; P's need 2, as the add form since round sixty-seven, triage-66 P10). -->
   <label class="field"><span>Species</span><SpeciesPicker reserve bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
-    <span class="faint small">A species, a cultivar (<i>Haworthia truncata</i> 'Lime Green'), or a hybrid: write the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
+    <span class="faint small">A species, a cultivar (<i>Monstera deliciosa</i> 'Thai Constellation'), or a hybrid: write the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="s-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
   {/if}

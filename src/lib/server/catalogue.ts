@@ -3,7 +3,8 @@
  * with it); here it is read from the build's file under the corpus id, else derived from the index and kept.
  */
 import { product, corpusNow, type Loaded, type IndexEntry, type Platform, type Fetch } from '$lib/server/dossiers';
-import { catalogueOf, catalogueFile, type By, type Chip, type CatalogueRows } from '$dossier/catalogue';
+import { catalogueOf, catalogueFile, rowItems, type By, type Chip, type CatalogueRows, type Item } from '$dossier/catalogue';
+import { grownGenera } from '$lib/ui/ref/most-grown';
 export * from '$dossier/catalogue';
 
 /**
@@ -14,10 +15,15 @@ export * from '$dossier/catalogue';
 export async function catalogueRows(platform: Platform, fetch: Fetch, by: By, chip: Chip, held?: Loaded): Promise<{ cat: CatalogueRows; idx: IndexEntry[]; corpus: string; fromFile: boolean }> {
   const c = held ?? (await corpusNow(platform, fetch));
   const { idx, corpus } = c;
+  // "Most grown" (round seventy-five): no build writes it; derived from the index and the ranking's file, and kept.
+  if (chip === 'grown') return { cat: catalogueOf(idx, by, chip, grownGenera(idx)), idx, corpus, fromFile: false };
   const file = await product<CatalogueRows>(c, platform, fetch, catalogueFile(by, chip));
   if (file && Array.isArray(file.rows)) return { cat: withPending(file), idx, corpus, fromFile: true };
   return { cat: catalogueOf(idx, by, chip), idx, corpus, fromFile: false };
 }
+
+/** One row's species under a chip, the most-grown genera given for "grown". */
+export const rowItemsUnder = (index: IndexEntry[], by: By, chip: Chip, id: string): Item[] | undefined => rowItems(index, by, chip, id, chip === 'grown' ? grownGenera(index) : undefined);
 
 /** A file from a corpus built before round sixty has no `pending` on its rows: read as 0, once per file. */
 const pendingRead = new WeakMap<CatalogueRows, CatalogueRows>();

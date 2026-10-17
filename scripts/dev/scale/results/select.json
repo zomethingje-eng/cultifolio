@@ -1,0 +1,665 @@
+{
+ "wcvp_accepted_species": 367476,
+ "inat": {
+  "taxa_species_or_hybrid": 58737,
+  "not_species_rank": {
+   "genushybrid": 22,
+   "genus": 381,
+   "section": 37,
+   "subtribe": 4,
+   "subsection": 3,
+   "tribe": 4,
+   "complex": 4,
+   "phylum": 5,
+   "subgenus": 6,
+   "family": 10,
+   "subkingdom": 1
+  },
+  "match": {
+   "ok": 54175,
+   "rows lead to two or more species": 3463,
+   "no Kew row of these words": 1019,
+   "rows only unplaced, misapplied or not leading to a species": 80
+  },
+  "kew_species_strict": 53263,
+  "kew_species_loose": 56497
+ },
+ "gbif_living": {
+  "keys": 63654,
+  "match": {
+   "ok": 59387,
+   "rows lead to two or more species": 800,
+   "no Kew row of these words": 3084,
+   "rows only unplaced, misapplied or not leading to a species": 383
+  },
+  "kew_species": 57856
+ },
+ "gbif_coords": {
+  "keys": 355133,
+  "match": {
+   "ok": 309954,
+   "rows lead to two or more species": 3067,
+   "no Kew row of these words": 37986,
+   "rows only unplaced, misapplied or not leading to a species": 4126
+  },
+  "kew_species": 296402
+ },
+ "today": {
+  "dossiers_matched": 8923,
+  "unmatched": 14
+ },
+ "inat_k_strict": [
+  {
+   "k": 1,
+   "species": 53263,
+   "today_kept": 4781
+  },
+  {
+   "k": 2,
+   "species": 37798,
+   "today_kept": 4138
+  },
+  {
+   "k": 3,
+   "species": 31128,
+   "today_kept": 3849
+  },
+  {
+   "k": 5,
+   "species": 24460,
+   "today_kept": 3503
+  },
+  {
+   "k": 10,
+   "species": 17491,
+   "today_kept": 3158
+  },
+  {
+   "k": 20,
+   "species": 12517,
+   "today_kept": 2901
+  },
+  {
+   "k": 50,
+   "species": 7976,
+   "today_kept": 2662
+  },
+  {
+   "k": 100,
+   "species": 5580,
+   "today_kept": 2545
+  },
+  {
+   "k": 200,
+   "species": 3875,
+   "today_kept": 2464
+  },
+  {
+   "k": 500,
+   "species": 2357,
+   "today_kept": 2035
+  },
+  {
+   "k": 1000,
+   "species": 1558,
+   "today_kept": 1329
+  }
+ ],
+ "inat_k_framework": [
+  {
+   "k": 1,
+   "species": 56497,
+   "today_kept": 5017
+  },
+  {
+   "k": 2,
+   "species": 40402,
+   "today_kept": 4369
+  },
+  {
+   "k": 3,
+   "species": 33401,
+   "today_kept": 4073
+  },
+  {
+   "k": 5,
+   "species": 26381,
+   "today_kept": 3718
+  },
+  {
+   "k": 10,
+   "species": 18938,
+   "today_kept": 3359
+  },
+  {
+   "k": 20,
+   "species": 13580,
+   "today_kept": 3096
+  },
+  {
+   "k": 50,
+   "species": 8672,
+   "today_kept": 2853
+  },
+  {
+   "k": 100,
+   "species": 6085,
+   "today_kept": 2734
+  },
+  {
+   "k": 200,
+   "species": 4220,
+   "today_kept": 2651
+  },
+  {
+   "k": 500,
+   "species": 2552,
+   "today_kept": 2189
+  },
+  {
+   "k": 1000,
+   "species": 1677,
+   "today_kept": 1421
+  }
+ ],
+ "living_k": [
+  {
+   "k": 1,
+   "species": 57856,
+   "today_kept": 4711
+  },
+  {
+   "k": 2,
+   "species": 40144,
+   "today_kept": 4035
+  },
+  {
+   "k": 3,
+   "species": 31999,
+   "today_kept": 3672
+  },
+  {
+   "k": 5,
+   "species": 23507,
+   "today_kept": 3202
+  },
+  {
+   "k": 10,
+   "species": 14417,
+   "today_kept": 2548
+  },
+  {
+   "k": 20,
+   "species": 8065,
+   "today_kept": 1825
+  },
+  {
+   "k": 50,
+   "species": 3330,
+   "today_kept": 981
+  },
+  {
+   "k": 100,
+   "species": 1655,
+   "today_kept": 525
+  },
+  {
+   "k": 200,
+   "species": 878,
+   "today_kept": 280
+  },
+  {
+   "k": 500,
+   "species": 420,
+   "today_kept": 145
+  },
+  {
+   "k": 1000,
+   "species": 233,
+   "today_kept": 92
+  }
+ ],
+ "union": [
+  {
+   "inat_k": 1,
+   "living_k": 1,
+   "species": 81848,
+   "today_kept": 5653,
+   "with_today": 85118
+  },
+  {
+   "inat_k": 1,
+   "living_k": 2,
+   "species": 70247,
+   "today_kept": 5369,
+   "with_today": 73801
+  },
+  {
+   "inat_k": 1,
+   "living_k": 3,
+   "species": 65683,
+   "today_kept": 5258,
+   "with_today": 69348
+  },
+  {
+   "inat_k": 1,
+   "living_k": 5,
+   "species": 61724,
+   "today_kept": 5142,
+   "with_today": 65505
+  },
+  {
+   "inat_k": 1,
+   "living_k": 10,
+   "species": 58611,
+   "today_kept": 5063,
+   "with_today": 62471
+  },
+  {
+   "inat_k": 2,
+   "living_k": 1,
+   "species": 71775,
+   "today_kept": 5273,
+   "with_today": 75425
+  },
+  {
+   "inat_k": 2,
+   "living_k": 2,
+   "species": 58279,
+   "today_kept": 4892,
+   "with_today": 62310
+  },
+  {
+   "inat_k": 2,
+   "living_k": 3,
+   "species": 52734,
+   "today_kept": 4727,
+   "with_today": 56930
+  },
+  {
+   "inat_k": 2,
+   "living_k": 5,
+   "species": 47668,
+   "today_kept": 4562,
+   "with_today": 52029
+  },
+  {
+   "inat_k": 2,
+   "living_k": 10,
+   "species": 43416,
+   "today_kept": 4443,
+   "with_today": 47896
+  },
+  {
+   "inat_k": 3,
+   "living_k": 1,
+   "species": 67999,
+   "today_kept": 5142,
+   "with_today": 71780
+  },
+  {
+   "inat_k": 3,
+   "living_k": 2,
+   "species": 53666,
+   "today_kept": 4717,
+   "with_today": 57872
+  },
+  {
+   "inat_k": 3,
+   "living_k": 3,
+   "species": 47616,
+   "today_kept": 4519,
+   "with_today": 52020
+  },
+  {
+   "inat_k": 3,
+   "living_k": 5,
+   "species": 41986,
+   "today_kept": 4323,
+   "with_today": 46586
+  },
+  {
+   "inat_k": 3,
+   "living_k": 10,
+   "species": 37082,
+   "today_kept": 4173,
+   "with_today": 41832
+  },
+  {
+   "inat_k": 5,
+   "living_k": 1,
+   "species": 64769,
+   "today_kept": 5018,
+   "with_today": 68674
+  },
+  {
+   "inat_k": 5,
+   "living_k": 2,
+   "species": 49554,
+   "today_kept": 4518,
+   "with_today": 53959
+  },
+  {
+   "inat_k": 5,
+   "living_k": 3,
+   "species": 42973,
+   "today_kept": 4281,
+   "with_today": 47615
+  },
+  {
+   "inat_k": 5,
+   "living_k": 5,
+   "species": 36698,
+   "today_kept": 4043,
+   "with_today": 41578
+  },
+  {
+   "inat_k": 5,
+   "living_k": 10,
+   "species": 31003,
+   "today_kept": 3856,
+   "with_today": 36070
+  }
+ ],
+ "genus_fill": [
+  {
+   "share": 0.2,
+   "species": 175424,
+   "added": 93576,
+   "today_kept": 7928,
+   "with_today": 176419
+  },
+  {
+   "share": 0.25,
+   "species": 150934,
+   "added": 69086,
+   "today_kept": 7483,
+   "with_today": 152374
+  },
+  {
+   "share": 0.33,
+   "species": 119843,
+   "added": 37995,
+   "today_kept": 6872,
+   "with_today": 121894
+  },
+  {
+   "share": 0.5,
+   "species": 94798,
+   "added": 12950,
+   "today_kept": 6537,
+   "with_today": 97184
+  },
+  {
+   "share": 0.67,
+   "species": 84901,
+   "added": 3053,
+   "today_kept": 5879,
+   "with_today": 87945
+  }
+ ],
+ "occ_today": {
+  "species": 8923,
+  "genera": 1308,
+  "families": 199,
+  "records_all": 124475552,
+  "records_kept_2000": 5083250,
+  "records_le_cap": 28004239,
+  "species_over_cap": 239,
+  "species_with_none": 755
+ },
+ "occ_inat1_living1": {
+  "species": 81848,
+  "genera": 8777,
+  "families": 415,
+  "records_all": 474627387,
+  "records_kept_2000": 49124394,
+  "records_le_cap": 164061160,
+  "species_over_cap": 883,
+  "species_with_none": 3254
+ },
+ "occ_inat2_living2": {
+  "species": 58279,
+  "genera": 7438,
+  "families": 396,
+  "records_all": 466280327,
+  "records_kept_2000": 42888635,
+  "records_le_cap": 155828249,
+  "species_over_cap": 882,
+  "species_with_none": 1827
+ },
+ "occ_inat1_living2": {
+  "species": 70247,
+  "genera": 8258,
+  "families": 409,
+  "records_all": 470987261,
+  "records_kept_2000": 46391118,
+  "records_le_cap": 160421034,
+  "species_over_cap": 883,
+  "species_with_none": 2719
+ },
+ "occ_inat3_living3": {
+  "species": 47616,
+  "genera": 6753,
+  "families": 383,
+  "records_all": 460475163,
+  "records_kept_2000": 39007073,
+  "records_le_cap": 150023085,
+  "species_over_cap": 882,
+  "species_with_none": 1298
+ },
+ "occ_inat5_living5": {
+  "species": 36698,
+  "genera": 5926,
+  "families": 371,
+  "records_all": 452045413,
+  "records_kept_2000": 34178635,
+  "records_le_cap": 141593335,
+  "species_over_cap": 882,
+  "species_with_none": 874
+ },
+ "occ_inat1": {
+  "species": 56497,
+  "genera": 7609,
+  "families": 404,
+  "records_all": 460432214,
+  "records_kept_2000": 41096558,
+  "records_le_cap": 150236254,
+  "species_over_cap": 881,
+  "species_with_none": 2365
+ },
+ "occ_inat2": {
+  "species": 40402,
+  "genera": 6432,
+  "families": 386,
+  "records_all": 448799332,
+  "records_kept_2000": 35191868,
+  "records_le_cap": 139111187,
+  "species_over_cap": 877,
+  "species_with_none": 1421
+ },
+ "occ_inat3": {
+  "species": 33401,
+  "genera": 5872,
+  "families": 375,
+  "records_all": 440230411,
+  "records_kept_2000": 31844030,
+  "records_le_cap": 132068452,
+  "species_over_cap": 867,
+  "species_with_none": 1074
+ },
+ "occ_top50000_by_records": {
+  "species": 50000,
+  "genera": 7460,
+  "families": 420,
+  "records_all": 481846732,
+  "records_kept_2000": 54746576,
+  "records_le_cap": 171280505,
+  "species_over_cap": 883,
+  "species_with_none": 0
+ },
+ "occ_top100000_by_records": {
+  "species": 100000,
+  "genera": 10174,
+  "families": 444,
+  "records_all": 489633333,
+  "records_kept_2000": 62533177,
+  "records_le_cap": 179067106,
+  "species_over_cap": 883,
+  "species_with_none": 0
+ },
+ "sum_k": [
+  {
+   "k": 1,
+   "species": 81848,
+   "today_kept": 5653
+  },
+  {
+   "k": 2,
+   "species": 60174,
+   "today_kept": 4989
+  },
+  {
+   "k": 3,
+   "species": 49939,
+   "today_kept": 4650
+  },
+  {
+   "k": 5,
+   "species": 39276,
+   "today_kept": 4203
+  },
+  {
+   "k": 10,
+   "species": 27432,
+   "today_kept": 3721
+  },
+  {
+   "k": 20,
+   "species": 18726,
+   "today_kept": 3323
+  },
+  {
+   "k": 50,
+   "species": 11114,
+   "today_kept": 2946
+  },
+  {
+   "k": 100,
+   "species": 7405,
+   "today_kept": 2773
+  },
+  {
+   "k": 200,
+   "species": 4971,
+   "today_kept": 2674
+  },
+  {
+   "k": 500,
+   "species": 2943,
+   "today_kept": 2303
+  },
+  {
+   "k": 1000,
+   "species": 1882,
+   "today_kept": 1504
+  }
+ ],
+ "occ_sum2": {
+  "species": 60174,
+  "genera": 7553,
+  "families": 398,
+  "records_all": 467459752,
+  "records_kept_2000": 43689953,
+  "records_le_cap": 157007674,
+  "species_over_cap": 882,
+  "species_with_none": 1871
+ },
+ "occ_sum2_with_today": {
+  "species": 64108,
+  "genera": 7559,
+  "families": 398,
+  "records_all": 467625604,
+  "records_kept_2000": 43848983,
+  "records_le_cap": 157173526,
+  "species_over_cap": 882,
+  "species_with_none": 2521
+ },
+ "occ_sum3": {
+  "species": 49939,
+  "genera": 6898,
+  "families": 386,
+  "records_all": 462596693,
+  "records_kept_2000": 40173821,
+  "records_le_cap": 152144615,
+  "species_over_cap": 882,
+  "species_with_none": 1344
+ },
+ "occ_sum3_with_today": {
+  "species": 54212,
+  "genera": 6906,
+  "families": 386,
+  "records_all": 462794565,
+  "records_kept_2000": 40364871,
+  "records_le_cap": 152342487,
+  "species_over_cap": 882,
+  "species_with_none": 2014
+ },
+ "occ_sum4": {
+  "species": 43694,
+  "genera": 6435,
+  "families": 375,
+  "records_all": 458841911,
+  "records_kept_2000": 37670039,
+  "records_le_cap": 148389833,
+  "species_over_cap": 882,
+  "species_with_none": 1073
+ },
+ "occ_sum4_with_today": {
+  "species": 48207,
+  "genera": 6448,
+  "families": 375,
+  "records_all": 459077478,
+  "records_kept_2000": 37896090,
+  "records_le_cap": 148625400,
+  "species_over_cap": 882,
+  "species_with_none": 1757
+ },
+ "occ_sum5": {
+  "species": 39276,
+  "genera": 6104,
+  "families": 372,
+  "records_all": 455576137,
+  "records_kept_2000": 35723914,
+  "records_le_cap": 145124059,
+  "species_over_cap": 882,
+  "species_with_none": 899
+ },
+ "occ_sum5_with_today": {
+  "species": 43996,
+  "genera": 6122,
+  "families": 372,
+  "records_all": 455864173,
+  "records_kept_2000": 35985889,
+  "records_le_cap": 145412095,
+  "species_over_cap": 882,
+  "species_with_none": 1594
+ },
+ "occ_rule100": {
+  "species": 97184,
+  "genera": 8779,
+  "families": 416,
+  "records_all": 475588772,
+  "records_kept_2000": 50014133,
+  "records_le_cap": 165022545,
+  "species_over_cap": 883,
+  "species_with_none": 7170
+ },
+ "excluded_families": {
+  "sum3": 44377,
+  "sum3_with_today": 48650,
+  "sum2_with_today": 57477,
+  "rule100": 87417,
+  "rule100_share033": 109004
+ }
+}

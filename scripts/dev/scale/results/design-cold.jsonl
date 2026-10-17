@@ -1,0 +1,3 @@
+{"dir":"/tmp/claude-0/rev75/S-s/design-8947","name":{"ms":0.9,"heapMB":0.2},"core":{"ms":36.8,"heapMB":5.5}}
+{"dir":"/tmp/claude-0/rev75/S-s/design-50000","name":{"ms":0.6,"heapMB":0.2},"core":{"ms":185.3,"heapMB":29.8}}
+{"dir":"/tmp/claude-0/rev75/S-s/design-100000","name":{"ms":0.7,"heapMB":0.2},"core":{"ms":518.1,"heapMB":60.3}}

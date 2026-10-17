@@ -6,6 +6,7 @@
  */
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const mk = () => { const m = new Map<string, string>(); return { m, s: { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, String(v)), removeItem: (k: string) => void m.delete(k), key: (i: number) => [...m.keys()][i] ?? null, get length() { return m.size; }, clear: () => m.clear() } }; };
 const session = mk(), local = mk();
@@ -37,18 +38,23 @@ describe('Leave (A9)', () => {
     const { leaveDemo, inDemo, finishLeaving } = await import('$lib/db/demo');
     leaveDemo('/');
     expect(loc.href).toMatch(/^\/\?left=[a-z0-9]+$/); // the address says it, for the next page's first script (round sixty-two, the first deploy), with Leave's own token (round sixty-nine)
-    // Until the page goes the database is in place and open; the flag is already off and the next page told, so the next
-    // page cannot read them late (the first deploy's race); a Leave called off puts them back (r62bg-sample).
-    expect([inDemo(), session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo.units')]).toEqual([false, '1', 'us']);
+    // Until the page goes the database is in place and open, and so are the flag and the tab's copies: since round
+    // seventy-five this page writes only Leave's token, and the next page, at that address, takes the tab out, so a Leave
+    // called off has nothing to put back (r62bg-sample). r75base: [false, '1', 'us'], the flag off at once.
+    expect([inDemo(), session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo.units')]).toEqual([true, undefined, 'us']);
     expect(await vault.getMeta('device')).toBe('demodemodemo'); // base: the database closed before the navigation was even asked
     expect(await names()).toContain('cultifolio-demo');
-    // The page goes: the flag and the tab's copies go with it, and the next page deletes the sample.
+    // The page goes; the next page's first script (app.html) reads the address before anything else.
     fire('pagehide');
-    expect([inDemo(), session.m.has('cultifolio.demo.units'), session.m.get('cultifolio.sampleLeft')]).toEqual([false, false, '1']);
+    const code = [...readFileSync('src/app.html', 'utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
+    new Function('localStorage', 'sessionStorage', 'document', 'location', code)(local.s, session.s, { documentElement: { dataset: {} } }, { search: new URL(loc.href, 'http://x').search });
+    expect([inDemo(), session.m.get('cultifolio.sampleLeft')]).toEqual([false, '1']);
     (await vault.openVault()).close();
     expect(await finishLeaving()).toBeNull(); // the example's own page deletes nothing: its collection was read as it loaded (round sixty-seven)
     vi.resetModules(); // the next page, outside the example
     const next = await import('$lib/db/demo');
+    next.clearExampleCopies(); // its bar, as it opens: the tab's copies of the example's settings go
+    expect(session.m.has('cultifolio.demo.units')).toBe(false);
     expect(await next.finishLeaving()).toBe('deleted');
     expect(await names()).not.toContain('cultifolio-demo');
     expect(await next.finishLeaving()).toBeNull(); // once

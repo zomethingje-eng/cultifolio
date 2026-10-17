@@ -1,8 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym, sharedOlderName } from '$lib/server/dossiers';
 import { synonymAsk, synonymInIndex, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch } from '$lib/server/synonyms';
-/** The genera the species list takes whole (the file the derivation reads), for the 404 to say so; the front page's collector genera. */
-import { COLLECTOR_GENERA as WHOLE_GENERA } from '$lib/ui/ref/collector';
+/** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
+import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';

@@ -29,6 +29,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { paceLine } from './engine-pace.mjs';
 
 const require = createRequire(import.meta.url);
 let cli;
@@ -84,7 +85,8 @@ if (missing.length) {
 // page; eight workers timed page loads out in round sixty-two), the smoke tests, 119 run in order and a quarter of the suite
 // (four files since round seventy-three, smoke-1 to smoke-4, each in order in a worker of its own), and Safari's engine, whose
 // IndexedDB answers about one request in 16 ms: playwright.config.ts holds WebKit to two workers of its own
-// (PW_WEBKIT_WORKERS). The launch run keeps the two every earlier deploy passed at.
+// (PW_WEBKIT_WORKERS), and since round seventy-five Firefox to two of its own (PW_FIREFOX_WORKERS; scripts/engine-pace.mjs).
+// The launch run keeps the two every earlier deploy passed at.
 const workers = extra.some((a) => a.startsWith('--workers') || a === '-j') ? [] : [`--workers=${process.env.PW_WORKERS || (tier === 'launch' ? 2 : 4)}`];
 const filtered = projectsNamed(extra);
 // Its own option at the end: Playwright gathers every `--project`, and a bare word after one would be read as a project.
@@ -108,9 +110,12 @@ if (tier) {
   }
 }
 console.log('predeploy: the browser suite, strict (a test that passes only on its retry fails the run)');
-if (tier) console.log(`predeploy: ${tier === 'corpus' ? 'Chromium and the Chromium phone' : `Chromium, the Chromium phone, and ${engines.join(', ')}`}, ${workers[0] ?? 'the workers you named'}`);
+// What runs, and at how many workers each engine runs (round seventy-five): Firefox is held to two of its own, as WebKit is.
+const runCount = workers.length ? Number(workers[0].slice('--workers='.length)) : null;
+const pace = paceLine({ engines, workers: runCount, chromium: !filtered.length || filtered.includes('chromium') || filtered.includes('phone') });
+if (tier) console.log(`predeploy: ${tier === 'corpus' ? paceLine({ engines: [], workers: runCount }) : pace}`);
 else if (filtered.length) console.log(`predeploy: only the projects named: ${filtered.join(', ')}${filtered.includes('chromium') && filtered.includes('phone') ? '' : '. This is not the whole run before a deploy; for that, name engines with --browsers= instead'}`);
-else console.log(engines.length ? `predeploy: Chromium, the Chromium phone, and ${engines.join(', ')}` : `predeploy: Chromium and the Chromium phone; for Safari's engine and Firefox as well, install them once (${INSTALL}) and run node scripts/predeploy.mjs --browsers=webkit,firefox`);
+else console.log(engines.length ? `predeploy: ${pace}` : `predeploy: ${pace}; for Safari's engine and Firefox as well, install them once (${INSTALL}) and run node scripts/predeploy.mjs --browsers=webkit,firefox`);
 const run = spawnSync(process.execPath, args, { stdio: 'inherit', env });
 if (run.error) {
   console.error(`predeploy: Playwright did not start: ${run.error.message}`);

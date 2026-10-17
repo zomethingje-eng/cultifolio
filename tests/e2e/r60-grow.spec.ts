@@ -371,6 +371,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await expect(page.locator('#try-sample')).toHaveCount(0);
   await page.goto('/today');
+  await ready(page); // hydrated, the layout's own start done, before the next navigation (round seventy-five; r60 11's one Firefox failure, not reproduced here)
   await expect(page.locator('#firsts')).toContainText('First flowers');
   for (const path of ['/sync', '/backup']) {
     await page.goto(path);

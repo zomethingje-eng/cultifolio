@@ -62,9 +62,6 @@ export async function liveShapedHome(page: Page) {
       d.rowCount = 1321;
       d.letters = LETTERS;
       d.letterAt = Object.fromEntries(LETTERS.map((l, i) => [l, i * 50]));
-      // The phone's collector view (round seventy-three): every live-shaped row stands as a collector genus, so a phone's
-      // first screen is measured with rows of the live shape whichever view it opens on.
-      if (d.collector) d.collector = { ...(d.collector as object), ids: GENERA.map(([g]) => g.toLowerCase()), letters: LETTERS, species: 6364 };
       n.data = JSON.parse(devalue.stringify(d));
     }
     await route.fulfill({ response: res, body: JSON.stringify(j) });

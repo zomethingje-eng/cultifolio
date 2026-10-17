@@ -395,7 +395,7 @@
 {#if mode === 'paste'}
   <div class="cult form">
     <label class="full"><span class="lab">One plant per line</span>
-      <textarea id="imp-text" rows="10" bind:value={text} spellcheck="false" placeholder={'Copiapoa cinerea\nHaworthia truncata; Lime Green\nGymnocalycium ragonesei; ; 2024-0031; club sale; two heads'}></textarea>
+      <textarea id="imp-text" rows="10" bind:value={text} spellcheck="false" placeholder={'Monstera deliciosa\nHaworthia truncata; Lime Green\nGymnocalycium ragonesei; ; 2024-0031; club sale; two heads'}></textarea>
       <span class="hint">The name, then if you like: cultivar; number; where it came from; notes, each after a semicolon. Leave a part empty to skip it. Columns copied from a spreadsheet work too.</span>
     </label>
     <p class="hint full">The same for every line:</p>

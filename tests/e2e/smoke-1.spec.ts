@@ -36,6 +36,7 @@ test('front page renders server-side with the fixture corpus: closed genus rows,
 
 test('the menu behind the mark reaches every place from any page', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('#menu')).toHaveCount(0);
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#menu');
@@ -602,6 +603,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   const html = await (await page.request.get('/')).text();
   expect(html).toContain('id="welcome"');
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // the welcome's lead says what the site is on a phone (round sixty-seven; triage-66 V9), for every grower since round seventy-four
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.locator('#welcome')).toHaveCount(0);
@@ -959,6 +961,7 @@ test('the app shell is installed for offline use: collection pages, a species pa
 
 test('the front page carries closed rows, never fetches the whole index, and a search or a chip is answered by the server (round thirty-nine)', async ({ page }) => {
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   const index: string[] = [];
   const searches: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/index')) index.push(r.url()); if (r.url().includes('/api/search')) searches.push(r.url()); });

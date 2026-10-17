@@ -93,13 +93,21 @@ describe('the delete mark is Leave\'s own token (X1; S-C1)', () => {
 });
 
 describe('a tab that was away when another tab left (X2; R46-19)', () => {
-  it('Leave writes a new generation as its page goes; a Leave called off writes none', async () => {
+  it('Leave\'s next page writes a new generation; a Leave called off writes none', async () => {
     local.m.set('cultifolio.sampleGen', 'g1');
     const demo = await examplePage();
     demo.leaveDemo('/');
     expect(local.m.get(demo.GEN)).toBe('g1'); // not before the page goes: a Leave called off is no Leave
     page.dispatchEvent(new Event('pagehide'));
-    expect(local.m.get(demo.GEN)).not.toBe('g1'); // base: no generation at all
+    // Since round seventy-five the page that goes writes nothing but the token; the next page, at Leave's address, writes
+    // the generation as it deletes the example (`finishLeaving`). r75base wrote it here, at `pagehide`.
+    expect(local.m.get(demo.GEN)).toBe('g1');
+    const token = session.m.get(demo.LEAVING);
+    firstScript(`?left=${token}`);
+    vi.resetModules();
+    const next = await import('$lib/db/demo');
+    await next.finishLeaving(0);
+    expect(local.m.get(demo.GEN)).not.toBe('g1'); // base (round sixty-eight): no generation at all
     expect(local.m.get(demo.GEN)).toBeTruthy();
   });
   it('a tab whose example is older than the last Leave opens the grower\'s own collection, and is told why', () => {

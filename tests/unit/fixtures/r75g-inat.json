@@ -1,0 +1,155 @@
+{
+ "_note": "Trimmed from iNaturalist's real answers of 17 October 2026 (round seventy-five, agent G): the rows of a few genera from /v1/taxa?taxon_id=47126&rank=genus&is_active=true and /v1/taxa/<ids>, and from /v1/observations/taxonomy?captive=true&taxon_id=47126 (Copiapoa left out of the tree, so it is asked on its own, as a genus without captive records would be; its count is its real total_results). The tests add filler rows to make a full page, and one constructed homonym.",
+ "taxa": [
+  {
+   "id": 47357,
+   "name": "Allium",
+   "rank": "genus",
+   "is_active": true,
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47163,
+    47218,
+    55849,
+    924653,
+    924696,
+    47357
+   ]
+  },
+  {
+   "id": 53438,
+   "name": "Rosa",
+   "rank": "genus",
+   "is_active": true,
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    47132,
+    47148,
+    415343,
+    922173,
+    53438
+   ]
+  },
+  {
+   "id": 53818,
+   "name": "Welwitschia",
+   "rank": "genus",
+   "is_active": true,
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    151883,
+    153151,
+    64618
+   ]
+  },
+  {
+   "id": 357923,
+   "name": "Copiapoa",
+   "rank": "genus",
+   "is_active": true,
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    47366,
+    47903,
+    335455,
+    543210
+   ]
+  },
+  {
+   "id": 72232,
+   "name": "Melaleuca",
+   "rank": "genus",
+   "is_active": true,
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    47791,
+    51816,
+    468848,
+    921781
+   ]
+  }
+ ],
+ "tree": [
+  {
+   "id": 47357,
+   "name": "Allium",
+   "rank": "genus",
+   "is_active": true,
+   "descendant_obs_count": 53397
+  },
+  {
+   "id": 53438,
+   "name": "Rosa",
+   "rank": "genus",
+   "is_active": true,
+   "descendant_obs_count": 232508
+  },
+  {
+   "id": 53818,
+   "name": "Welwitschia",
+   "rank": "genus",
+   "is_active": true,
+   "descendant_obs_count": 263
+  },
+  {
+   "id": 58861,
+   "name": "Mahonia",
+   "rank": "genus",
+   "is_active": false,
+   "descendant_obs_count": 2
+  },
+  {
+   "id": 72232,
+   "name": "Melaleuca",
+   "rank": "genus",
+   "is_active": true,
+   "descendant_obs_count": 67631
+  },
+  {
+   "id": 82467,
+   "name": "Callistemon",
+   "rank": "genus",
+   "is_active": false,
+   "descendant_obs_count": 2
+  },
+  {
+   "id": 960090,
+   "name": "Allium",
+   "rank": "genus",
+   "is_active": false,
+   "descendant_obs_count": 2
+  },
+  {
+   "id": 47125,
+   "name": "Angiospermae",
+   "rank": "subphylum",
+   "is_active": true,
+   "descendant_obs_count": 14594476
+  },
+  {
+   "id": 47126,
+   "name": "Plantae",
+   "rank": "kingdom",
+   "is_active": true,
+   "descendant_obs_count": 15991181
+  }
+ ],
+ "copiapoaTotal": 140
+}

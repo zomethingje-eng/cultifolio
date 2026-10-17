@@ -57,14 +57,16 @@ describe('the page\'s collection, read once (V3; S-A4, R45-17)', () => {
     page.addEventListener('beforeunload', (e) => e.preventDefault()); // the add form's own guard
     demo.leaveDemo('/');
     page.dispatchEvent(new Event('beforeunload', { cancelable: true })); // "Leave site?" … Cancel, said by nothing
-    expect(demo.inDemo()).toBe(false); // the flag is off for the next page, as Leave needs (the first deploy's race)
-    // Within the 3 s before the Leave is known to be called off, the visitor presses Add with a new place.
+    // Since round seventy-five the flag stays on: the next page takes it off from Leave's address, so there is nothing to
+    // put back after a Cancel (r75base: false here, and back only after 3 s).
+    expect(demo.inDemo()).toBe(true);
+    // Before the Leave is known to be called off, the visitor presses Add with a new place.
     stored.writeSetting('cultifolio.lastLocation', 'collection', 'example-place-id');
     expect(local.m.get('cultifolio.lastLocation')).toBe('growers-own-bench'); // base: 'example-place-id', the grower's own overwritten
     expect(session.m.get('cultifolio.demo.lastLocation')).toBe('example-place-id');
     expect(stored.sampleTab()).toBe(true);
     vi.advanceTimersByTime(3100);
-    expect(demo.inDemo()).toBe(true); // called off: the flag is back
+    expect(demo.inDemo()).toBe(true); // called off: the flag is still on
   });
   it('a page that loaded outside the example is the grower\'s, whatever the tab\'s flag says later', async () => {
     const { PAGE_IN_DEMO } = await import('$lib/db/demo');

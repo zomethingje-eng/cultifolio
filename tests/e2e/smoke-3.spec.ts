@@ -6,6 +6,7 @@ import { inject, wipe } from './helpers/inject';
 import { fromAddress } from './helpers/address';
 import { allowWrites, writeWait, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 import { traceSave, markSave } from './helpers/save-trace';
+import { watchStorage, whileStoring } from './helpers/progress';
 import { smokeSetup, ready, addPlant, localDay, year, more, syncRun, WEBKIT_OFFLINE } from './helpers/smoke';
 
 smokeSetup();
@@ -99,6 +100,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   const today = page.locator('.today');
   await expect(today.locator('.line', { hasText: 'without a photograph in the last twelve months' })).toBeVisible();
   await expect(today).toContainText('Frost watch needs a site');
@@ -124,6 +126,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.accrow .fig', { hasText: 'watered 21 d ago' })).toBeVisible();
   await expect(page.locator('.accrow .fig.due')).toHaveCount(1);
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.today .line', { hasText: '1 of 1 plants past their watering rhythm' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
   await page.locator('.today .line', { hasText: 'past their watering rhythm' }).click();
   await expect(page).toHaveURL(/\/today#water$/);
@@ -152,6 +155,7 @@ test('the install bar waits for a second day, and stays away for thirty days onc
   // the next day
   await page.evaluate(() => localStorage.setItem('cultifolio.lastVisit', '2000-01-01'));
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect.poll(() => page.evaluate(() => localStorage.getItem('cultifolio.visits'))).toBe('2');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
   await expect(page.locator('.install')).toBeVisible();
@@ -167,6 +171,7 @@ test('settings: units switch every figure and sentence, survive a reload through
   const us = await page.request.get('/species/copiapoa-cinerea', { headers: { 'accept-language': 'en-US,en;q=0.9' } });
   expect(await us.text()).toContain('43.7<span class="u">°F');
   await page.goto('/species/copiapoa-cinerea');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
   await page.locator('.glance .useg button', { hasText: '°F' }).click();
   const glance = page.locator('.glance');
@@ -354,6 +359,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   let calls = 0;
   await ctx.route(/\/api\/(index|entries)/, (r) => { calls++; r.abort(); });
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
   await page.waitForTimeout(1500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(calls).toBeLessThanOrEqual(4); // the page's fetch and the worker's, once each: no loop
@@ -832,6 +838,9 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   // Flaky in WebKit on the owner's PC (IND-8): the price edit's Save at the end left the form open for ten seconds. The
   // Save is recorded, and the record attached if the test fails (helpers/save-trace.ts).
   await traceSave(page, testInfo);
+  // The restores below are waited for while the database keeps answering, not for a time worked out beforehand (round
+  // seventy-five; helpers/progress.ts): WebKit's first restore ran past its 125 s on the owner's PC, still writing.
+  await watchStorage(page);
   // Four hundred plants with a kilobyte of notes each: changes.json past the sizes at which fflate's asynchronous
   // writer (160 kB) and reader (512 kB) hand the work to a blob: worker, which worker-src 'self' refuses (round twenty-eight, 0).
   const wall = Date.now() - 3_600_000;
@@ -855,10 +864,11 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles({ name: 'seed.cultifolio.zip', mimeType: 'application/zip', buffer: seed });
   await expect(page.locator('.preview')).toContainText('400 plants');
-  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts).
-  allowWrites(6_000 * WEBKIT_MS_PER_REQUEST);
+  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts),
+  // and the test is given twice that, as an outer bound only. The wait itself goes on while the database answers.
+  allowWrites(2 * 6_000 * WEBKIT_MS_PER_REQUEST);
   await page.click('#bk-merge');
-  await expect(page.locator('#bk-done')).toContainText('400 plants', { timeout: writeWait(5_000, 6_000) });
+  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 15_000);
   // the backup is written
   const dl = page.waitForEvent('download');
   await page.click('#bk-export');
@@ -870,16 +880,17 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path);
   await expect(page.locator('.preview')).toContainText('400 plants');
-  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts).
-  allowWrites(6_000 * WEBKIT_MS_PER_REQUEST);
+  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts),
+  // and the test is given twice that, as an outer bound only. The wait itself goes on while the database answers.
+  allowWrites(2 * 6_000 * WEBKIT_MS_PER_REQUEST);
   await page.click('#bk-merge');
-  await expect(page.locator('#bk-done')).toContainText('400 plants', { timeout: writeWait(5_000, 6_000) });
+  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 15_000);
   // Opening the collection then reads the two restores' 4,000 arrivals one change at a time after the snapshot (4,018
   // requests, counted in Chromium): over a minute at Safari's engine's pace, where the page said "Opening your
   // collection…" past the 10 s, both times (round sixty-six; the all-engines run; helpers/pace.ts).
-  allowWrites(4_000 * WEBKIT_MS_PER_REQUEST);
+  allowWrites(2 * 4_000 * WEBKIT_MS_PER_REQUEST);
   await page.goto('/plants');
-  await expect(page.locator('.seccount').first()).toContainText('400', { timeout: writeWait(10_000, 4_000) });
+  await whileStoring(page, (timeout) => expect(page.locator('.seccount').first()).toContainText('400', { timeout }), 15_000);
   // a plant whose stored acquired date is in the future (an older file) can have its price edited; only a date this edit types is judged (round twenty-eight, 0)
   await page.goto('/plants/2025-0400');
   await more(page, 'Edit');
@@ -976,6 +987,7 @@ test('round thirty-four: a genus address opens the catalogue for a grower with p
   await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-pressed', 'true');
   // but the genus page's own address (the sitemap's, a shared link's) shows the genus
   await page.goto('/?by=genus&open=copiapoa');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page).toHaveTitle(/^Copiapoa/);
   await expect(page.locator('.grow.open', { hasText: 'Copiapoa' })).toBeVisible();
   await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
@@ -1025,6 +1037,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   const searches: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/search')) searches.push(r.url()); });
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-pressed', 'true');
   // A number, a field number, a name: found on the device, and nothing goes to the server or the URL (R2-1).
   await page.fill('.searchbar', `${year()}-0001`);
@@ -1152,6 +1165,7 @@ test('round forty-six: a client-side navigation to a species page whose HTML the
 test('round forty-eight: on a phone the search row stays pinned through the list, and A–Z brings the index back (1)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.letters')).toBeVisible();
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
   await page.evaluate((y) => window.scrollTo(0, y), Math.max(500, h - 900));
@@ -1373,6 +1387,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
 test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('section.featured.phoneonly .strip')).toBeVisible(); // the phone's strip, after the first rows (round sixty-three, V4)
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   const box = page.locator('.toolrow .searchbar');
