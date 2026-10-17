@@ -1,9 +1,9 @@
 /**
  * Round sixty-three, agent V (V2): the example collection as the answer to an empty grower page. The rules here, apart
- * from the pages (tests/e2e/r63v-visitor.spec.ts walks them): a tab that left the example is marked so, by Leave, by the
- * address a Leave opens, and by a close in another tab, so an empty Today never opens it again (Leave would loop); a tab
- * whose storage refuses the flag is never sent anywhere. A tap no longer decides (round sixty-three, the fix pass; R1, 1):
- * the page it lands on does, by the open collection (tests/unit/r63fv-example.test.ts).
+ * from the pages (tests/e2e/r63v-visitor.spec.ts walks them): a tab whose storage refuses the flag is never sent
+ * anywhere. Until round seventy-four an empty Today opened the example by itself, and a tab that left it was marked
+ * (`cultifolio.sampleOut`) so it would not open again; since the owner's decision of round seventy-four nothing opens it
+ * by itself, so there is no mark, and an empty page offers it with a button whether or not the tab has left it before.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -31,32 +31,31 @@ afterEach(() => {
   for (const [k, d] of [['sessionStorage', had.ss], ['localStorage', had.ls], ['location', had.loc], ['addEventListener', had.add]] as const) { if (d) Object.defineProperty(globalThis, k, d); else delete (globalThis as Record<string, unknown>)[k]; }
 });
 
-describe('the tab that left the example is marked, so an empty page never opens it again', () => {
-  it('Leave marks it before the navigation', async () => {
+// Round seventy-four: the subject of round sixty-three's three tests here was the mark that stopped an empty page from
+// opening the example again. Nothing opens it by itself now, so each is turned to its opposite: no mark is written, and
+// nothing reads one. On r74base Leave, a close and the address each wrote `cultifolio.sampleOut`.
+describe('a tab that left the example is not marked, since no page opens it by itself (round seventy-four)', () => {
+  it('Leave writes no mark before the navigation', async () => {
     session.m.set('cultifolio.demo', '1');
-    const { leaveDemo, leftHere } = await import('$lib/db/demo');
-    expect(leftHere()).toBe(false);
-    leaveDemo('/');
+    const demo = await import('$lib/db/demo');
+    demo.leaveDemo('/');
     expect(loc.href).toMatch(/^\/\?left=[a-z0-9]+$/);
-    expect(leftHere()).toBe(true);
+    expect(session.m.has('cultifolio.sampleOut')).toBe(false);
+    expect(['leftHere', 'markLeftByAddress', 'OUT'].filter((k) => k in demo)).toEqual([]);
   });
-  it('a close in another tab marks it too, and so does the address a Leave opens', async () => {
+  it('a close in another tab sends the tab home and writes no mark', async () => {
     session.m.set('cultifolio.demo', '1');
-    const { sampleClosedHere, markLeftByAddress, leftHere, OUT } = await import('$lib/db/demo');
+    const { sampleClosedHere } = await import('$lib/db/demo');
     sampleClosedHere();
     expect(loc.href).toBe('/'); // home; the tab's note takes it out of the example, and the address marks nothing (round sixty-nine; triage-68 X1)
-    expect(leftHere()).toBe(true);
-    session.m.delete(OUT);
-    markLeftByAddress();
-    expect(leftHere()).toBe(true);
+    expect(session.m.has('cultifolio.sampleOut')).toBe(false);
   });
-  it('a tab whose storage refuses the flag is not sent anywhere, and reads as left (never entered by itself)', async () => {
-    const { enterDemo, leftHere } = await import('$lib/db/demo');
+  it('a tab whose storage refuses the flag is not sent anywhere', async () => {
+    const { enterDemo } = await import('$lib/db/demo');
     const refuse = { ...session.s, getItem: () => { throw new Error('refused'); }, setItem: () => { throw new Error('refused'); } };
     Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: refuse });
     expect(enterDemo('/today')).toBe(false);
     expect(loc.href).toBe('http://x/today');
-    expect(leftHere()).toBe(true);
   });
   it('enterDemo opens on the page it is given, Today by default', async () => {
     const { enterDemo } = await import('$lib/db/demo');
@@ -66,26 +65,31 @@ describe('the tab that left the example is marked, so an empty page never opens 
   });
 });
 
-describe('who is taken into the example', () => {
-  it('a page decides only on an open, empty, own collection in a tab that has not left it', async () => {
-    const { entersHere, example } = await import('$lib/ui/grow/example.svelte');
+// Round seventy-four: the page no longer decides to go in (`entersHere` is gone); it decides whether to offer the
+// button (`offersHere`), on the same open, empty, own collection, and a tab that left the example before is offered it
+// too. On r74base `offersHere` did not exist.
+describe('who is offered the example (round seventy-four: offered, never taken)', () => {
+  it('a page offers it only on an open, empty, own collection, outside the example, and never opens it itself', async () => {
+    const ex = await import('$lib/ui/grow/example.svelte');
+    const { offersHere, example } = ex;
+    expect('entersHere' in ex).toBe(false);
     example.settled = true;
-    expect(entersHere()).toBe(false); // not open yet: never decided before the collection is read
+    expect(offersHere()).toBe(false); // not open yet: never decided before the collection is read
     col.ready = true;
-    expect(entersHere()).toBe(true);
+    expect(offersHere()).toBe(true);
     col.sowings = [{}];
-    expect(entersHere()).toBe(false); // a batch is a collection
+    expect(offersHere()).toBe(false); // a batch is a collection
     col.sowings = [];
     col.taxa = [{ followed: true }];
-    expect(entersHere()).toBe(false); // so is a species followed
+    expect(offersHere()).toBe(false); // so is a species followed
     col.taxa = [];
     col.locations = [{}];
-    expect(entersHere()).toBe(false); // and so is a place: a grower who began with their benches (round sixty-three, V2)
+    expect(offersHere()).toBe(false); // and so is a space: a grower who began with their benches (round sixty-three, V2)
     col.locations = [];
     session.m.set('cultifolio.sampleOut', '1');
-    expect(entersHere()).toBe(false); // left here
-    session.m.delete('cultifolio.sampleOut');
+    expect(offersHere()).toBe(true); // a tab that left it before is offered it again: the button is the only way in
     session.m.set('cultifolio.demo', '1');
-    expect(entersHere()).toBe(false); // already in it
+    expect(offersHere()).toBe(false); // already in it
+    expect(loc.href).toBe('http://x/today'); // and nothing was opened
   });
 });

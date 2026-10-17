@@ -215,7 +215,7 @@ test('r61a 9: Move starts with no place chosen, focus goes to the picker and bac
   await expect(go).toHaveAttribute('aria-disabled', 'true');
   await go.focus();
   await page.keyboard.press('Enter'); // nothing chosen: nothing moves, and the reason is said
-  await expect(page.locator('.selbar')).toContainText('Choose a place first');
+  await expect(page.locator('.selbar')).toContainText('Choose a space first');
   await expect(page.locator('.toast')).toBeHidden();
   await page.selectOption('#sel-loc', 'b2');
   await expect(go).not.toHaveAttribute('aria-disabled', 'true');
@@ -228,11 +228,11 @@ test('r61a 9: Move starts with no place chosen, focus goes to the picker and bac
   await page.keyboard.press('Enter');
   await expect(page.locator('.toast')).toContainText('Undone: back where they were.');
   await expect(page.locator('#sel-move')).toBeFocused();
-  // "No place" is a choice of its own
+  // "No space" is a choice of its own
   await page.locator('#sel-move').click();
   await page.selectOption('#sel-loc', 'none');
   await page.locator('#sel-move-go').click();
-  await expect(page.locator('.toast')).toContainText('1 moved to no place.');
+  await expect(page.locator('.toast')).toContainText('1 moved to no space.');
 });
 
 test('r61a G8: Archive in select mode has an Undo that puts the plants back to growing and takes the lines away', async ({ page }) => {

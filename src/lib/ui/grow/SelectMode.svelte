@@ -132,7 +132,7 @@
   }
   async function move() {
     if (busy || !chosen.length) return;
-    if (!moveTo) { moveWhy = 'Choose a place first, or "No place".'; await focusNext('#sel-loc'); return; }
+    if (!moveTo) { moveWhy = 'Choose a space first, or "No space".'; await focusNext('#sel-loc'); return; }
     busy = true;
     try {
       const to = moveTo === 'none' ? null : moveTo;
@@ -140,7 +140,7 @@
       // Focus to the button the panel gives way to before the toast is raised, so the toast's origin is that button and
       // Tab reaches its Undo (round sixty-one; the accessibility review, 2).
       await closeMove();
-      toast.show(n ? `${n} moved to ${to ? collection.locationName(to) : 'no place'}.` : 'Already there.', 8000, n ? { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where they were.')); } } : null);
+      toast.show(n ? `${n} moved to ${to ? collection.locationName(to) : 'no space'}.` : 'Already there.', 8000, n ? { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where they were.')); } } : null);
     } finally {
       busy = false;
     }
@@ -211,8 +211,8 @@
       <div class="moveto">
         <label class="movelab" for="sel-loc">Move to</label>
         <select id="sel-loc" bind:value={moveTo} onchange={() => (moveWhy = '')} aria-describedby={moveWhy ? 'sel-move-why' : undefined}>
-          <option value="" disabled>Choose a place…</option>
-          <option value="none">No place</option>
+          <option value="" disabled>Choose a space…</option>
+          <option value="none">No space</option>
           {#each places as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
         </select>
         <button class="btn pri" type="button" id="sel-move-go" onclick={move} aria-disabled={busy || !chosen.length || !moveTo}>Move {chosen.length}</button><button class="btn" type="button" onclick={closeMove}>Cancel</button>
@@ -222,7 +222,7 @@
       <span>Archive {growing.length}? They leave the growing list and can be marked growing again.</span><button class="btn" type="button" id="sel-archive-yes" onclick={archive} aria-disabled={busy}>Yes, archive</button><button class="btn" type="button" id="sel-archive-keep" onclick={keep}>Keep</button>
     {:else}
       <button class="btn pri" type="button" id="sel-water" onclick={water} aria-disabled={busy || !growing.length}>Water</button>
-      <button class="btn" type="button" id="sel-move" onclick={openMove} aria-disabled={busy || !chosen.length}>Move to a place</button>
+      <button class="btn" type="button" id="sel-move" onclick={openMove} aria-disabled={busy || !chosen.length}>Move to a space</button>
       <button class="btn" type="button" id="sel-labels" onclick={labels} aria-disabled={!chosen.length}>Print labels</button>
       <button class="btn" type="button" id="sel-archive" onclick={askArchive} aria-disabled={busy || !growing.length}>Archive</button>
     {/if}

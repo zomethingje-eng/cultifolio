@@ -128,7 +128,6 @@ test('trace 2: six plants from the add form, on the first page', async ({ browse
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await ctx.addInitScript(trace);
-  await ctx.addInitScript(() => { try { sessionStorage.setItem('cultifolio.sampleOut', '1'); } catch { /* none */ } });
   const page = await ctx.newPage();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await ready(page);

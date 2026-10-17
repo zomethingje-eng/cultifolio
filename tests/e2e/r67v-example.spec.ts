@@ -214,7 +214,7 @@ test('r67v V5: the seed comes with its mark and boundary, a cut-off mark is repa
   expect(asked.join(' ')).toMatch(/Leave the example collection\? The (record you added or changed here is|\d+ records you added or changed here are) deleted with it\./);
 });
 
-test('r67v V1: inside the example the top bar\'s "+", "Add one to my plants" and "New place" lead out of it first', async ({ page }) => {
+test('r67v V1: inside the example the top bar\'s "+", "Add one to my plants" and "New space" lead out of it first', async ({ page }) => {
   test.setTimeout(120_000);
   await intoExample(page);
   await page.goto('/today'); await ready(page);
@@ -233,7 +233,7 @@ test('r67v V1: inside the example the top bar\'s "+", "Add one to my plants" and
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   await intoExample(page);
   await page.goto('/places'); await ready(page);
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await expect(page).toHaveURL(/\/places(\?left=sample)?(#add)?$/);
   await ready(page);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
@@ -289,7 +289,7 @@ test('r67v V9: on a phone the welcome\'s lead says what the site is, and a whole
     const ctx = await browser.newContext({ baseURL, viewport, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await page.goto('/'); await ready(page);
-    await expect(page.locator('#welcome')).toContainText('Grow cacti, succulents or bulbs?');
+    await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // round seventy-four's words, for every grower
     const [row, bar] = await Promise.all([page.locator('.rows .azrow, .rows > a, .rows > div').first().boundingBox(), page.locator('#tabbar').boundingBox()]);
     expect(row && bar && row.y + row.height <= bar.y + 1, `${JSON.stringify(viewport)}: first row ${JSON.stringify(row)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
     await ctx.close();

@@ -367,7 +367,7 @@
   <p class="muted" id="number-chooser-why">{choices.length} batches have the number {param}: two devices gave it out while offline, or a file was merged in. Open the one you mean; its page offers to renumber it.</p>
   <ul class="chooser" id="number-chooser">
     {#each choices as c (c.id)}
-      <li><a class="azrow accrow" href="/propagation/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{sowNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no place'} · started {c.sown}{c.status !== 'active' ? ` · ${c.status}` : ''}</span></span></a></li>
+      <li><a class="azrow accrow" href="/propagation/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{sowNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no space'} · started {c.sown}{c.status !== 'active' ? ` · ${c.status}` : ''}</span></span></a></li>
     {/each}
   </ul>
 {:else if !s}

@@ -1,20 +1,19 @@
 /**
- * The example collection as the answer to an empty grower page (round sixty-three, V2; the owner's words: a visitor
- * "isn't given the knowledge of the app's capabilities" until a first plant is added). A visitor who opens Today, Places
- * or Propagation on a device whose own collection is empty lands in the example on that same page; a tab that has left
- * the example, a tab whose storage refuses the flag, and a device with a collection of its own are shown the page's own
- * empty state with the offer instead. "Example" is the word on the page; the code keeps "sample" (`$lib/db/demo`).
+ * The example collection as an offer on an empty grower page (round sixty-three, V2; the owner's words: a visitor "isn't
+ * given the knowledge of the app's capabilities" until a first plant is added). Since round seventy-four (the owner's
+ * decision: a new visitor starts on the real site, blank) nothing opens it by itself: an empty Today, My spaces or
+ * Propagation on a device whose own collection is empty shows its own empty state with one button, "Show the example
+ * collection", and so does an empty My plants (`TrySample`). "Example" is the word on the page; the code keeps "sample"
+ * (`$lib/db/demo`).
  *
- * Decided on the page, once it has arrived, never on the tap that leads to it (round sixty-three, the fix pass; R1, 1):
- * a tap that went straight into the example was a full load, which skipped every page's own "Leave this page?" (a
- * half-typed first plant or batch, an import's review list) and, on an iPhone, lost them without a word. The tap is now
- * the app's ordinary move, which asks first; the page it lands on, whose own work is none, goes into the example.
+ * Opened on the page the button is on, never on the tap that leads to it (round sixty-three, the fix pass; R1, 1): a
+ * full load from a page with nothing of the grower's typed on it, so no page's own "Leave this page?" is skipped.
  *
  * Its own file, not the grow barrel, which the root layout must not import (scripts/check-bundle.mjs).
  */
 import { goto } from '$app/navigation';
 import { collection } from '$lib/db/collection.svelte';
-import { PAGE_IN_DEMO, enterDemo, inDemo, leaveDemo, leftHere, sampleEdits } from '$lib/db/demo';
+import { PAGE_IN_DEMO, enterDemo, inDemo, leaveDemo, sampleEdits } from '$lib/db/demo';
 import { readSetting } from '$lib/ui/stored';
 import { sync } from '$lib/sync/engine.svelte';
 import { replaceWaiting } from '$lib/db/vault';
@@ -62,7 +61,7 @@ export const example = $state({ seeding: false, entering: false, busy: 0, settle
 
 /**
  * Run `work` as work a page load must not cut off (a restore, a merge, an import): while it runs, no page goes into the
- * example, by itself or by a button, since that is a full load (round sixty-three, the fix pass; R1, 2). The work goes on
+ * example from a button, since that is a full load (round sixty-three, the fix pass; R1, 2). The work goes on
  * when the grower moves to another page in the app, as it always did.
  */
 export async function keepWorking<T>(work: () => Promise<T>): Promise<T> {
@@ -79,12 +78,19 @@ export function working(): boolean {
   return example.busy > 0 || !!sync.busy;
 }
 
-/** This page should go into the example by itself: the collection is open, empty and the visitor's own, nothing is in progress, and this tab has not left the example. */
-export function entersHere(): boolean {
-  return collection.ready && example.settled && !PAGE_IN_DEMO && !inDemo() && !leftHere() && !working() && ownEmpty();
+/**
+ * This page offers the example (round seventy-four): the collection is open and sync's key read, the page is outside
+ * the example, and the device's own collection is empty. Offered, never opened: only the button opens it.
+ */
+export function offersHere(): boolean {
+  return collection.ready && example.settled && !PAGE_IN_DEMO && !inDemo() && ownEmpty();
 }
 
-/** Why "See the example collection" did not open it: the tab's storage refused the flag, or work in progress here would be cut off. */
+/** The button's words, and the one sentence beside it: the same on every page that offers the example (round seventy-four). */
+export const SHOW_EXAMPLE = 'Show the example collection';
+export const EXAMPLE_APART = 'A sample kept apart from your own collection, which you can close at any time.';
+
+/** Why "Show the example collection" did not open it: the tab's storage refused the flag, or work in progress here would be cut off. */
 export type NotEntered = 'refused' | 'busy';
 
 /** What a button says when the example did not open, so a press is never answered with nothing (rule 2; R1, 7). */
@@ -147,7 +153,7 @@ export async function openExample(to: string): Promise<true | NotEntered | 'stay
     await goto(to);
     if (location.pathname !== to) return 'stayed';
   }
-  if (example.entering) return true; // the page arrived at went in by itself
+  if (example.entering) return true; // already on its way in (a second press)
   return enterExample(to);
 }
 

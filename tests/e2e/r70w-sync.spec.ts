@@ -6,7 +6,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { fromAddress } from './helpers/address';
-import { ownPages } from './helpers/r63v-own';
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
@@ -15,7 +14,6 @@ async function ready(p: Page) {
 test('a tab open before sync was set up in another tab, moved to /sync by its own link, runs and says Synced (round seventy; W1)', async ({ browser }) => {
   test.setTimeout(90_000);
   const ctx = await browser.newContext();
-  await ctx.addInitScript(ownPages);
   await fromAddress(ctx);
   // Tab A opens first, with no sync record: its layout's init finds nothing and schedules nothing.
   const a = await ctx.newPage();

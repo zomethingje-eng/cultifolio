@@ -2,7 +2,6 @@
 import { test, expect } from '@playwright/test';
 import { wipe } from './helpers/inject';
 import { fromAddress, docAddress, limitAddress } from './helpers/address';
-import { ownPages } from './helpers/r63v-own';
 import { openDisclosure } from './helpers/disclosure';
 import { writeWait } from './helpers/pace';
 import { smokeSetup, ready, addPlant, year, more, syncRun } from './helpers/smoke';
@@ -41,13 +40,13 @@ test('the menu behind the mark reaches every place from any page', async ({ page
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#menu');
   await expect(menu).toBeVisible();
-  for (const l of ['Species', 'My plants', 'Places', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
+  for (const l of ['Species', 'My plants', 'My spaces', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
   await expect(menu.locator('a.on')).toHaveText('Species');
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
   await page.getByRole('button', { name: 'Menu' }).click();
-  await menu.getByRole('link', { name: 'Places' }).click();
+  await menu.getByRole('link', { name: 'My spaces' }).click();
   await expect(page).toHaveURL(/\/places$/);
   await expect(page.locator('#menu')).toHaveCount(0); // closed by the navigation
 });
@@ -151,20 +150,20 @@ test('add a plant, record an event, survive a reload', async ({ page }) => {
 
 test('benches: make a place, put a plant there, water the bench, audit it', async ({ page }) => {
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Laundry room');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Laundry room' })).toBeVisible();
   // a shelf inside the room
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Shelf 2');
   await page.selectOption('#loc-kind', 'shelf');
   await page.selectOption('#loc-parent', { label: 'Laundry room' });
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Shelf 2' })).toBeVisible();
   // the next place is not filed inside Laundry room just because the last one was (round twenty-two, 3)
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await expect(page.locator('#loc-parent option:checked')).toHaveText('Top level');
   // add a plant on the shelf
   await page.goto('/plants/new'); await ready(page);
@@ -260,7 +259,7 @@ test('a species page hands its name to the add-plant and sow-seed forms', async 
 test('the path species → my plants → bench is prefilled at every step and loops back', async ({ page }) => {
   // a place to put things
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'East sill');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -292,7 +291,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   // back on the plant, the comparison shows both figures and no verdict: the judgement is the grower's
   await page.goto(`/plants/${acc}`);
   await page.locator('#habitat > summary').click();
-  await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2.0 °C');
+  await expect(page.locator('.hvh')).toContainText('this space is set to bottom out at 2.0 °C');
   // the habitat figure is the median with its 10th–90th span across the envelope cells, and the quantity is named
   await expect(page.locator('.hvh')).toContainText(/coldest month's mean nightly low at the habitat \d+(\.\d)? °C in \w+ \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at a typical spot in the range 6\.5 °C \(NASA POWER\)/);
   await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\)/);
@@ -308,7 +307,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await page.getByRole('button', { name: 'New…' }).click();
   await page.fill('#mv-loc-new-name', 'Cold frame');
   await page.selectOption('#mv-loc-new-kind', 'coldframe');
-  await page.getByRole('button', { name: 'Add place' }).click();
+  await page.getByRole('button', { name: 'Add space' }).click();
   await page.getByRole('button', { name: 'Move', exact: true }).last().click();
   await expect(page.locator('.idcard .place', { hasText: 'Cold frame' })).toBeVisible();
   await expect(page.locator('.tlrow', { hasText: 'Cold frame' })).toBeVisible();
@@ -398,7 +397,7 @@ test('photos: taken on the device, resized, stored, captioned, made the cover, s
 test('backup: export a zip, wipe the device, restore it, and the collection is identical, photo included', async ({ page }) => {
   // a collection with a place, a plant there, an event, a photo
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Back porch');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -462,8 +461,8 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   // restore by merge into the empty device
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path!);
-  await expect(page.locator('.preview')).toContainText('1 plant · 2 timeline entries · 1 place · 0 propagation batches · 1 photo');
-  await expect(page.locator('#bk-preview')).toContainText('1 plant, 1 place, 2 timeline entries and 1 photo will be added. Nothing here is removed.');
+  await expect(page.locator('.preview')).toContainText('1 plant · 2 timeline entries · 1 space · 0 propagation batches · 1 photo');
+  await expect(page.locator('#bk-preview')).toContainText('1 plant, 1 space, 2 timeline entries and 1 photo will be added. Nothing here is removed.');
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('1 photo');
   await expect(page.locator('#bk-done')).toContainText(/This device had no site( or preferences)? of its own, so the file's (was|were) applied/);
@@ -603,7 +602,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   const html = await (await page.request.get('/')).text();
   expect(html).toContain('id="welcome"');
   await page.goto('/');
-  await expect(page.locator('#welcome')).toContainText('Grow cacti, succulents or bulbs?'); // the welcome's lead says what the site is on a phone (round sixty-seven; triage-66 V9)
+  await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // the welcome's lead says what the site is on a phone (round sixty-seven; triage-66 V9), for every grower since round seventy-four
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.locator('#welcome')).toHaveCount(0);
   await page.reload();
@@ -635,11 +634,10 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   test.setTimeout(120_000);
   // Device A: a place, a plant with a photo and a watering; then set up a vault.
   const A = await browser.newContext();
-  await A.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await fromAddress(A); // the vault is made from an address of its own, not 127.0.0.1's five a day (round sixty-two second pass)
   const a = await A.newPage();
   await a.goto('/places');
-  await a.getByRole('button', { name: 'New place' }).click();
+  await a.getByRole('button', { name: 'New space' }).click();
   await a.fill('#loc-name', 'Kitchen sill');
   await a.selectOption('#loc-kind', 'windowsill');
   await a.getByRole('button', { name: 'Add', exact: true }).click();

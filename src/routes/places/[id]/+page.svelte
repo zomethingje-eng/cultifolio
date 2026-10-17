@@ -44,7 +44,7 @@
   const cond = $derived(collection.conditions(id));
   const today = () => localDate(); // read when the action runs, not when the page loaded (round twenty-four, 2)
   $effect(() => {
-    if (loc) setCrumb([{ label: 'Places', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
+    if (loc) setCrumb([{ label: 'My spaces', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
     return () => setCrumb([]);
   });
   const dli = $derived(cond.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
@@ -139,7 +139,7 @@
     }
     // The plant form's rule and sentence (round fifty-nine): a whole number of days, 1 to 365; an empty box follows the place above.
     const wd = num(f.waterDays);
-    if (wd != null && (!Number.isInteger(wd) || wd < 1 || wd > 365)) out.waterDays = `${said(f.waterDays)} is not a whole number of days from 1 to 365; leave it blank to follow ${inheritedDays ? 'the place above' : 'the default'}.`;
+    if (wd != null && (!Number.isInteger(wd) || wd < 1 || wd > 365)) out.waterDays = `${said(f.waterDays)} is not a whole number of days from 1 to 365; leave it blank to follow ${inheritedDays ? 'the space above' : 'the default'}.`;
     return out;
   }
   async function save() {
@@ -192,7 +192,7 @@
     if (busy) return; // a second tap before the first commits wrote every line twice (round fifty-two, 3)
     busy = t;
     // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
-    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'place'}: ${loc?.name ?? ''}` }))); // the grower's own action: a sighting, not an `auto` line (round fifty-eight)
+    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'space'}: ${loc?.name ?? ''}` }))); // the grower's own action: a sighting, not an `auto` line (round fifty-eight)
     busy = '';
     const n = ids.length;
     // One tap wrote n lines; one tap takes exactly those back (round twenty-six, 5).
@@ -336,7 +336,7 @@
       const coldest = forecast.forecast.days.length ? forecast.forecast.days.reduce((a, b) => (b.tmin < a.tmin ? b : a)) : null;
       return { level: 'none', text: `Held at ${F} by its heater${coldest ? `; outside falls to ${temp(coldest.tmin, units.current, 1)} on ${coldest.date} (MET Norway)` : ''}. A plant that needs more than ${F} is the one at risk here.` };
     }
-    if (nights.length) return { level: 'floor', text: `Forecast reaches this place's ${F} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` };
+    if (nights.length) return { level: 'floor', text: `Forecast reaches this space's ${F} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` };
     const above = `Outside stays above the ${F} floor for the ${forecast.forecast.hoursCovered} hours of forecast.`;
     return forecast.risk.level === 'none' ? { level: 'none', text: above } : { level: forecast.risk.level, text: `${forecast.risk.text} ${above}` };
   });
@@ -351,7 +351,7 @@
   let confirmRemove = $state(false);
   async function remove() {
     const r = await collection.removeLocation(id);
-    const parts = [r.plants ? `${r.plants} plant${r.plants === 1 ? '' : 's'}` : '', r.batches ? `${r.batches} batch${r.batches === 1 ? '' : 'es'}` : '', r.places ? `${r.places} place${r.places === 1 ? '' : 's'}` : ''].filter(Boolean);
+    const parts = [r.plants ? `${r.plants} plant${r.plants === 1 ? '' : 's'}` : '', r.batches ? `${r.batches} batch${r.batches === 1 ? '' : 'es'}` : '', r.places ? `${r.places} space${r.places === 1 ? '' : 's'}` : ''].filter(Boolean);
     toast.show(parts.length ? `Removed. ${parts.join(', ')} moved ${r.to ? `up to ${r.to}` : 'to the top level'}${r.plants ? ', and each plant\'s log says so' : ''}.` : 'Removed.');
     goto('/places');
   }
@@ -359,13 +359,13 @@
 
 {#snippet ago(n: number | null)}{#if n == null}–{:else if n === 0}today{:else}{n}<span class="u">{' d ago'}</span>{/if}{/snippet}
 
-<svelte:head><title>{loc?.name ?? 'Location'} · Cultifolio</title></svelte:head>
+<svelte:head><title>{loc?.name ?? 'Space'} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if !collection.ready}
   <Opening />
 {:else if !loc}
-  {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All places</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No place with that id on this device. <a href="/places">All places</a>.</p>{/if}
+  {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This space" {waiting} /><p class="muted"><a href="/places">All spaces</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No space with that id on this device. <a href="/places">All spaces</a>.</p>{/if}
 {:else}
   <!-- No band above the card: it carried only the kind, which the line under the name says, and on a phone it was a grey
        block before anything the grower came for. The path to the place is in that line now (round fifty, 4). -->
@@ -373,7 +373,7 @@
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
       {#if summary.length}<p class="rules" id="place-rules">{summary.join(' · ').replace(/^./, (c) => c.toUpperCase())}</p>{/if}
-      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null}{' · '}{cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Space'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'space')}` : ''}{#if cond.indoor != null}{' · '}{cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       {#if cond.floorC != null || dli != null || (watchable && effectiveRisk) || (unseen && deep.length) || dueHere}
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">{cond.floorHeld ? 'held at' : 'floor'} {temp(cond.floorC, units.current, 1)}</span>{/if}
@@ -389,7 +389,7 @@
 
   <Parked kind="location" id={id} />
   {#if collection.needsHome(id)}
-    <p class="small muted">This place needs a home: two devices moved places into each other while offline, so it was set free at the top level. <button type="button" class="linkish" onclick={startEdit}>Move it</button> where it belongs.</p>
+    <p class="small muted">This space needs a home: two devices moved spaces into each other while offline, so it was set free at the top level. <button type="button" class="linkish" onclick={startEdit}>Move it</button> where it belongs.</p>
   {/if}
   {#if editing}
     <form class="cult form" onsubmit={(e) => { e.preventDefault(); save(); }}>
@@ -444,10 +444,10 @@
     <div class="cult movein">
       <div class="sum">Move plants here <span class="hint">tick the plants, then Move; each gets a move line on its timeline</span></div>
       <div class="body">
-        <input class="searchbar" id="move-filter" type="search" placeholder="Filter by number, name or place…" bind:value={moveQ} aria-label="Filter plants to move" />
+        <input class="searchbar" id="move-filter" type="search" placeholder="Filter by number, name or space…" bind:value={moveQ} aria-label="Filter plants to move" />
         <div class="rows moverows">
           {#each moveShown.slice(0, 200) as a (a.id)}
-            <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : 'no place'}</span></span></label>
+            <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : 'no space'}</span></span></label>
           {/each}
           {#if moveShown.length > 200}<p class="small muted">{moveShown.length - 200} more: filter to find them.</p>{/if}
           {#if !moveShown.length}<p class="small muted">No plant matches.</p>{/if}
@@ -472,7 +472,7 @@
 
   {#if watchable}
     <div class="secrule"><h2>Frost watch</h2><div class="line"></div></div>
-    {#if bySite}<p class="small muted" id="frost-site">Forecast for your site, set in <a href="/settings#site">Settings</a>; <button type="button" class="linkish" onclick={startEdit}>give this place coordinates</button> to watch it on its own.</p>{/if}
+    {#if bySite}<p class="small muted" id="frost-site">Forecast for your site, set in <a href="/settings#site">Settings</a>; <button type="button" class="linkish" onclick={startEdit}>give this space coordinates</button> to watch it on its own.</p>{/if}
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
@@ -480,7 +480,7 @@
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true && !nothingRecorded}
-    <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent), or set your site in <a href="/settings#site">Settings</a>, to watch the forecast for frost.</p>
+    <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this space (or a parent), or set your site in <a href="/settings#site">Settings</a>, to watch the forecast for frost.</p>
   {/if}
 
   {#if cond.lat != null || cond.altM != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
@@ -497,14 +497,14 @@
     <div class="secrule"><h2>Inside</h2><div class="line"></div><span class="n">{kids.length}</span></div>
     <div class="rows">
       {#each kids as k}
-        {@const kl = LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}
+        {@const kl = LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Space'}
         <!-- The tile is decoration; the name and the kind on one line with a dot between, a box with its own margins, since the spaces at a tag's edge are dropped ("Bench 1BENCH"; round fifty-eight, round fifty-nine), and a hidden comma for a screen reader. -->
         <a class="azrow inside" href="/places/{k.id}"><span class="im" aria-hidden="true">{kl.slice(0, 5)}</span><span class="namekind"><span class="nm" style="font-style: normal">{k.name}</span><span class="dot" aria-hidden="true">·</span><span class="sr">{', '}</span><span class="fam">{kl}</span></span><span class="fig"><span class="sr">{', '}</span>{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
       {/each}
     </div>
   {/if}
 
-  <div class="secrule"><h2>{auditing ? 'Audit: tick what you can see' : `Plants${kids.length ? ' (including places inside)' : ''}`}</h2><div class="line"></div><span class="n">{deep.length}</span></div>
+  <div class="secrule"><h2>{auditing ? 'Audit: tick what you can see' : `Plants${kids.length ? ' (including spaces inside)' : ''}`}</h2><div class="line"></div><span class="n">{deep.length}</span></div>
   {#if !deep.length}
     <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>, <a href="/propagation/new?loc={id}" onclick={(e) => addLeavesExample(e, `/propagation/new?loc=${id}`)}>start a batch here</a>, or move plants in with the button above.</div></div>
   {:else}
@@ -541,11 +541,11 @@
   {/if}
 
   <div class="dangerrow">
-    <span>Removing a place keeps every plant's records: its plants, batches and places move up to {parentName ?? 'the top level'}, and each plant's log gets a line saying so.</span>
+    <span>Removing a space keeps every plant's records: its plants, batches and spaces move up to {parentName ?? 'the top level'}, and each plant's log gets a line saying so.</span>
     {#if confirmRemove}
       <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => (confirmRemove = false)}>Keep</button></span>
     {:else}
-      <button class="btn danger small" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove place</button>
+      <button class="btn danger small" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove space</button>
     {/if}
   </div>
 {/if}

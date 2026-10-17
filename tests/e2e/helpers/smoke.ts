@@ -11,7 +11,6 @@
  * sheet's answer.
  */
 import { test, expect } from '@playwright/test';
-import { ownPages } from './r63v-own';
 import { attachSaveTrace } from './save-trace';
 
 /** The page hydrated: before then a value typed into a bound field is dropped, and a click has no handler (round fifty-nine). */
@@ -60,8 +59,6 @@ export const WEBKIT_OFFLINE = "In Playwright's WebKit a navigation the service w
 
 /** The hooks every smoke file runs, as smoke.spec.ts ran them. */
 export function smokeSetup(): void {
-  // The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
-  test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
   // The two tests that trace their Save attach the record when they fail or retry, and only then (round seventy; triage-69
   // P1, IND-8: helpers/save-trace.ts). A test that does not trace attaches nothing.
   test.afterEach(async ({}, testInfo) => { await attachSaveTrace(testInfo); });

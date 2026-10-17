@@ -51,7 +51,7 @@
   const menu = [
     { href: '/', label: 'Species' },
     { href: '/plants', label: 'My plants' },
-    { href: '/places', label: 'Places' },
+    { href: '/places', label: 'My spaces' },
     { href: '/propagation', label: 'Propagation' },
     { href: '/today', label: 'Today' },
     null,
@@ -200,9 +200,9 @@
     addEventListener('focusin', show);
     return () => { removeEventListener('scroll', onScroll); removeEventListener('focusin', show); };
   });
-  // What the "+" adds is what the section is about: a place on Places, a batch on Propagation, a plant everywhere else (round fifty-eight; the grower review).
+  // What the "+" adds is what the section is about: a space on My spaces, a batch on Propagation, a plant everywhere else (round fifty-eight; the grower review).
   const adds = $derived(
-    page.url.pathname.startsWith('/places') ? { href: '/places#add', path: '', label: 'Add a place' }
+    page.url.pathname.startsWith('/places') ? { href: '/places#add', path: '', label: 'Add a space' }
     : page.url.pathname.startsWith('/propagation') ? { href: '/propagation/new', path: '/propagation/new', label: 'Start a propagation batch' }
     : { href: '/plants/new', path: '/plants/new', label: 'Add a plant' }
   );
@@ -263,6 +263,13 @@
     if (!collection.ready) return;
     if (collection.recordCount > 0 || sync.configured) considerWorker(page.url.pathname);
   });
+  /** Asks the active worker to claim this page while it has no controller, with waits between (round seventy-four). */
+  const CLAIM_WAITS = [500, 1000, 1500, 3000, 4000];
+  function askClaim(r: ServiceWorkerRegistration, n: number) {
+    if (navigator.serviceWorker.controller) return;
+    r.active?.postMessage('claim');
+    if (n < CLAIM_WAITS.length) setTimeout(() => askClaim(r, n + 1), CLAIM_WAITS[n]);
+  }
   function registerWorker() {
     if (workerOn || !('serviceWorker' in navigator) || import.meta.env.DEV) return;
     workerOn = true;
@@ -278,6 +285,10 @@
       // with a worker in charge and none installing: on a first install it can only make a second copy of the same build,
       // which the next page takes over (round sixty-four; the Firefox run, where the second page reloaded itself).
       if (reg.active && !reg.installing) reg.update().catch(() => {});
+      // A first visit's page that the first worker's claim missed (WebKit, when the page was loading as the worker
+      // activated) asks to be claimed: offline use then starts on this page, not the next (round seventy-four). Asked
+      // again while no worker controls the page, at 0.5, 1.5, 3, 6 and 10 s: one ask still missed it in 1 run of 6 in WebKit.
+      void navigator.serviceWorker.ready.then((r) => { askClaim(r, 0); }, () => {});
       reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
     }).catch((e) => console.warn('service worker not registered; offline use is off', e));
     // The reload under the new worker happens at once only in the first seconds of a page, with nothing typed and no
@@ -325,14 +336,14 @@
   /**
    * The phone's tabs: the same five for everyone, with or without a collection, in or out of the example (round
    * sixty-three, V1). A visitor's own four (Species, Compare, My plants, About) hid what the app does until a first plant
-   * was added, and the set changed under the owner as his phone held no collection; an empty Places, Propagation or
-   * Today now opens the example collection on that page (`ExampleOffer`). Compare and About are in the menu and the
+   * was added, and the set changed under the owner as his phone held no collection; an empty My spaces, Propagation or
+   * Today offers the example collection on that page with a button (`ExampleOffer`; opt-in since round seventy-four). Compare and About are in the menu and the
    * footer on every page, and Compare in its pill.
    */
   const tabs: Array<{ href: string; label: string; on: (p: string) => boolean }> = [
     { href: '/', label: 'Species', on: (p) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'Plants', on: (p) => p.startsWith('/plants') },
-    { href: '/places', label: 'Places', on: (p) => p.startsWith('/places') },
+    { href: '/places', label: 'My spaces', on: (p) => p.startsWith('/places') },
     { href: '/propagation', label: 'Propagation', on: (p) => p.startsWith('/propagation') },
     { href: '/today', label: 'Today', on: (p) => p.startsWith('/today') || p.startsWith('/frost') }
   ];
@@ -353,7 +364,7 @@
   const places = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'Plants', on: (p: string) => p.startsWith('/plants') },
-    { href: '/places', label: 'Places', on: (p: string) => p.startsWith('/places') },
+    { href: '/places', label: 'My spaces', on: (p: string) => p.startsWith('/places') },
     { href: '/propagation', label: 'Propagation', on: (p: string) => p.startsWith('/propagation') },
     { href: '/today', label: 'Today', on: (p: string) => p.startsWith('/today') || p.startsWith('/frost') }
   ];
@@ -473,7 +484,7 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
-        {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
+        {:else if pl.label === 'My spaces'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
         {:else}<circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />{/if}
       </svg>

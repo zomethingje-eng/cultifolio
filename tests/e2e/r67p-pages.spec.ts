@@ -3,7 +3,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
@@ -30,7 +29,6 @@ function firefoxPersist(): void {
 test('r67p P1: a "keep data" question never answered is put once over six page loads, not on every load (S-E4, R45-6, IND-2)', async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
-  await ctx.addInitScript(ownPages);
   await ctx.addInitScript(firefoxPersist);
   const page = await ctx.newPage();
   await page.goto('/plants'); await ready(page);
@@ -59,7 +57,6 @@ test('r67p P1: a "keep data" question never answered is put once over six page l
 });
 
 test('r67p P3: hovering the compare tray on a private page sends nothing (S-F6, R45-7)', async ({ page }) => {
-  await page.addInitScript(ownPages);
   await page.addInitScript(() => { try { localStorage.setItem('cultifolio.compare', JSON.stringify([{ slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea' }, { slug: 'welwitschia-mirabilis', name: 'Welwitschia mirabilis' }])); } catch { /* none */ } });
   const asked: string[] = [];
   page.on('request', (r) => { if (/\/compare\/__data\.json|\/species\/.*__data\.json/.test(r.url())) asked.push(r.url()); });
@@ -79,7 +76,6 @@ test('r67p P3: hovering the compare tray on a private page sends nothing (S-F6, 
 });
 
 test('r67p P6: the menu says the current page and its items take a thumb; Today\'s place headings read with a separator', async ({ page }) => {
-  await page.addInitScript(ownPages);
   await page.goto('/plants'); await ready(page);
   await inject(page, [['location', 'gh', 'name', 'Greenhouse'], ...plant('r1', '2026-0001', 'Copiapoa cinerea', 'gh'), ...plant('r2', '2026-0002', 'Lithops lesliei', 'gh')], Date.now() - 90 * 86_400_000);
   await page.goto('/plants'); await ready(page);
@@ -122,7 +118,6 @@ test('r67p P7: a species page whose photographs fail keeps the strip\'s squares,
 });
 
 test('r67p P8: after "Save and add another", a name check still in flight for the previous name does not settle onto the emptied field (R45-25)', async ({ page }) => {
-  await page.addInitScript(ownPages);
   // The name service answers late, for the first name only; the reference's own search has nothing.
   await page.route('**/api/names**', async (r) => { await new Promise((f) => setTimeout(f, 2500)); await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ key: 4242, canonicalName: 'Notacactus ignotus', rank: 'SPECIES', status: 'ACCEPTED', family: 'Cactaceae' }]) }); });
   await page.route('**/api/search**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
@@ -152,7 +147,6 @@ async function framesOf(page: Page, sels: string[], ms: number): Promise<Record<
 
 for (const name of ['Copiapoa cinerea', 'Copiapoa zzzzia']) {
   test(`r67p P10: the add form's "Use my own number" and Add do not move, frame by frame, as the name check answers late (${name}; S-E2, decision D5)`, async ({ page }) => {
-    await page.addInitScript(ownPages);
     await page.route('**/api/names**', async (r) => { await new Promise((f) => setTimeout(f, 1500)); await r.continue(); });
     await page.route('**/api/search**', async (r) => { await new Promise((f) => setTimeout(f, 1200)); await r.continue(); });
     await page.setViewportSize({ width: 390, height: 664 });

@@ -22,7 +22,6 @@ import { test, expect, type Page } from '@playwright/test';
 import { countRequests, countSince, idbQuiet, markCount } from './helpers/idb-count';
 import { inject, injectTail, snapshotSaved, type Row } from './helpers/inject';
 import { openDisclosure } from './helpers/disclosure';
-import { ownPages } from './helpers/r63v-own';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -78,7 +77,6 @@ test("r67h budget 2: the example's next page load costs at most 60 requests", { 
 
 test('r67h budget 3: one Water on a fresh page costs at most 20 requests', { tag: '@chromium' }, async ({ browser }) => {
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
-  await ctx.addInitScript(ownPages);
   await countRequests(ctx);
   const page = await ctx.newPage();
   await page.goto('/plants'); await ready(page);
@@ -97,7 +95,6 @@ test('r67h budget 3: one Water on a fresh page costs at most 20 requests', { tag
 test('r67h budget 4: an import of 100 costs at most 70 requests a plant, and one Water right after it, in the same page life, at most 60', { tag: '@chromium' }, async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
-  await ctx.addInitScript(ownPages);
   await countRequests(ctx);
   const page = await ctx.newPage();
   const N = 100;
@@ -139,7 +136,6 @@ test('r67h budget 4: an import of 100 costs at most 70 requests a plant, and one
 test('r67h budget 5: a page load with fewer than 50 changes since the snapshot costs at most 40 requests', { tag: '@chromium' }, async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
-  await ctx.addInitScript(ownPages);
   await countRequests(ctx);
   const page = await ctx.newPage();
   await page.goto('/plants'); await ready(page);

@@ -11,10 +11,10 @@
   import { plantHref } from '$lib/db/links';
   import { plantLabel } from '$lib/ui/plant-label';
   import { toast } from '$lib/ui/toast.svelte';
-  // An empty collection's Places opens the example collection, or offers it (round sixty-three, V2).
+  // An empty My spaces offers the example collection under its own empty state; nothing opens it by itself (round seventy-four).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
-  // In the example a new place is the grower's own: "New place" leads out of it first, and a form opened there says
-  // where the place would go (round sixty-seven; triage-66 V1).
+  // In the example a new space is the grower's own: "New space" leads out of it first, and a form opened there says
+  // where the space would go (round sixty-seven; triage-66 V1).
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { addLeavesExample } from '$lib/ui/grow/example.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -60,7 +60,7 @@
   const dirty = () => adding && !leavingWith && !!(name.trim() || kind);
   beforeNavigate((nav) => {
     if (!dirty() || nav.type === 'leave' || nav.willUnload) return;
-    if (!confirm('Leave this page? The place you were adding will be lost.')) nav.cancel();
+    if (!confirm('Leave this page? The space you were adding will be lost.')) nav.cancel();
   });
   function guardUnload(e: BeforeUnloadEvent) {
     if (dirty()) e.preventDefault();
@@ -113,7 +113,7 @@
    */
   async function add(another = false) {
     if (!name.trim()) return;
-    kindMsg = kind ? '' : 'Say what kind of place it is.';
+    kindMsg = kind ? '' : 'Say what kind of space it is.';
     if (!kind) { document.getElementById('loc-kind')?.focus(); return; }
     const added = name.trim();
     try {
@@ -133,24 +133,24 @@
   }
 </script>
 
-<svelte:head><title>Places · Cultifolio</title></svelte:head>
+<svelte:head><title>My spaces · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
-<PageHead compact title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
-  <button class="btn pri" onclick={(e) => { if (!addLeavesExample(e, '/places#add')) adding = !adding; }}>New place</button>
+<PageHead compact title="My spaces" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a space apply to everything inside it." count="{rows.length} space{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} with no space` : ''}">
+  <button class="btn pri" onclick={(e) => { if (!addLeavesExample(e, '/places#add')) adding = !adding; }}>New space</button>
 </PageHead>
 
 {#if adding}
   <ExampleAddLine what="place" draft={draftOf} hold={(on) => (leavingWith = on)} />
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add((e.submitter as HTMLElement | null)?.id === 'loc-another'); }}>
     <!-- Each field with a visible name over it: a placeholder was the name's only one, and the place above had none (round fifty-eight; the accessibility review). -->
-    <label class="fl"><span class="eyebrow">Name of the new place</span><input id="loc-name" type="text" placeholder="e.g. Greenhouse, Bench 1" bind:value={name} /></label>
-    <label class="fl"><span class="eyebrow">Kind of place</span><select id="loc-kind" bind:value={kind} aria-invalid={!!kindMsg} aria-describedby={kindMsg ? 'loc-kind-bad' : undefined} onchange={() => (kindMsg = '')}><option value="" disabled>Choose…</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
-    <label class="fl"><span class="eyebrow">Inside which place</span><select id="loc-parent" bind:value={parent}>
+    <label class="fl"><span class="eyebrow">Name of the new space</span><input id="loc-name" type="text" placeholder="e.g. Greenhouse, Bench 1" bind:value={name} /></label>
+    <label class="fl"><span class="eyebrow">Kind of space</span><select id="loc-kind" bind:value={kind} aria-invalid={!!kindMsg} aria-describedby={kindMsg ? 'loc-kind-bad' : undefined} onchange={() => (kindMsg = '')}><option value="" disabled>Choose…</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+    <label class="fl"><span class="eyebrow">Inside which space</span><select id="loc-parent" bind:value={parent}>
       <option value={null}>Top level</option>
       {#each rows as r}<option value={r.loc.id}>{collection.locationName(r.loc.id) || r.loc.name}</option>{/each}<!-- the full path, as the place picker says it (round fifty-eight; the grower review) -->
     </select></label>
-    <span class="addbtns"><button class="btn pri" type="submit" id="loc-add" disabled={!name.trim()}>Add</button><button class="btn" type="submit" id="loc-another" disabled={!name.trim()} title="Add this place and keep the form open for the next, inside the same place and of the same kind">Add another</button></span>
+    <span class="addbtns"><button class="btn pri" type="submit" id="loc-add" disabled={!name.trim()}>Add</button><button class="btn" type="submit" id="loc-another" disabled={!name.trim()} title="Add this space and keep the form open for the next, inside the same space and of the same kind">Add another</button></span>
     {#if kindMsg}<span class="bad small full" id="loc-kind-bad">{kindMsg}</span>{/if}
     <p class="small full addedmsg" role="status" id="loc-added">{addedMsg}</p>
   </form>
@@ -160,15 +160,13 @@
   <Opening />
 {:else}
   {#if !rows.length}
-    <!-- Held while the add form is open or asked for (`#add`, read before the page's own mount takes it off the address): a
-         visitor who asked to add a place (the "+", My plants' first step) is not taken into the example. -->
-    <ExampleOffer what="places" hold={adding || page.url.hash === '#add'}><div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div></ExampleOffer>
+    <ExampleOffer><div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No spaces yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div></ExampleOffer>
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}
         <!-- Two lines, the name and then its kind and count: three columns on one line squeezed the name on a phone (round fifty-eight; the grower review). -->
         <a class="row card" href="/places/{r.loc.id}" style="--d:{r.depth}">
-          <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)}{' '}<span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
+          <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)}{' '}<span class="faint">· needs a home: two devices moved spaces into each other; move this one where it belongs</span>{/if}</span>
           <!-- The separator is a box with its own margins, not spaces at a span's edge, which the row's layout dropped ("Greenhouse·0 plants"); the comma is for a screen reader (round fifty-nine). -->
           <span class="line2"><span class="sr">{', '}</span>{#if kindLabel(r.loc.type)}<span class="faint kind">{kindLabel(r.loc.type)}</span><span class="faint dot" aria-hidden="true">·</span><span class="sr">{', '}</span>{/if}<span class="n mono">{plural(r.deepN, 'plant')}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span></span>
         </a>
@@ -176,11 +174,11 @@
     </div>
   {/if}
   {#if unplaced}
-    <p class="faint small" id="unplaced">{plural(unplaced, 'growing plant')} {unplaced === 1 ? 'has' : 'have'} no place.{#if rows.length}{' '}<button class="linkish" type="button" aria-expanded={placing} aria-controls="unplaced-list" onclick={() => (placing = !placing)}>{placing ? 'Close' : unplaced === 1 ? 'Give it one' : 'Give them one'}</button>{/if}</p>
+    <p class="faint small" id="unplaced">{plural(unplaced, 'growing plant')} {unplaced === 1 ? 'has' : 'have'} no space.{#if rows.length}{' '}<button class="linkish" type="button" aria-expanded={placing} aria-controls="unplaced-list" onclick={() => (placing = !placing)}>{placing ? 'Close' : unplaced === 1 ? 'Give it one' : 'Give them one'}</button>{/if}</p>
     {#if placing && rows.length}
       <ul class="cult unplacedlist" id="unplaced-list">
         {#each unplacedList as a (a.id)}
-          <li><a href={plantHref(a)}><span class="mono">{accNo(a)}</span> <i>{plantLabel(a)}</i></a><label><span class="sr">Place for {accNo(a)}</span><select onchange={(e) => placeIt(a, e.currentTarget.value)}><option value="" selected>Choose a place…</option>{#each rows as r (r.loc.id)}<option value={r.loc.id}>{collection.locationName(r.loc.id) || r.loc.name}</option>{/each}</select></label></li>
+          <li><a href={plantHref(a)}><span class="mono">{accNo(a)}</span> <i>{plantLabel(a)}</i></a><label><span class="sr">Space for {accNo(a)}</span><select onchange={(e) => placeIt(a, e.currentTarget.value)}><option value="" selected>Choose a space…</option>{#each rows as r (r.loc.id)}<option value={r.loc.id}>{collection.locationName(r.loc.id) || r.loc.name}</option>{/each}</select></label></li>
         {/each}
       </ul>
     {/if}

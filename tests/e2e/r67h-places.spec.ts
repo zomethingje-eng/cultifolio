@@ -18,10 +18,8 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 test.use({ serviceWorkers: 'block' });
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
@@ -92,7 +90,7 @@ test('r67h places 1: "Add place" pressed twice while the place is being written 
   await page.goto('/plants/2026-0001'); await ready(page);
   await page.getByRole('button', { name: 'Move', exact: true }).click();
   await nameNew(page, 'mv-loc', 'Shelf twice');
-  const add = page.getByRole('button', { name: 'Add place' });
+  const add = page.getByRole('button', { name: 'Add space' });
   await add.click();
   await add.click({ timeout: 2_000 }); // still on screen: the first is being written
   await expect.poll(async () => (await vault(page)).places['Shelf twice']?.length ?? 0, { timeout: 15_000 }).toBe(1);
@@ -106,7 +104,7 @@ test('r67h places 2: Move pressed while "Add place" is still writing moves the p
   await page.goto('/plants/2026-0001'); await ready(page);
   await page.getByRole('button', { name: 'Move', exact: true }).click();
   await nameNew(page, 'mv-loc', 'Shelf race');
-  await page.getByRole('button', { name: 'Add place' }).click();
+  await page.getByRole('button', { name: 'Add space' }).click();
   await page.locator('.actions button.pri', { hasText: 'Move' }).click(); // the place's write has not completed
   await expect(page.locator('.idcard .place', { hasText: 'Shelf race' })).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(2_000);

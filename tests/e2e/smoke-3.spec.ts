@@ -4,7 +4,6 @@ import { test, expect } from '@playwright/test';
 import { controlledBy } from './helpers/controlled';
 import { inject, wipe } from './helpers/inject';
 import { fromAddress } from './helpers/address';
-import { ownPages } from './helpers/r63v-own';
 import { allowWrites, writeWait, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 import { traceSave, markSave } from './helpers/save-trace';
 import { smokeSetup, ready, addPlant, localDay, year, more, syncRun, WEBKIT_OFFLINE } from './helpers/smoke';
@@ -129,7 +128,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await page.locator('.today .line', { hasText: 'past their watering rhythm' }).click();
   await expect(page).toHaveURL(/\/today#water$/);
   await expect(page.locator('#water .stop .row.warn a, #water .stop .row.resting a')).toHaveCount(1); // a Copiapoa in October is in its habitat's dry season by the sheet: its own row (round fifty-four, 4)
-  await expect(page.locator('#water .stop h3')).toContainText('No place');
+  await expect(page.locator('#water .stop h3')).toContainText('No space');
   await page.goto('/plants?show=due');
   await expect(page.locator('.accrow')).toHaveCount(1);
   // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
@@ -245,14 +244,14 @@ test('the species page reads in reference order: the facts and the figures, then
 
 test('a visitor sees all five places in the top bar, the menu and, since round sixty-three, the phone\'s tab bar (round sixty; the visitor review; round sixty-three, V1)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
-  // On a phone a visitor's tabs are the grower's five: an empty Today, Places or Propagation opens the example collection (round sixty-three, V1 and V2).
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  // On a phone a visitor's tabs are the grower's five: an empty Today, My spaces or Propagation offers the example collection (round sixty-three, V1 and V2; a button since round seventy-four).
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
   await page.setViewportSize({ width: 1280, height: 800 });
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
-  await expect(page.locator('#menu').getByRole('link', { name: 'Places', exact: true })).toBeVisible();
+  await expect(page.locator('#menu').getByRole('link', { name: 'My spaces', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   // the species page says what it is, once, under the name
   await page.goto('/species/copiapoa-cinerea');
@@ -264,12 +263,12 @@ test('a visitor sees all five places in the top bar, the menu and, since round s
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
   // a grower's five, from the first plant, and on the next page load too (the hint is read before the first render)
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
   await page.goto('/');
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
 });
 
 test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL, browserName }) => {
@@ -595,7 +594,7 @@ test.use({ serviceWorkers: 'block' });
 test('a place chosen on the add form while the reference is still answering is kept, not overwritten by the last-used default (round seventeen, A3)', async ({ page }) => {
   await page.goto('/places');
   for (const n of ['Greenhouse', 'Cold frame']) {
-    await page.getByRole('button', { name: 'New place' }).click();
+    await page.getByRole('button', { name: 'New space' }).click();
     await page.fill('#loc-name', n);
     await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
     await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -680,12 +679,12 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   // A place inside a place: removing the inner one moves its plant up, says so, and writes the move on the plant's log (round twenty-three, 2)
   await page.goto('/places');
   await ready(page);
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Porch');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Porch' })).toBeVisible();
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await expect(page.locator('#loc-kind')).toHaveValue(''); // the kind is chosen per place, never carried from the last one or defaulted (round twenty-three, 19; round twenty-six, 16)
   await page.fill('#loc-name', 'Cold frame');
   await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
@@ -705,7 +704,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   // Date.now() is held still from here; timers run.
   await page.clock.setFixedTime(Date.now());
   await page.goto(`/places/${frame}`);
-  await page.getByRole('button', { name: 'Remove place' }).click();
+  await page.getByRole('button', { name: 'Remove space' }).click();
   await page.getByRole('button', { name: 'Yes, remove' }).click();
   await expect(page.locator('.toast')).toContainText('1 plant moved up to Porch');
   await page.goto(`/plants/${acc}`);
@@ -1111,7 +1110,7 @@ test('round forty-one, as round fifty-eight has it: the site is a first-visit st
   await page.locator('#species-name').blur();
   await addPlant(page);
   const setup = page.locator('.setup');
-  await expect(setup.locator('.setuprow', { hasText: 'Give it a place' })).toBeVisible();
+  await expect(setup.locator('.setuprow', { hasText: 'Give it a space' })).toBeVisible();
   await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
 });
 
@@ -1244,7 +1243,7 @@ test('round forty-nine: Water is one tap with an Undo, on the plant page and on 
 
 test('round forty-nine: a place takes plants in from a ticked list, in one commit, each with its move line (3)', async ({ page }) => {
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Cold frame');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1313,7 +1312,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   if (await tiles.count() > 1) { const second = await tiles.nth(1).boundingBox(); expect(Math.round(second!.width)).toBe(112); }
   // a grower with two plants on a shelf
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Porch');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1408,7 +1407,7 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
 
 test('round fifty-one: a move into a place has an Undo that puts the plant back and removes its line; Enter on the Add form is Add, not Save and add another (4)', async ({ page }) => {
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Cold frame');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1488,7 +1487,6 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   // One context whose clock can be moved: the plant's record must be three weeks old for "no watering recorded" to count.
   // Without the service worker, so the forecast mock below is what answers (a worker would fetch the real route).
   const C = await browser.newContext({ serviceWorkers: 'block' });
-  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days: [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 4, tmax: 12, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: '2026-11-02' }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
@@ -1497,7 +1495,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await page.goto('/places');
   await page.evaluate(() => localStorage.setItem('cultifolio.frost.site', JSON.stringify({ lat: 40.38, lon: -80.05, name: 'Mt Lebanon' })));
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Bench');
   await page.selectOption('#loc-kind', 'bench');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1603,7 +1601,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   // twenty-five days on, the page is opened and left open across midnight: a watering after midnight is dated the new day
   await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000)));
   await page.goto('/today');
-  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  const stop = page.locator('#water .stop', { hasText: 'No space' });
   await expect(stop).toHaveCount(1);
   await page.evaluate(() => { (globalThis as { __shift?: number }).__shift = 26 * 86_400_000; }); // past midnight, by the clock; the day store notices within a minute, the tap reads it then
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -1633,12 +1631,11 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
 
 test('round fifty-five: a watered stop keeps its height and the next stop does not move under the finger; the Undo survives a trip to another tab (5)', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
-  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   await page.goto('/places');
   for (const name of ['Bench A', 'Bench B']) {
-    await page.getByRole('button', { name: 'New place' }).click();
+    await page.getByRole('button', { name: 'New space' }).click();
     await page.fill('#loc-name', name);
     await page.selectOption('#loc-kind', 'bench');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1704,11 +1701,10 @@ test('round fifty-six: two plants under one number are not renumbered by opening
 
 test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry months are one quiet line, and a stop waters only the plants left ticked', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
-  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Weekly bench');
   await page.selectOption('#loc-kind', 'bench');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -1759,11 +1755,11 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
 test('round fifty-nine: the top bar\'s + opens the new-place form on every tap; the place form refuses what it cannot keep, with a sentence, and stays open (8, 9, 10)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/places');
-  const plus = page.locator('#topbar a[aria-label="Add a place"]');
+  const plus = page.locator('#topbar a[aria-label="Add a space"]');
   await plus.click();
   await expect(page.locator('#loc-name')).toBeFocused();
   await expect(page).not.toHaveURL(/#add/);
-  await page.getByRole('button', { name: 'New place' }).click(); // the head's button closes it
+  await page.getByRole('button', { name: 'New space' }).click(); // the head's button closes it
   await expect(page.locator('#loc-name')).toHaveCount(0);
   await plus.click(); // a second tap in a row opens it again
   await expect(page.locator('#loc-name')).toBeFocused();

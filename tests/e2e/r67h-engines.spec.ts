@@ -18,11 +18,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { positionsFromStart, positionMoves } from './helpers/positions';
 import { rootText } from './helpers/text-size';
-import { ownPages } from './helpers/r63v-own';
 
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
 test.use({ serviceWorkers: 'block' });
-test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); await context.addInitScript(ownPages); });
+test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 /** Two frames drawn after the fonts: what was going to move has moved. */
@@ -57,7 +56,6 @@ test('r67h engines 3: at 320 px with the text at 200%, no page scrolls sideways 
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ baseURL, locale: 'en-GB', viewport: { width: 320, height: 700 }, serviceWorkers: 'block' });
   await ctx.addInitScript(quiet);
-  await ctx.addInitScript(ownPages);
   await rootText(ctx, 200);
   const page = await ctx.newPage();
   try {
@@ -97,7 +95,6 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
     test.skip(!['linux', 'win32', 'darwin'].includes(process.platform), `the fallback faces are tuned for Linux's, Windows' and Apple's fonts, not ${process.platform}'s`);
     const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, locale: 'en-GB', serviceWorkers: 'block' });
     await ctx.addInitScript(quiet);
-    await ctx.addInitScript(ownPages);
     await ctx.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
     await ctx.route(/\.woff2(\?|$)/, async (r) => { await new Promise((x) => setTimeout(x, 1500)); await r.continue(); });
     // What a reader's eye is on as the page settles: the page's title, the first heading and paragraph of the content,

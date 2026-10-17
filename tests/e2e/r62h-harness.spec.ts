@@ -12,14 +12,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
 import { inject, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 // The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
 // deploy's strict run on Windows; round sixty-two).
 test.use({ serviceWorkers: 'block' });
-// The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });

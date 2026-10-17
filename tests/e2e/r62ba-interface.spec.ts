@@ -58,7 +58,7 @@ for (const who of ['grower', 'visitor'] as const) for (const width of [320, 360,
       const s = a.querySelector('span')!;
       return { t: s.textContent, w: s.getBoundingClientRect().width, whole: s.scrollWidth <= s.clientWidth + 1 };
     }));
-    expect(labels.map((l) => l.t)).toEqual(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+    expect(labels.map((l) => l.t)).toEqual(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
     for (const l of labels) { expect(l.whole, l.t!).toBe(true); expect(l.w, l.t!).toBeGreaterThan(20); }
     await ctx.close();
   });

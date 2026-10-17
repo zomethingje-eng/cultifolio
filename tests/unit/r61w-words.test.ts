@@ -1,7 +1,8 @@
 /**
  * Round sixty-one, decisions 8 and 9 (the visitor and words review of round sixty, V-numbers): the figures' own names on
  * every surface, every tied month named, the share card's hemisphere, the refusal said as one, the title's promise, the
- * front page's feature only on the plain front page. Each failed on the base of round sixty-one.
+ * front page's feature only on the plain front page. Each failed on the base of round sixty-one. Round seventy-four took
+ * the front page's feature away (the owner's decision 3): its load sends none at any address.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -134,15 +135,12 @@ describe('the front page (decision 9)', () => {
   const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
   const load = async (u: string) => {
     const { load } = await import('../../src/routes/+page.server');
-    return (await load({ url: new URL(u), request: new Request(u), cookies: { get: () => undefined }, platform: undefined, fetch: noStatic, locals: {}, setHeaders: () => {} } as never)) as { feature: unknown };
+    return (await load({ url: new URL(u), request: new Request(u), cookies: { get: () => undefined }, platform: undefined, fetch: noStatic, locals: {}, setHeaders: () => {} } as never)) as object;
   };
-  it('sends the feature for the front page and its groupings and chips, not for a genus row, a letter or a later window (corpus 10; round sixty-two, A10)', async () => {
-    expect((await load('https://cultifolio.com/')).feature).toBeTruthy();
-    // Round sixty-two: a grouping or a chip keeps it, since it stands above the toolbar and leaving moved the rows (A10, B1).
-    for (const q of ['?by=family', '?chip=climate']) expect((await load(`https://cultifolio.com/${q}`)).feature, q).toBeTruthy();
-    for (const q of ['?by=genus&open=copiapoa', '?by=genus&from=C', '?by=genus&at=1']) expect((await load(`https://cultifolio.com/${q}`)).feature, q).toBeNull();
+  it('sends no feature at any front page address (round seventy-four; on r74base the plain page and its groupings sent one)', async () => {
+    for (const q of ['', '?by=family', '?chip=climate', '?by=genus&open=copiapoa', '?by=genus&from=C', '?by=genus&at=1']) expect('feature' in (await load(`https://cultifolio.com/${q}`)), q).toBe(false);
   });
-  it('says the precise claim, puts the sample first, and the search and photographs before the feature', () => {
+  it('says the precise claim, puts the sample first, and the photographs before the search', () => {
     const p = readFileSync('src/routes/+page.svelte', 'utf8');
     expect(p).toContain('Nothing about a species is written per page by a person or by AI, apart from credited quotations');
     expect(p).not.toContain('Nothing on a species page is written by a person or by AI.');
@@ -151,10 +149,6 @@ describe('the front page (decision 9)', () => {
     expect(welcome.indexOf('try-sample-home')).toBeLessThan(welcome.indexOf('/plants/new'));
     const at = (t: string) => p.indexOf(t, p.indexOf('{:else}\n  <!-- While a search is typed'));
     expect(at("{@render featured(false, 'wide')}")).toBeGreaterThan(-1); // the desktop's strip; the phone's follows the first rows (round sixty-three, V4)
-    expect(at("{@render featured(false, 'wide')}")).toBeLessThan(at('{@render featureBlock(feature)}'));
-    // Round sixty-two, second pass (the outside triage's 2): the feature after the search and the first rows, so a desktop's
-    // first screen holds the search and a row, and the chips still sit with the rows they govern (A10, B1).
-    expect(at('class="searchbar" type="search" placeholder="Search species')).toBeLessThan(at('{@render featureBlock(feature)}'));
-    expect(at('{#each visibleRows')).toBeLessThan(at('{@render featureBlock(feature)}'));
+    expect(at("{@render featured(false, 'wide')}")).toBeLessThan(at('class="searchbar" type="search" placeholder="Search species'));
   });
 });

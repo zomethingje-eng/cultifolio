@@ -13,7 +13,7 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, LEFTOVER_DAYS, leftoverLater, markLeftByAddress, onExampleClosed } from '$lib/db/demo';
+  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, LEFTOVER_DAYS, leftoverLater, onExampleClosed } from '$lib/db/demo';
   import { example, enterExample, hadOwn, leaveExample, notEnteredWords } from './example.svelte';
   import { replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
@@ -39,8 +39,7 @@
       // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
       // The address a Leave opened this page at says so (`?left=` and Leave's token, read by app.html's first script); taken off it here,
       // so a reload or a link copied from it is an ordinary visit (round sixty-two, the first deploy).
-      // The tab is marked as out of the example by the address too, so an empty Today does not open it again (round sixty-three, V2).
-      if (page.url.searchParams.has(LEFT_PARAM)) { markLeftByAddress(); setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
+      if (page.url.searchParams.has(LEFT_PARAM)) { setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
       void finishLeaving().then((left) => {
         if (left === 'blocked') toast.show('The example collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
         else if (left === 'failed') toast.show('The example collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);
@@ -94,7 +93,7 @@
     <!-- To `/`: the tab's note takes it out of the example; an address that marked a delete deleted an example opened afterwards in another tab (round sixty-nine; triage-68 X1, S-C1). -->
     <span class="demoacts"><a class="btn small pri" href="/" id="demo-home" data-sveltekit-reload>Go to my own collection</a></span>
   {:else}
-    <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''}{#if unseeded}{' '}<span role="status" id="demo-unseeded">Its own plants and places were not set out, because something had already been added to it.</span>{/if} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
+    <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''}{#if unseeded}{' '}<span role="status" id="demo-unseeded">Its own plants and spaces were not set out, because something had already been added to it.</span>{/if} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
     <span class="demoacts">
       {#if hasOwn === false}<button class="btn small pri" type="button" id="demo-add" onclick={() => leaveExample('/plants/new')} disabled={example.leaving}>Add your first plant</button>{/if}
       <button class="btn small" type="button" id="demo-leave" onclick={() => leaveExample('/')} disabled={example.leaving}>{example.leaving ? 'Leaving…' : 'Leave the example'}</button>

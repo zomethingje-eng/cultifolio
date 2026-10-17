@@ -275,7 +275,7 @@
   {/if}
 
   <div class="two">
-    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" lastUsed={lastUsedLoc} bind:typed={placeTyped} start={startPlace} /></div>
+    <div class="field"><span>Space</span><LocationPicker bind:value={locationId} id="f-loc" label="Space" lastUsed={lastUsedLoc} bind:typed={placeTyped} start={startPlace} /></div>
     <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
   </div>
 
@@ -334,7 +334,7 @@
     <span class="sr" role="status">{addStatus}</span>
     <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken}>{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
     <a class="btn cancel" href="/plants">Cancel</a>
-    <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
+    <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the space, date, source and provenance kept">Save and add another</button>
   </div>
 </form>
 

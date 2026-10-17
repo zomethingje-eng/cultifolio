@@ -184,9 +184,9 @@
     if (!habitat?.dli) return null;
     const d = habitat.dli;
     const sky = `open sky over the habitat ${r0(d.lo)}–${r0(d.hi)} mol/m²/day across the year (median year${d.lo10 != null && d.hi90 != null ? `; across the range, ${habitat.cells} grid cells, ${r0(d.lo10)} to ${r0(d.hi90)}` : ''}; CHELSA)`;
-    if (hereDli == null) return { here: null, text: `${sky}; no light figure for this place` };
+    if (hereDli == null) return { here: null, text: `${sky}; no light figure for this space` };
     // Hours not set are taken as 12 and said so: "from this place's settings" claimed a figure the grower never gave (round fifty-nine).
-    return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this place's light${cond?.lightHours == null ? ' and 12 hours assumed (no hours set)' : ` over ${cond.lightHours} hours`}; ${sky}` };
+    return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this space's light${cond?.lightHours == null ? ' and 12 hours assumed (no hours set)' : ` over ${cond.lightHours} hours`}; ${sky}` };
   });
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
@@ -194,8 +194,8 @@
     const night = `coldest month's mean nightly low at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : '';
-    if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
-    return { here: cond.floorC, text: `this place is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
+    if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this space` };
+    return { here: cond.floorC, text: `this space is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
   // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
   const season = $derived.by(() => {
@@ -206,7 +206,7 @@
     const southHere = (hereLat ?? 40) < 0;
     const here = runs(forReader(y, hereLat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
-    const shift = `shifted to ${cond?.lat != null ? 'this place' : hereLat != null ? 'your site' : 'the north'}${hereLat == null ? ' (no site set)' : ''}: ${here}`;
+    const shift = `shifted to ${cond?.lat != null ? 'this space' : hereLat != null ? 'your site' : 'the north'}${hereLat == null ? ' (no site set)' : ''}: ${here}`;
     // The median year's total, named as that: the species page's glance card shows the median of the cells' own yearly
     // totals, a different figure (round sixty-three; the fix pass, R2 1).
     if (y.none) return { label: 'No season to read', note: `${rain(y.annualMm, u)} of rain in the median year and a flat temperature curve (${deltaT(y.rangeT, u)} of range): no rainy season and no cooler half (CHELSA).` };
@@ -234,7 +234,7 @@
       const to = moveTo ?? null;
       const { undo } = await collection.movePlantsUndoable([id], to); // the place and the line in one commit (round forty-nine, 1), with the way back (round fifty-one, 4)
       moving = false;
-      toast.show(to ? `Moved to ${collection.locationName(to)}` : 'Place cleared', 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where it was.'), () => toast.show('The Undo was not saved; the plant is where it was moved.')); } });
+      toast.show(to ? `Moved to ${collection.locationName(to)}` : 'Space cleared', 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where it was.'), () => toast.show('The Undo was not saved; the plant is where it was moved.')); } });
     } catch {
       /* the write was refused: the page says so from lastWriteError, and the panel stays open to try again */
     } finally {
@@ -281,7 +281,7 @@
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
     const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
-    if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
+    if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a space', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
     if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); } });
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
     // The site is not a step on a plant: it is set once, in Settings, and the habitat block says so in one line while it is not (round fifty-eight; the grower review).
@@ -393,7 +393,7 @@
     if (edDateMsg) { document.getElementById('ed-date')?.focus(); return; }
     // The plant's own watering rhythm: blank follows its place; a figure is whole days, 1 to 365, as the place form takes it (round fifty-eight; the grower review).
     const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
-    edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its place.` : '';
+    edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its space.` : '';
     if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
     // This form's own picker only (round sixty-seven; triage-66 R12); a place that could not be made says why there, and nothing is saved.
     try { await settlePlaces('ed-loc'); } catch { return; }
@@ -598,7 +598,7 @@
   <p class="muted" id="number-chooser-why">{choices.length} plants have the number {param}: two devices gave it out while offline, or a file was merged in. Open the one you mean; its page offers to renumber it.</p>
   <ul class="chooser" id="number-chooser">
     {#each choices as c (c.id)}
-      <li><a class="azrow accrow" href="/plants/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{accNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no place'} · added {c.acquired ?? collection.madeOn('accession', c.id) ?? 'on a day not recorded'}{c.status !== 'growing' ? ` · ${c.status}` : ''}</span></span></a></li>
+      <li><a class="azrow accrow" href="/plants/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{accNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no space'} · added {c.acquired ?? collection.madeOn('accession', c.id) ?? 'on a day not recorded'}{c.status !== 'growing' ? ` · ${c.status}` : ''}</span></span></a></li>
     {/each}
   </ul>
 {:else if !a}
@@ -640,7 +640,7 @@
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
-        {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{/if}
+        {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
         {#if !a.taxonKey && kind !== 'hybrid' && ref === 'none'}{' · '}<span id="name-not-in-reference">Name not in the reference</span>{:else if !a.taxonKey && kind !== 'hybrid' && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
@@ -688,8 +688,8 @@
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
       <!-- The plant's own watering rhythm, over its place's: blank follows the place, and the placeholder says what that is (round fifty-eight; the grower review). -->
-      <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its place' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
-      <div class="wide"><span class="lbl">Place</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Place" /></div>
+      <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its space' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
+      <div class="wide"><span class="lbl">Space</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Space" /></div>
       <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>Save</button></div>
     </form>
   {/if}
@@ -785,7 +785,7 @@
       {#each shownTimeline as row (row.k + row.id)}
         {#if row.k === 'e'}
           {@const e = row.e}
-          <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a place-wide action, not an observation of this plant' : undefined}>
+          <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a space-wide action, not an observation of this plant' : undefined}>
             <span class="d">{lineDates.get(e.id) ?? e.d}</span>
             <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
@@ -838,19 +838,19 @@
   {/if}
 
   <details class="hab" id="habitat">
-    <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this place{:else}Habitat vs this place{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
+    <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this space{:else}Habitat vs this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
       <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
     {#if habitat && a.locationId}
     <div class="factgrid hvh">
-      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
     </div>
     <!-- "across the range" and "a typical spot in the range", the glossary's words (round fifty-eight; the accessibility review). -->
     <details class="why">
       <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across the range, NASA POWER at a typical spot in the range), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across the range, NASA POWER at a typical spot in the range), not measured tolerances of this plant. This space's figures are its own settings, inherited from the spaces above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
     </details>
     {/if}
     {#if !site.current && cond?.lat == null}<p class="small muted siteline">No site is set: set it once in <a href="/settings#site">Settings</a> and the seasons here are read from where you grow.</p>{/if}

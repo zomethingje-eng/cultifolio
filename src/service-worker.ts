@@ -58,6 +58,9 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data === 'skip') self.skipWaiting();
+  // A page that loaded while this first worker was activating and was left out of its claim asks again (round seventy-four:
+  // in WebKit a second page asked for in that moment stayed uncontrolled until its next navigation, in 4 of 6 runs of r64f 7).
+  else if (e.data === 'claim') e.waitUntil(self.clients.claim());
   // Which build this worker serves, for a page deciding whether a takeover changes anything it shows (round sixty-four;
   // the Firefox run, where a second worker of the very build the page ran took over and the page reloaded under the grower).
   else if (e.data === 'version') e.ports[0]?.postMessage(version);

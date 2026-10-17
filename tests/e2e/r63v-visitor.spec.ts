@@ -2,8 +2,9 @@
  * Round sixty-three, agent V (V1, V2, V5): the visitor's first experience. The owner opened cultifolio.com in Safari on
  * his iPhone, a browser with no collection, and saw Species, Compare, My plants and About: a visitor "isn't given the
  * knowledge of the app's capabilities" until a first plant is added. Now the tab bar is the grower's five for everyone,
- * and an empty Today, Places or Propagation opens the example collection on that page; Leave goes home and never back
- * into it; a tab that left it, or a device with plants of its own, is offered it instead.
+ * and an empty Today, My spaces or Propagation offers the example collection on that page. Since round seventy-four
+ * (the owner's decision: a new visitor starts on the real site, blank) nothing opens it by itself: those pages show
+ * their own empty state with one button, "Show the example collection", and the button opens it; Leave goes home.
  *
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r63v-visitor.spec.ts
  */
@@ -11,7 +12,7 @@ import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
-const FIVE = ['Species', 'My plants', 'Places', 'Propagation', 'Today'];
+const FIVE = ['Species', 'My plants', 'My spaces', 'Propagation', 'Today'];
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
 test.use({ serviceWorkers: 'block', viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
 test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); });
@@ -61,10 +62,37 @@ test('r63v V1: on a desktop the top bar is the same five for a visitor', async (
   await ctx.close();
 });
 
-test('r63v V2: Today by tab on an empty device opens the example on Today, and Leave goes home without looping back', async ({ page }) => {
+/** The empty page's own state, with the one button and its sentence, and no example. */
+async function offered(page: Page, own: string) {
+  await expect(page.locator('#example-offer #see-example')).toHaveText('Show the example collection');
+  await expect(page.locator('#example-offer #example-apart')).toHaveText('A sample kept apart from your own collection, which you can close at any time.');
+  await expect(page.locator('#example-offer button')).toHaveCount(1);
+  await expect(page.locator('.emptybox').first()).toContainText(own);
+  await expect(page.locator('html[data-demo]')).not.toBeAttached();
+}
+
+// Round seventy-four (the owner's decision 2): the subject of round sixty-three's first two V2 tests was Today opening the
+// example by itself. Each is turned to its opposite: an empty device's Today does not open the example; its button does.
+// On r74base Today by tab opened the example (`html[data-demo]` attached, no #example-apart).
+test('r63v V2: Today by tab on an empty device does not open the example; its button does, and Leave goes home', async ({ page }) => {
   allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/'); await ready(page);
   await page.locator('#tabbar a[href="/today"]').click();
+  await expect(page).toHaveURL(/\/today$/);
+  await offered(page, 'No growing plants yet.');
+  await page.waitForTimeout(1000);
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator('html[data-demo]')).not.toBeAttached();
+  // My spaces and Propagation the same: their own empty state, the button, no example.
+  for (const [path, own] of [['/places', 'No spaces yet'], ['/propagation', 'Nothing in progress.']] as const) {
+    await page.locator(`#tabbar a[href="${path}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await offered(page, own);
+  }
+  // The button opens it, on this page.
+  await page.locator('#tabbar a[href="/today"]').click();
+  await expect(page).toHaveURL(/\/today$/);
+  await page.locator('#see-example').click();
   await inExample(page, '/today');
   await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.locator('#demo-leave').click();
@@ -72,43 +100,32 @@ test('r63v V2: Today by tab on an empty device opens the example on Today, and L
   await ready(page);
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/); // the mark taken off the address
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
-  // Today again: this tab has left the example, so Today shows its own empty state with the offer, and stays out of it.
+  // Today again after Leave: its own empty state with the same button, as before the visitor first looked.
   await page.locator('#tabbar a[href="/today"]').click();
   await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator('#example-offer')).toBeVisible();
-  await expect(page.locator('#example-offer')).toContainText('Today says what needs water, place by place');
-  await expect(page.locator('#example-offer #see-example')).toHaveText('See the example collection');
-  await expect(page.locator('#example-offer #offer-add')).toHaveText('Add your first plant');
-  await page.waitForTimeout(1000);
-  await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator('html[data-demo]')).not.toBeAttached();
-  // Places and Propagation the same.
-  for (const [path, words] of [['/places', 'Places are the greenhouses, rooms, benches and windowsills'], ['/propagation', 'Propagation keeps each sowing, cutting, offset or division']] as const) {
-    await page.locator(`#tabbar a[href="${path}"]`).click();
-    await expect(page).toHaveURL(new RegExp(`${path}$`));
-    await expect(page.locator('#example-offer')).toContainText(words);
-    await expect(page.locator('html[data-demo]')).not.toBeAttached();
-  }
-  // The offer enters it on this page.
+  await offered(page, 'No growing plants yet.');
+  // The button on Propagation opens it there.
+  await page.locator('#tabbar a[href="/propagation"]').click();
+  await expect(page).toHaveURL(/\/propagation$/);
   await page.locator('#see-example').click();
   await inExample(page, '/propagation');
   await expect(page.locator('.bcards li').first()).toBeVisible({ timeout: seedWait() });
 });
 
-test('r63v V2: Today opened by a link, and by its address, on an empty device opens the example on Today', async ({ page }) => {
-  allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
+test('r63v V2: Today opened by a link, and by its address, on an empty device does not open the example', async ({ page }) => {
   await page.goto('/about/how'); await ready(page);
-  // A link in a page, not one of the layout's own: the router's client-side visit, decided on the page.
+  // A link in a page, not one of the layout's own: the router's client-side visit.
   await page.evaluate(() => { const a = document.createElement('a'); a.href = '/today'; a.id = 'r63v-link'; a.textContent = 'Today'; const m = document.getElementById('main')!; m.insertBefore(a, m.firstChild); });
   await page.locator('#r63v-link').click();
-  await inExample(page, '/today');
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
-
-  // By its address, in a fresh tab (a tab of its own: the left flag is the tab's).
+  await expect(page).toHaveURL(/\/today$/);
+  await offered(page, 'No growing plants yet.');
+  // By its address, in a fresh tab.
   const fresh = await page.context().newPage();
-  await fresh.goto('/today');
-  await inExample(fresh, '/today');
-  await expect(fresh.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
+  await fresh.goto('/today'); await ready(fresh);
+  await offered(fresh, 'No growing plants yet.');
+  await fresh.waitForTimeout(800);
+  await expect(fresh).toHaveURL(/\/today$/);
+  await expect(fresh.locator('html[data-demo]')).not.toBeAttached();
   await fresh.close();
 });
 
@@ -117,7 +134,8 @@ test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the
     (window as unknown as { __cls: number }).__cls = 0;
     new PerformanceObserver((l) => { for (const e of l.getEntries() as Array<PerformanceEntry & { value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) (window as unknown as { __cls: number }).__cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
   });
-  await page.goto('/today');
+  await page.goto('/today'); await ready(page);
+  await page.locator('#see-example').click(); // opened by its button since round seventy-four
   await inExample(page, '/today');
   await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.waitForTimeout(1500);
@@ -128,7 +146,8 @@ test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the
 
 test('r63v V2: "Add your first plant" leaves the example for the add form, and the plant is the visitor\'s own', async ({ page }) => {
   allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
-  await page.goto('/today');
+  await page.goto('/today'); await ready(page);
+  await page.locator('#see-example').click(); // opened by its button since round seventy-four
   await inExample(page, '/today');
   await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.locator('#demo-add').click();
@@ -202,7 +221,8 @@ test('r63v V2: My plants keeps its own empty page and offers the example first',
   await page.goto('/plants'); await ready(page);
   await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
-  await expect(page.locator('#try-sample')).toHaveText('See the example collection');
+  await expect(page.locator('#try-sample')).toHaveText('Show the example collection'); // round seventy-four's words, with its one sentence
+  await expect(page.locator('#try-sample-apart')).toHaveText('A sample kept apart from your own collection, which you can close at any time.');
   await expect(page.locator('.firststeps a[href="/places#add"]')).toHaveCount(1);
   // The first step adds a place: the add form, not the example.
   await page.locator('.firststeps a[href="/places#add"]').click();
@@ -214,7 +234,7 @@ test('r63v V2: My plants keeps its own empty page and offers the example first',
 test('r63v V3: the front page\'s welcome says what a grower gets and opens the example on Today', async ({ page }) => {
   await page.goto('/'); await ready(page);
   const w = page.locator('#welcome');
-  await expect(w).toContainText('Keep their record on this device: watering read against each species\' habitat season, places, seed batches, frost warnings, labels.');
+  await expect(w).toContainText('Keep your plants\' record on this device: watering read against each species\' habitat season, spaces, seed batches, frost warnings, labels.');
   await expect(page.locator('#try-sample-home')).toHaveText('See the example collection');
   await page.locator('#try-sample-home').click();
   await inExample(page, '/today');

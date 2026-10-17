@@ -2,7 +2,7 @@
  * Round sixty-three, agent V (V4): the phone's first screen, measured where the owner sees it. Round sixty-two measured
  * 390 × 844, the iPhone's whole screen; Safari's page is about 390 × 664, and there the tab bar began right under the
  * chips and no catalogue row showed (docs/REVIEW-ROUND-62.md, section 7). The photo strip is drawn after the first rows on
- * a phone now, as the feature is on a desktop. Measured with the live-shaped front page round sixty-two built
+ * a phone now. Measured with the live-shaped front page round sixty-two built
  * (`r62w-shapes.ts`), at Safari's page sizes on an iPhone 12 to 15 (390 × 664), an iPhone SE (375 × 548) and a common
  * Android phone (360 × 640), with the welcome line shown (a visitor) and dismissed.
  *
@@ -80,7 +80,7 @@ test('r63v V4: on a phone a chip click moves no row', { tag: '@phone-only' }, as
   await ctx.close();
 });
 
-test('r63v V4: on a desktop the strip stays above the search, and the feature follows the first rows', async ({ browser, baseURL }) => {
+test('r63v V4: on a desktop the strip stays above the search, and the search above the first rows', async ({ browser, baseURL }) => {
   const ctx = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 }, locale: 'en-GB', serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await page.goto('/');
@@ -88,10 +88,10 @@ test('r63v V4: on a desktop the strip stays above the search, and the feature fo
   const g = await page.evaluate(() => {
     const strips = [...document.querySelectorAll<HTMLElement>('section.featured')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().top + scrollY);
     const top = (s: string) => document.querySelector(s)!.getBoundingClientRect().top + scrollY;
-    return { strips, search: top('.toolrow .searchbar'), row: top('.rows .grow'), feature: top('section.feature') };
+    return { strips, search: top('.toolrow .searchbar'), row: top('.rows .grow') };
   });
   expect(g.strips.length).toBe(1);
   expect(g.strips[0]).toBeLessThan(g.search);
-  expect(g.feature).toBeGreaterThan(g.row);
+  expect(g.search).toBeLessThan(g.row); // round seventy-four: the feature that followed the rows is gone (the owner's decision 3)
   await ctx.close();
 });

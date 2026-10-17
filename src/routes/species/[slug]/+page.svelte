@@ -293,7 +293,7 @@
       const grown = mine.find((a) => a.status === 'growing' && a.locationId);
       const p = (grown && places.find((l) => l.id === grown.locationId)) ?? null;
       const whose = "this habitat's cold floor";
-      return p ? { text: `Your ${p.name}, where you grow it, has no floor set. Set one to see how it compares with ${whose}.`, href: `/places/${p.id}`, under: false } : { text: `None of your places has a floor set. Set one to see how it compares with ${whose}.`, href: '/places', under: false };
+      return p ? { text: `Your ${p.name}, where you grow it, has no floor set. Set one to see how it compares with ${whose}.`, href: `/places/${p.id}`, under: false } : { text: `None of your spaces has a floor set. Set one to see how it compares with ${whose}.`, href: '/places', under: false };
     }
     const diff = withFloor.c.floorC! - floorC;
     // A difference in the reader's degrees, never through temp() (which adds 32 for °F: a 2 °C gap read as 35.6 °F), and

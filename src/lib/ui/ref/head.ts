@@ -20,7 +20,7 @@ import { yearRain } from '$climate/year-rain';
  * a narrower one (round sixty-two; the words review's 2, outside review A2). The image is drawn by scripts/dev/og.mjs from
  * scripts/dev/og.html (round sixty-three); change the two together.
  */
-export const OG_ALT = 'Cultifolio, species reference. Cactus, succulent and bulb species, and the plants most grown alongside them. Every figure names its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no sign-up, free and open source.';
+export const OG_ALT = 'Cultifolio, species reference. The plants people grow, each with its habitat climate where its records allow one. Every figure names its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no sign-up, free and open source.';
 
 type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
 export interface HeadInput {

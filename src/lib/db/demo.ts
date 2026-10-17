@@ -140,18 +140,6 @@ export function freshOnRestore(): () => void {
   return () => removeEventListener('pageshow', f);
 }
 /**
- * Set in a tab that has left the sample (by Leave, or sent home because another tab closed it): an empty Today, Places or
- * Propagation then offers the example instead of opening it again, so Leave never loops back into it (round sixty-three, V2).
- */
-export const OUT = 'cultifolio.sampleOut';
-/** This tab has left the sample: an empty grower page offers it rather than opening it by itself. */
-export function leftHere(): boolean {
-  try { return sessionStorage.getItem(OUT) === '1'; } catch { return true; } // no storage: never entered by itself either
-}
-function markOut(): void {
-  try { sessionStorage.setItem(OUT, '1'); } catch { /* without storage the sample is never entered by itself */ }
-}
-/**
  * On a page outside the example, with the tab not on its way in: any copies of the example's settings still in the tab
  * go (round sixty-seven; triage-66 V3). A page that keeps its state as it goes (Labels' picks, at `pagehide`) writes it
  * as the example's after Leave has cleared the copies; the first page outside takes what is left.
@@ -265,7 +253,6 @@ export function sampleClosedHere(): void {
   markExampleClosed();
   if (sentHome) return;
   sentHome = true;
-  markOut();
   try { sessionStorage.setItem(CLOSED_NOTE, '1'); } catch { /* said nowhere, then */ }
   if (typeof addEventListener === 'function') addEventListener('pagehide', clearFlag, { once: true });
   else clearFlag(); // no page to hide (a test): it goes now
@@ -330,7 +317,6 @@ export async function seedState(seededKey: string): Promise<'marked' | 'repaired
 function leaving(): void {
   clearFlag();
   newGeneration();
-  markOut();
   try { sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
   tellOthers();
 }
@@ -349,12 +335,7 @@ export const LEFT_PARAM = 'left';
 function readyToLeave(): string {
   const token = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
   try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); sessionStorage.setItem(LEAVING, token); } catch { /* the leftover is then deleted on a later load */ }
-  markOut(); // kept by a Leave called off too: it is read only outside the sample, where a later Leave would set it again
   return token;
-}
-/** The first page after a Leave marks the tab as out of the sample by its address too, which reaches it whatever the storage race `leaveDemo` describes (round sixty-three, V2). */
-export function markLeftByAddress(): void {
-  markOut();
 }
 function stayInSample(): void {
   try { sessionStorage.setItem(KEY, '1'); sessionStorage.removeItem(LEFT); } catch { /* the tab then loads outside the sample next time */ }

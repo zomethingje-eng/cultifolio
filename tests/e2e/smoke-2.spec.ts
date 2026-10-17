@@ -110,7 +110,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Bench A');
   await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -119,7 +119,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/today', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
     await page.goto(r);
     await expect(page.locator('h1')).toBeVisible();
-    if (r === '/places') await page.getByRole('button', { name: 'New place' }).click();
+    if (r === '/places') await page.getByRole('button', { name: 'New space' }).click();
     if (r === `/plants/${acc}`) { await page.locator('.quickbar .more').click(); await page.getByRole('button', { name: 'Measure', exact: true }).click(); await more(page, 'Edit'); await page.getByRole('button', { name: 'Move', exact: true }).click(); }
     if (r === '/sync') await page.getByRole('button', { name: 'I have a key' }).click();
     const s = await a11yScan(page);
@@ -438,7 +438,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page.locator('#frostbar')).toHaveCount(0); // a refusal is not a frost: nothing under the top bar
   // an outdoor place with coordinates watches the forecast on its own page
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Back step');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -467,7 +467,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   // At the context, not the page: after the first load the service worker makes these requests, and a page route does not see them.
   await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) }));
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Cold frame');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -479,7 +479,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await page.fill('#e-floor', '10');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText('Below the floor.');
-  await expect(page.locator('.notice')).toContainText("reaches this place's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
+  await expect(page.locator('.notice')).toContainText("reaches this space's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
   await expect(page.locator('.notice')).not.toContainText('Frost forecast');
   await expect(page.locator('.notice')).toContainText('Alerts not checked');
   await expect(page.locator('.pill', { hasText: 'reaches the floor' })).toBeVisible();
@@ -488,7 +488,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '8');
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('.notice')).toContainText("reaches this place's 8.0 °C floor");
+  await expect(page.locator('.notice')).toContainText("reaches this space's 8.0 °C floor");
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '2.5');
   await page.getByRole('button', { name: 'Save' }).click();

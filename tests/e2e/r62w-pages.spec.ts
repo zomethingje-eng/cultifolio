@@ -118,28 +118,23 @@ test.describe('phone, 390 × 844', () => {
 test.describe('desktop, 1280 × 800', () => {
   test.use({ viewport: { width: 1280, height: 800 }, locale: 'en-GB' });
 
-  test('the feature follows the first rows, and a chip click moves no row (A10, B1; second pass, the outside triage\'s 2)', async ({ page }) => {
+  // Round seventy-four: the feature this test also followed is gone (the owner's decision 3); the chip's half stays.
+  test('a chip click moves no row (A10, B1; second pass, the outside triage\'s 2)', async ({ page }) => {
     await page.goto('/');
     await ready(page);
-    const feature = page.locator('section.feature');
-    await expect(feature).toBeVisible();
-    await expect(feature.locator('#feature-h')).toContainText('This is what a species page with a habitat climate shows');
     const at = () => page.evaluate(() => {
       const top = (s: string) => document.querySelector(s)!.getBoundingClientRect().top + scrollY;
-      return { feature: top('section.feature'), search: top('.toolrow .searchbar'), chips: top('.chiprow'), toolEnd: document.querySelector('.toolrow')!.getBoundingClientRect().bottom + scrollY, row: top('.rows .grow') };
+      return { search: top('.toolrow .searchbar'), chips: top('.chiprow'), toolEnd: document.querySelector('.toolrow')!.getBoundingClientRect().bottom + scrollY, row: top('.rows .grow') };
     });
     const before = await at();
-    expect(before.feature).toBeGreaterThan(before.row); // second pass: after the first rows, so the search is on the first screen
-    // The rows follow the toolbar that governs them: nothing but the letter index between them, no 700 px feature.
+    // The rows follow the toolbar that governs them: nothing but the letter index between them.
     expect(before.row - before.toolEnd).toBeLessThan(110);
     await page.locator('.chiprow a', { hasText: 'Climate known' }).click();
     await page.waitForURL(/chip=climate/);
     await expect(page.locator('.chiprow a.on')).toContainText('Climate known');
-    await expect(feature).toBeVisible(); // kept on a chip's page
     const after = await at();
     expect(Math.abs(after.chips - before.chips)).toBeLessThan(2); // the chip stays under the pointer
-    // Second pass: the feature follows the rows, so it moves with what the chip leaves; the rows above it do not.
-    // The fixture's chip leaves one letter, so the letter line goes: the rows move by that line at most, never by the feature.
+    // The fixture's chip leaves one letter, so the letter line goes: the rows move by that line at most.
     expect(after.row - after.toolEnd).toBeLessThan(110);
     expect(Math.abs(after.row - before.row)).toBeLessThan(50);
   });

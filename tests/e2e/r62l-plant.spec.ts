@@ -31,7 +31,7 @@ test('a "cf." plant links and compares its habitat as "Compare: Copiapoa cinerea
   await page.goto('/plants/2026-0001'); await ready(page);
   await expect(page.locator('#species-link')).toHaveText('Compare: Copiapoa cinerea');
   await expect(page.locator('#species-link')).toHaveAttribute('href', '/species/copiapoa-cinerea');
-  await expect(page.locator('#habitat summary h2')).toHaveText('Compare: Copiapoa cinerea, habitat vs this place');
+  await expect(page.locator('#habitat summary h2')).toHaveText('Compare: Copiapoa cinerea, habitat vs this space');
 });
 
 test('a name the reference answered it does not hold is "Name not in the reference", not "not checked" (grower 9)', async ({ page }) => {

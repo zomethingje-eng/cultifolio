@@ -63,9 +63,11 @@ const cacheOf = (name: string) => {
   };
 };
 
+/** How many times the worker claimed its pages (round seventy-four). */
+let claims = 0;
 beforeAll(async () => {
   vi.doMock('$service-worker', () => ({ build: ['/_app/immutable/entry/new.js'], files: [], version: 'B' }));
-  vi.stubGlobal('self', { addEventListener: (t: string, h: Handler) => handlers.set(t, h), skipWaiting: () => {}, clients: { claim: async () => {} } });
+  vi.stubGlobal('self', { addEventListener: (t: string, h: Handler) => handlers.set(t, h), skipWaiting: () => {}, clients: { claim: async () => { claims++; } } });
   vi.stubGlobal('location', { origin: ORIGIN });
   vi.stubGlobal('caches', { open: async (n: string) => cacheOf(n), keys: async () => [...stores.keys()], delete: async (n: string) => stores.delete(n), match: async () => undefined });
   vi.stubGlobal('fetch', async (r: Request) => { fetched.push(r.url); throw new TypeError('offline'); });
@@ -93,5 +95,25 @@ describe('the worker reads the previous build\'s cache it keeps (S-E7)', () => {
   it('the corpus cache is never read for a build file', async () => {
     await (await caches.open('cultifolio-corpus')).put(`${ORIGIN}/_app/immutable/chunks/odd.js`, new Response('corpus'));
     await expect(get('/_app/immutable/chunks/odd.js')).rejects.toThrow(/offline/);
+  });
+});
+
+describe("round seventy-four: a page the first worker's claim missed asks to be claimed", () => {
+  // In WebKit on the owner's PC, a second page asked for as the first worker activated stayed uncontrolled until its next
+  // navigation (r64f 7, 7 of 11 runs alone: the worker "activated", the page with no controller after 90 s).
+  it("the worker claims its pages again when a page sends 'claim', and only then", async () => {
+    const waits: Promise<unknown>[] = [];
+    const before = claims;
+    handlers.get('message')!({ data: 'claim', waitUntil: (p: Promise<unknown>) => void waits.push(p) } as never);
+    await Promise.all(waits);
+    expect(claims).toBe(before + 1);
+    handlers.get('message')!({ data: 'version', ports: [], waitUntil: (p: Promise<unknown>) => void waits.push(p) } as never);
+    expect(claims).toBe(before + 1);
+  });
+  it('the layout sends it once the worker is active, and again while the page has no controller', () => {
+    const layout = readFileSync('src/routes/+layout.svelte', 'utf8');
+    expect(layout).toContain('void navigator.serviceWorker.ready.then((r) => { askClaim(r, 0); }, () => {});');
+    // asked again while the page has no controller, and never once it has one
+    expect(layout).toMatch(/function askClaim\(r: ServiceWorkerRegistration, n: number\) \{\n    if \(navigator\.serviceWorker\.controller\) return;\n    r\.active\?\.postMessage\('claim'\);\n    if \(n < CLAIM_WAITS\.length\) setTimeout/);
   });
 });

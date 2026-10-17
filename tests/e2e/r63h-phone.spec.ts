@@ -11,7 +11,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 const phone = { tag: '@phone-only' };
 
@@ -73,10 +72,6 @@ test('r63h phone 3: no text field is under 16 px, so Safari never zooms the page
   // iOS zooms in on a focused field whose text is under 16 px and leaves the page zoomed (round forty-nine, 3; the rule is
   // in theme.css at the phone's width). A page's own scoped rule outranked it once (round fifty-one, 4): this reads the
   // fields every phone page draws, as drawn.
-  // On a fresh device an empty Places opens the example collection by itself (round sixty-three, V2), and its load cut
-  // this reading off ("Execution context was destroyed"): this reads the grower's own pages, as a tab that has seen the
-  // example finds them (round sixty-three, the fix pass).
-  await page.context().addInitScript(ownPages);
   const small: string[] = [];
   let read = 0;
   for (const path of ['/', '/plants', '/plants/new', '/places', '/propagation/new', '/labels', '/settings', '/compare']) {

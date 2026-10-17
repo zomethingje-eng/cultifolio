@@ -12,7 +12,7 @@ import { photoCredit } from '$lib/ui/ref/head';
 const code = (f: string) => readFileSync(f, 'utf8').replace(/<!--[^]*?-->/g, '').replace(/\/\*[^]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 describe('the species page never says "in the wild" over a modelled figure (A3)', () => {
-  it('the glance row (species page and front page feature) is not headed "In the wild"', () => {
+  it('the glance row (species page) is not headed "In the wild"', () => {
     // Over a 1st-percentile night from one NASA POWER reanalysis cell and CHELSA medians across cells.
     expect(code('src/lib/ui/ref/Glance.svelte')).not.toMatch(/>\s*In the wild\s*</);
   });

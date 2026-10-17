@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import QRCode from 'qrcode';
 import { test, expect, type Page } from '@playwright/test';
 import { openDisclosure } from './helpers/disclosure';
-import { ownPages } from './helpers/r63v-own';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 /**
@@ -13,8 +12,6 @@ import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './h
  *
  * The helpers are copies of smoke.spec.ts's own (kept in step by hand; this file does not import that one).
  */
-// The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 /** The page hydrated: before then a value typed into a bound field is dropped, and a click has no handler (round fifty-nine). */
 async function ready(p: Page) {
@@ -50,7 +47,7 @@ async function more(p: Page, name: string) {
 async function newPlace(p: Page, name: string, waterDays?: number): Promise<string> {
   await p.goto('/places');
   await ready(p);
-  await p.getByRole('button', { name: 'New place' }).click();
+  await p.getByRole('button', { name: 'New space' }).click();
   await p.fill('#loc-name', name);
   await p.selectOption('#loc-kind', 'bench');
   await p.getByRole('button', { name: 'Add', exact: true }).click();
@@ -80,9 +77,9 @@ async function plant(p: Page, name: string, opts: { place?: string | null; price
   // the field's own fault, now fixed (r66y 3).
   await expect(p.locator('.picker .pill.ok')).toContainText('GBIF', { timeout: 15_000 });
   // The form starts on the last place used (round fifty-eight): null asks for no place. Chosen once the collection has
-  // opened with its places, when that start is set; "No place" chosen before it was overwritten (round sixty-four; 1 run
+  // opened with its places, when that start is set; "No space" chosen before it was overwritten (round sixty-four; 1 run
   // in 7 of r60 4 here).
-  if (opts.place === null) { await expect(p.locator('#f-loc option')).not.toHaveCount(1); await p.selectOption('#f-loc', { label: 'No place' }); }
+  if (opts.place === null) { await expect(p.locator('#f-loc option')).not.toHaveCount(1); await p.selectOption('#f-loc', { label: 'No space' }); }
   else if (opts.place) {
     const v = await p.locator('#f-loc option', { hasText: opts.place }).getAttribute('value');
     await p.selectOption('#f-loc', v!);
@@ -172,7 +169,7 @@ test('r60 3: a pasted sheet with a BOM and semicolons makes its places when aske
   await expect(page.locator('.rvrow', { hasText: '09/03/2024' })).toContainText('could be 9 March or 3 September');
   await make.check();
   await page.click('#imp-add');
-  await expect(page.locator('#imp-done')).toContainText(`2 plants added, numbered ${y}-0001 and 2024-0001, and 2 new places`);
+  await expect(page.locator('#imp-done')).toContainText(`2 plants added, numbered ${y}-0001 and 2024-0001, and 2 new spaces`);
   await page.goto('/places');
   await expect(page.locator('.tree .row', { hasText: 'Greenhouse' }).first()).toBeVisible();
   await expect(page.locator('.tree .row', { hasText: 'Bench 9' })).toBeVisible();

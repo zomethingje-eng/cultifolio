@@ -18,7 +18,7 @@ export function sitemapUrls(index: IndexEntry[]): string[] {
   if (!urls) made.set(index, (urls = urlsOf(index)));
   return urls;
 }
-/** The pages that change with a deploy, not with a corpus build: the front page (its feature changes daily too) and the about pages. */
+/** The pages that change with a deploy, not with a corpus build: the front page (its strip changes daily too) and the about pages. */
 const FIXED = ['/', '/about/how', '/about/formats'];
 function urlsOf(index: IndexEntry[]): string[] {
   const genera = [...new Set(index.map((e) => genusOf(e.name)))].sort();

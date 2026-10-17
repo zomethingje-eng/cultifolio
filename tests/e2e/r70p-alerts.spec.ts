@@ -7,7 +7,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
@@ -22,7 +21,6 @@ const answer = (alertsStatus: string | undefined) => JSON.stringify({
 
 for (const status of ['n/a', undefined]) {
   test(`r70p P4: a place no alerts service reads (${status ?? 'no status'}) says "Forecast clear.", never "All clear." (R47-12) @phone`, async ({ page }) => {
-    await page.context().addInitScript(ownPages);
     await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: answer(status) }));
     await page.goto('/places'); await ready(page);
     await inject(page, [['location', 'ct1', 'name', 'Stoep'], ['location', 'ct1', 'type', 'outdoor'], ['location', 'ct1', 'indoor', false], ['location', 'ct1', 'lat', -33.92], ['location', 'ct1', 'lon', 18.42]], Date.now() - 3_600_000);

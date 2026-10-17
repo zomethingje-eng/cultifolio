@@ -12,7 +12,7 @@
 
   let { kind, label, waiting }: { kind: 'accession' | 'sowing' | 'location'; label: string; waiting: { id: string; missing: string[]; parked?: boolean } } = $props();
   const WORD: Record<string, string> = { taxonName: 'name', status: 'status', method: 'method', sown: 'date', count: 'count', name: 'name' };
-  const what = $derived(kind === 'accession' ? 'plant' : kind === 'sowing' ? 'batch' : 'place');
+  const what = $derived(kind === 'accession' ? 'plant' : kind === 'sowing' ? 'batch' : 'space');
   const missing = $derived(waiting.missing.map((f) => WORD[f] ?? f));
   const them = $derived(missing.length === 1 ? 'it' : 'them');
   /** Set aside on Sync: a batch from a newer build may hold the real value, and a default written now would be newer than it and win on every device (round thirty-eight, R1-1). */

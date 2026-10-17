@@ -196,24 +196,29 @@ describe('the lapse sentence (A3)', () => {
 
 describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)', () => {
   const home = code('src/routes/+page.svelte');
-  it('the title, og:title, the description, the image alt and the first line say the list\'s whole reach', () => {
-    const reach = 'cactus, succulent and bulb species, and the plants most grown alongside them';
-    // title, og:title, first line; the image's alt is the image's own words (round sixty-two, second pass; the words review's 2)
-    expect(home.match(new RegExp(reach.replace(/[.,]/g, '\\$&'), 'g'))?.length).toBeGreaterThanOrEqual(3);
-    expect(home).toContain('Cactus, succulent and bulb species and the plants most grown alongside them: sourced habitat climate');
+  // Round seventy-four (the owner's decision): the reach is every plant people grow, not cactus, succulent and bulb species.
+  it('the title, og:title, the description and the first line say the site is for the plants people grow', () => {
+    const reach = 'a reference for the plants people grow';
+    // title, og:title, first line (round seventy-four's words; the image's alt is the image's own, r62bw-words)
+    expect(home.match(new RegExp(reach, 'gi'))?.length).toBeGreaterThanOrEqual(4);
+    expect(home).toContain('A reference for the plants people grow: ${fmtN(data.total)} species, sourced habitat climate for ${fmtN(data.withClimate)}.');
     expect(home).toMatch(/Your records, encrypted before sync\./); // round sixty-two, second pass: the words review's 11
   });
   it('the home description stays under 160 characters at the live counts', () => {
-    const desc = `Cactus, succulent and bulb species and the plants most grown alongside them: sourced habitat climate for 7,123 of 8,947. Your records, encrypted before sync.`;
-    expect(home).toContain(desc.replace('7,123', '${fmtN(data.withClimate)}').replace('8,947', '${fmtN(data.total)}'));
+    const desc = `A reference for the plants people grow: 8,945 species, sourced habitat climate for 7,123. Your records, encrypted before sync.`;
+    expect(home).toContain(desc.replace('7,123', '${fmtN(data.withClimate)}').replace('8,945', '${fmtN(data.total)}'));
     expect(desc.length).toBeLessThan(160);
   });
-  it('the feature stands above the search, says what kind of page it shows, and links its rule', () => {
-    expect(home.indexOf('class="feature"')).toBeLessThan(home.indexOf('aria-label="Search the whole species catalogue"'));
-    expect(home).toContain('This is what a species page with a habitat climate shows');
-    expect(home).toContain('<a href="/about/how#feature">Chosen by rule</a>');
-    expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toMatch(/<p id="feature">/);
-    expect(code('src/routes/+page.server.ts')).toMatch(/const plain = !w\.open && !fromValid && !atValid;/);
+  // Round seventy-four (the owner's decision 3): the front page's species shown whole, "This is what a species page with a
+  // habitat climate shows", is gone with its chart, its figures and its server read; the about page's rule for the
+  // photographs stays (#feature), naming no species shown whole. On r74base each of these was there.
+  it('the front page shows no species whole: no feature, no chart, no figures, no dossier read', () => {
+    expect(home).not.toContain('This is what a species page with a habitat climate shows');
+    expect(home).not.toMatch(/class="feature"|featureBlock|<Climograph|<Glance|cultivationSheet|climograph\(/);
+    expect(code('src/routes/+page.server.ts')).not.toMatch(/getDossier|feature\b/);
+    const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
+    expect(how).toMatch(/<p id="feature">The front page's photographs are chosen by rule/);
+    expect(how).not.toMatch(/shown whole/);
   });
   it('the phone search placeholder fits', () => {
     expect(home).toContain('placeholder="Search species, genus, family or origin…"');

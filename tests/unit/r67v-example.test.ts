@@ -50,19 +50,19 @@ async function grower() {
 
 describe('"empty" is the whole log and the frost site (V4)', () => {
   it('a removed plant, a species\' notes or a numbering scheme is a record: the device is not empty', async () => {
-    const { ownEmpty, entersHere } = await grower();
+    const { ownEmpty, offersHere } = await grower();
     expect(ownEmpty()).toBe(true);
-    expect(entersHere()).toBe(true);
+    expect(offersHere()).toBe(true); // offered, since round seventy-four, not opened
     col.recordCount = 1; // one record in the fold, live or removed: a plant removed, notes on a species, the numbering scheme
     expect(ownEmpty()).toBe(false); // base: true, and Today opened the example over them (S-A2's A2 to A4)
-    expect(entersHere()).toBe(false);
+    expect(offersHere()).toBe(false);
   });
   it('a frost site set with no plant is a grower\'s device (S-A2\'s A1)', async () => {
     local.m.set('cultifolio.frost.site', '{"lat":51.5,"lon":-0.1,"name":"Home"}');
     const { ownEmpty } = await grower();
     expect(ownEmpty()).toBe(false); // base: true, and the example's frost watch said "No site set"
   });
-  it('the bar\'s words: the test is noted as the example is opened, places included (S-A11)', async () => {
+  it('the bar\'s words: the test is noted as the example is opened, spaces included (S-A11)', async () => {
     col.recordCount = 2; col.locations = [{}, {}]; // a grower who set out their benches first
     const { enterExample, OWN_NOTE } = await grower();
     expect(enterExample('/today')).toBe(true);

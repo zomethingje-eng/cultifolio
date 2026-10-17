@@ -723,3 +723,25 @@ describe('round sixty: shared numbers, links by id, and what waits', () => {
     }
   });
 });
+
+describe('round seventy-four: a write pressed while the collection is still opening', () => {
+  // In Firefox on the owner's PC, "Cold frame" named and added in the first moments of /places was refused with
+  // "collection not loaded" (smoke-3, round forty-nine 3). The write now waits for the opening the page began.
+  it('waits for the opening and is kept, rather than refused', async () => {
+    vi.resetModules();
+    mem = newMem('testdevice');
+    const { collection } = await import('$lib/db/collection.svelte');
+    const opening = collection.load();
+    expect(collection.ready).toBe(false);
+    const l = await collection.addLocation({ name: 'Cold frame', parentId: null });
+    await opening;
+    expect(collection.locationName(l.id)).toBe('Cold frame');
+    expect([...mem.changes.values()].some((c) => c.kind === 'location' && c.id === l.id)).toBe(true);
+  });
+  it('with no opening begun, a write is still refused, as before', async () => {
+    vi.resetModules();
+    mem = newMem('testdevice');
+    const { collection } = await import('$lib/db/collection.svelte');
+    await expect(collection.addLocation({ name: 'Cold frame', parentId: null })).rejects.toThrow(/not loaded/);
+  });
+});

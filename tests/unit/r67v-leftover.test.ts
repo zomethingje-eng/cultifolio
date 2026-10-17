@@ -126,7 +126,7 @@ describe('app.html\'s first script (V3, V6)', () => {
   it('the address takes the tab out of the example, and marks nothing for deletion', async () => {
     ss.set('cultifolio.demo', '1');
     const d = await firstScript('?left=sample');
-    expect([d.demo, ss.get('cultifolio.demo'), ss.get('cultifolio.sampleOut'), ss.get('cultifolio.sampleLeft')]).toEqual([undefined, undefined, '1', undefined]); // base: sampleLeft '1'
+    expect([d.demo, ss.get('cultifolio.demo'), ss.get('cultifolio.sampleOut'), ss.get('cultifolio.sampleLeft')]).toEqual([undefined, undefined, undefined, undefined]); // base: sampleLeft '1'; round seventy-four writes no "left" mark (r74base: sampleOut '1')
   });
   it('a tab sent home by another tab\'s Leave opens its next page outside the example, whatever the address (a reload, a link)', async () => {
     ss.set('cultifolio.demo', '1');

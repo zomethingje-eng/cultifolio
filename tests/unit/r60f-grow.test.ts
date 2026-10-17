@@ -84,7 +84,7 @@ describe('the watering calendar file', () => {
     expect(got.map((x) => [x.summary, x.start, x.every, x.dry])).toEqual([
       ['Water 2026-0003 Lithops lesliei (every 28 days)', '2026-10-18', 28, [1]],
       ['Water Bench 1 (every 10 days)', '2026-10-08', 10, [1]],
-      ['Water plants with no place (every 21 days)', '2026-10-04', 21, []]
+      ['Water plants with no space (every 21 days)', '2026-10-04', 21, []]
     ]);
     expect(got[1].description).toMatch(/2 growing plants.*Not in the months kept dry: Jan\./);
   });

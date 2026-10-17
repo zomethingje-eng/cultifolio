@@ -8,10 +8,8 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 test.use({ serviceWorkers: 'block' });
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
 /** From the next load, every read-write transaction's completion is told `ms` late (a slow engine's commit). */
@@ -150,7 +148,7 @@ test('R12: a place that cannot be made says why in the picker, with no unhandled
   const errs: string[] = [];
   page.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
   await page.locator('.actions button.pri:has-text("Move")').click();
-  await expect(page.locator('#mv-loc-err')).toContainText('The place was not made.');
+  await expect(page.locator('#mv-loc-err')).toContainText('The space was not made.');
   await expect(page.locator('#mv-loc-new-name')).toBeVisible();
   await page.waitForTimeout(500);
   expect(errs).toEqual([]);

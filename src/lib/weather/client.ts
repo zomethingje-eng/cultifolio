@@ -181,7 +181,7 @@ export function forecastRefusal(status: number | null | { status: number; held?:
   if (held && status === 503 && reserve) return `${what} not checked: the rest of this site's calls to the forecast services this minute are kept for visitors on networks that have not called yet, so they were not asked. This is not an all-clear; it is asked again in a few minutes.`;
   if (held && status === 503) return `${what} not checked: this site's calls to the forecast services are used up for this minute, so they were not asked. This is not an all-clear; it is asked again in a few minutes.`;
   if (status === 429) return `${what} not checked: this site asked this device to wait a few minutes before asking again.`;
-  if (status === 400) return `${what} not checked: this place's altitude is outside −500 to 9000 m, or its coordinates are not a place; check them.`;
+  if (status === 400) return `${what} not checked: the altitude given is outside −500 to 9000 m, or the coordinates are not a place on Earth; check them.`;
   // Warmer, and still not an all-clear (round sixty; the grower review's wording table).
   return `${what} not checked: the forecast could not be reached just now, so this is not an all-clear. It is asked again when this page is next opened.`;
 }

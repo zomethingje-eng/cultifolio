@@ -34,7 +34,7 @@
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
-  // An empty collection's Today opens the example collection, or offers it (round sixty-three, V2).
+  // An empty collection's Today offers the example collection under its own empty state; nothing opens it by itself (round seventy-four).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
   import type { Forecast, Alert } from '$lib/weather/forecast';
@@ -228,7 +228,7 @@
   const hasWork = (s: Stop) => !!(s.overdue.length || s.unknown.length || s.resting.length || s.unseen.length);
   const workPlaces = $derived(stops.filter((s) => s.place && hasWork(s)).length);
   const workNoPlace = $derived(stops.some((s) => !s.place && hasWork(s)));
-  const across = $derived(workPlaces ? `across ${workPlaces} ${workPlaces === 1 ? 'place' : 'places'}${workNoPlace ? ' and among the plants with no place' : ''}` : workNoPlace ? 'among the plants with no place' : '');
+  const across = $derived(workPlaces ? `across ${workPlaces} ${workPlaces === 1 ? 'space' : 'spaces'}${workNoPlace ? ' and among the plants with no space' : ''}` : workNoPlace ? 'among the plants with no space' : '');
   // Counted to the day store's date, the one the page shows and the taps write, so a page open across midnight says the same day throughout (round fifty-eight).
   const days = (a: Accession) => { const w = collection.lastWatered(a.id); return daysBetween(w ?? collection.madeOn('accession', a.id) ?? a.acquired ?? today, today); };
   /** Plants a grower unticked on a stop: left out of its Water button (round fifty-eight; the grower review). Per page visit. */
@@ -275,7 +275,7 @@
       if (day.current !== d) day.current = d;
       const height = (document.getElementById(`stop-${s.key}`)?.getBoundingClientRect().height ?? 0);
       // The grower's own action, so a sighting of each plant, not an `auto` line (round fifty-eight).
-      const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d, t: 'water' as const, note: `from Today: ${s.place ? s.place.name : 'plants with no place'}` })));
+      const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d, t: 'water' as const, note: `from Today: ${s.place ? s.place.name : 'plants with no space'}` })));
       wateredHere.add(s.key, ids, plants.map((a) => ({ id: a.id, no: accNo(a), name: plantLabel(a) })), height);
       // The button gave way to the done row: focus goes to the row's Undo, else the stop's heading, before the toast is
       // raised, never to the page body (round sixty-one; the accessibility review, 2, still open from round fifty-nine).
@@ -361,13 +361,13 @@
 <svelte:head><title>Today · Cultifolio</title></svelte:head>
 
 <div class="page">
-  <PageHead title="Today" sub="What needs you, place by place, then the nights ahead." />
+  <PageHead title="Today" sub="What needs you, space by space, then the nights ahead." />
   <HeldNote />
 
   <!-- What needs you first, the frost watch under it: at 390 px the first stop started 570 px down, after the frost card and a method paragraph (round sixty; the grower review, §3 and §4). -->
   <!-- While it waits, the section keeps most of a screen, so what is drawn under it (the footer) does not jump down when the stops arrive (round sixty-one; the accessibility review, 5). -->
   <section id="water" aria-labelledby="water-h" class:waiting={!collection.ready || (growing.length && !sheetsOnce) || example.entering || (example.seeding && !growing.length)}>
-    <div class="secrule"><h2 id="water-h" tabindex="-1">By place</h2><div class="line"></div></div>
+    <div class="secrule"><h2 id="water-h" tabindex="-1">By space</h2><div class="line"></div></div>
     <!-- The stops wait for the species sheets as their buttons did: a stop drawn before them reflowed as its resting plants
          moved to their own row, and the page shifted under the reader (round sixty-one; the accessibility review, 5). -->
     {#if collection.failed}
@@ -376,23 +376,23 @@
     {:else if !collection.ready || (growing.length && !sheetsOnce)}
       <p class="small muted">{collection.ready ? (sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets…') : 'Opening the collection…'}</p>
     {:else if !growing.length}
-      <ExampleOffer what="today"><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add one</a> and this page says what it needs.</p></div></ExampleOffer>
+      <ExampleOffer><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add one</a> and this page says what it needs.</p></div></ExampleOffer>
     {:else if !stops.length}
       <!-- What is true: no record meets the checks; not that every plant was watered. The outcome first, the rule one tap away (round sixty; the grower review, §3). -->
       <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
       {#if firstWeeks}
         <!-- A new collection is quiet for its first weeks: say what will appear here and when, and how to start the count sooner (round sixty; the grower review, 6). -->
-        <p class="small muted" id="first-weeks">No watering is recorded yet, so each plant is counted from the day it was added. Once a plant's rhythm passes, it is listed here under its place with a Water button, and so is a plant missed at an audit. To start the count sooner, press Water on a plant's page, or give "Last watered" when you add plants.</p>
+        <p class="small muted" id="first-weeks">No watering is recorded yet, so each plant is counted from the day it was added. Once a plant's rhythm passes, it is listed here under its space with a Water button, and so is a plant missed at an audit. To start the count sooner, press Water on a plant's page, or give "Last watered" when you add plants.</p>
       {/if}
     {:else}
-      <p class="small muted">{#if todo}{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something {across}.{:else}Nothing past its rhythm or unseen; the places below have a note for today.{/if}</p>
+      <p class="small muted">{#if todo}{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something {across}.{:else}Nothing past its rhythm or unseen; the spaces below have a note for today.{/if}</p>
       <ol class="stops">
         {#each stops as s (s.key)}
           {@const n = ticked(s).length}
           {@const total = s.overdue.length + s.unknown.length}
           <li class="stop" id="stop-{s.key}" style="--depth: {s.depth}{s.watered?.height ? `; min-height: ${s.watered.height}px` : ''}">
             <div class="head">
-              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if}<span class="sr">,</span> <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
+              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No space{/if}<span class="sr">,</span> <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
               <!-- Water while something is ticked; with nothing ticked, words, not a disabled "Water 0 of 3"; and the done mark only once nothing ticked is left anywhere on the stop (round fifty-eight; round sixty). -->
               {#if total && n}
                 <!-- While the sheets are read again, the reason is said beside the button, not only on hover (round sixty-one; the accessibility review, 13). -->
@@ -419,7 +419,7 @@
               <div class="row unknown" data-row="{s.key}-u"><span class="lab">No watering recorded</span> {#each firstOf(s.unknown, `${s.key}-u`) as a (a.id)}{@render chip(a, addedWords(days(a)))}{/each}{@render more(s.unknown, `${s.key}-u`, true)}</div>
             {/if}
             {#if s.keptDry}
-              <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its place\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
+              <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its space\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
             {/if}
             {#if s.ahead.length}
               <p class="row ahead" data-row="{s.key}-a"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each firstOf(s.ahead, `${s.key}-a`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}{@render more(s.ahead, `${s.key}-a`, false)}</p>
@@ -432,7 +432,7 @@
               {/if}
             {/each}
             {#if s.unseen.length}
-              <p class="row warn" data-row="{s.key}-s"><span class="lab">Missed at the last audit, or not seen for ninety days since this place's audit</span> {#each firstOf(s.unseen, `${s.key}-s`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}{@render more(s.unseen, `${s.key}-s`, false)}</p>
+              <p class="row warn" data-row="{s.key}-s"><span class="lab">Missed at the last audit, or not seen for ninety days since this space's audit</span> {#each firstOf(s.unseen, `${s.key}-s`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}{@render more(s.unseen, `${s.key}-s`, false)}</p>
             {/if}
           </li>
         {/each}
@@ -442,7 +442,7 @@
       <!-- The method, one tap away rather than before the first plant (round sixty; the grower review, §3). -->
       <details class="why howdecides" id="how-today">
         <summary>How Today decides</summary>
-        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its place or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A place's dry months keep its plants off the list. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its place's audit, is listed too. Places come in the order they are kept, places inside after their parent.</p>
+        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its space or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A space's dry months keep its plants off the list. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its space's audit, is listed too. Spaces come in the order they are kept, spaces inside after their parent.</p>
       </details>
     {/if}
   </section>
@@ -460,7 +460,7 @@
       {#if PAGE_IN_DEMO}
         <p class="small muted froststrip" id="frost-example">The example collection has no site of its own, so the frost watch reads no forecast here. Once you leave the example, set your site on Today with Use my location, or in Settings, and its forecast appears on Today, on the front page and under the top bar when it turns.</p>
       {:else}
-        <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button> or <a href="/settings#site">set your site in Settings</a>, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; places with coordinates are watched on their own pages either way{/if}.</p>
+        <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button> or <a href="/settings#site">set your site in Settings</a>, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; spaces with coordinates are watched on their own pages either way{/if}.</p>
       {/if}
     {/if}
     {#if locateMsg}<p class="small muted">{locateMsg}</p>{/if}
@@ -499,7 +499,7 @@
       </details>
     {/if}
     {#if site.current}
-      <p class="small muted">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.{#if watched.length}{' '}Watched places, each with its own forecast on its page: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}.{/if}</p>
+      <p class="small muted">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.{#if watched.length}{' '}Watched spaces, each with its own forecast on its page: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}.{/if}</p>
     {/if}
   </section>
 

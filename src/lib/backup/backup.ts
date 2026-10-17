@@ -369,7 +369,7 @@ export function previewMerge(current: Change[], incoming: Change[]) {
       else if (!isComplete(r)) {
         addedWaiting++;
         const what = r.kind === 'accession' ? accNo(r as unknown as Accession) : r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : (r.name ?? r.id);
-        waitingNames.push(`${r.kind === 'accession' ? 'plant' : r.kind === 'sowing' ? 'batch' : r.kind === 'location' ? 'place' : r.kind} ${String(what)}`);
+        waitingNames.push(`${r.kind === 'accession' ? 'plant' : r.kind === 'sowing' ? 'batch' : r.kind === 'location' ? 'space' : r.kind} ${String(what)}`);
       }
       else if (!ownerLive(r)) {
         addedOnRemoved++;

@@ -150,7 +150,7 @@ class Collection {
       const named = (pre: string, who: string, when: string) => `${pre}${who ? ` of ${who}` : ''}${when ? `, ${when}` : ''}`;
       const label = kind === 'accession' ? [f('acc'), f('taxonName')].filter(Boolean).join(' ') || 'A plant'
         : kind === 'sowing' ? [f('no'), f('taxonName')].filter(Boolean).join(' ') || 'A batch'
-        : kind === 'location' ? f('name') || 'A place'
+        : kind === 'location' ? f('name') || 'A space'
         : kind === 'event' ? named(`A log line (${EVENT_LABEL[f('t') as keyof typeof EVENT_LABEL] ?? (f('t') || 'an entry')})`, plantWords(f('acc')), f('d'))
         : kind === 'photo' ? named('A photograph', plantWords(f('acc') || f('sowing')), f('d') ? `taken ${f('d')}` : '')
         : kind === 'taxon' ? `Your notes on ${f('name') || 'a species'}`
@@ -886,6 +886,7 @@ class Collection {
   }
   /** Keep a species on your list without a plant of it (or stop). Diffed like any other write, so sync carries it unchanged. */
   async follow(slug: string, name: string, gbifKey: number | null | undefined, on: boolean): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null });
   }
   /** Your species: every kind you grow or follow, by slug. */
@@ -1068,13 +1069,14 @@ class Collection {
   }
   /** Move a node; refused when it would make a loop. */
   async moveLocation(id: string, parentId: string | null): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     this.checkMove(id, parentId);
     await this.put('location', id, { parentId });
   }
   /** What a move must satisfy, for a caller that writes the new parent with the rest of an edit in one commit (round fifty-one, 3). */
   checkMove(id: string, parentId: string | null): void {
-    if (this.wouldCycle(id, parentId)) throw new Error('A place cannot be put inside itself.');
-    if (parentId && !this.location(parentId)) throw new Error('That parent place does not exist.');
+    if (this.wouldCycle(id, parentId)) throw new Error('A space cannot be put inside itself.');
+    if (parentId && !this.location(parentId)) throw new Error('That parent space does not exist.');
   }
   /** Conditions as they apply at a node: the nearest ancestor's value wins for anything the node leaves null. */
   conditions(id: string): { indoor: boolean | null; floorC: number | null; floorHeld: boolean; ppfd: number | null; lightHours: number | null; lat: number | null; lon: number | null; altM: number | null; waterDays: number | null; dryMonths: number[] | null; from: Record<string, string> } {
@@ -1100,7 +1102,8 @@ class Collection {
   }
   /** A new place. Its identity is minted, never derived from the name: two shelves called "Shelf 1" in different rooms are two places. */
   async addLocation(l: Omit<Location, 'id'> & { id?: string }): Promise<Location> {
-    if (l.parentId && !this.location(l.parentId)) throw new Error('The place it was to go inside is no longer here (removed in another tab, or by sync). Choose another.'); // said in the picker (round sixty-seven; triage-66 R12)
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
+    if (l.parentId && !this.location(l.parentId)) throw new Error('The space it was to go inside is no longer here (removed in another tab, or by sync). Choose another.'); // said in the picker (round sixty-seven; triage-66 R12)
     const id = l.id ?? 'l' + this.eventId().slice(1);
     const rec: Location = { ...l, id };
     await this.put('location', id, rec as unknown as Record<string, unknown>);
@@ -1108,6 +1111,7 @@ class Collection {
   }
   /** Removing a node moves its plants, sowings and children up to its parent as shown (never the raw `parentId`, which in a cut loop points back into it); nothing is orphaned. */
   async removeLocation(id: string): Promise<{ plants: number; batches: number; places: number; to: string | null }> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const node = this.location(id);
     if (!node) return { plants: 0, batches: 0, places: 0, to: null };
     const parent = this.tree().parent.get(id) ?? null;
@@ -1124,7 +1128,7 @@ class Collection {
       changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
       if (a.status !== 'growing') continue;
       const eid = this.eventId();
-      changes.push(...diff('event', eid, { id: eid, acc: a.id, d: when, t: 'move', note: parent ? `to ${toName} (${node.name} was removed)` : `${node.name} was removed; no place now`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
+      changes.push(...diff('event', eid, { id: eid, acc: a.id, d: when, t: 'move', note: parent ? `to ${toName} (${node.name} was removed)` : `${node.name} was removed; no space now`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
       out.plants++;
     }
     for (const s of this.sowings) if (s.locationId && this.placeOf(s.locationId) === id) { changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent }); out.batches++; }
@@ -1180,6 +1184,7 @@ class Collection {
     return nextAccession(this.takenNumbers('sowing'), { mode: 'prefix', prefix: `S${year}`, width: 3 });
   }
   async addSowing(sw: Omit<Sowing, 'id' | 'status'> & { id?: string; status?: Sowing['status'] }): Promise<Sowing> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const wanted = sw.no?.trim() || null;
     const id = sw.id ?? this.newId('s');
     const rec = await this.claim('sowing', (issued) => {
@@ -1203,6 +1208,7 @@ class Collection {
    * event on the sowing naming them, one acquire event each. All in one commit.
    */
   async potUp(sowingId: string, n: number, opts: { date?: string; locationId?: string | null; note?: string | null } = {}): Promise<Accession[]> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const s = this.sowing(sowingId);
     if (!s || n < 1) return [];
     const date = opts.date ?? localDate();
@@ -1319,6 +1325,7 @@ class Collection {
   }
   /** Store the pixels first, then the record: a record without pixels is worse than pixels without a record. */
   async addPhoto(p: Omit<Photo, 'id'> & { blob: Blob; thumb: Blob }): Promise<Photo> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     // The time it was made, then 16 random base-36 characters, never the counter and the device (round sixty-seven;
     // triage-66 S10, S-D10): a holder of the vault's token reads every batch's device and hour from the listing, and could
     // guess an id of time and device, which made the server's two photograph faults of round sixty-six practical. The
@@ -1345,6 +1352,7 @@ class Collection {
    * function, so an Undo within the toast's life puts the record, the cover and the pixels back (round twenty-nine, 1).
    */
   async removePhoto(id: string): Promise<() => Promise<void>> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const p = this.photo(id);
     const wasCover = !!p?.acc && this.accession(p.acc)?.cover === id;
     const blobs = await getPhotoBlobs(id);
@@ -1362,6 +1370,7 @@ class Collection {
     };
   }
   async setCover(acc: string, photoId: string | null): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.put('accession', acc, { cover: photoId });
   }
   /** The pixels went (a removal folded from another device): the cached URLs would show them still (round forty-nine, 1). */
@@ -1500,6 +1509,15 @@ class Collection {
   }
 
   /* ---- writes ---- */
+  /**
+   * A write pressed while the collection is still opening waits for the opening, rather than being refused with
+   * "collection not loaded": in Firefox on the owner's PC, a space named and added in the first moments of /places was
+   * refused so (round seventy-four). Only a write made while not ready waits, so a loaded collection's writes run as before;
+   * with no opening begun, the write is refused as before.
+   */
+  private async untilOpen(): Promise<void> {
+    if (this.loading) await this.loading;
+  }
   private tick = () => {
     if (!this.clock) throw new Error('collection not loaded');
     return this.clock.tick();
@@ -1653,6 +1671,7 @@ class Collection {
 
   /** Upsert any record kind from a plain object. Only changed fields are written. */
   async put(kind: Kind, id: string, fields: Record<string, unknown>): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.commit(this.putChanges(kind, id, fields));
   }
   /**
@@ -1665,6 +1684,7 @@ class Collection {
   putWith(kind: Kind, id: string, fields: Record<string, unknown>, events?: Array<Omit<PlantEvent, 'id'>>, also?: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts?: { meta?: Record<string, unknown>; markLast?: string }): Promise<void>;
   putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>>, also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta: MetaCondition[]; requireEmpty?: boolean }): Promise<PutResult>;
   async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[]; requireEmpty?: boolean } = {}): Promise<PutResult | void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const changes = this.putChanges(kind, id, fields);
     for (const o of also) {
       // A record removed in the same commit, as `remove` and `removeEvents` write it: `diff` passes over `_` fields, so
@@ -1740,6 +1760,7 @@ class Collection {
   }
 
   async remove(kind: Kind, id: string): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const ids = [id, ...(kind === 'event' ? this.renumberTwins(id, false) : [])]; // a repair's note shown once goes with its twins (round sixty-three)
     await this.commit(ids.map((x) => ({ t: this.tick(), kind, id: x, field: '_deleted', value: true })));
   }
@@ -1751,6 +1772,7 @@ class Collection {
    * (round fifty-nine; the round forty-one review, 5). Returns the change of number, if there was one, for the page to say.
    */
   async restore(kind: Kind, id: string): Promise<{ from: string; to: string; unknown?: boolean } | null> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const back: Change = { t: this.tick(), kind, id, field: '_deleted', value: false };
     const rec = this.state.get(recKey(kind, id));
     if ((kind !== 'accession' && kind !== 'sowing') || !rec) {
@@ -1813,6 +1835,7 @@ class Collection {
 
   /** A new plant. Its number is minted, or taken from `acc` when the grower brings one; a number already in use is refused, never overwritten. */
   async addAccession(a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     return (await this.addAccessions(1, a))[0];
   }
 
@@ -1829,6 +1852,7 @@ class Collection {
    * first one is.
    */
   async addAccessions(n: number, a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }, each?: Array<Partial<Omit<Accession, 'id' | 'status'>>>): Promise<Accession[]> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const wanted = a.acc?.trim() || null;
     const ids = Array.from({ length: Math.max(1, n) }, (_, i) => (i === 0 && a.id ? a.id : this.newId('r')));
     const given = ids.map((_, i) => each?.[i]?.acc?.trim() || (i === 0 ? wanted : null));
@@ -1884,6 +1908,7 @@ class Collection {
   }
 
   async addEvent(e: Omit<PlantEvent, 'id'> & { id?: string }): Promise<PlantEvent> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const id = e.id ?? this.eventId();
     const rec: PlantEvent = { ...e, id };
     await this.put('event', id, rec as unknown as Record<string, unknown>);
@@ -1895,6 +1920,7 @@ class Collection {
    * status and its line, and a page closed between two commits left one without the other (round forty-nine, 1).
    */
   async addEventWith(e: Omit<PlantEvent, 'id'>, kind: 'accession' | 'sowing', id: string, fields: Record<string, unknown>): Promise<PlantEvent> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const eid = this.eventId();
     const rec: PlantEvent = { ...e, id: eid };
     const changes = diff(kind, id, fields, this.state.get(recKey(kind, id)), this.tick);
@@ -1908,6 +1934,7 @@ class Collection {
    * a place's "Move plants here" moves a benchful at once, and a plant's own Move was two commits.
    */
   async movePlants(ids: string[], locationId: string | null): Promise<number> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     return (await this.movePlantsUndoable(ids, locationId)).n;
   }
   /**
@@ -1915,6 +1942,7 @@ class Collection {
    * and removes exactly those lines, in one commit (round fifty-one, 4). A plant moved on since the move is left where it is.
    */
   async movePlantsUndoable(ids: string[], locationId: string | null): Promise<{ n: number; undo: () => Promise<void> }> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const changes: Change[] = [];
     const back: Array<{ id: string; locationId: string | null; line: string | null }> = [];
     for (const id of ids) {
@@ -1942,10 +1970,12 @@ class Collection {
 
   /** One commit for many events (watering a whole bench): all land or none do. */
   async addEvents(list: Array<Omit<PlantEvent, 'id'>>): Promise<number> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     return (await this.addEventsIds(list)).length;
   }
   /** The same, returning the ids written, so a place-wide action can be undone by removing exactly those lines (round twenty-six, 5). */
   async addEventsIds(list: Array<Omit<PlantEvent, 'id'>>): Promise<string[]> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     const changes: Change[] = [];
     const ids: string[] = [];
     for (const e of list) {
@@ -1959,12 +1989,14 @@ class Collection {
   }
   /** Remove several events in one commit: all go or none do. */
   async removeEvents(ids: string[]): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     if (!ids.length) return;
     await this.commit(ids.map((id) => ({ t: this.tick(), kind: 'event' as const, id, field: '_deleted', value: true })));
   }
 
   /** The numbering scheme, as a synced setting record. */
   async setScheme(s: NumberingScheme): Promise<void> {
+    if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.put('setting', NUMBERING_SETTING, { scheme: s });
   }
 

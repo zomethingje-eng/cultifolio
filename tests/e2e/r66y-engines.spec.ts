@@ -9,9 +9,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 // No service worker: in Safari's engine a page the worker controls sends its requests past `page.route` (round sixty-five,
 // smoke 1528), and r66y 3 and 4 hold the reference's search back with a route. Nothing here is about the worker.
 test.use({ serviceWorkers: 'block' });
@@ -142,7 +140,7 @@ test('r66y 7: a plant added with a new place named and not added goes into that 
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   await page.locator('.picker').getByRole('button', { name: 'New…' }).click();
   await page.fill('#f-loc-new-name', 'Shelf 9');
-  await page.getByRole('button', { name: /^Add/ }).filter({ hasNotText: 'place' }).click();
+  await page.getByRole('button', { name: /^Add/ }).filter({ hasNotText: 'space' }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect(page.locator('.idcard .place', { hasText: 'Shelf 9' })).toBeVisible(); // base: no place
 });

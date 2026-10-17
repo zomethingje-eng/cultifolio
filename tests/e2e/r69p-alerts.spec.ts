@@ -7,7 +7,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 
 // The service worker answers /api/forecast itself once it controls the page, past a page's route in WebKit and Firefox:
 // the test is about the pages' words, not the shell (as smoke's forecast tests).
@@ -29,7 +28,6 @@ const WHY = {
 
 for (const status of ['refused', 'unanswered'] as const) {
   test(`r69p P1: alerts ${status} are "not checked" on a US place page and on Today, never "All clear." (R46-6) @phone`, async ({ page }) => {
-    await page.context().addInitScript(ownPages);
     await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: answer(status) }));
     await page.goto('/places'); await ready(page);
     await inject(page, [['location', 'cf1', 'name', 'Cold frame'], ['location', 'cf1', 'type', 'coldframe'], ['location', 'cf1', 'indoor', false], ['location', 'cf1', 'lat', 40.38], ['location', 'cf1', 'lon', -80.05]], Date.now() - 3_600_000);
@@ -59,7 +57,6 @@ for (const status of ['refused', 'unanswered'] as const) {
 }
 
 test('r69p P1: alerts checked and none in force read "All clear." and say no alert, so the words above are the unchecked case alone', async ({ page }) => {
-  await page.context().addInitScript(ownPages);
   await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: answer('none') }));
   await page.goto('/places'); await ready(page);
   await inject(page, [['location', 'cf2', 'name', 'Back step'], ['location', 'cf2', 'type', 'outdoor'], ['location', 'cf2', 'indoor', false], ['location', 'cf2', 'lat', 40.38], ['location', 'cf2', 'lon', -80.05]], Date.now() - 3_600_000);

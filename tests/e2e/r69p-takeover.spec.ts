@@ -11,7 +11,6 @@
  * the second because the browser's own unload question came after the page's.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { ownPages } from './helpers/r63v-own';
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
@@ -42,7 +41,6 @@ async function takeOver(p: Page) {
 }
 
 test.beforeEach(async ({ context }) => {
-  await context.addInitScript(ownPages);
   await context.addInitScript(staged);
 });
 

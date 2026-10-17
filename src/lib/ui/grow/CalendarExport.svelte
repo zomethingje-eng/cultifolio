@@ -51,7 +51,7 @@
 {#if growing.length && !PAGE_IN_DEMO}
   <details class="cal" id="calendar">
     <summary>Watering in your phone's calendar</summary>
-    <p>A calendar file with one all-day event per place, and one per plant with a rhythm of its own, repeating at its rhythm from its next due day, each with a reminder at 9 in the morning (some calendars use their own instead). Months a place is kept dry are left out: its repeats stop before them and start again on the first day after, the day Today lists its plants again, for the next {Math.round(DRY_HORIZON_DAYS / 365)} years; download it again after that, or when a rhythm changes. It is made here; the calendar you add it to keeps the place names and rhythms.</p>
+    <p>A calendar file with one all-day event per space, and one per plant with a rhythm of its own, repeating at its rhythm from its next due day, each with a reminder at 9 in the morning (some calendars use their own instead). Months a space is kept dry are left out: its repeats stop before them and start again on the first day after, the day Today lists its plants again, for the next {Math.round(DRY_HORIZON_DAYS / 365)} years; download it again after that, or when a rhythm changes. It is made here; the calendar you add it to keeps the space names and rhythms.</p>
     <!-- Said before the button: a calendar keeps an imported event as it was, so the new file's events land beside the old ones rather than replacing them (round sixty-one; the grower review). -->
     <p id="ics-again"><b>Downloading it again?</b> Delete the old Cultifolio watering events from your calendar first, or they stay beside the new ones.</p>
     <button class="btn" type="button" id="ics-download" onclick={download}>Download watering calendar (.ics)</button>

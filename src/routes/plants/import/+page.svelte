@@ -313,7 +313,7 @@
     if (r.placeId) return collection.locationName(r.placeId);
     if (!r.placePath) return '';
     const hit = resolvePlace(r.placePath, nodes);
-    return 'id' in hit ? collection.locationName(hit.id) : makePlaces ? `${splitPath(r.placePath).join(' › ')} (new)` : `${r.placePath}: not a place here, so no place unless made below`;
+    return 'id' in hit ? collection.locationName(hit.id) : makePlaces ? `${splitPath(r.placePath).join(' › ')} (new)` : `${r.placePath}: not a space here, so no space unless made below`;
   };
   async function add() {
     if (!plan || adding || !live.length || checking) return;
@@ -376,12 +376,12 @@
   <div class="cult done" id="imp-done">
     <div class="body">
       <h2 class="donehead" id="imp-done-h" tabindex="-1">{result.failed ? 'The import stopped' : 'The import is done'}</h2>
-      <p><b>{result.added.length} plant{result.added.length === 1 ? '' : 's'} added</b>{result.added.length ? `, numbered ${range(result)}` : ''}{result.placesMade ? `, and ${result.placesMade} new place${result.placesMade === 1 ? '' : 's'}` : ''}. <span class="muted">({(result.ms / 1000).toFixed(1)} s)</span></p>
+      <p><b>{result.added.length} plant{result.added.length === 1 ? '' : 's'} added</b>{result.added.length ? `, numbered ${range(result)}` : ''}{result.placesMade ? `, and ${result.placesMade} new space${result.placesMade === 1 ? '' : 's'}` : ''}. <span class="muted">({(result.ms / 1000).toFixed(1)} s)</span></p>
       {#if result.renumbered.length}<p>{result.renumbered.length === 1 ? 'One number was' : `${result.renumbered.length} numbers were`} taken, so the next free one was given: {result.renumbered.slice(0, 12).map((x) => `line ${x.line}, ${x.given} → ${x.got}`).join('; ')}{result.renumbered.length > 12 ? '; …' : ''}.</p>{/if}
       {#if result.alreadyHere.length}{@const k = result.alreadyHere.length}<p id="imp-already-here">Meanwhile {k === 1 ? 'one line was' : `${k} lines were`} imported elsewhere (in another tab, or by sync), so {k === 1 ? 'its plants were' : 'their plants were'} left out, never added twice: {result.alreadyHere.slice(0, 12).map((x) => (x.whole ? `line ${x.line}` : `line ${x.line} (${x.plants === 1 ? 'one plant' : `${x.plants} plants`} of it; the rest added)`)).join(', ')}{k > 12 ? ', …' : ''}.</p>{/if}
       {#if result.watered}{#if result.watered.failed}<p class="bad">The last watering was not recorded: {result.watered.failed}. The plants stand; record it from Today or My plants.</p>{:else}<p>Last watered on {lastWatered || 'the date given'}: recorded on {result.watered.lines} plant{result.watered.lines === 1 ? '' : 's'}.</p>{/if}{/if}
       {#if result.failed}
-        {#if result.failed.line === null}<p class="bad">Stopped before any plant was added: {result.failed.error}.{result.placesMade ? ` ${result.placesMade === 1 ? 'One new place was' : `${result.placesMade} new places were`} made, and stay${result.placesMade === 1 ? 's' : ''}; a second try finds ${result.placesMade === 1 ? 'it' : 'them'} and makes no other.` : ''} Every line is still in the list below.</p>
+        {#if result.failed.line === null}<p class="bad">Stopped before any plant was added: {result.failed.error}.{result.placesMade ? ` ${result.placesMade === 1 ? 'One new space was' : `${result.placesMade} new spaces were`} made, and stay${result.placesMade === 1 ? 's' : ''}; a second try finds ${result.placesMade === 1 ? 'it' : 'them'} and makes no other.` : ''} Every line is still in the list below.</p>
         {:else}<p class="bad">Stopped at line {result.failed.line}: {result.failed.error}. The lines before it were added; the rest, line {result.failed.line} with them, are still in the list below.</p>{/if}
       {/if}
       {#if !result.failed && laterN && sheet}<p id="imp-next-pass">{laterN === 1 ? 'One more line' : `${laterN} more lines`} of {fileName} {laterN === 1 ? 'is' : 'are'} still to come: <button class="linkish" type="button" onclick={() => review()}>check the next {laterN > MAX_ROWS ? MAX_ROWS : laterN}</button>.</p>{/if}
@@ -399,7 +399,7 @@
       <span class="hint">The name, then if you like: cultivar; number; where it came from; notes, each after a semicolon. Leave a part empty to skip it. Columns copied from a spreadsheet work too.</span>
     </label>
     <p class="hint full">The same for every line:</p>
-    <div class="full"><span class="lab">Place</span><LocationPicker bind:value={placeId} id="imp-loc" label="Place" /></div>
+    <div class="full"><span class="lab">Space</span><LocationPicker bind:value={placeId} id="imp-loc" label="Space" /></div>
     <label><span class="lab">Date acquired</span><input id="imp-date" type="date" bind:value={acquired} /><span class="hint">Blank: not stated; numbers take this year.</span></label>
     <label><span class="lab">From</span><input id="imp-from" type="text" bind:value={source} placeholder="a nursery, a club sale, a friend" /></label>
     {#if pasteMsg}<p class="bad full" role="alert">{pasteMsg}</p>{/if}
@@ -473,8 +473,8 @@
     <!-- Which numbering a renumbered line follows (round sixty-three; the round-sixty grower review, 10), from the number it
          truly carried on from, and a line's further plants with it (the fix pass, R2 3 to 6). -->
     {#if plan && ((plan.renumbered.length && (plan.onFrom || plan.mixed || plan.own)) || (plan.extrasOn && plan.onFrom))}<p class="small" id="imp-numbered-on">{plan.onFrom ? `${plan.renumbered.length && plan.extrasOn ? 'Renumbered lines, and the further plants of a line of several,' : plan.renumbered.length ? 'Renumbered lines' : 'The further plants of a line of several'} carry on your sheet's own numbering, from ${plan.onFromHere ? `the highest number of that kind here, ${plan.onFrom}` : `its highest number, ${plan.onFrom}`}.` : plan.own ? 'Renumbered lines take this collection\'s next number by its own rule, since your sheet is numbered as this collection numbers.' : 'Renumbered lines take this collection\'s next number, since the numbers in your sheet do not all follow one pattern (the same letters before the digits, and either as many digits or none padded with a leading 0).'}</p>{/if}
-    {#if loose.paths && rows.length}<label class="small makeplaces"><input type="checkbox" id="imp-paths" checked={pathsOn} onchange={(e) => (pathsAnswer = (e.currentTarget as HTMLInputElement).checked)} /> Read &gt; and / as a path, as in {loose.example} ({loose.paths === 1 ? 'one place' : `${loose.paths} places`} in this sheet); unticked, each is one place by that whole name</label>{/if}
-    {#if toMake.length}<label class="small makeplaces"><input type="checkbox" id="imp-make-places" bind:checked={makePlaces} /> Make {toMake.length === 1 ? 'this place' : `these ${toMake.length} places`}, which {toMake.length === 1 ? 'is' : 'are'} not here yet: {toMake.map((p) => p.join(' › ')).join(', ')}</label>{/if}
+    {#if loose.paths && rows.length}<label class="small makeplaces"><input type="checkbox" id="imp-paths" checked={pathsOn} onchange={(e) => (pathsAnswer = (e.currentTarget as HTMLInputElement).checked)} /> Read &gt; and / as a path, as in {loose.example} ({loose.paths === 1 ? 'one space' : `${loose.paths} spaces`} in this sheet); unticked, each is one space by that whole name</label>{/if}
+    {#if toMake.length}<label class="small makeplaces"><input type="checkbox" id="imp-make-places" bind:checked={makePlaces} /> Make {toMake.length === 1 ? 'this space' : `these ${toMake.length} spaces`}, which {toMake.length === 1 ? 'is' : 'are'} not here yet: {toMake.map((p) => p.join(' › ')).join(', ')}</label>{/if}
     <div class="reviewopts">
       <label class="check"><input type="checkbox" id="imp-only-needs" bind:checked={onlyNeeds} /> Show only lines that need me ({needN})</label>
       <label class="watered"><span class="lab">Last watered, for every plant (if you know)</span><input id="imp-watered" type="date" bind:value={lastWatered} max={localDate()} oninput={() => (waterMsg = '')} aria-invalid={!!waterMsg} aria-describedby={waterMsg ? 'imp-watered-bad' : undefined} />{#if waterMsg}<span class="bad small" id="imp-watered-bad">{waterMsg}</span>{/if}</label>

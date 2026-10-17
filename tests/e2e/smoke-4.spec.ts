@@ -94,7 +94,7 @@ test('round sixty: watering by keyboard keeps focus on the button, the toast\'s 
   // Today, twenty-two days on: Undo on a stop puts focus on that stop's Water button, not its heading
   await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
   await page.goto('/today');
-  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  const stop = page.locator('#water .stop', { hasText: 'No space' });
   const head = stop.locator('.head').getByRole('button', { name: /^Water/ });
   await expect(head).toBeEnabled();
   await head.focus();
@@ -116,7 +116,7 @@ test('round sixty: Today with nothing ticked says so, never "Water these 0"; the
   await expect(page.locator('#first-weeks')).toContainText('counted from the day it was added'); // the first weeks say what will show here (the grower review, 6)
   await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
   await page.goto('/today');
-  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  const stop = page.locator('#water .stop', { hasText: 'No space' });
   await expect(stop.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
   for (const box of await stop.locator('.chip.tick input').all()) await box.uncheck();
   await expect(stop.locator('.head')).toContainText('None ticked');
@@ -245,7 +245,7 @@ test('round sixty: a navigation with a query is not kept as the plain page\'s of
 
 test('round sixty: the place form refuses a floor that is not a temperature, and writes nothing (E03)', async ({ page }) => {
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Floor bench');
   await page.selectOption('#loc-kind', 'bench');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -279,12 +279,12 @@ test('round sixty: a death has an Undo; "Record…", not "Log"; Since watered sa
 
 test('round sixty: places are added one after another with the parent and the kind kept, and a plant with no place is given one from the list (the grower review, 14 and 17)', async ({ page }) => {
   await page.goto('/places');
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Greenhouse');
   await page.selectOption('#loc-kind', 'greenhouse');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree a', { hasText: 'Greenhouse' })).toBeVisible();
-  await page.getByRole('button', { name: 'New place' }).click();
+  await page.getByRole('button', { name: 'New space' }).click();
   await page.fill('#loc-name', 'Bench 1');
   await page.selectOption('#loc-kind', 'bench');
   await page.selectOption('#loc-parent', { label: 'Greenhouse' });
@@ -299,10 +299,10 @@ test('round sixty: places are added one after another with the parent and the ki
   await expect(page.locator('.tree a', { hasText: 'Bench 2' })).toBeVisible();
   // a plant with no place: the line offers a place to pick, and the pick moves it with an Undo
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
-  await page.selectOption('#f-loc', { label: 'No place' });
+  await page.selectOption('#f-loc', { label: 'No space' });
   await addPlant(page);
   await page.goto('/places');
-  await expect(page.locator('#unplaced')).toContainText('1 growing plant has no place.');
+  await expect(page.locator('#unplaced')).toContainText('1 growing plant has no space.');
   await page.locator('#unplaced').getByRole('button', { name: 'Give it one' }).click();
   const opt = await page.locator('#unplaced-list option', { hasText: 'Bench 2' }).getAttribute('value');
   await page.locator('#unplaced-list select').selectOption(opt!);
@@ -327,17 +327,12 @@ test('round sixty: "Save and add another" keeps the last watering, and its toast
   await expect(page.locator('.accrow .fig', { hasText: 'watered 3 d ago' })).toHaveCount(1); // Today and the list count from it
 });
 
-test('round sixty: a visitor sees one species\' figures and chart on a desktop, none on a phone (its search stays with the rows; round sixty-one), and a search that matched nothing as written says what it searched', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+// Round seventy-four: the species shown whole this test began with is gone from the front page (the owner's decision 3);
+// r61w-pages and r62w-words say it is not drawn. The welcome's way into the example and the search's half stay.
+test('round sixty: a visitor is offered the example from the front page, and a search that matched nothing as written says what it searched', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await ready(page);
-  const feature = page.locator('section.feature');
-  await expect(feature).toBeVisible();
-  await expect(feature.locator('.featurehead')).toContainText('This is what a species page with a habitat climate shows');
-  await expect(feature.locator('.card.cold')).toContainText('Cold floor');
-  await expect(feature.locator('.climo')).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(feature).toBeHidden(); await expect(feature.locator('.climo')).toHaveCount(0); // on a phone the section is still sent but hidden by CSS (under 900 px), so the search stays with its rows; there is no link to it, and its chart is not drawn (round sixty-one, at the merge; this comment put right in round sixty-two, the verification triage-self review N8)
   await expect(page.locator('#try-sample-home')).toBeVisible();
   // a variety the reference files under its species: nothing as written, the species on the retry, and the page says so
   await page.setViewportSize({ width: 1280, height: 900 });

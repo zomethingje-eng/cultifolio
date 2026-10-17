@@ -15,9 +15,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { pressOnce, type Press } from './helpers/disclosure';
 import { startPositions, positionMoves } from './helpers/positions';
-import { ownPages } from './helpers/r63v-own';
 
-test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 // No service worker: in Safari's engine a page the worker controls sends its requests past `page.route`, and the late
 // name check below is a route.
 test.use({ serviceWorkers: 'block' });

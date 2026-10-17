@@ -15,12 +15,12 @@
   import { keepAsOwn, UNKEPT_WORDS, type Draft } from './keep-draft';
   let { what, draft, hold }: {
     what: 'plant' | 'batch' | 'place';
-    /** what the form holds now: its fields, and its place by name and kind */
+    /** what the form holds now: its fields, and its space by name and kind */
     draft: () => Omit<Draft, 'form'>;
     /** the form's own unload guard, set aside (true) while it leaves and put back (false) if the Leave does not happen */
     hold?: (on: boolean) => void;
   } = $props();
-  const noun = { plant: 'A plant', batch: 'A batch', place: 'A place' } as const;
+  const noun = { plant: 'A plant', batch: 'A batch', place: 'A space' } as const;
   let unkept = $state(false);
   async function keep() {
     unkept = false;

@@ -50,17 +50,14 @@ test.describe('phone', () => {
     expect(onTop).toEqual([true, true, true]);
   });
 
-  test('the front page on a phone: the search with its rows on the first screen, the feature hidden, and no chart shipped (decision 9, changed at the merge)', async ({ page }) => {
+  test('the front page on a phone: the search with its rows on the first screen, and no chart shipped (decision 9, changed at the merge; round seventy-four)', async ({ page }) => {
     const html = await (await page.request.get('/')).text();
     expect(html).not.toMatch(/class="climo[ "]/); // the chart is not in the HTML a phone is sent
     await page.goto('/');
     await ready(page);
     const top = async (sel: string) => (await page.locator(sel).first().boundingBox())!.y;
-    // The four cards between the search and the rows put the first row two screens down and parted the search from what it
-    // searches (round fifty, 1): on a phone the feature is sent but hidden by CSS, with no link to it; the strip's first
-    // photograph is the same species (this comment put right in round sixty-two; the verification triage-self review N8).
-    await expect(page.locator('section.feature')).toBeHidden();
-    await expect(page.locator('.featured .strip a').first()).toHaveAttribute('href', /\/species\//); // the strip's first photograph is the featured species
+    // The front page's species shown whole went in round seventy-four (the owner's decision 3); the strip's photographs lead to their pages.
+    await expect(page.locator('.featured .strip a').first()).toHaveAttribute('href', /\/species\//);
     // On a phone the strip follows the first rows since round sixty-three (V4; the first screen is measured at Safari's page size in r63v-first-screen.spec.ts).
     expect(await top('section.featured:visible')).toBeGreaterThan(await top('.rows .grow'));
     expect(await top('.toolrow .searchbar')).toBeLessThan(844); // on the first screen
@@ -94,43 +91,33 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1280, height: 900 }, locale: 'en-GB' });
 
-  test('the front page\'s "This is what every species page shows" chart names CHELSA where a reader can see it (visitor 3)', async ({ page }) => {
-    await page.goto('/');
+  // Round seventy-four: the chart this test read stood in the front page's "This is what a species page with a habitat
+  // climate shows", which is gone (the owner's decision 3); the same chart on the species page is read instead.
+  test('the habitat climate chart names CHELSA where a reader can see it (visitor 3)', async ({ page }) => {
+    await page.goto('/species/copiapoa-cinerea');
     await ready(page);
-    const fig = page.locator('section.feature figure.climo');
+    const fig = page.locator('figure.climo').first();
     await expect(fig).toBeVisible();
-    // On the base the chart's visible text named only NASA POWER; "CHELSA" was in the SVG <desc> alone.
+    // On round sixty-one's base the chart's visible text named only NASA POWER; "CHELSA" was in the SVG <desc> alone.
     expect(await fig.evaluate((f) => (f as HTMLElement).innerText)).toMatch(/CHELSA/);
     expect(await fig.evaluate((f) => (f as HTMLElement).innerText)).not.toMatch(/undated/);
   });
 
-  // Round sixty-two (decision 8, outside review A10, B1): the chips sit with the rows they govern. Second pass (the outside
-  // triage's 2): above the search the feature pushed the search off a desktop's first screen, so it follows the first rows.
-  test('the front page: the photographs come first, then the search and the first rows, then the feature, and drawing the chart moves nothing (decision 9; round sixty-two)', async ({ page }) => {
+  // Round sixty-two (decision 8, outside review A10, B1): the chips sit with the rows they govern. Round seventy-four (the
+  // owner's decision 3): the species shown whole after the first rows, with its figures and chart, is gone; the photographs,
+  // the search and the first rows stay in that order on a desktop's first screen. On r74base the section was drawn.
+  test('the front page: the photographs come first, then the search and the first rows, and no species is shown whole (round seventy-four)', async ({ page }) => {
     await page.goto('/');
     await ready(page);
     const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
-    const feature = page.locator('section.feature');
-    await expect(feature.locator('figure.climo')).toBeVisible();
-    const search = await box('.toolrow .searchbar'), strip = await box('.featured'), f = await box('section.feature');
+    const search = await box('.toolrow .searchbar'), strip = await box('.featured'), row = await box('.rows .grow');
     expect(strip.y).toBeLessThan(900);
-    expect(strip.y).toBeLessThan(f.y);
-    expect(search.y + search.height).toBeLessThanOrEqual(f.y); // round sixty-two, second pass: after the search and the first rows
-    expect((await box('.rows .grow')).y).toBeLessThan(f.y);
-    expect(f.height).toBeLessThanOrEqual(900); // no taller than a screen
-    // the four cards two by two beside the chart
-    const cards = await feature.locator('.gcards > .card').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
-    expect(cards).toHaveLength(4);
-    expect(new Set(cards).size).toBe(2);
-    expect((await box('section.feature figure.climo')).x).toBeGreaterThan(Math.max(...cards));
-    // the chart is drawn after hydration into a column that held its height from the first paint: the column is the
-    // height it was given, not the chart's, so the rows below did not move
-    const col = await page.locator('.fchart').evaluate((e) => ({ h: e.getBoundingClientRect().height, min: parseFloat(getComputedStyle(e).minHeight), chart: e.querySelector('figure.climo')!.getBoundingClientRect().height }));
-    expect(col.chart).toBeLessThanOrEqual(col.min);
-    expect(Math.abs(col.h - col.min)).toBeLessThan(1);
+    expect(strip.y).toBeLessThan(search.y);
+    expect(search.y + search.height).toBeLessThanOrEqual(row.y);
+    await expect(page.locator('section.feature, #feature-h, .fchart, figure.climo')).toHaveCount(0);
     const html = await (await page.request.get('/')).text();
-    expect(html).not.toMatch(/class="climo[ "]/);
-    expect(html).toMatch(/class="fchart[^"]*" style="--fh: calc\(\d+px \+ 14rem\);?"/);
+    expect(html).not.toContain('This is what a species page with a habitat climate shows');
+    expect(html).not.toMatch(/class="(climo|fchart|feature)[ "]/);
   });
 
   test('labels are the figures\' own names on the species page, with every tied month named (visitor 1, 5)', async ({ page }) => {

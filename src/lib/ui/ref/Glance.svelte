@@ -114,7 +114,7 @@
       </ol>
       <div class="sub key" aria-hidden="true">{#if strip.shadeIs}<span><i class="sw on"></i>{strip.shadeIs}</span>{/if}{#if strip.cells.some((c) => c.dry)}<span><i class="sw dry"></i>under {ruleRain(5, u)} of rain</span>{/if}</div>
       {#if seasonLead}<div class="sub lead">{seasonLead} <span class="src">{seasonRule}</span></div>{/if}
-      <div class="sub hemi">{#if !year.shiftable}Not shifted: the shift rule does not apply to this habitat.{:else if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your places.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{#if chartHref}{' '}<a href={chartHref}>The chart</a> is in the habitat's months.{/if}</div>
+      <div class="sub hemi">{#if !year.shiftable}Not shifted: the shift rule does not apply to this habitat.{:else if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your spaces.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{#if chartHref}{' '}<a href={chartHref}>The chart</a> is in the habitat's months.{/if}</div>
     </div>
   {/if}
 </div>

@@ -9,7 +9,7 @@
   import { PROP_METHODS } from '$lib/db/types';
   import { plantHref, batchHref } from '$lib/db/links';
   import PlantName from '$lib/ui/PlantName.svelte';
-  // An empty collection's Propagation opens the example collection, or offers it (round sixty-three, V2).
+  // An empty collection's Propagation offers the example collection under its own empty state; nothing opens it by itself (round seventy-four).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   // In the example a new batch is the grower's own, so it leads out of the example first (round sixty-seven; triage-66 V1).
   import { addLeavesExample } from '$lib/ui/grow/example.svelte';
@@ -47,7 +47,7 @@
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   <ToggleGroup chips label="Which batches" bind:value={show} options={[{ value: 'active', label: 'In progress', n: collection.sowings.filter((s) => s.status === 'active').length }, { value: 'all', label: 'All', n: collection.sowings.length }]} />
   {#if !rows.length}
-    <ExampleOffer what="propagation"><div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new" onclick={(e) => addLeavesExample(e, '/propagation/new')}>Start one.</a></p></div></ExampleOffer>
+    <ExampleOffer><div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new" onclick={(e) => addLeavesExample(e, '/propagation/new')}>Start one.</a></p></div></ExampleOffer>
   {:else}
     <!-- Under 640px the table was cut off at Date: a phone gets one card per batch with the same figures, the table stays above it. Two renderings, one hidden per width by CSS (round fifty-eight; the grower review). -->
     <ul class="bcards" aria-label="Batches">

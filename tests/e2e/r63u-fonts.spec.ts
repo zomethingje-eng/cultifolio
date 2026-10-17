@@ -14,7 +14,7 @@
 import { test, expect } from '@playwright/test';
 
 const SENTENCES = [
-  'A reference for cactus, succulent and bulb species, and the plants most grown alongside them, with each one\'s habitat climate where its records allow one.',
+  'A reference for the plants people grow, 8,945 species so far, each with its habitat climate where its records allow one.', // the front page's first line since round seventy-four
   'Every figure names its source. No sign-up. Your plants stay on your device, or sync encrypted if you choose.',
   'Copiapoa cinerea var. columna-alba, Lithops lesliei, Astrophytum asterias, Haworthia cooperi var. truncata'
 ];

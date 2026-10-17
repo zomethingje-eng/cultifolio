@@ -171,7 +171,7 @@ describe('a credit says two licences disagree only when they do (the words revie
 
 describe('the link-preview image\'s alt (the words review\'s 2)', () => {
   it('is the image\'s own words, on the front page and on a species page with no photograph', () => {
-    expect(OG_ALT).toContain('Cactus, succulent and bulb species, and the plants most grown alongside them. Every figure names its source. Your own plants stay on your device, or sync encrypted.');
+    expect(OG_ALT).toContain('The plants people grow, each with its habitat climate where its records allow one. Every figure names its source. Your own plants stay on your device, or sync encrypted.'); // round seventy-four's words, for every home grower
     expect(home).toContain('<meta property="og:image:alt" content={OG_ALT} />');
     expect(species).toContain('content={hero ? heroAlt : OG_ALT}');
   });
@@ -180,7 +180,7 @@ describe('the link-preview image\'s alt (the words review\'s 2)', () => {
 describe('the front page and the species page say what is so (the words review\'s 3, 11, 15)', () => {
   it('"where its records allow one", not "where the sources answered"; "encrypted", not "sealed"', () => {
     expect(home).not.toContain('where the sources answered');
-    expect(home).toContain("with each one's habitat climate where its records allow one.");
+    expect(home).toContain('each with its habitat climate where its records allow one.'); // round seventy-four's first line
     expect(home).toContain('Your records, encrypted before sync.');
   });
   it('the group is said once, as the table lists it', () => {

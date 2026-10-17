@@ -48,7 +48,7 @@ describe('a pending Replace is not "empty" (X4; S-C3)', () => {
     await wipeMeta(vault);
     await vault.setMeta('device', DEV);
   });
-  it('the collection opens with nothing folded and the replacement waiting: no page goes into the example by itself', async () => {
+  it('the collection opens with nothing folded and the replacement waiting: it is neither offered the example nor sent into it', async () => {
     const base = Date.now() - 86_400_000;
     const a = await boot();
     await a.vault.appendChanges(plant('mine', '2026-0001', base, DEV), true);
@@ -64,7 +64,7 @@ describe('a pending Replace is not "empty" (X4; S-C3)', () => {
     ex.example.settled = true;
     expect([b.collection.ready, b.collection.recordCount]).toEqual([true, 0]);
     expect(ex.ownEmpty()).toBe(false); // base: true, and Today, Places and Propagation opened the example over it
-    expect(ex.entersHere()).toBe(false);
+    expect(ex.offersHere()).toBe(false); // nor offered over it (round seventy-four: offered, never opened by itself)
   });
 });
 

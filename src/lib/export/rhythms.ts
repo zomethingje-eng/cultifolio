@@ -51,7 +51,7 @@ export function rhythmsOf(src: RhythmSource): Rhythm[] {
   }
   for (const [placeId, ps] of groups) {
     const at = rule(placeId);
-    const where = placeId ? src.placeName(placeId) : 'plants with no place';
+    const where = placeId ? src.placeName(placeId) : 'plants with no space';
     out.push({ uid: `water-place-${placeId ?? 'none'}.${tag}@cultifolio`, what: where, summary: `Water ${where} (${everyWords(at.every)})`, description: `${ps.length} growing plant${ps.length === 1 ? '' : 's'} on this rhythm, from Cultifolio.${dryWords(at.dry)}`, start: next(ps, at.every), every: at.every, dry: at.dry });
   }
   return out.sort((a, b) => a.summary.localeCompare(b.summary));

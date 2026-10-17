@@ -7,7 +7,8 @@
  *
  * The bucket can (A) hold a manifest this build refuses and no top-level index, (B) throw on every call, with nothing
  * held. Each route must answer 503 (a Kit error or a Response), never 200 with the fixture's species, never 404 or an
- * empty list ("nothing matches"; rule 2). The front page's `feature` read failing must leave the page whole.
+ * empty list ("nothing matches"; rule 2). The front page reads no species' dossier since round seventy-four, when its
+ * one species shown whole went (the owner's decision), so no dossier's failure can touch it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { _forgetIndex, corpusNow } from '$lib/server/dossiers';
@@ -89,23 +90,20 @@ describe('a dossier the index lists but cannot be read', () => {
   const { manifest, files } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
   const withManifest = () => bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string])]);
 
-  it('the front page still renders, with no feature block, when the featured species\' dossier is missing or R2 throws for it', async () => {
-    const { load } = await import('../../src/routes/+page.server');
-    const b = withManifest();
-    const page = (await load(ev('/', plat(b)))) as { feature: unknown; featured: unknown[] };
-    expect(page.featured.length).toBe(1); // W is the pool: eight photographs or more, a thumbnail, a climate
-    expect(page.feature).toBeNull();
-    const get = b.get;
-    b.get = async (k: string) => { if (k === dossierPath(5411106)) throw new Error('R2 internal error'); return get(k); };
-    _forgetIndex();
-    expect(((await load(ev('/', plat(b)))) as { feature: unknown }).feature).toBeNull();
-  });
-  it('and draws it when the dossier is there', async () => {
+  // Round seventy-four (the owner's decision 3): the front page's "This is what a species page with a habitat climate
+  // shows" is gone, and with it the one dossier read the front page made. On r74base the load read the first strip
+  // species' dossier and sent `feature`.
+  it('the front page reads no species dossier and sends no feature, its strip whole either way', async () => {
     const { load } = await import('../../src/routes/+page.server');
     const b = bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), [dossierPath(5411106), readFileSync('fixtures/dossiers/s/v2/5411106.json', 'utf8')]]);
-    const page = (await load(ev('/', plat(b)))) as { feature: { slug: string } | null };
-    // The fixture's Welwitschia has its climate pending, so the block is not drawn for it either: "without a derived climate, the page simply does not draw the block".
-    expect(page.feature).toBeNull();
+    const asked: string[] = [];
+    const get = b.get;
+    b.get = async (k: string) => { asked.push(k); if (k === dossierPath(5411106)) throw new Error('R2 internal error'); return get(k); };
+    _forgetIndex();
+    const page = (await load(ev('/', plat(b)))) as Record<string, unknown> & { featured: unknown[] };
+    expect(page.featured.length).toBe(1); // W is the pool: eight photographs or more, a thumbnail, a climate
+    expect('feature' in page).toBe(false);
+    expect(asked.filter((k) => k === dossierPath(5411106))).toEqual([]);
   });
   it('without a manifest, a bucket whose species cannot be read is answered 503, never left without it (finding 13, fixed in round sixty-two)', async () => {
     const b = bucket([['s/v2/index.json', JSON.stringify(idx)]]);

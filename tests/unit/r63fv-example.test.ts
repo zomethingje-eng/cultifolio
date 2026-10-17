@@ -5,7 +5,8 @@
  *   example, and no longer "entering" (R1, 1).
  * - A device whose records are all held or parked, or that has sync set up, is not empty (R1, 2 and 5).
  * - Nothing goes into the example while a restore, a merge, an import or a sync run is in progress, nor before the
- *   layout has read sync's key; a button pressed then says why (R1, 2 and 7).
+ *   layout has read sync's key; a button pressed then says why (R1, 2 and 7). Since round seventy-four nothing goes in
+ *   by itself at all: the page offers the button (`offersHere`) and only the button opens it.
  * - The menu's way in moves inside the app first, so the page being left asks about its own work; called off, nothing
  *   changes (R1, 1).
  * - A page the back-forward cache brings back into a tab whose mode changed loads afresh (R1, 3).
@@ -105,32 +106,34 @@ describe('a load into the example that is called off leaves the tab as it was (R
 
 describe('a device with records of its own, or work in progress, is never sent into the example (R1, 2 and 5)', () => {
   it('a device whose every record is held, or parked, is not empty', async () => {
-    const { ownEmpty, entersHere } = await import('$lib/ui/grow/example.svelte');
+    const { ownEmpty, offersHere } = await import('$lib/ui/grow/example.svelte');
     expect(ownEmpty()).toBe(true);
     col.heldWaiting = 40;
     expect(ownEmpty()).toBe(false); // the reviewer's reproduction failed here: the held records were not read
-    expect(entersHere()).toBe(false);
+    expect(offersHere()).toBe(false);
     col.heldWaiting = 0;
     col.parkedRecords = 3;
     expect(ownEmpty()).toBe(false);
   });
   it('a device with sync set up is a grower\'s, and nothing is decided before sync\'s key has been read', async () => {
-    const { ownEmpty, entersHere, example } = await import('$lib/ui/grow/example.svelte');
+    const { ownEmpty, offersHere, example } = await import('$lib/ui/grow/example.svelte');
     syncState.configured = true;
     expect(ownEmpty()).toBe(false);
     syncState.configured = false;
     example.settled = false;
-    expect(entersHere()).toBe(false);
+    expect(offersHere()).toBe(false);
     example.settled = true;
-    expect(entersHere()).toBe(true);
+    expect(offersHere()).toBe(true);
   });
-  it('while a restore, a merge or an import runs, or a sync, no page goes in by itself, and a button says why', async () => {
-    const { entersHere, enterExample, keepWorking, notEnteredWords, example } = await import('$lib/ui/grow/example.svelte');
+  // Round seventy-four: "no page goes in by itself" holds always now; the page offers the button meanwhile (the opposite
+  // of round sixty-three's `entersHere` false), and the button says why it did not open.
+  it('while a restore, a merge or an import runs, or a sync, the button opens nothing and says why', async () => {
+    const { offersHere, enterExample, keepWorking, notEnteredWords, example } = await import('$lib/ui/grow/example.svelte');
     const { inDemo } = await import('$lib/db/demo');
     let finish!: () => void;
     const restore = keepWorking(() => new Promise<void>((r) => (finish = r)));
     expect(example.busy).toBe(1);
-    expect(entersHere()).toBe(false);
+    expect(offersHere()).toBe(true);
     expect(enterExample('/today')).toBe('busy');
     expect(asked).toEqual([]);
     expect(inDemo()).toBe(false);
@@ -138,9 +141,8 @@ describe('a device with records of its own, or work in progress, is never sent i
     finish();
     await restore;
     expect(example.busy).toBe(0);
-    expect(entersHere()).toBe(true);
+    expect(inDemo()).toBe(false); // nothing went in by itself once the work was done
     syncState.busy = 'Pulling…';
-    expect(entersHere()).toBe(false);
     expect(enterExample('/today')).toBe('busy');
   });
   it('the work is counted, so one finishing does not clear another, and a failure clears its own', async () => {

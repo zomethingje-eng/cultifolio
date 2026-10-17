@@ -9,12 +9,10 @@ import { test, expect, type Page } from '@playwright/test';
 import { pressOnce, type Press } from './helpers/disclosure';
 import { DISCLOSURES, type Disclosure } from './helpers/disclosure-list';
 import { inject, injectChanges, type Row } from './helpers/inject';
-import { ownPages } from './helpers/r63v-own';
 import { fromAddress } from './helpers/address';
 
 test.use({ serviceWorkers: 'block' });
 test.beforeEach(async ({ context }) => {
-  await context.addInitScript(ownPages);
   await context.addInitScript(() => { try { sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } });
 });
 
@@ -88,7 +86,6 @@ const setups: Record<string, (page: Page) => Promise<Page>> = {
     await page.click('#bk-export');
     const path = await (await dl).path();
     const other = await page.context().browser()!.newContext({ serviceWorkers: 'block' });
-    await other.addInitScript(ownPages);
     const b = await other.newPage();
     await b.goto('/plants'); await ready(b);
     await inject(b, [['accession', 'dq1', 'acc', '2026-0001'], ['accession', 'dq1', 'taxonName', 'Aloe vera'], ['accession', 'dq1', 'status', 'growing']], Date.now() - HOUR, 'fedcbafedcba0000');

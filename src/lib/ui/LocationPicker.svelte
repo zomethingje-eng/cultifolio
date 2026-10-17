@@ -78,7 +78,7 @@
 <div class="picker">
   {#if !adding}
     <select {id} bind:value aria-label={label} aria-describedby={lastUsed && value === lastUsed ? `${id}-last` : undefined}>
-      <option value={null}>No place</option>
+      <option value={null}>No space</option>
       {#each flat as f}<option value={f.id}>{f.label}</option>{/each}
     </select>
     <!-- A new place goes beside the one picked, not inside it: another bench in the same greenhouse is the usual case, and the parent is shown and changeable below. -->
@@ -87,16 +87,16 @@
   {:else}
     <div class="new card">
       <!-- Each field with a visible name over it; the placeholder was the name's only one (round fifty-eight; the accessibility review). -->
-      <label class="fl"><span class="eyebrow">Name of the new place</span><input id="{id}-new-name" type="text" placeholder="e.g. Shelf 2" bind:value={newName} /></label>
-      <label class="fl"><span class="eyebrow">Kind of place</span><select id="{id}-new-kind" bind:value={newKind}>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
-      <label class="fl"><span class="eyebrow">Inside which place</span><select id="{id}-new-parent" bind:value={newParent}>
+      <label class="fl"><span class="eyebrow">Name of the new space</span><input id="{id}-new-name" type="text" placeholder="e.g. Shelf 2" bind:value={newName} /></label>
+      <label class="fl"><span class="eyebrow">Kind of space</span><select id="{id}-new-kind" bind:value={newKind}>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+      <label class="fl"><span class="eyebrow">Inside which space</span><select id="{id}-new-parent" bind:value={newParent}>
         <option value={null}>Top level</option>
         {#each flat as f}<option value={f.id}>{f.label}</option>{/each}
       </select></label>
-      {#if wasInside && !newParent}<p class="small muted" id="{id}-was-inside">In the example it was inside {wasInside}, which is not one of your places, so it goes at the top level unless you choose one.</p>{/if}
+      {#if wasInside && !newParent}<p class="small muted" id="{id}-was-inside">In the example it was inside {wasInside}, which is not one of your spaces, so it goes at the top level unless you choose one.</p>{/if}
       <p class="small muted path">{newParent ? `${collection.locationName(newParent)} › ` : ''}{newName.trim() || '…'}</p>
-      {#if err}<p class="small bad" role="alert" id="{id}-err">The place was not made. {err}</p>{/if}
-      <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => {})} disabled={!newName.trim()}>Add place</button></div>
+      {#if err}<p class="small bad" role="alert" id="{id}-err">The space was not made. {err}</p>{/if}
+      <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => {})} disabled={!newName.trim()}>Add space</button></div>
     </div>
   {/if}
 </div>

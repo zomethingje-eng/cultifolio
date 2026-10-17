@@ -4,9 +4,11 @@
    * visitor's way to see My plants, Today and a plant's page filled in before keeping a single plant. The example is a
    * database of its own, chosen at page load and deleted whole on leaving; nothing of it reaches the grower's own
    * collection, a backup or sync. At the head of the empty My plants page, where it opens the example on that page.
+   * Worded "Show the example collection" with one sentence beside it since round seventy-four, as on the other empty
+   * pages (`ExampleOffer`): the example opens only from a button now.
    */
   import { PAGE_IN_DEMO } from '$lib/db/demo';
-  import { enterExample, notEnteredWords, type NotEntered } from './example.svelte';
+  import { enterExample, notEnteredWords, SHOW_EXAMPLE, EXAMPLE_APART, type NotEntered } from './example.svelte';
   let { note = true, to = '/plants' }: { note?: boolean; to?: string } = $props();
   let demo = $state(false);
   let refused = $state<NotEntered | null>(null);
@@ -15,8 +17,8 @@
 
 {#if !demo}
   <p class="trysample">
-    <button class="btn pri" type="button" id="try-sample" onclick={() => { const r = enterExample(to); refused = r === true ? null : r; }}>See the example collection</button>
-    {#if note}<span class="muted">Twelve plants in a greenhouse and on a windowsill, with a seed batch, so you can see what each page does. Nothing in it is yours, and leaving deletes it.</span>{/if}
+    <button class="btn pri" type="button" id="try-sample" onclick={() => { const r = enterExample(to); refused = r === true ? null : r; }}>{SHOW_EXAMPLE}</button>
+    {#if note}<span class="muted" id="try-sample-apart">{EXAMPLE_APART}</span>{/if}
   </p>
   {#if refused}<p class="small" role="status">{notEnteredWords(refused)}</p>{/if}
 {/if}

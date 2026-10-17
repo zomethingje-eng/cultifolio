@@ -4,6 +4,7 @@
  * half-typed first plant went without a word on an iPhone, and a desktop's "Leave site?" answered Cancel left the tab
  * marked as the example's over the visitor's own collection. The tap is now the app's ordinary move, which asks first;
  * the page it lands on goes into the example. The menu's "See the example collection" moves inside the app first too.
+ * Since round seventy-four the page it lands on does not go into the example at all; its button does.
  *
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r63fv-guard.spec.ts
  */
@@ -40,8 +41,15 @@ test('r63fv 1: a tab tapped from a half-typed first plant asks first; Cancel kee
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   expect(await flag(page)).toBeNull();
-  // Asked again and answered OK: Today, which goes into the example by itself, the form's words having been let go.
+  // Asked again and answered OK: Today, the form's words having been let go. Round seventy-four (the owner's decision 2):
+  // an empty device's Today does not open the example; its button does (on r74base it went in by itself here).
   await page.locator('#tabbar a[href="/today"]').click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator('#see-example')).toBeVisible();
+  await page.waitForTimeout(800);
+  await expect(page.locator('html[data-demo]')).not.toBeAttached();
+  expect(await flag(page)).toBeNull();
+  await page.locator('#see-example').click();
   await inExample(page, '/today');
   expect(asked).toHaveLength(2);
 });

@@ -32,12 +32,11 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 768]] as const) 
     // past `page.route`, so they never loaded (round sixty-four; the all-engines run; r61w-pages blocks it for the same).
     test.use({ viewport: { width, height }, locale: 'en-GB', serviceWorkers: 'block' });
 
-    test('the search and a whole catalogue row are on the first screen, the chips with the rows, the feature after them', async ({ page }) => {
+    test('the search and a whole catalogue row are on the first screen, the chips with the rows', async ({ page }) => {
       await liveHome(page);
-      await expect(page.locator('section.feature')).toBeVisible();
       const m = await page.evaluate(() => {
         const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-        return { scrollY, h: innerHeight, search: b('.toolrow .searchbar').bottom, chips: b('.tools .chiprow').bottom, toolEnd: b('.toolrow').bottom, rowTop: b('.rows .grow').top, row: b('.rows .grow').bottom, feature: b('section.feature').top };
+        return { scrollY, h: innerHeight, search: b('.toolrow .searchbar').bottom, chips: b('.tools .chiprow').bottom, toolEnd: b('.toolrow').bottom, rowTop: b('.rows .grow').top, row: b('.rows .grow').bottom };
       });
       expect(m.scrollY).toBe(0);
       // On the base the search stood at y 1262 and the first row at 1478 at every one of these sizes.
@@ -45,7 +44,6 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 768]] as const) 
       expect(m.chips).toBeLessThanOrEqual(m.h);
       expect(m.row, `first row bottom ${m.row} of ${m.h}`).toBeLessThanOrEqual(m.h);
       expect(m.rowTop - m.toolEnd).toBeLessThan(110); // nothing but the letters between the chips and the rows
-      expect(m.feature).toBeGreaterThan(m.row);
     });
   });
 }
@@ -53,17 +51,15 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 768]] as const) 
 test.describe('desktop, 1280 × 800, the fixture', () => {
   test.use({ viewport: { width: 1280, height: 800 }, locale: 'en-GB' });
 
-  test('opening a row keeps the feature, so no row moves under the pointer', async ({ page }) => {
+  // Round seventy-four: the feature this test kept in place is gone (the owner's decision 3); no row moves still.
+  test('opening a row moves no row under the pointer', async ({ page }) => {
     await page.goto('/');
     await ready(page);
-    await expect(page.locator('section.feature')).toBeVisible();
     const top = (s: string) => page.evaluate((s) => document.querySelector(s)!.getBoundingClientRect().top + scrollY, s);
     const before = await top('#g-copiapoa');
     await page.locator('#g-copiapoa').click();
     await page.waitForURL(/open=copiapoa/);
     await expect(page.locator('#g-copiapoa')).toHaveAttribute('aria-expanded', 'true');
-    // The server sends no feature for `?open=`; the page keeps the one it drew.
-    await expect(page.locator('section.feature')).toBeVisible();
     expect(Math.abs((await top('#g-copiapoa')) - before)).toBeLessThan(2);
   });
 

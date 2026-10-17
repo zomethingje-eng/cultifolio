@@ -236,16 +236,16 @@
 {#if collection.ready && collection.accessions.length}
 <div class="toolrow plantstools">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search plants…" aria-label="Search your plants" bind:value={q} />
-  {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By place</option></select>{/if}
+  {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By space</option></select>{/if}
   <!-- One place and what is inside it; the address carries it, so a place page can link here (round sixty-one; the grower
-       review, 7). Offered with the "By place" order, or while a place is chosen, so the phone's first screen keeps its one row. -->
-  {#if collection.locations.length && (place || (!few && sort === 'place'))}<select id="plants-place" class="sortsel placesel" aria-label="Place" bind:value={place}><option value="">All places</option>{#each placeList as p (p.id)}<option value={p.id}>{p.label}</option>{/each}</select>{/if}
+       review, 7). Offered with the "By space" order, or while a space is chosen, so the phone's first screen keeps its one row. -->
+  {#if collection.locations.length && (place || (!few && sort === 'place'))}<select id="plants-place" class="sortsel placesel" aria-label="Space" bind:value={place}><option value="">All spaces</option>{#each placeList as p (p.id)}<option value={p.id}>{p.label}</option>{/each}</select>{/if}
   {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
   <!-- "Due" by each plant's rhythm, which a place or the plant may set: the chip no longer says 21 days for all (round fifty-eight; the grower review). -->
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   {#if !few}<ToggleGroup chips class="showrow" style="margin: 0" label="Which plants" bind:value={show} options={[
     { value: 'growing', label: 'Growing', n: collection.accessions.filter((a) => a.status === 'growing').length },
-    { value: 'due', label: 'Due', n: dueN, title: 'Past its watering rhythm: 21 days unless its place or the plant sets another' },
+    { value: 'due', label: 'Due', n: dueN, title: 'Past its watering rhythm: 21 days unless its space or the plant sets another' },
     ...(noPhotoN || show === 'nophoto' ? [{ value: 'nophoto' as const, label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants kept six months or more and not photographed in the last year' }] : []),
     { value: 'all', label: 'All', n: collection.accessions.length }
   ]} />{/if}
@@ -279,8 +279,8 @@
     <!-- The example first, where a visitor starts: a look at every page filled in before typing a plant (round sixty-three, V2). -->
     <TrySample />
     <ol class="steps">
-      <!-- To the add form: an empty Places opens the example by itself, and this step is for the grower's own place (round sixty-three, V2). -->
-      <li><a href="/places#add" onclick={(e) => addLeavesExample(e, '/places#add')}><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one place' : `${collection.locations.length} places`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
+      <!-- To the add form: this step is for the grower's own space (round sixty-three, V2). -->
+      <li><a href="/places#add" onclick={(e) => addLeavesExample(e, '/places#add')}><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one space' : `${collection.locations.length} spaces`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
       <li><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}><span class="n">2</span><span class="t">Your first plant</span><span class="w">its name, where it came from and where it lives</span></a></li>
       <li><a href="/settings#site"><span class="n">3</span><span class="t">Your location for the frost watch</span><span class="w">{site.current ? `set${site.current.name ? `: ${site.current.name}` : ''}` : 'the frost watch reads its forecast there, and the months follow its hemisphere'}</span></a></li>
     </ol>
@@ -290,7 +290,7 @@
 {:else}
   {#if byPlace.length && !place}
     <!-- What the list is held to, said, with the way to the words instead (round sixty-one; the grower review, 7). -->
-    <p class="small muted" id="q-place">The plants at {byPlace.map((id) => collection.locationName(id)).join(' and ')} and inside, since the search names {byPlace.length === 1 ? 'that place' : 'those places'}. <button class="linkish" type="button" id="q-words" onclick={() => (wordsOnly = true)}>Every plant that mentions “{q.trim()}” instead</button></p>
+    <p class="small muted" id="q-place">The plants at {byPlace.map((id) => collection.locationName(id)).join(' and ')} and inside, since the search names {byPlace.length === 1 ? 'that space' : 'those spaces'}. <button class="linkish" type="button" id="q-words" onclick={() => (wordsOnly = true)}>Every plant that mentions “{q.trim()}” instead</button></p>
   {/if}
   {#if list.length && !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
     <!-- One line, the disclosure behind it: the paragraph stood between the chips and the first plant on a phone (round fifty, 4). -->

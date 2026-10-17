@@ -80,7 +80,8 @@ describe('the delete mark is Leave\'s own token (X1; S-C1)', () => {
     session.m.set('cultifolio.demo', '1');
     session.m.set('cultifolio.sampleLeaving', 'abc123');
     const d = firstScript('?left=zzz999');
-    expect([session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo'), d.demo, session.m.get('cultifolio.sampleOut')]).toEqual([undefined, undefined, undefined, '1']);
+    // Round seventy-four: no "left" mark is written any more (nothing opens the example by itself); on r74base, '1'.
+    expect([session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo'), d.demo, session.m.get('cultifolio.sampleOut')]).toEqual([undefined, undefined, undefined, undefined]);
   });
   it('a tab sent home goes to `/`, an address that marks nothing (S-C1\'s smallest fix)', async () => {
     const demo = await examplePage();
@@ -106,7 +107,7 @@ describe('a tab that was away when another tab left (X2; R46-19)', () => {
     session.m.set('cultifolio.demo.gen', 'g1');
     local.m.set('cultifolio.sampleGen', 'g2'); // another tab left since
     const d = firstScript('');
-    expect([d.demo, session.m.get('cultifolio.demo'), session.m.get('cultifolio.sampleClosed'), session.m.get('cultifolio.sampleOut')]).toEqual([undefined, undefined, '1', '1']); // base: '1' and the example set out again, twelve plants
+    expect([d.demo, session.m.get('cultifolio.demo'), session.m.get('cultifolio.sampleClosed'), session.m.get('cultifolio.sampleOut')]).toEqual([undefined, undefined, '1', undefined]); // base: '1' and the example set out again, twelve plants; round seventy-four writes no "left" mark (r74base: '1')
   });
   it('a tab of the same generation stays in the example; so does one from before any Leave was noted', () => {
     session.m.set('cultifolio.demo', '1');
