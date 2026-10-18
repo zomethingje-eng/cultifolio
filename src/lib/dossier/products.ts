@@ -15,6 +15,8 @@ import { prepare, search } from '$core/search';
 import { contentHash, SHORT_HITS, type Manifest } from './manifest';
 import { md5 } from './md5';
 import { catalogueOf, rowsOnly, catalogueFile, BYS, CHIPS } from './catalogue';
+import { buildNameFiles, buildRowFiles, generaOfIndex, featuredFile, SITEMAP_CHUNK } from './lookups';
+import { sitemapUrls, sitemapDays } from '$lib/server/sitemap';
 
 export interface Products {
   manifest: Manifest;
@@ -44,7 +46,7 @@ export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[
   return out;
 }
 
-export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = []): Products {
+export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: number) => readonly string[] | undefined): Products {
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = md5(body); };
@@ -68,6 +70,14 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   for (const body of posted.values()) for (const k of Object.keys(body)) if (k.length <= 2 && !Object.hasOwn(short, k)) short[k] = search(whole, k, SHORT_HITS).map((e) => place.get(e)!).filter((i) => i !== undefined);
   put('short.json', JSON.stringify(Object.fromEntries(Object.entries(short).sort(([a], [b]) => (a < b ? -1 : 1)))));
   for (const by of BYS) for (const chip of CHIPS) put(catalogueFile(by, chip), JSON.stringify(rowsOnly(catalogueOf(index, by, chip))));
+  // What the Worker read from the index for everything but the search, written as files read by key (round seventy-six;
+  // ./lookups.ts): the name files, each grouping's row files, the genera, the strip and the sitemap.
+  for (const [f, body] of buildNameFiles(index, synonymsOf)) put(`names/${f}.json`, JSON.stringify(body));
+  for (const by of BYS) for (const [f, body] of buildRowFiles(index, by)) put(`rows/${by}/${f}.json`, JSON.stringify(body));
+  put('genera.json', JSON.stringify(generaOfIndex(index)));
+  put('featured.json', JSON.stringify(featuredFile(index)));
+  const urls = sitemapUrls(index), days = sitemapDays(index);
+  for (let n = 1; (n - 1) * SITEMAP_CHUNK < urls.length; n++) put(`sitemap/${n}.json`, JSON.stringify({ urls: urls.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK), days: days.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK) }));
   // The id names everything in the directory, not the index alone: a dossier change that leaves its index entry as it was
   // still changes its sheet, and a sheet rewritten under an unchanged id sat in every cache for a day (round fifty-four, 3; both reviewers).
   const id = contentHash([...files.keys()].sort().map((n) => `${n}=${hashes[n]}`).join('\n')).slice(0, 16);

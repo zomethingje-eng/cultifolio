@@ -1,6 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym, sharedOlderName } from '$lib/server/dossiers';
-import { synonymAsk, synonymInIndex, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch } from '$lib/server/synonyms';
+import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer } from '$lib/server/dossiers';
+import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch, type SynonymAnswer } from '$lib/server/synonyms';
+import { lookupOf, addressOf, type Lookup } from '$lib/server/lookup';
+import { plainName, synonymKey, type Card } from '$dossier/lookups';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
@@ -18,47 +20,46 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // One corpus for the page, the hook's when it held the page: its key, its slug and every index read (round fifty-nine).
   // A corpus that cannot be read is a 503 that says so (`UNREADABLE`), never the fixture's species (round sixty).
   const c = locals?.corpus ?? (await corpusNow(platform, fetch));
-  // An address in capitals, or with a space, an underscore or any other character a slug does not have, is the same
-  // species: moved for good to the slug, written as a slug, so no decoded character (a space, a `?`, a line break) is
-  // ever put in the Location header or changes which page answers (round sixty; the corpus review, 9: `Copiapoa%20cinerea`
-  // moved to an address with a raw space, `%3F` to another page, and `%0D%0A` was a 500). `/species/Copiapoa-cinerea`
-  // said Kew did not accept the name (round fifty-eight).
-  if (!c.bySlug.has(params.slug)) {
-    const slug = slugify(params.slug);
-    if (slug !== params.slug) {
-      if (!slug) error(404, { message: 'No species page at this address' });
-      redirect(301, `/species/${encodeURIComponent(slug)}${url.search}`);
-    }
+  // Every name the page asks of the reference, by key: from the build's name files, or the maps over the index of a
+  // corpus built before them (round seventy-six; $lib/server/lookup).
+  const look: Lookup = lookupOf(c, platform, fetch);
+  // What the address names, in the order since round seventy (`addressOf`):
+  // - An address in capitals, or with a space, an underscore or any other character a slug does not have, is the same
+  //   species: moved for good to the slug, written as a slug, so no decoded character (a space, a `?`, a line break) is
+  //   ever put in the Location header or changes which page answers (round sixty; the corpus review, 9: `Copiapoa%20cinerea`
+  //   moved to an address with a raw space, `%3F` to another page, and `%0D%0A` was a 500). `/species/Copiapoa-cinerea`
+  //   said Kew did not accept the name (round fifty-eight).
+  // - A genus alone is its row in the catalogue, opened (round fifty-eight): `/species/copiapoa` was a dead end.
+  // - An older name of two species or more of the reference answers none of them (rule 3), and GBIF is not asked: the
+  //   404 says so and names them (round sixty-nine; triage-68 N1, S-F1, R46-3: "Cotyledon mammillaris" went to
+  //   Adromischus filicaulis, the first holder in the index's order, and the page said GBIF accepted it as that species).
+  //   Whichever of them shows it (round seventy; triage-69 F1): looked up by the address's slug, so a hyphenated name is
+  //   found as written (N3), and each holder named with the author under which its record holds the name, read from its
+  //   dossier's stored synonyms, or with none where the record has none or could not be read.
+  // - An old name the reference's own older names hold, held by one species: moved there (round thirty-one, 3).
+  const at = await addressOf(look, params.slug, (slug) => resolveSlug(platform, fetch, slug, c));
+  if (at.kind === 'move') {
+    if (!at.slug) error(404, { message: 'No species page at this address' });
+    redirect(301, `/species/${encodeURIComponent(at.slug)}${url.search}`);
   }
-  const key = await resolveSlug(platform, fetch, params.slug, c);
+  if (at.kind === 'genus') redirect(302, `/?by=genus&open=${slugify(at.genus)}`);
+  const key = at.kind === 'page' ? at.key : null;
   if (!key) {
-    // A genus alone is its row in the catalogue, opened (round fifty-eight): `/species/copiapoa` was a dead end.
-    if (/^[a-z]+$/.test(params.slug)) {
-      const g = params.slug[0].toUpperCase() + params.slug.slice(1);
-      if (indexMaps(c.idx).byGenus.get(g)?.length) redirect(302, `/?by=genus&open=${slugify(g)}`);
-    }
-    // An older name of two species or more of the reference answers none of them (rule 3), and GBIF is not asked: the
-    // 404 says so and names them (round sixty-nine; triage-68 N1, S-F1, R46-3: "Cotyledon mammillaris" went to
-    // Adromischus filicaulis, the first holder in the index's order, and the page said GBIF accepted it as that species).
-    // Whichever of them shows it (round seventy; triage-69 F1): looked up by the address's slug, so a hyphenated name is
-    // found as written (N3), and each holder named with the author under which its record holds the name, read from its
-    // dossier's stored synonyms, or with none where the record has none or could not be read.
-    const holders = ambiguousSynonym(c.idx, params.slug);
-    if (holders) {
-      const asName = sharedOlderName(c.idx, params.slug) ?? nameFromSlug(params.slug);
-      const records = await Promise.all(holders.map((e) => getDossier(platform, fetch, e.key, c).catch(() => null)));
+    if (at.kind === 'shared') {
+      const asName = at.name;
+      const records = await Promise.all(at.holders.map(([k]) => getDossier(platform, fetch, k, c).catch(() => null)));
       // A record not read is the next visit's to read again: kept by no one (rule 2), where a full answer is kept five minutes.
       setHeaders({ 'cache-control': records.every(Boolean) ? 'public, max-age=300' : 'no-store' });
       const g = asName.split(' ')[0];
-      const message = sharedNameMessage(asName, holders.map((e, i) => ({ name: e.name, authors: authorsOf(asName, records[i]?.name.synonyms ?? []) })));
-      error(404, { message, species: { name: asName, genus: g, inGenus: indexMaps(c.idx).byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g), suggest: holders.map((e) => ({ slug: e.slug, name: e.name })) } });
+      const message = sharedNameMessage(asName, at.holders.map(([, , name], i) => ({ name, authors: authorsOf(asName, records[i]?.name.synonyms ?? []) })));
+      error(404, { message, species: { name: asName, genus: g, inGenus: at.inGenus, wholeGenus: WHOLE_GENERA.has(g), suggest: at.holders.map(([, slug, name]) => ({ slug, name })) } });
     }
-    // An old name: the index's own synonym lists first (no request), then the backbone is asked whether it is a synonym,
+    // An old name: the reference's own older names first (no request), then the backbone is asked whether it is a synonym,
     // and the page moves to the accepted species when the reference holds it, saying so; otherwise the 404 says what the
     // name is now (round thirty, R2-8; round thirty-two, 2). The move is temporary (a 302, cached for the day the
     // answer is), since the backbone changes its mind and a browser keeps a 301 for good; and a lookup upstream is
     // rate-limited per address, since a script can mint binomial-shaped addresses without end (round thirty-three, 12).
-    let syn = await synonymInIndex(platform, fetch, params.slug, c); // the page's corpus (round sixty; A27)
+    let syn: SynonymAnswer | null = at.kind === 'older' ? { matched: at.matched, acceptedKey: at.key, acceptedName: at.name, slug: at.slug } : null; // the page's corpus (round sixty; A27)
     let unchecked = false;
     let heldBack = false; // the site held its call to GBIF back: not asked, never "did not answer" (round sixty-one)
     let gbifRefused = false; // GBIF refused this site's request: said as a refusal (round sixty-seven; S8)
@@ -85,14 +86,13 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const asked = nameFromSlug(params.slug);
     // A genus only when the address is shaped as a name: "not-a-plant-zzz" is no genus "Not" (round seventy-two; triage F12).
     const genus = addressGenus(asked) ?? '';
-    const index = c.idx;
     // And the reference's own nearest names, by the catalogue's search (the slips it forgives, and since round sixty the
     // way growers write names: a variety the reference files under its species is offered that species, as the search's
     // retry on the first two words finds it), so a misspelt address offers the page it meant (round fifty-eight). Only
     // from the postings: a miss of them is no suggestion, never a whole-index pass.
     const found = asked ? await searchAnswer(platform, fetch, asked, 3, async () => new Response(null, { status: 429 }), c).catch(() => null) : null;
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
-    const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
+    const species = genus ? { name: asked, genus, inGenus: (await look.genera()).get(genus) ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
     // A held call is "not asked", a silence "not checked" (round sixty-two; visitor-words 12, rule 2). "The calls this site
     // allows" covers the site's share and this address's part of it alike.
@@ -101,9 +101,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
-  const index = c.idx;
-  const { byKey, byGenus } = indexMaps(index); // once per index, not a map of fifty thousand entries per page (round fifty-one, 6)
-  const me = byKey.get(key);
+  // The species, the genera and its genus's row, read together with the dossier: by key from the name files under a
+  // manifest that names them, from the maps over the index otherwise (round seventy-six).
+  const [me, genera] = await Promise.all([look.species(key), look.genera()]);
+  const rowOf = (g: string) => look.row('genus', slugify(g)).then((r) => (r?.items ?? []).filter((e) => genusOf(e.name) === g));
   // The species is in the index: a dossier that cannot be read (absent from the bucket, damaged, or R2 not answering) is
   // a page that could not be read, a 503 not kept by anyone, never "No species page" (round sixty; the first outside
   // review, A6; rule 2: a refusal is not an absence).
@@ -112,9 +113,11 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const unreadable = () => {
     setHeaders({ 'cache-control': 'no-store' });
     const g = me ? genusOf(me.name) : '';
-    const body = { message: SPECIES_UNREADABLE, unreadable: true as const, ...(me ? { species: { name: me.name, genus: g, inGenus: byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g) } } : {}) };
+    const body = { message: SPECIES_UNREADABLE, unreadable: true as const, ...(me ? { species: { name: me.name, genus: g, inGenus: genera.get(g) ?? 0, wholeGenus: WHOLE_GENERA.has(g) } } : {}) };
     return error(503, body);
   };
+  const myRow = me ? rowOf(genusOf(me.name)) : null;
+  myRow?.catch(() => {}); // awaited below, or not at all when the page cannot be read
   const [loaded, genusRecordEarly] = await Promise.all([getDossier(platform, fetch, key, c).catch(() => null), me ? getGenus(platform, fetch, slugify(genusOf(me.name)), c).catch(() => null) : Promise.resolve(undefined)]);
   if (!loaded) return unreadable();
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
@@ -126,23 +129,23 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
-  const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
+  const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
-  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaOf(byGenus.keys()) });
+  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaOf(genera.keys()) });
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
-  const allSiblings = (byGenus.get(genus) ?? []).filter((e) => e.key !== key);
+  const allSiblings = (await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus))).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
   const siblingCount = allSiblings.length;
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.
-  const near = (me?.near ?? []).map((k) => byKey.get(k)).filter((e): e is NonNullable<typeof me> => !!e && e.climate === 'ok').map(card);
+  const near = (await Promise.all((me?.near ?? []).map((k) => look.species(k)))).filter((e): e is Card => !!e && e.climate === 'ok').map(card);
   // About the genus: its Wikipedia lead, written by `--fill genus`; null when that pass has not run for this genus.
   const genusRecord = genusRecordEarly !== undefined ? genusRecordEarly : await getGenus(platform, fetch, slugify(genus), c).catch(() => null);
   // Shown only when the name is one this species' own record lists (the index's binomials, or the dossier's synonyms):
   // `?was=` is a statement anyone can write into a link, and the page printed it as fact (round thirty-three, 12).
   const was = url.searchParams.get('was');
   // Compared without rank markers, since the backbone's canonical form of a variety drops "var." (round thirty-four).
-  const plain = (x: string) => x.toLowerCase().replace(/\b(var|subsp|ssp|f)\.? /g, '').replace(/\s+/g, ' ').trim();
+  const plain = plainName;
   const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x)].map(plain);
   const ownNames = new Set(listed);
   // The binomial of a listed variety counts too: the backbone files "Trichocereus pachanoi" under a variety of
@@ -169,18 +172,20 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // A name another species here is accepted under names no one species here, as a shared older name does (round
   // seventy-one; S-F3: `?was=Annona%20muricata` on Annona montana, which holds Vellozo's homonym, said the backbone
   // accepted this species as Annona muricata, the soursop's name).
-  const acceptedElsewhere = shownWas ? [indexMaps(index).byName.get(wasPlain)].filter((e): e is NonNullable<typeof e> => !!e && e.key !== key).map((e) => ({ slug: e.slug, name: e.name })) : [];
-  const sharedWith = shownWas ? (ambiguousSynonym(index, shownWas) ?? []).filter((e) => e.key !== key && !acceptedElsewhere.some((a) => a.slug === e.slug)).map((e) => ({ slug: e.slug, name: e.name })) : [];
+  const acceptedElsewhere = shownWas ? [await look.accepted(wasPlain)].filter((e): e is NonNullable<typeof e> => !!e && e[0] !== key).map(([, slug, name]) => ({ slug, name })) : [];
+  const wasHeld = shownWas ? await look.older(synonymKey(shownWas)) : null;
+  const sharedWith = wasHeld && 'many' in wasHeld ? wasHeld.many.filter(([k, slug]) => k !== key && !acceptedElsewhere.some((a) => a.slug === slug)).map(([, slug, name]) => ({ slug, name })) : [];
   // The record's older names that are another species' accepted name here: shown with the record's author, and said not
   // to be that species (round seventy-one; S-F3: 169 pages, "Also known as … Annona muricata" on Annona montana).
-  const { byName } = indexMaps(index);
-  const namedElsewhere = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))].flatMap((n) => {
-    const e = byName.get(plain(n));
-    return e && e.key !== key ? [{ name: n, slug: e.slug, authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
+  const olderOwn = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))];
+  const elsewhere = await look.elsewhere(key, olderOwn.map(plain));
+  const namedElsewhere = olderOwn.flatMap((n) => {
+    const e = elsewhere.get(plain(n));
+    return e && e[0] !== key ? [{ name: n, slug: e[1], authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
   });
   // The other page whose Kew entry gives this page its range, when the dossier names one (round seventy-two; triage B3, F13).
   const viaKey = Number((d.distribution as { via?: { page?: string } }).via?.page);
-  const viaEntry = Number.isFinite(viaKey) && viaKey !== key ? byKey.get(viaKey) : undefined;
+  const viaEntry = Number.isFinite(viaKey) && viaKey !== key ? await look.species(viaKey) : undefined;
   return {
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
     /** English common names, the index's choice first (round sixty-one; decision 7). */

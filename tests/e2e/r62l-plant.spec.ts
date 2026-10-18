@@ -84,7 +84,9 @@ test('a plant whose missing fields are all parked shows the Parked notice with A
   // off by the next goto) as a page error, "Fetch API cannot load … due to access control checks", whether or not the
   // page caught it; that is the engine's word for a cancelled fetch, not a throw of the page's (round sixty-nine;
   // triage-68 P4, R46-30). Only that message, for this site's own /api/ addresses, is set aside.
-  const cancelled = (m: string) => /^Fetch API cannot load https?:\/\/[^/]+\/api\/\S* due to access control checks\.?$/.test(m);
+  // Round seventy-six: WebKit on the owner's PC wrote it without the words before the address ("/127.0.0.1:4173/api/sheets?… due
+  // to access control checks."), so the words before the address are optional; the address must still be this site's own /api/.
+  const cancelled = (m: string) => /^(Fetch API cannot load )?(https?:\/\/|\/)?(127\.0\.0\.1|localhost)(:\d+)?\/api\/\S* due to access control checks\.?$/.test(m);
   page.on('pageerror', (e) => { if (!cancelled(e.message)) thrown.push(e.message); });
   await page.goto('/plants'); await ready(page);
   const far = Date.now() + 365 * 86_400_000;

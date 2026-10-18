@@ -58,8 +58,9 @@ test.describe('phone', () => {
     const top = async (sel: string) => (await page.locator(sel).first().boundingBox())!.y;
     // The front page's species shown whole went in round seventy-four (the owner's decision 3); the strip's photographs lead to their pages.
     await expect(page.locator('.featured .strip a').first()).toHaveAttribute('href', /\/species\//);
-    // On a phone the strip follows the first rows since round sixty-three (V4; the first screen is measured at Safari's page size in r63v-first-screen.spec.ts).
-    expect(await top('section.featured:visible')).toBeGreaterThan(await top('.rows .grow'));
+    // Above the search at every width since round seventy-six (the owner's decision; round sixty-three, V4, had drawn a phone's
+    // strip after the first rows). The first screen is measured at Safari's page size in r63v-first-screen.spec.ts.
+    expect(await top('section.featured:visible')).toBeLessThan(await top('.toolrow .searchbar'));
     expect(await top('.toolrow .searchbar')).toBeLessThan(844); // on the first screen
     expect(await top('.rows .grow')).toBeLessThan(844); // and the first row
     // the example first in the welcome line's ways in (round sixty-three, V2)

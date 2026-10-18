@@ -44,6 +44,8 @@ describe('the engine fixes of P4 (IND-12, IND-13, R46-30)', () => {
     const l = raw('tests/e2e/r62l-plant.spec.ts');
     const re = new RegExp(/const cancelled = \(m: string\) => (\/.*\/)\.test\(m\);/.exec(l)![1].slice(1, -1));
     expect(re.test('Fetch API cannot load http://127.0.0.1:4173/api/sheets?b=0a&c=x&v=1 due to access control checks.')).toBe(true);
+    // Round seventy-six: WebKit on the owner's PC wrote it without the words before the address.
+    expect(re.test('/127.0.0.1:4173/api/sheets?b=03&n=32&v=1792285814243 due to access control checks.')).toBe(true);
     expect(re.test('Illegal invocation')).toBe(false);
     expect(re.test('Fetch API cannot load https://example.org/x due to access control checks.')).toBe(false);
   });

@@ -94,7 +94,7 @@ import { createHash } from 'node:crypto';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
-import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, type HeldNames } from '../src/lib/dossier/photo-kind';
+import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
 import { englishNames, indexNames, generaOf, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
@@ -109,7 +109,8 @@ import { writeAtomic } from './write-atomic';
 import { loadKewInfra } from './kew-infra-load';
 import { inatKewFill, type InatKewDossier } from '../src/lib/dossier/inat-kew-fill';
 import type { KewInfra } from '../src/lib/dossier/kew-infra';
-import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossier/schema';
+import { dossierPath, DOSSIER_V, parseDossier, unchain, Dossier as DossierSchema } from '../src/lib/dossier/schema';
+import * as vb from 'valibot';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
 import { bucketOf } from '../src/lib/core/bucket';
 import { buildProducts } from '../src/lib/dossier/products';
@@ -336,10 +337,17 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
   const held = heldNamesOf(out);
   out.forEach((e, i) => {
     const p = photoFields(forPhotos[i], held);
-    e.thumb = p.thumb;
-    e.photos = p.photos;
-    if (p.credit) e.credit = p.credit;
-    else delete e.credit;
+    // In the entry's own order, the credit after the thumbnail, whatever the first phase found: the first phase reads a
+    // dossier's stored judgement (round seventy-six) and found a credit where before it found none, and a credit put back
+    // at the end moved bytes of the index on a second run that changed nothing.
+    const o: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(e)) {
+      if (k === 'credit') continue;
+      if (k === 'thumb') { o.thumb = p.thumb; if (p.credit) o.credit = p.credit; continue; }
+      o[k] = k === 'photos' ? p.photos : v;
+    }
+    for (const k of Object.keys(e)) delete (e as unknown as Record<string, unknown>)[k];
+    Object.assign(e, o);
   });
   if (stamped) console.log(`  ${stamped} dossier${stamped === 1 ? '' : 's'} changed since ${stamped === 1 ? 'its' : 'their'} last stamp (or never stamped): the day each last changed written into the file, for the sitemap`);
   // "Grows like": the six nearest habitat climates per species, by the distance in src/lib/core/near.ts, into the index.
@@ -1037,11 +1045,11 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number, aliase
  * previous corpus's files until the next refresh (DEPLOY.md says how the bucket is pruned), and a device or an edge
  * that read the previous manifest a minute ago still finds them.
  */
-function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, aliases: readonly Alias[] = []): Manifest {
+function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, aliases: readonly Alias[] = [], synonymsOf?: (key: number) => readonly string[] | undefined): Manifest {
   let prev: Manifest | null = null;
   try { prev = JSON.parse(readFileSync(`${idxDir}/manifest.json`, 'utf8')) as Manifest; } catch { /* the first build with a manifest */ }
   if (prev && (typeof prev.files !== 'object' || !Object.values(prev.files).every(isFileHash))) prev = null; // a manifest of round fifty-three's layout names directories, not files
-  const { manifest, files } = buildProducts(index, indexText, sheetsOf, undefined, aliases);
+  const { manifest, files } = buildProducts(index, indexText, sheetsOf, undefined, aliases, synonymsOf);
   const dir = `${idxDir}/p`;
   mkdirSync(dir, { recursive: true });
   let written = 0, kept = 0;
@@ -1162,6 +1170,41 @@ function markSharedPhotos(dir: string): void {
   } else if (existsSync('shared-photos.txt')) unlinkSync('shared-photos.txt');
 }
 
+/**
+ * Round seventy-six (docs/SCALE-STUDY.md section 2.4): what the photograph rules make of each Commons file with every
+ * name the reference holds (`heldNamesOf` of the index just written, as the Worker read it before) is stored in the
+ * dossier as `judged`, so the Worker reads a page without the whole index. Read with the dossier as the Worker parses
+ * it; only the files whose judgement changes are written. Left out of the substance stamp (changed.ts), as derived.
+ * Gives each species' dossier synonyms, which the name files read for the older names that are another's accepted name.
+ */
+function judgeDossiers(dir: string, index: IndexEntry[]): Map<number, string[]> {
+  const held = heldNamesOf(index);
+  const synonyms = new Map<number, string[]>();
+  let written = 0, judged = 0, unread = 0;
+  for (const e of index) {
+    const path = `${dir}/${e.key}.json`;
+    let raw: Dossierish & { photos: Array<Parameters<typeof judgePhotos>[0][number]> };
+    try { raw = JSON.parse(readFileSync(path, 'utf8')); } catch { unread++; continue; }
+    synonyms.set(e.key, raw.name?.synonyms ?? []);
+    const parsed = vb.safeParse(DossierSchema, raw);
+    if (!parsed.success) { unread++; continue; } // the Worker does not serve it either
+    const names = kindNamesOf(parsed.output, held)!;
+    // The parse keeps the photographs in their order: each stored file is judged as its parsed copy reads.
+    const photos = parsed.output.photos as unknown as Parameters<typeof judgePhotos>[0];
+    judgePhotos(photos, names);
+    let changed = false;
+    raw.photos.forEach((p, i) => {
+      const j = photos[i]?.judged;
+      if (p.src !== 'commons') { if (p.judged) { delete p.judged; changed = true; } return; }
+      judged++;
+      if (JSON.stringify(p.judged ?? null) !== JSON.stringify(j ?? null)) { if (j) p.judged = j; else delete p.judged; changed = true; }
+    });
+    if (changed) { writeAtomic(path, JSON.stringify(raw)); written++; }
+  }
+  console.log(`  photograph judgement: ${judged} Commons files on ${index.length - unread} pages read with the reference's names; ${written} dossier${written === 1 ? '' : 's'} written anew${unread ? `; ${unread} not read (they fail the schema, and no page shows them)` : ''}`);
+  return synonyms;
+}
+
 function writeIndexFromDisk(): void {
   markSharedPhotos(`${outDir}/s/v${DOSSIER_V}`);
   const index = uniqueSlugs(scanDossiers(true).sort((a, b) => a.name.localeCompare(b.name)));
@@ -1181,7 +1224,10 @@ function writeIndexFromDisk(): void {
   console.log(`  index: ${index.length} species`);
   // Old addresses of merged pages (round seventy-three): read from the kept pages' records, as `--prune-followed` reads them.
   if (aliases.length) console.log(`  ${aliases.length} old address${aliases.length === 1 ? '' : 'es'} of pages merged into another answered by the kept page: ${aliases.map((a) => a.slug).join(', ')}`);
-  writeProducts(index, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count, aliases).buckets, aliases);
+  // The photograph judgement with every name of the reference, stored in each dossier (round seventy-six), and each
+  // record's older names for the name files: the Worker then reads a page without the index.
+  const synonyms = judgeDossiers(idxDir, index);
+  writeProducts(index, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count, aliases).buckets, aliases, (key) => synonyms.get(key));
   // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
   // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no
   // accepted name in its place), so the page stays under it and says so; listed for information, not for rebuilding.

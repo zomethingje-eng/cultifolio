@@ -105,6 +105,10 @@ const groupKey = (c: Item, by: By): string => (by === 'genus' ? genusOf(c.name) 
 const shownUnder = (list: Item[], chip: Chip, grown?: ReadonlySet<string>) => (chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : chip === 'grown' ? list.filter((c) => !!grown?.has(genusOf(c.name))) : list);
 /** One row's species, sorted, from the index alone: for the row the front page opens when the rows came from the build's file (round fifty-three, 2). */
 export function rowItems(index: IndexEntry[], by: By, chip: Chip, id: string, grown?: ReadonlySet<string>): Item[] | undefined {
+  return rowGroupsOf(index, by, chip, grown).get(id);
+}
+/** Every row's species under a grouping and a chip, by row id, each sorted by name: what `rowItems` looks up, and what the build writes as the row files (round seventy-six). */
+export function rowGroupsOf(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<string>): Map<string, Item[]> {
   // Grouped once per index, grouping and chip, then looked up: every opened row slugified the whole index on every
   // render, 11 to 22 ms at nine thousand species, on a page with no rate limit (round fifty-nine; the corpus review, 5).
   let byIndex = rowGroups.get(index);
@@ -121,7 +125,7 @@ export function rowItems(index: IndexEntry[], by: By, chip: Chip, id: string, gr
     for (const xs of groups.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
     byIndex.set(k, groups);
   }
-  return groups.get(id);
+  return groups;
 }
 const rowGroups = new WeakMap<IndexEntry[], Map<string, Map<string, Item[]>>>();
 
@@ -149,7 +153,15 @@ export function catalogueItems(index: IndexEntry[]): Item[] {
 
 function build(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<string>): Catalogue {
   const list = catalogueItems(index);
-  const shown = shownUnder(list, chip, grown);
+  return catalogueFrom(shownUnder(list, chip, grown), by, index.length, list.filter((c) => c.climate === 'ok').length, list);
+}
+
+/**
+ * A catalogue from the species it shows, in the index's order (round seventy-six): `total` and `withClimate` are the
+ * whole reference's, whatever the chip, as `build` gives them. The Worker builds the "Most grown" chip's rows with it from
+ * the build's row files, without the index.
+ */
+export function catalogueFrom(shown: Item[], by: By, total: number, withClimate: number, list: Item[] = shown): Catalogue {
   // The catalogue is browsed as closed groups, one open at a time (`?open=`): a genus is what a grower thinks in, so it is
   // the default; origin keeps its little map; family is for those who think that way.
   const keyOf = (c: Item): string => groupKey(c, by);
@@ -209,5 +221,21 @@ function build(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<stri
   const letters = [...new Set(rows.map((r) => r.letter).filter(Boolean))];
   const letterAt: Record<string, number> = {};
   rows.forEach((r, i) => { if (r.letter && !(r.letter in letterAt)) letterAt[r.letter] = i; });
-  return { rows, letters, letterAt, total: index.length, withClimate: list.filter((c) => c.climate === 'ok').length, itemsOf: (id) => sortedById.get(id), list };
+  return { rows, letters, letterAt, total, withClimate, itemsOf: (id) => sortedById.get(id), list };
 }
+
+/**
+ * The species the front page's strip rotates through (round fifty-one, 6; written by the build as `featured.json` since
+ * round seventy-six): one from each of the forty-eight genera with the most photographed species with a habitat climate,
+ * the genus's most recorded. Eight or more photographs: a species photographed that often is photographed alive, not as a
+ * pressed sheet.
+ */
+export function featuredPoolOf(list: readonly Item[]): Item[] {
+  const byGenus = new Map<string, Item[]>();
+  for (const c of list) if (c.thumb && c.climate === 'ok' && (c.photos ?? 0) >= 8) { const g = genusOf(c.name); const xs = byGenus.get(g); if (xs) xs.push(c); else byGenus.set(g, [c]); }
+  const genera = [...byGenus.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  return genera.slice(0, 48).map(([, xs]) => [...xs].sort((a, b) => b.open - a.open)[0]);
+}
+/** What the strip shows of each species, and all that `featured.json` keeps. */
+export type Featured = { slug: string; name: string; thumb: string; credit?: string; common?: string; family?: string };
+export const featuredOf = (c: Item): Featured => ({ slug: c.slug, name: c.name, thumb: c.thumb!, credit: c.credit, common: c.common, family: c.family });

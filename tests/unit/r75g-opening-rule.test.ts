@@ -86,7 +86,7 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
     expect(SHARE).toBe(0.5);
     expect(about).toContain(`The front page's catalogue is the same on every device, every genus and every species, and its chip “Most grown”, off until chosen, narrows it to the species of the most-grown genera: the fewest genera of the reference that, taken from the most observed down, together hold half of iNaturalist's observations of plants marked captive or cultivated across all the reference's genera that were counted, each genus counted with every taxon under it, on ${longDay(m.day)} (<code>scripts/most-grown-genera.txt</code> in the source holds every count, the query and iNaturalist's terms).`);
     expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip.');
-    expect(about).toContain('unfiltered and under each climate chip (the rows under “Most grown” are worked out by the server from the index');
+    expect(about).toContain('unfiltered and under each climate chip (the rows under “Most grown” are worked out by the server from the genus rows\' files and the counts\' file, once for each corpus)'); // round seventy-six: no longer from the index
     expect(about).not.toMatch(/On a phone the front page's catalogue opens|opens on the most-grown|opens on the genera of that list/);
     // The examples it names are refused in the file, as old names iNaturalist holds only inactive.
     expect(about).toContain('such as Callistemon or Mahonia, which it holds only as an old name');

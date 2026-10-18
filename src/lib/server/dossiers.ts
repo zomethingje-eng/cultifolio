@@ -4,13 +4,15 @@
  * scripts/build-dossiers.ts writes, served as assets), then the fixture
  * corpus compiled into the build (so tests work with nothing else present).
  */
-import { genusOf, slugify } from '$core/names';
 import { prepare, search, hasExact, rankedWords, relaxedQuery, searchGenera, type Prepared } from '$core/search';
 import { queryPlan, candidates, postingFileOf } from '$core/postings';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { heldNamesOf } from '$dossier/photo-kind';
-import { manifestPath, productPath, isManifest, SHORT_HITS, type Manifest } from '$dossier/manifest';
+import { manifestPath, productPath, isManifest, hasLookups, SHORT_HITS, type Manifest } from '$dossier/manifest';
+import { indexMaps, synonymKey, sharedOrder } from '$dossier/lookups';
+import { lookupOf } from './lookup';
+export { indexMaps };
 import * as v from 'valibot';
 import { error, isHttpError } from '@sveltejs/kit';
 
@@ -48,7 +50,15 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
  * nearly every minute of a quiet site, which was most of a species page's time to first byte (round forty-three, 1).
  */
 /** One load of the corpus: a request takes it once and reads everything it answers from it, so an answer is never one generation's index with another's products (round fifty-eight; all three reviews). */
-export type Loaded = { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
+/**
+ * `idx` and `bySlug` are the index and its slug map, held from the load when the corpus is read through them: a corpus
+ * whose manifest names no lookup files (one built before round seventy-six), the static corpus without them, or the
+ * fixture. Under a manifest that names them (`fromFiles`), both are null: every name a page asks for is read from the
+ * build's files by key (./lookup.ts), and the index is read only by the search, on its first query (`indexOf`).
+ */
+export type Loaded = { at: number; idx: IndexEntry[] | null; bySlug: Map<string, number> | null; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
+/** Whether a corpus is read through the build's lookup files rather than its index (round seventy-six). */
+export const fromFiles = (c: Pick<Loaded, 'manifest'>): boolean => !!c.manifest && hasLookups(c.manifest);
 let cached: Loaded | null = null;
 /** One load at a time: after an upload, concurrent requests each parsed their own copy of the index (round fifty-one, 6). */
 let loading: Promise<Loaded> | null = null;
@@ -74,7 +84,37 @@ export async function corpusNow(platform: Platform, fetch: Fetch): Promise<Loade
 }
 
 export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexEntry[]> {
-  return (await loadIndex(platform, fetch)).idx;
+  return indexOf(await loadIndex(platform, fetch), platform, fetch);
+}
+
+/**
+ * The whole index of the corpus a request holds: the one held from the load, or, for a corpus read through the lookup
+ * files, read and parsed on the first request that needs it (the search) and kept with that corpus (round seventy-six).
+ * An index that is not there, or not a list of the manifest's species, is a 503 (`UNREADABLE`), never an empty answer.
+ */
+const lazyIndex = new WeakMap<Loaded, Promise<IndexEntry[]>>();
+export function indexOf(c: Loaded, platform: Platform, fetch: Fetch): Promise<IndexEntry[]> {
+  if (c.idx) return Promise.resolve(c.idx);
+  let p = lazyIndex.get(c);
+  if (!p) {
+    p = (async () => {
+      const m = c.manifest!;
+      const path = productPath(m.files['index.json']);
+      const store = platform?.env?.STORE;
+      let text: string | null = null;
+      if (store) { const obj = await store.get(path); if (obj) text = await obj.text(); }
+      if (text === null && !c.fromStore) { try { const r = await fetch(`/${path}`); if (r.ok) text = await r.text(); } catch { /* no static file */ } }
+      const parsed = text === null ? null : parseIndex(text);
+      if (!parsed || parsed.length !== m.species) {
+        console.error(`the index named by manifest ${m.id} is ${parsed ? `a list of ${parsed.length}, not ${m.species}` : 'not there or not a list'}`);
+        error(503, { message: UNREADABLE });
+      }
+      return parsed;
+    })();
+    lazyIndex.set(c, p);
+    p.catch(() => { if (lazyIndex.get(c) === p) lazyIndex.delete(c); });
+  }
+  return p;
 }
 
 /**
@@ -129,6 +169,9 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
     }
   }
   // No bucket, or a bucket that holds no corpus at all (a dev server's empty local bucket): the static corpus, then the fixture.
+  // A static manifest naming the lookup files is read through them, as the bucket's is (round seventy-six).
+  const sm = await staticJson<unknown>(fetch, manifestPath());
+  if (isManifest(sm) && hasLookups(sm) && (await generaHold(sm, (path) => staticJson<unknown>(fetch, path)))) return adopt(null, sm.id, null, false, sm);
   let idx: IndexEntry[] = [];
   let corpus = '';
   let manifest: Manifest | null = null;
@@ -136,16 +179,28 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
   if (Array.isArray(stat) && stat.length) {
     idx = stat;
     corpus = fnv(JSON.stringify(stat));
-    const m = await staticJson<unknown>(fetch, manifestPath());
-    if (isManifest(m)) { manifest = m; corpus = m.id; }
+    if (isManifest(sm)) { manifest = sm; corpus = sm.id; } // the manifest read above
   }
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
   if (!idx.length) manifest = null;
   return adopt(out, idx.length ? corpus : 'fixture', null, false, manifest);
 }
-function adopt(idx: IndexEntry[], corpus: string, etag: string | null, fromStore: boolean, manifest: Manifest | null): Loaded {
-  cached = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus, etag, fromStore, manifest, buckets: manifest?.buckets ?? BUCKETS };
+/**
+ * Whether the genera file a manifest names is there and counts its species (round seventy-six): what a corpus read
+ * through the lookup files is checked by when it is adopted, as the index's length was. Read through `product`, so the
+ * pages that read it next find it held.
+ */
+async function generaHold(m: Manifest, read: (path: string) => Promise<unknown>): Promise<boolean> {
+  const hash = m.files['genera.json'];
+  const g = await read(productPath(hash));
+  const ok = Array.isArray(g) && g.every((x) => Array.isArray(x) && typeof x[0] === 'string' && Number.isInteger(x[1]) && x[1] > 0) && g.reduce((n: number, x: [string, number]) => n + x[1], 0) === m.species;
+  if (ok) hold(hash, g, JSON.stringify(g).length);
+  return ok;
+}
+function adopt(idx: IndexEntry[] | null, corpus: string, etag: string | null, fromStore: boolean, manifest: Manifest | null): Loaded {
+  cached = { at: Date.now(), idx, bySlug: idx ? new Map(idx.map((e) => [e.slug, e.key])) : null, corpus, etag, fromStore, manifest, buckets: manifest?.buckets ?? BUCKETS };
+  if (!idx) return cached; // read through the lookup files: nothing of the whole is built (round seventy-six)
   // The search's structure and the bucket map are built with the index, not inside the first request that needs them
   // (round fifty-two, 5), unless the build wrote them: then they are read per shard and per bucket, and the index is
   // the one thing held whole (round fifty-three, 2).
@@ -203,7 +258,25 @@ async function fromStore(store: R2Bucket, previous: Loaded | null): Promise<Load
   // manifest first) is not a corpus, and the top-level index must never be served under its id, where every cache
   // would keep it for a day (round fifty-four, 3; both reviewers). The corpus held before stays until the files are
   // there; that is not a refusal, so the next minute asks again.
-  if (manifest) {
+  if (manifest && hasLookups(manifest)) {
+    // Read through the lookup files (round seventy-six): the index is not read until a search asks for it, but it must be
+    // there, and the genera file must count the manifest's species, as the index's length had to be the manifest's.
+    const idxThere = typeof store.head === 'function' ? await store.head(productPath(manifest.files['index.json'])) : await store.get(productPath(manifest.files['index.json']));
+    const g = idxThere ? await store.get(productPath(manifest.files['genera.json'])) : null;
+    if (!idxThere || !g) {
+      console.warn(`manifest ${manifest.id} names an index or a genera file the bucket does not hold yet; the corpus held before stands`);
+      const k = keep();
+      if (k) return k;
+    } else {
+      const text = await g.text();
+      if (await generaHold(manifest, async () => { try { return JSON.parse(text); } catch { return null; } })) return adopt(null, manifest.id, mEtag, true, manifest);
+      console.warn(`the genera file named by manifest ${manifest.id} does not count the manifest's species; the corpus held before stands`);
+      refuse(mEtag);
+      refused = true;
+      const k = keep();
+      if (k) return k;
+    }
+  } else if (manifest) {
     const obj = await store.get(productPath(manifest.files['index.json']));
     if (!obj) {
       console.warn(`manifest ${manifest.id} names an index the bucket does not hold yet; the corpus held before stands`);
@@ -264,8 +337,8 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
  */
 type Held = { p: Promise<unknown>; size: number; retryAt?: number };
 const products = new Map<string, Held>();
-/** Every posting file, the catalogues and a working set of buckets fit: 160 files, under the 24 MB that bounds them (round fifty-eight; the server review's finding 8). */
-const PRODUCTS_HELD = 160;
+/** Every posting file, the catalogues, a working set of buckets and the name and row files fit: 480 files, under the 24 MB that bounds them (round fifty-eight; the server review's finding 8; round seventy-six). */
+const PRODUCTS_HELD = 480; // and since round seventy-six the name and row files: 128 and 96 more at today's corpus
 const PRODUCTS_BYTES = 24 * 1024 * 1024;
 const MISS_MS = 60_000;
 /**
@@ -320,6 +393,11 @@ export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, na
     return null;
   }
 }
+/** A product already read and parsed (the genera file a load checks), kept as `product` would keep it. */
+function hold(hash: string, parsed: unknown, size: number): void {
+  products.set(hash, { p: Promise.resolve(parsed), size });
+  trim(hash);
+}
 function trim(keep: string): void {
   let total = 0;
   for (const v of products.values()) total += v.size;
@@ -341,7 +419,9 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number, 
   const c = held ?? (await loadIndex(platform, fetch));
   // The reference's names, read from the index (memoised by the index array), so an uploader's slip in a Commons title is
   // read as the index reads it when it is written (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
-  const names = heldNamesOf(c.idx);
+  // Under the lookup files the build has stored that judgement in each dossier (`Photo.judged`; round seventy-six), so
+  // no names are needed; a corpus built before is judged here as before.
+  const names = c.idx && !fromFiles(c) ? heldNamesOf(c.idx) : null;
   const store = platform?.env?.STORE;
   if (store) {
     const obj = await store.get(dossierPath(key));
@@ -370,7 +450,7 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number, 
 
 export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<number | null> {
   const c = held ?? (await loadIndex(platform, fetch)); // the request's corpus, and its own slug map (round fifty-nine: it read whichever was current)
-  const hit = c.bySlug.get(slug);
+  const hit = await lookupOf(c, platform, fetch).slug(slug);
   if (hit != null) return hit;
   // Synthetic species are reachable only while no real corpus exists.
   if (c.idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
@@ -396,71 +476,6 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string, h
   return c.corpus === 'fixture' ? (parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null) : null;
 }
 
-/** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
-/**
- * `bySynonym`: an older name held by one species, in lower case, and under its slug as well. `ambiguous`: an older name
- * two species or more hold, with every species that holds it, under both keys too; `sharedName`, the name as an entry
- * writes it, under both (round sixty-nine; triage-68 N1; round seventy; triage-69 F1, N3).
- */
-type IndexMaps = { byKey: Map<number, IndexEntry>; byName: Map<string, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
-const maps = new WeakMap<IndexEntry[], IndexMaps>();
-export function indexMaps(index: IndexEntry[]): IndexMaps {
-  let m = maps.get(index);
-  if (m) return m;
-  const byKey = new Map<number, IndexEntry>();
-  const byName = new Map<string, IndexEntry>(); // each accepted name in lower case (round seventy-one; S-F3)
-  const byGenus = new Map<string, IndexEntry[]>();
-  // Each older name's holders, under its name in lower case and under its slug: "Arbutus uva-ursi" is
-  // `arbutus-uva-ursi` at an address, which `nameFromSlug` reads as "Arbutus uva ursi", a name no species holds (round
-  // seventy; triage-69 N3, S-F3: 230 hyphenated older names of one species each were 404s). Keyed by the slug, two
-  // spellings an address cannot tell apart are one name, and their holders are counted together.
-  const held = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
-  const hold = (k: string, e: IndexEntry, name: string) => {
-    const xs = held.get(k) ?? [];
-    if (!xs.some((x) => x.entry === e)) xs.push({ entry: e, matched: name });
-    held.set(k, xs);
-  };
-  for (const e of index) {
-    byKey.set(e.key, e);
-    byName.set(e.name.toLowerCase(), e);
-    const g = genusOf(e.name);
-    const xs = byGenus.get(g);
-    if (xs) xs.push(e); else byGenus.set(g, [e]);
-    // Every older name of species rank too, past the six `syn` shows (round sixty-seven; triage-66 N1): an address under
-    // "Ferocactus glaucescens" is Bisnaga glaucescens from the index, without asking the backbone.
-    for (const syn of [...(e.syn ?? []), ...(e.older ?? [])]) {
-      hold(syn.toLowerCase(), e, syn);
-      const slug = slugify(syn);
-      if (slug) hold(slug, e, syn);
-    }
-  }
-  const { bySynonym, ambiguous, sharedName } = synonymMaps(held);
-  for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-  maps.set(index, (m = { byKey, byName, byGenus, bySynonym, ambiguous, sharedName }));
-  return m;
-}
-/**
- * Which species an older name answers (round seventy; triage-69 F1, S-F1; rule 3): the one species that holds it, among
- * the six it shows or for the search alone. A name two species or more hold is no one species' name, whichever shows
- * it: it does not redirect, and the species route's 404 names every holder. Round sixty-nine sent a name one species
- * showed and another held only for the search to the one that showed it, and which one showed it was an accident of
- * `olderNamesOf` (the first six, other genera first), not of taxonomy: 215 live names redirected so, and
- * `/species/echeveria-farinosa` went to Dudleya pulverulenta, saying GBIF accepted it as that species, while GBIF holds
- * Echeveria farinosa Lindl. as Dudleya farinosa and Echeveria farinosa Van Houtte as D. pulverulenta.
- */
-function synonymMaps(held: Map<string, Array<{ entry: IndexEntry; matched: string }>>) {
-  const bySynonym = new Map<string, { entry: IndexEntry; matched: string }>();
-  const ambiguous = new Map<string, IndexEntry[]>();
-  const sharedName = new Map<string, string>();
-  for (const [k, by] of held) {
-    if (by.length === 1) { bySynonym.set(k, by[0]); continue; }
-    ambiguous.set(k, by.map((x) => x.entry));
-    sharedName.set(k, by[0].matched);
-  }
-  return { bySynonym, ambiguous, sharedName };
-}
-/** An older name as the maps key it: a slug as it is, a name in lower case with its spaces closed up. */
-const synonymKey = (nameOrSlug: string) => nameOrSlug.trim().replace(/\s+/g, ' ').toLowerCase();
 /**
  * The species an older name is held by when it answers no one of them (`synonymMaps`), in the order the search gives
  * them for the name typed (the species that holds it exactly and keeps its epithet first, then one that shows it, then
@@ -471,9 +486,7 @@ const synonymKey = (nameOrSlug: string) => nameOrSlug.trim().replace(/\s+/g, ' '
 export function ambiguousSynonym(index: IndexEntry[], name: string): IndexEntry[] | null {
   const holders = indexMaps(index).ambiguous.get(synonymKey(name));
   if (!holders) return null;
-  const shared = indexMaps(index).sharedName.get(synonymKey(name)) ?? name;
-  const order = search(prepare(holders), shared);
-  return [...order, ...holders.filter((e) => !order.includes(e))];
+  return sharedOrder(holders, indexMaps(index).sharedName.get(synonymKey(name)) ?? name);
 }
 /** The older name two species or more hold, as an entry writes it ("Arbutus uva-ursi" for `arbutus-uva-ursi`), else null. */
 export function sharedOlderName(index: IndexEntry[], name: string): string | null {
@@ -502,7 +515,7 @@ export function entriesByBucket(index: IndexEntry[], buckets = cached?.buckets ?
 export async function entriesIn(c: Loaded, platform: Platform, fetch: Fetch, bucket: string): Promise<IndexEntry[]> {
   const file = await product<IndexEntry[]>(c, platform, fetch, `entries/${bucket}.json`);
   if (file) return file;
-  return entriesByBucket(c.idx, c.buckets).get(bucket) ?? [];
+  return entriesByBucket(await indexOf(c, platform, fetch), c.buckets).get(bucket) ?? [];
 }
 /**
  * The answer to a search (round fifty-six, 1), from one corpus held for the whole request (round fifty-eight). Without
@@ -538,10 +551,12 @@ export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, 
 async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
   const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
   const m = c.manifest;
-  if (!m) return { hits: search(searchIndex(c.idx), q, n), corpus };
+  // The search is what still reads the index whole (round seventy-six): held from the load, or read on the first query.
+  const idx = await indexOf(c, platform, fetch);
+  if (!m) return { hits: search(searchIndex(idx), q, n), corpus };
   const plan = queryPlan(q);
   if (!plan.exact.length) return { hits: [], corpus }; // no word the tokeniser keeps: nothing matches, and nothing is read
-  const entries = (ix: number[]) => { const out: IndexEntry[] = []; for (const i of ix) { const e = c.idx[i]; if (e) out.push(e); } return out; };
+  const entries = (ix: number[]) => { const out: IndexEntry[] = []; for (const i of ix) { const e = idx[i]; if (e) out.push(e); } return out; };
   // One word and nothing else, as the ranking reads the query: a trailing rank marker still counts ("a var" is two), and
   // a leading one or a repeat does not ("f a" and "a a" are "a"; round fifty-nine).
   const only = rankedWords(q);
@@ -550,7 +565,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
     if (short && typeof short === 'object') {
       const xs = Object.hasOwn(short, only[0]) ? short[only[0]] : [];
       // Positions in this index, or the file is not this corpus's answers (a hash naming another file): the postings answer (round fifty-nine).
-      if (Array.isArray(xs) && xs.every((i) => Number.isInteger(i) && i >= 0 && i < c.idx.length)) return { hits: entries(xs.slice(0, n)), corpus };
+      if (Array.isArray(xs) && xs.every((i) => Number.isInteger(i) && i >= 0 && i < idx.length)) return { hits: entries(xs.slice(0, n)), corpus };
     }
   }
   const files = new Map<string, Record<string, number[]> | null>();
@@ -562,7 +577,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   const posting = (k: string) => { const f = files.get(postingFileOf(k, m.postings)); const xs = f && Object.hasOwn(f, k) ? f[k] : undefined; return Array.isArray(xs) ? xs : undefined; };
   const whole = async () => {
     const stop = await charge();
-    return stop ? { stop } : { hits: search(await searchWhole(c), q, n), corpus };
+    return stop ? { stop } : { hits: search(await searchWhole(c, idx), q, n), corpus };
   };
   if (!(await read(plan.exact))) return whole();
   // The exact pass in a function of its own, so its prepared candidates are garbage before the near pass waits on the
@@ -572,7 +587,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // are charged as it is (round fifty-nine; the corpus reviews: 127 to 309 ms each under the ordinary search allowance).
   const cands = candidates(plan.exact, posting);
   if (heavy(cands.length)) { const stop = await charge(); if (stop) return { stop }; }
-  const exactHits = exactPass(entries(cands), q, n, generaOfIndex(c.idx));
+  const exactHits = exactPass(entries(cands), q, n, generaOfIndex(idx));
   if (exactHits) return { hits: exactHits, corpus };
   if (!plan.near) return { hits: [], corpus };
   if (!(await read(plan.near))) return whole();
@@ -580,7 +595,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // exact pass ranked its own, and was never charged (round sixty; the corpus review, 6; A26).
   const near = candidates(plan.near, posting);
   if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
-  return { hits: search(prepare(entries(near), generaOfIndex(c.idx)), q, n), corpus };
+  return { hits: search(prepare(entries(near), generaOfIndex(idx)), q, n), corpus };
 }
 /**
  * The genera of the whole index, once per index: the candidates of a request are prepared with them, so a typed genus
@@ -599,9 +614,11 @@ function exactPass(cands: IndexEntry[], q: string, n: number, genera: ReadonlySe
 /** The whole index prepared for one request, under a manifest, when a posting file is missing; not kept (round fifty-four, 3). */
 /** One whole-index preparation in flight per index at a time: concurrent misses share it, and it is let go when the last of them is answered (round fifty-five, 4; both reviewers). */
 let wholeInFlight: { idx: IndexEntry[]; p: Promise<Prepared<IndexEntry>[]>; users: number } | null = null;
-export async function searchWhole(c: Loaded): Promise<Prepared<IndexEntry>[]> {
-  if (!c.manifest) return searchIndex(c.idx);
-  if (!wholeInFlight || wholeInFlight.idx !== c.idx) wholeInFlight = { idx: c.idx, p: Promise.resolve().then(() => prepare(c.idx)), users: 0 };
+export async function searchWhole(c: Loaded, held?: IndexEntry[]): Promise<Prepared<IndexEntry>[]> {
+  const idx = held ?? c.idx;
+  if (!idx) throw new Error('searchWhole: the index is not read yet (indexOf)');
+  if (!c.manifest) return searchIndex(idx);
+  if (!wholeInFlight || wholeInFlight.idx !== idx) wholeInFlight = { idx, p: Promise.resolve().then(() => prepare(idx)), users: 0 };
   const w = wholeInFlight;
   w.users++;
   try {

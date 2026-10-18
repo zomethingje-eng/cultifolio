@@ -785,8 +785,9 @@
   .reltile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); line-height: 1.25; font-weight: 600; }
   .reltile .rf { display: block; padding: 3px 9px 9px; font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Two lines, cut after the second, so the licence that leads the credit is never cut at 200% text (round sixty-seven, triage-66 N13, R45-12). */
-  .reltile .rc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; overflow-wrap: anywhere; }
+  /* Whole, on as many lines as it takes: one line cut the licence at 200% text (round sixty-seven, triage-66 N13), and two
+     cut the author (round seventy-six; rule 4). The strip's tiles share one grid row, so each takes the tallest one's height. */
+  .reltile .rc { display: block; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
   .reltile.more { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
   @media (min-width: 860px) {
     /* The first screen answers: the photograph beside the name and the actions, the four figures and the note under them. */
@@ -859,6 +860,17 @@
   }
 
   /* The failed-photograph line takes the photograph's own box on a phone, not a 200px one of its own: the page below did not move when it failed (round forty-nine, 3; S2). */
-  @media (max-width: 640px) { .hero { margin-top: 0; } .hero.photo { height: 150px; } .hero.photo img { height: 100%; max-height: none; } }
+  /* On a phone the band is 150 px, or as tall as its credit needs: the photograph is laid over the band and the credit is
+     in its flow, so a credit of several lines (a long name, 200% text) makes the band taller instead of being cut by its
+     edge, and its foot margin keeps it clear of the name card's 44 px over the band (round seventy-six; rule 4). */
+  @media (max-width: 640px) {
+    .hero { margin-top: 0; }
+    .hero.photo.failed { height: 150px; }
+    .hero.photo:not(.failed) { min-height: 150px; display: flow-root; }
+    .hero.photo:not(.failed) > a:first-child { position: absolute; inset: 0; }
+    .hero.photo picture { display: block; height: 100%; }
+    .hero.photo img { height: 100%; max-height: none; }
+    .hero.photo:not(.failed) .cred { position: relative; top: auto; right: auto; width: fit-content; margin: 10px 12px 54px auto; }
+  }
   .otherkey { display: block; }
 </style>

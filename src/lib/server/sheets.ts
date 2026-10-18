@@ -1,4 +1,4 @@
-import { getDossier, product, type Loaded, type Platform, type Fetch } from './dossiers';
+import { getDossier, product, indexOf, type Loaded, type Platform, type Fetch } from './dossiers';
 import { bucketOf } from '$core/bucket';
 
 export { sheetOf, type Sheet, type SheetMonth, type SheetClimate } from '$dossier/sheet';
@@ -51,7 +51,7 @@ export async function sheetsIn(c: Loaded, platform: Platform, fetch: Fetch, buck
     throw new SheetsUnreadable(bucket);
   }
   if (!out) {
-    const entries = c.idx.filter((e) => bucketOf(e.slug, c.buckets) === bucket);
+    const entries = (await indexOf(c, platform, fetch)).filter((e) => bucketOf(e.slug, c.buckets) === bucket); // only a corpus with no manifest comes here, and its index is held
     out = [];
     const width = 16;
     for (let i = 0; i < entries.length; i += width) {

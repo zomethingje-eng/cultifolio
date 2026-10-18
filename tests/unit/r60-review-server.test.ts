@@ -243,15 +243,15 @@ describe('the corpus when R2 blips at the minute check', () => {
     let now = Date.UTC(2026, 9, 4, 12);
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     const first = await corpusNow(platform, noStatic);
-    expect(first.idx.length).toBe(2);
+    expect(first.idx!.length).toBe(2);
     down = true; now += 61_000; asked = 0;
-    expect((await corpusNow(platform, noStatic)).idx.length).toBe(2); // the two-species corpus the isolate holds stands
+    expect((await corpusNow(platform, noStatic)).idx!.length).toBe(2); // the two-species corpus the isolate holds stands
     expect(asked).toBeGreaterThan(0);
     asked = 0; now += 5_000;
-    expect((await corpusNow(platform, noStatic)).idx.length).toBe(2);
+    expect((await corpusNow(platform, noStatic)).idx!.length).toBe(2);
     expect(asked).toBe(0); // not asked again on every request
     now += 6_000;
-    expect((await corpusNow(platform, noStatic)).idx.length).toBe(2);
+    expect((await corpusNow(platform, noStatic)).idx!.length).toBe(2);
     expect(asked).toBeGreaterThan(0); // asked again after ten seconds
     down = false; now += 11_000;
     expect((await corpusNow(platform, noStatic)).corpus).toBe(first.corpus);

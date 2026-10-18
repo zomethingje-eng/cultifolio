@@ -284,14 +284,19 @@ test('r67v V7, V8: the example offers no calendar file or spreadsheet, says it i
   await expect(page.locator('.today')).toContainText('The example collection is kept nowhere: it is deleted when you leave it.'); // base: "Kept on this device: no backup yet, not synced"
 });
 
-test('r67v V9: on a phone the welcome\'s lead says what the site is, and a whole row is still above the tab bar (R45-4)', async ({ browser, baseURL }) => {
+test('r67v V9: on a phone the welcome\'s lead says what the site is, and the strip and the search start above the tab bar (R45-4; round seventy-six)', async ({ browser, baseURL }) => {
   for (const viewport of [{ width: 375, height: 548 }, { width: 390, height: 664 }, { width: 360, height: 640 }]) {
     const ctx = await browser.newContext({ baseURL, viewport, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await page.goto('/'); await ready(page);
     await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // round seventy-four's words, for every grower
-    const [row, bar] = await Promise.all([page.locator('.rows .azrow, .rows > a, .rows > div').first().boundingBox(), page.locator('#tabbar').boundingBox()]);
-    expect(row && bar && row.y + row.height <= bar.y + 1, `${JSON.stringify(viewport)}: first row ${JSON.stringify(row)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
+    // Round seventy-six (the owner's decision): the photograph strip sits above the search on a phone as on a desktop, so the
+    // first screen is the welcome, the strip and the search, and the catalogue's first row follows them. Before, a whole row
+    // was above the tab bar here, with the strip after the first three rows. Now the strip's first photograph is whole and the
+    // search box starts above the tab bar, at the smallest of these screens too (an iPhone SE with Safari's bars: 375 by 548).
+    const [tile, search, bar] = await Promise.all([page.locator('.featured .ftile').first().boundingBox(), page.locator('input[type=search]').first().boundingBox(), page.locator('#tabbar').boundingBox()]);
+    expect(tile && bar && tile.y + tile.height <= bar.y + 1, `${JSON.stringify(viewport)}: first photograph ${JSON.stringify(tile)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
+    expect(search && bar && search.y < bar.y, `${JSON.stringify(viewport)}: the search ${JSON.stringify(search)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
     await ctx.close();
   }
 });

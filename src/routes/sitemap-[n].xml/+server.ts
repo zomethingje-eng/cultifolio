@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { corpusNow } from '$lib/server/dossiers';
+import { corpusNow, fromFiles, product, UNREADABLE } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
-import { sitemapUrls, sitemapChunk, sitemapDays, lastmodOf, SITEMAP_CHUNK } from '$lib/server/sitemap';
+import { sitemapUrls, sitemapChunk, sitemapPart, sitemapDays, lastmodOf, SITEMAP_CHUNK } from '$lib/server/sitemap';
 import type { RequestHandler } from './$types';
 
 /** One file of the sitemap index: `/sitemap-1.xml` holds the first `SITEMAP_CHUNK` addresses, and so on (round forty, own). */
@@ -10,7 +10,15 @@ export const GET: RequestHandler = async ({ params, platform, fetch, getClientAd
   const stop = await limited(platform, getClientAddress, 'reference'); // every request reaches the Worker, counted (round fifty-eight; round sixty)
   if (stop) return stop;
   const c = await corpusNow(platform, fetch);
-  const urls = sitemapUrls(c.idx);
+  const headers = { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=86400' };
+  if (fromFiles(c)) {
+    // The build's file of these addresses and their days (round seventy-six): the index is not read.
+    if (!Number.isInteger(n) || n < 1 || !Object.hasOwn(c.manifest!.files, `sitemap/${n}.json`)) error(404, 'no such sitemap file');
+    const part = await product<{ urls: string[]; days: Array<number | null> }>(c, platform, fetch, `sitemap/${n}.json`);
+    if (!part || !Array.isArray(part.urls) || !Array.isArray(part.days)) error(503, { message: UNREADABLE });
+    return new Response(sitemapPart(part.urls, part.days, lastmodOf(c.manifest?.built)), { headers });
+  }
+  const urls = sitemapUrls(c.idx!);
   if (!Number.isInteger(n) || n < 1 || (n - 1) * SITEMAP_CHUNK >= urls.length) error(404, 'no such sitemap file');
-  return new Response(sitemapChunk(urls, n, lastmodOf(c.manifest?.built), sitemapDays(c.idx)), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+  return new Response(sitemapChunk(urls, n, lastmodOf(c.manifest?.built), sitemapDays(c.idx!)), { headers });
 };

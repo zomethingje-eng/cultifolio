@@ -19,7 +19,7 @@ describe('a sheets bucket with a dossier that cannot be read', () => {
     const platform = { env: {} } as never;
     const c0 = await corpusNow(platform, fetch);
     const slug = 'zz-unreadable-species';
-    const c = { ...c0, manifest: null, idx: [...c0.idx, { key: 987654321, slug, name: 'Zz unreadable', photos: 0, open: 0, climate: '' }] };
+    const c = { ...c0, manifest: null, idx: [...c0.idx!, { key: 987654321, slug, name: 'Zz unreadable', photos: 0, open: 0, climate: '' }] };
     const b = bucketOf(slug, c.buckets);
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const first = await sheetsIn(c as never, platform, fetch, b).catch((e) => e);

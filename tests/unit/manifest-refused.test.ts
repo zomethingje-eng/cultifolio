@@ -45,8 +45,8 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
     const after = await corpusNow(platform, noStatic);
-    process.stderr.write(`\nbefore ${first.corpus} manifest=${!!first.manifest}; after ${after.corpus} manifest=${!!after.manifest} species=${after.idx.length}\n`);
-    expect({ corpus: after.corpus, manifest: !!after.manifest, species: after.idx.length }).toEqual({ corpus: a.manifest.id, manifest: true, species: X.length });
+    process.stderr.write(`\nbefore ${first.corpus} manifest=${!!first.manifest}; after ${after.corpus} manifest=${!!after.manifest} species=${after.idx?.length ?? after.manifest?.species}\n`);
+    expect({ corpus: after.corpus, manifest: !!after.manifest, species: after.idx?.length ?? after.manifest?.species }).toEqual({ corpus: a.manifest.id, manifest: true, species: X.length });
     let reads = 0; const g = store.get; store.get = async (k: string) => { reads++; return g(k); };
     for (let i = 2; i <= 6; i++) { vi.spyOn(Date, 'now').mockImplementation(() => T0 + i * 61_000); expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id); }
     expect(reads).toBe(0); // heads only: the refused manifest is not fetched and parsed again
@@ -67,15 +67,16 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
     const T0 = Date.UTC(2026, 9, 3, 12);
     vi.spyOn(Date, 'now').mockImplementation(() => T0);
     expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id);
-    // B's manifest, but naming A's index (four species where B has five)
+    // B's manifest, but naming A's index (four species where B has five), and since round seventy-six A's genera file,
+    // which is what a corpus read through the lookup files is checked by when it is adopted
     for (const [k, v] of b.blobs) m.set(k, v);
-    m.set(manifestPath(), JSON.stringify({ ...b.manifest, files: { ...b.manifest.files, 'index.json': a.manifest.files['index.json'] } }));
+    m.set(manifestPath(), JSON.stringify({ ...b.manifest, files: { ...b.manifest.files, 'index.json': a.manifest.files['index.json'], 'genera.json': a.manifest.files['genera.json'] } }));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
     reads.length = 0;
     const after = await corpusNow(platform, noStatic);
     expect(reads).toContain(manifestPath()); // the new manifest was read and judged: the test is not vacuous
-    expect({ corpus: after.corpus, species: after.idx.length }).toEqual({ corpus: a.manifest.id, species: X.length });
+    expect({ corpus: after.corpus, species: after.idx?.length ?? after.manifest?.species }).toEqual({ corpus: a.manifest.id, species: X.length });
     reads.length = 0;
     for (let i = 2; i <= 6; i++) { vi.spyOn(Date, 'now').mockImplementation(() => T0 + i * 61_000); expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id); }
     expect(reads).toEqual([]); // heads only for five minutes: the refusal is remembered

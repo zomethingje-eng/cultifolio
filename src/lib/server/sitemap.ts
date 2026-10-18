@@ -1,13 +1,14 @@
 import { genusOf, slugify } from '$core/names';
 import { dayIso } from '$dossier/changed';
-import type { IndexEntry } from './dossiers';
+import type { IndexEntry } from '$dossier/index-entry';
 
 /**
  * The sitemap as an index of files: the protocol caps one file at 50,000 addresses, and a corpus a few times the
  * present one crosses that with its genus rows. `/sitemap.xml` lists the files; `/sitemap-<n>.xml` holds a chunk
  * (round forty, own). The first file still names a species page early, which the live check reads.
  */
-export const SITEMAP_CHUNK = 40_000;
+import { SITEMAP_CHUNK } from '$dossier/lookups';
+export { SITEMAP_CHUNK };
 const BASE = 'https://cultifolio.com';
 const esc = (s: string) => s.replace(/&/g, '&amp;');
 
@@ -63,8 +64,8 @@ export function sitemapDays(index: IndexEntry[]): Array<number | null> {
   return out;
 }
 
-export function sitemapIndex(urls: string[], lastmod: string | null = null): string {
-  const files = Math.max(1, Math.ceil(urls.length / SITEMAP_CHUNK));
+export function sitemapIndex(urls: string[] | number, lastmod: string | null = null): string {
+  const files = typeof urls === 'number' ? urls : sitemapFiles(urls.length);
   const entries = Array.from({ length: files }, (_, i) => `  <sitemap><loc>${BASE}/sitemap-${i + 1}.xml</loc>${mod(lastmod)}</sitemap>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</sitemapindex>\n`;
 }
@@ -77,6 +78,11 @@ export function sitemapIndex(urls: string[], lastmod: string | null = null): str
  */
 export function sitemapChunk(urls: string[], n: number, lastmod: string | null = null, own: ReadonlyArray<number | null> = []): string {
   const from = (n - 1) * SITEMAP_CHUNK;
-  const part = urls.slice(from, n * SITEMAP_CHUNK);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u, i) => `  <url><loc>${esc(BASE + u)}</loc>${FIXED.includes(u) ? '' : mod(dayIso(own[from + i]) ?? lastmod)}</url>`).join('\n')}\n</urlset>\n`;
+  return sitemapPart(urls.slice(from, n * SITEMAP_CHUNK), own.slice(from, n * SITEMAP_CHUNK), lastmod);
 }
+/** One file of addresses from its own addresses and days: the build's `sitemap/<n>.json` (round seventy-six), or a slice of the whole. */
+export function sitemapPart(part: readonly string[], own: ReadonlyArray<number | null>, lastmod: string | null = null): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u, i) => `  <url><loc>${esc(BASE + u)}</loc>${FIXED.includes(u) ? '' : mod(dayIso(own[i]) ?? lastmod)}</url>`).join('\n')}\n</urlset>\n`;
+}
+/** How many files a sitemap of this many addresses is. */
+export const sitemapFiles = (urls: number) => Math.max(1, Math.ceil(urls / SITEMAP_CHUNK));

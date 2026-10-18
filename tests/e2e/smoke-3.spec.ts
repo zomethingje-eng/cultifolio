@@ -834,6 +834,17 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   await expect(page.locator('.pill', { hasText: 'done' }).first()).toBeVisible();
 });
 
+/**
+ * Round seventy-six: on the owner's PC, WebKit's second restore of the 400 plants never began. The page had been opened by
+ * address after the wipe, the file chosen and its preview drawn, and the press on Merge left the buttons enabled: the press
+ * landed while the page was still settling as its collection opened, and nothing ran (the trace's snapshots, before and
+ * after the press). The page is now waited for, then its collection, and the press is checked to have begun the merge.
+ */
+async function mergeBackup(page: import('@playwright/test').Page) {
+  await page.click('#bk-merge');
+  const begun = () => page.evaluate(() => { const b = document.querySelector<HTMLButtonElement>('#bk-merge'); return !b || b.disabled || !!document.querySelector('#bk-done'); });
+  if (!(await expect.poll(begun, { timeout: 3000 }).toBe(true).then(() => true, () => false))) await page.click('#bk-merge');
+}
 test('round twenty-eight: a backup of four hundred plants with long notes is written and read under the site\'s CSP, and a plant whose stored date is in the future can still be edited', async ({ page }, testInfo) => {
   // Flaky in WebKit on the owner's PC (IND-8): the price edit's Save at the end left the form open for ten seconds. The
   // Save is recorded, and the record attached if the test fails (helpers/save-trace.ts).
@@ -861,14 +872,15 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   // a backup zip as the app writes one: the manifest and the log (since round fifty-seven only the zip is read)
   const manifest = { format: 'cultifolio-backup', v: 1, exported: new Date().toISOString(), counts: { changes: changes.length, accessions: 400, events: 0, locations: 0, sowings: 0, taxa: 0, photos: 0, photoBytes: 0 } };
   const seed = Buffer.from(zipSync({ 'manifest.json': strToU8(JSON.stringify(manifest)), 'changes.json': strToU8(json) }));
-  await page.goto('/backup');
+  await page.goto('/backup'); await ready(page);
+  await expect(page.locator('#bk-export')).toBeEnabled(); // the collection has opened
   await page.locator('#bk-file').setInputFiles({ name: 'seed.cultifolio.zip', mimeType: 'application/zip', buffer: seed });
   await expect(page.locator('.preview')).toContainText('400 plants');
   // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts),
   // and the test is given twice that, as an outer bound only. The wait itself goes on while the database answers.
   allowWrites(2 * 6_000 * WEBKIT_MS_PER_REQUEST);
-  await page.click('#bk-merge');
-  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 15_000);
+  await mergeBackup(page);
+  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 45_000);
   // the backup is written
   const dl = page.waitForEvent('download');
   await page.click('#bk-export');
@@ -877,20 +889,21 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await expect(page.locator('.secrule .n', { hasText: 'last today' })).toBeVisible();
   // wiped, then read back
   await wipe(page); // the snapshot and the arrival rows go with the log (round sixty-seven; triage-66 H7)
-  await page.goto('/backup');
+  await page.goto('/backup'); await ready(page);
+  await expect(page.locator('#bk-export')).toBeEnabled(); // the collection has opened
   await page.locator('#bk-file').setInputFiles(path);
   await expect(page.locator('.preview')).toContainText('400 plants');
   // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts),
   // and the test is given twice that, as an outer bound only. The wait itself goes on while the database answers.
   allowWrites(2 * 6_000 * WEBKIT_MS_PER_REQUEST);
-  await page.click('#bk-merge');
-  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 15_000);
+  await mergeBackup(page);
+  await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 45_000);
   // Opening the collection then reads the two restores' 4,000 arrivals one change at a time after the snapshot (4,018
   // requests, counted in Chromium): over a minute at Safari's engine's pace, where the page said "Opening your
   // collection…" past the 10 s, both times (round sixty-six; the all-engines run; helpers/pace.ts).
   allowWrites(2 * 4_000 * WEBKIT_MS_PER_REQUEST);
   await page.goto('/plants');
-  await whileStoring(page, (timeout) => expect(page.locator('.seccount').first()).toContainText('400', { timeout }), 15_000);
+  await whileStoring(page, (timeout) => expect(page.locator('.seccount').first()).toContainText('400', { timeout }), 45_000);
   // a plant whose stored acquired date is in the future (an older file) can have its price edited; only a date this edit types is judged (round twenty-eight, 0)
   await page.goto('/plants/2025-0400');
   await more(page, 'Edit');
@@ -1287,9 +1300,10 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
 test('round forty-nine: a letter near the end of the catalogue still lands with its heading under the bar; the list is padded, and the padding goes once rows fill in above (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  // The fixture's catalogue is a few rows: on a phone the strip now follows them (round sixty-three, V4) and makes the page
-  // tall enough to place W without padding; taken away here, the list is as short as the padding is for.
-  await page.addStyleTag({ content: 'section.featured.phoneonly { display: none !important; }' });
+  // The fixture's catalogue is a few rows: the strip above them makes the page tall enough to place W without padding;
+  // taken away here, the list is as short as the padding is for (round sixty-three, V4, when a phone's strip followed the
+  // rows; the one strip is above the search since round seventy-six).
+  await page.addStyleTag({ content: 'section.featured { display: none !important; }' });
   await page.locator('.letters a', { hasText: 'W' }).click();
   // landed: the heading is at or below the pinned row's foot; polled, not after a fixed 300 ms (round sixty; the harness review, 14)
   await expect.poll(async () => { const b = (await page.locator('.stickyhead .toolrow').boundingBox())!; return (await page.locator('#l-W').boundingBox())!.y >= b.y + b.height; }).toBe(true);
@@ -1314,13 +1328,15 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   let fs = await firstScreen(page);
   const firstRow = await page.locator('.rows .grow').first().boundingBox();
   expect(firstRow!.y + 24).toBeLessThan(fs.bottom); // the first genus row begins above the tab bar
-  const strip = await page.locator('section.featured.phoneonly .strip').boundingBox();
+  const strip = await page.locator('section.featured .strip').boundingBox();
   const search = await page.locator('.toolrow .searchbar').boundingBox();
-  expect(strip!.y).toBeGreaterThan(firstRow!.y); // since round sixty-three the phone's strip follows the first rows, so the search, the grouping, the chips and a row are on Safari's first screen (V4); round sixty had it above the one toolbar (visitor 16)
+  // Above the one toolbar, as round sixty had it (visitor 16) and a desktop always has: round sixty-three (V4) drew a phone's
+  // strip after the first rows, and on the owner's iPhone it read as plants dropped into the list (round seventy-six).
+  expect(strip!.y + strip!.height).toBeLessThanOrEqual(search!.y);
   expect(search!.y + search!.height).toBeLessThan(fs.bottom); // and the search is on the first screen
   expect(strip!.height).toBeLessThan(200);
   // the lead tile is double width; the rest are 112px
-  const tiles = page.locator('section.featured.phoneonly .strip .ftile');
+  const tiles = page.locator('section.featured .strip .ftile');
   const lead = await tiles.first().boundingBox();
   expect(lead!.width).toBeGreaterThan(200);
   if (await tiles.count() > 1) { const second = await tiles.nth(1).boundingBox(); expect(Math.round(second!.width)).toBe(112); }
@@ -1388,7 +1404,7 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
-  await expect(page.locator('section.featured.phoneonly .strip')).toBeVisible(); // the phone's strip, after the first rows (round sixty-three, V4)
+  await expect(page.locator('section.featured .strip')).toBeVisible(); // the one strip, above the search (round seventy-six)
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   const box = page.locator('.toolrow .searchbar');
   await box.click();
@@ -1415,7 +1431,7 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
   await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.locator('.cancelsearch').click();
   await expect(page.locator('.toolrow .searchbar')).toHaveValue('');
-  await expect(page.locator('section.featured.phoneonly .strip')).toBeVisible();
+  await expect(page.locator('section.featured .strip')).toBeVisible();
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   await expect(page.locator('.cancelsearch')).toHaveCount(0);
 });

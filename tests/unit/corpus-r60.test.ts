@@ -62,7 +62,7 @@ describe('a corpus the Worker cannot read is never answered with the fixture (ro
   it('a fresh isolate under a refused manifest serves the top-level index, under its own id', async () => {
     const b = bucket([[manifestPath(), '{"v":99}'], ['s/v2/index.json', JSON.stringify(X)]]);
     const c = await corpusNow(platformOf(b), noStatic);
-    expect({ fixture: c.corpus === 'fixture', species: c.idx.length, manifest: !!c.manifest }).toEqual({ fixture: false, species: X.length, manifest: false });
+    expect({ fixture: c.corpus === 'fixture', species: c.idx!.length, manifest: !!c.manifest }).toEqual({ fixture: false, species: X.length, manifest: false });
   });
   it('with no top-level index either, the corpus is a 503 that says so: for the pages and for the routes', async () => {
     const b = bucket([[manifestPath(), '{"v":99}']]);
@@ -76,7 +76,8 @@ describe('a corpus the Worker cannot read is never answered with the fixture (ro
   });
   it('a valid manifest whose index is of the wrong length, with nothing held and no top-level index: 503, not the fixture', async () => {
     const a = productsOf(X), y = productsOf(Y);
-    const b = bucket([...y.blobs, [manifestPath(), JSON.stringify({ ...y.manifest, files: { ...y.manifest.files, 'index.json': a.manifest.files['index.json'] } })], [productPath(a.manifest.files['index.json']), a.text]]);
+    // and A's genera file: what a corpus read through the lookup files is checked by when it is adopted (round seventy-six)
+    const b = bucket([...y.blobs, [manifestPath(), JSON.stringify({ ...y.manifest, files: { ...y.manifest.files, 'index.json': a.manifest.files['index.json'], 'genera.json': a.manifest.files['genera.json'] } })], [productPath(a.manifest.files['index.json']), a.text], [productPath(a.manifest.files['genera.json']), a.blobs.get(productPath(a.manifest.files['genera.json']))!]]);
     await expect(corpusNow(platformOf(b), noStatic)).rejects.toMatchObject({ status: 503 });
   });
   it('a bucket that holds no corpus at all (a dev server\'s empty bucket) is the fixture, as before', async () => {
@@ -91,9 +92,10 @@ describe('a refused manifest is remembered for ten minutes, then read again (rou
     const p = platformOf(b);
     const T0 = now;
     expect((await corpusNow(p, noStatic)).corpus).toBe(a.manifest.id);
-    // B lands with its index damaged in transit (not JSON)
+    // B lands with its genera file damaged in transit (not JSON): since round seventy-six the file a corpus read through
+    // the lookup files is checked by when it is adopted, as its index was
     for (const [k, v] of y.blobs) b.m.set(k, v);
-    const yIndex = productPath(y.manifest.files['index.json']);
+    const yIndex = productPath(y.manifest.files['genera.json']);
     b.m.set(yIndex, '[{"key":1,');
     b.m.set(manifestPath(), JSON.stringify(y.manifest));
     at(T0 + 61_000);

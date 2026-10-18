@@ -8,7 +8,8 @@
  * server, never from the browser, and only for an address the reference does
  * not hold; the answer is kept in the Worker's cache (the Cache API) for a day.
  */
-import { getIndex, indexMaps, type Platform, type Fetch, type Loaded } from './dossiers';
+import { corpusNow, type Platform, type Fetch, type Loaded } from './dossiers';
+import { lookupOf } from './lookup';
 import { upstreamCall } from './sync';
 import { workerKey } from './worker-cache';
 import { canonicalSynonym } from '$core/names';
@@ -46,15 +47,15 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
   const want = name.toLowerCase();
-  const index = held?.idx ?? (await getIndex(platform, fetch)); // the request's own corpus, as the page's (round sixty; A27)
+  const look = lookupOf(held ?? (await corpusNow(platform, fetch)), platform, fetch); // the request's own corpus, as the page's (round sixty; A27)
   // The address's slug first, as it is: the maps hold every older name under its slug too, so `arbutus-uva-ursi` is
   // Arbutus uva-ursi, where `nameFromSlug` reads "Arbutus uva ursi", which no species holds (round seventy; triage-69 N3,
-  // S-F3). Then the name read from it, as before. One map per index, not a scan of every synonym per unknown address
-  // (round fifty-one, 6).
-  const maps = indexMaps(index);
-  const hit = maps.bySynonym.get(slug.trim().toLowerCase()) ?? maps.bySynonym.get(want);
+  // S-F3). Then the name read from it, as before. A name held by one species only: one held by two or more answers neither.
+  // Read by key from the build's name files, or from the maps over the index (round seventy-six).
+  const one = async (k: string) => { const o = await look.older(k); return o && 'one' in o ? o : null; };
+  const hit = (await one(slug.trim().toLowerCase())) ?? (await one(want));
   if (!hit) return null;
-  return { matched: hit.matched, acceptedKey: hit.entry.key, acceptedName: hit.entry.name, slug: hit.entry.slug };
+  return { matched: hit.matched, acceptedKey: hit.one[0], acceptedName: hit.one[2], slug: hit.one[1] };
 }
 
 /**
@@ -111,11 +112,12 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
   if (matchType !== 'EXACT' && !(matchType === 'FUZZY' && Number(body.confidence ?? 0) >= 90 && matched.split(' ')[0] === name.split(' ')[0])) return null;
   const acceptedName = String(body.species ?? body.canonicalName ?? '');
   if (!acceptedName) return null;
-  const index = held?.idx ?? (await getIndex(platform, fetch)); // the request's own corpus (round sixty; A27)
+  const look = lookupOf(held ?? (await corpusNow(platform, fetch)), platform, fetch); // the request's own corpus (round sixty; A27)
   // The accepted usage of a variety is the variety; the reference files species, so its `speciesKey` is what the index may hold.
   const keys = [body.acceptedUsageKey, typeof body.speciesKey === 'number' ? body.speciesKey : null].filter((k): k is number => typeof k === 'number');
-  const entry = index.find((e) => keys.includes(e.key));
-  return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: entry?.slug ?? null };
+  // Of the two, the one the index lists first, as the scan of the index found it (round seventy-six: read by key).
+  const found = (await Promise.all(keys.map((k) => look.species(k)))).filter((e) => !!e).sort((a, b) => a!.at - b!.at);
+  return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: found[0]?.slug ?? null };
 }
 
 /**

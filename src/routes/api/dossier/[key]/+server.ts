@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
-import { getDossier, corpusNow, indexMaps } from '$lib/server/dossiers';
+import { getDossier, corpusNow } from '$lib/server/dossiers';
+import { lookupOf } from '$lib/server/lookup';
 import { limited } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
 
@@ -22,10 +23,11 @@ export const GET: RequestHandler = async ({ params, platform, fetch, getClientAd
   // A key the index does not list has no page, whatever the bucket still holds under it (round seventy-two; E): the
   // upload copies and never deletes, so the dossier of a species since dropped from the corpus (a synonym followed, a
   // duplicate merged) was served here as a page for good, and every unknown key cost an R2 read.
-  if (!indexMaps(c.idx).byKey.has(key)) error(404, 'no species page for that key');
+  // Asked of the name files by key, or of the index's map for a corpus built before them (round seventy-six).
+  const listed = !!(await lookupOf(c, platform, fetch).species(key));
+  if (!listed) error(404, 'no species page for that key');
   const d = await getDossier(platform, fetch, key, c).catch(() => undefined);
   if (!d) {
-    const listed = indexMaps(c.idx).byKey.has(key);
     if (d === undefined || listed) return json({ message: 'This species page could not be read just now' }, { status: 503, headers: { 'cache-control': 'no-store', 'retry-after': '60' } });
     error(404, 'no species page for that key');
   }

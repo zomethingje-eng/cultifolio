@@ -1,0 +1,17 @@
+# node 22, round seventy-six: scripts/dev/scale/cold-routes.mjs (a fresh process, one request through the Worker's own route code, a bucket over the corpus on disk; median of three). after = this round, before = r76base, same corpus (as workerd-heap.txt).
+{"label":"before-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":550,"heapMB":45.1,"readMB":5.6,"reads":4,"indexHeld":true}
+{"label":"before-8947","what":"home","arg":"","ok":true,"ms":379,"heapMB":26.4,"readMB":5.9,"reads":3,"indexHeld":true}
+{"label":"before-8947","what":"dossier","arg":"7284333","ok":true,"ms":551,"heapMB":45,"readMB":5.6,"reads":3,"indexHeld":true}
+{"label":"before-8947","what":"search","arg":"aloe","ok":true,"ms":371,"heapMB":25.2,"readMB":5.6,"reads":3,"indexHeld":true}
+{"label":"after-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":75,"heapMB":5.5,"readMB":1,"reads":13,"indexHeld":false}
+{"label":"after-8947","what":"home","arg":"","ok":true,"ms":54,"heapMB":2.9,"readMB":0.4,"reads":4,"indexHeld":false}
+{"label":"after-8947","what":"dossier","arg":"7284333","ok":true,"ms":60,"heapMB":3,"readMB":0.2,"reads":4,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"aloe","ok":true,"ms":258,"heapMB":12.1,"readMB":5.6,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":2630,"heapMB":216.9,"readMB":31.3,"reads":4,"indexHeld":true}
+{"label":"before-50000","what":"home","arg":"","ok":true,"ms":1540,"heapMB":118.8,"readMB":31.5,"reads":3,"indexHeld":true}
+{"label":"before-50000","what":"dossier","arg":"7284333","ok":true,"ms":2615,"heapMB":216.9,"readMB":31.3,"reads":3,"indexHeld":true}
+{"label":"before-50000","what":"search","arg":"aloe","ok":true,"ms":1698,"heapMB":112.3,"readMB":31.3,"reads":3,"indexHeld":true}
+{"label":"after-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":81,"heapMB":6.7,"readMB":1.5,"reads":13,"indexHeld":false}
+{"label":"after-50000","what":"home","arg":"","ok":true,"ms":61,"heapMB":3.1,"readMB":0.5,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"dossier","arg":"7284333","ok":true,"ms":60,"heapMB":3.3,"readMB":0.3,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe","ok":true,"ms":815,"heapMB":53.7,"readMB":31.3,"reads":4,"indexHeld":false}

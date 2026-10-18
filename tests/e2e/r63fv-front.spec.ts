@@ -20,25 +20,23 @@ async function photos(page: Page) {
   await page.route((u) => !/^https?:\/\/(127\.0\.0\.1|localhost)/.test(u.href) && !u.href.startsWith('data:'), (r) => r.fulfill({ status: 200, contentType: 'image/gif', body: PIXEL }));
 }
 /** The strip's first photographs, by copy: what each image is showing (its chosen source). */
-const sources = (page: Page, which: 'wideonly' | 'phoneonly') => page.evaluate((w) => [...document.querySelectorAll<HTMLImageElement>(`.featured.${w} img`)].slice(0, 3).map((i) => i.currentSrc || i.src), which);
+const sources = (page: Page) => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.featured img')].slice(0, 3).map((i) => i.currentSrc || i.src));
 
-test('r63fv front 1: on a phone the hidden desktop strip fetches no photograph; on a desktop it shows them', async ({ browser, baseURL }) => {
-  const phone = await browser.newContext({ baseURL, viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
-  const p = await phone.newPage();
-  await photos(p);
-  await p.goto('/'); await ready(p);
-  const wide = await sources(p, 'wideonly');
-  expect(wide.length).toBeGreaterThan(0);
-  for (const s of wide) expect(s.startsWith('data:')).toBe(true);
-  await phone.close();
-  const desk = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 }, locale: 'en-GB', serviceWorkers: 'block' });
-  const d = await desk.newPage();
-  await photos(d);
-  await d.goto('/'); await ready(d);
-  const shown = await sources(d, 'wideonly');
-  expect(shown.length).toBeGreaterThan(0);
-  for (const s of shown) expect(s.startsWith('http')).toBe(true);
-  await desk.close();
+// Round seventy-six: the strip is drawn once, above the search at every width (the owner's decision), so there is no hidden
+// copy whose photographs a phone could fetch for nothing; what this test now holds is that each width has the one strip and
+// fetches the photographs it shows, never a placeholder pixel in their place.
+test('r63fv front 1: one strip at every width, and the photographs it fetches are the ones it shows', async ({ browser, baseURL }) => {
+  for (const opts of [{ viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true }, { viewport: { width: 1280, height: 800 } }]) {
+    const ctx = await browser.newContext({ baseURL, ...opts, locale: 'en-GB', serviceWorkers: 'block' });
+    const p = await ctx.newPage();
+    await photos(p);
+    await p.goto('/'); await ready(p);
+    await expect(p.locator('section.featured')).toHaveCount(1);
+    const shown = await sources(p);
+    expect(shown.length).toBeGreaterThan(0);
+    for (const s of shown) expect(s.startsWith('http')).toBe(true);
+    await ctx.close();
+  }
 });
 
 test('r63fv front 2: a photograph\'s placeholder prints dark on white in the dark theme', { tag: '@chromium' }, async ({ page }) => {

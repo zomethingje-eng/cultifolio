@@ -33,3 +33,20 @@ export function grownChip(index: Named[]): { genera: number; species: number } |
   const v = of(index);
   return v.genera.size ? { genera: v.genera.size, species: v.species } : null;
 }
+
+/** The same from the genera and their counts (the build's `genera.json`, or the index's): what the Worker reads since round seventy-six. */
+const keptFrom = new WeakMap<ReadonlyMap<string, number>, { genera: ReadonlySet<string>; species: number }>();
+export function grownFrom(genera: ReadonlyMap<string, number>): { genera: ReadonlySet<string>; species: number } {
+  let v = keptFrom.get(genera);
+  if (!v) {
+    const set = new Set(openingGenera(MOST_GROWN, genera.keys()).genera);
+    v = { genera: set, species: [...set].reduce((n, g) => n + (genera.get(g) ?? 0), 0) };
+    keptFrom.set(genera, v);
+  }
+  return v;
+}
+/** `grownChip` from the genera and their counts. */
+export function grownChipFrom(genera: ReadonlyMap<string, number>): { genera: number; species: number } | null {
+  const v = grownFrom(genera);
+  return v.genera.size ? { genera: v.genera.size, species: v.species } : null;
+}

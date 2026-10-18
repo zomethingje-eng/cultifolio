@@ -148,7 +148,8 @@ describe('the front page (decision 9)', () => {
     expect(welcome.indexOf('try-sample-home')).toBeGreaterThan(-1);
     expect(welcome.indexOf('try-sample-home')).toBeLessThan(welcome.indexOf('/plants/new'));
     const at = (t: string) => p.indexOf(t, p.indexOf('{:else}\n  <!-- While a search is typed'));
-    expect(at("{@render featured(false, 'wide')}")).toBeGreaterThan(-1); // the desktop's strip; the phone's follows the first rows (round sixty-three, V4)
-    expect(at("{@render featured(false, 'wide')}")).toBeLessThan(at('class="searchbar" type="search" placeholder="Search species'));
+    // One strip at every width since round seventy-six (the owner's decision); round sixty-three (V4) drew a phone's copy after the first rows.
+    expect(at('{@render featured(false)}')).toBeGreaterThan(-1);
+    expect(at('{@render featured(false)}')).toBeLessThan(at('class="searchbar" type="search" placeholder="Search species'));
   });
 });

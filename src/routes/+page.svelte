@@ -77,8 +77,6 @@
   // half the home page's score; round forty-five, 1). A device that dismissed it hides it before first paint by a
   // flag app.html's inline script sets from localStorage, and the state here catches up at mount.
   let welcomeHidden = $state(false);
-  /** One transparent pixel, inline: the desktop strip's photographs below the desktop's width, where that copy is hidden (R1, 8). */
-  const NO_PIXELS = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
   /** The welcome's "See the example collection" did not open it: said under the line, never a press answered with nothing (round sixty-three, the fix pass; R1, 7). */
   let exampleRefused = $state<NotEntered | null>(null);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
@@ -453,8 +451,6 @@
   const ITEMS = 240;
   const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
   const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
-  /** The phone's strip follows this many rows of the first window, or all of them when there are fewer. */
-  const STRIP_AFTER = 3;
   /** The genera of "Most grown" while that chip is on, for its search (round seventy-five); the server sends them only then. */
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
@@ -523,8 +519,9 @@
     <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
          hosts of the first three are preconnected, so the handshakes start with the stylesheet (round forty-two, 1). A grower's own
          page replaces the strip after the collection opens; the one small file this costs them is cached by then. -->
-    <!-- A desktop's only: on a phone the strip follows the first rows, and a row is the first screen's paint (round sixty-three, V4). -->
-    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" media="(min-width: 701px)" />
+    <!-- At every width since round seventy-six: the strip is above the search on a phone too (the owner's decision), and its
+         first tile is on a phone's first screen again (round sixty-three, V4, had made it a desktop's only). -->
+    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" />
     {#each photoHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
 </svelte:head>
@@ -537,30 +534,32 @@
   {/if}
 {/snippet}
 
-{#snippet featured(titled = false, where: 'any' | 'wide' | 'phone' = 'any')}
-  <!-- On a phone the strip follows the first rows (`where`: drawn twice, one shown per width by CSS): above the search it
-       put the search, the chips and the first row under the tab bar on Safari's 390 × 664 page (round sixty-three, V4;
-       docs/REVIEW-ROUND-62.md, section 7). The phone's copy loads its photographs lazily, so on a desktop, where it is
-       hidden, it fetches nothing. The desktop's copy fetches its first three at once, and an eager image is fetched even
-       inside `display: none`: below the desktop's width its picture names a pixel already on the page instead, so a phone
-       does not spend two high-priority requests on photographs it does not show yet (round sixty-three, the fix pass; R1, 8). -->
-  <section class="featured" class:wideonly={where === 'wide'} class:phoneonly={where === 'phone'} aria-label="From the reference">
+{#snippet featured(titled = false)}
+  <!-- One strip, drawn once, at every width: between the welcome and the search, where a desktop has always had it (round
+       seventy-six, the owner's decision). Round sixty-three (V4) drew a second copy after the first three catalogue rows on
+       a phone, so the search and a row were on Safari's first screen; on the owner's iPhone it read as three random plants
+       dropped into the A section of the list. -->
+  <section class="featured" aria-label="From the reference">
     {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
     <div class="strip">
       {#each data.featured as c, i (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
           <!-- One size by surface, not by pixel density: a 150 px tile at `small` (240 px), never `medium`, which a phone's density promoted every tile to and made the phone's home page seven megabytes (round thirty-five, R2-7). -->
-          <!-- The first phone viewport shows two or three tiles, and whichever is largest is the first-screen paint: the first three
-               are fetched at once, the first with priority, the rest of the strip lazily (round thirty-seven, R2-4; round forty, R2-5).
-               A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
-          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else if where === 'wide'}<picture><source media="(max-width: 700px)" srcset={NO_PIXELS} /><img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} /></picture>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 && where !== 'phone' ? 'eager' : 'lazy'} fetchpriority={i < 2 && where !== 'phone' ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          <!-- The first screen shows two or three tiles at every width now, and the first is preloaded from the head: the first
+               three are fetched at once, the first two with priority, the rest of the strip lazily (round thirty-seven, R2-4;
+               round forty, R2-5; round seventy-six, measured). A photograph that does not load leaves a placeholder with the
+               name, not a blank card (round forty, own). -->
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          <!-- The name and the English name may be cut to one line on a phone; both are whole in the link's name. -->
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
           <!-- The photograph's source on the tile, its author and licence on the page it opens (round sixty; rule 1, the round forty-two review G). -->
-          <!-- A photograph that does not load takes its credit with it, but not the line's height: the strip shrank by that line
-               as the photograph failed, and the rows under the reader moved 21 px a moment after a fill had put them back
-               (round sixty-five; smoke 2819 in Safari's engine and Firefox; Chromium passed only by reading before the failure). -->
-          {#if !failedTiles.has(c.slug) && tileCredit(c)}<span class="fcred">{tileCredit(c)}</span>{:else if tileCredit(c)}<span class="fcred" aria-hidden="true">&nbsp;</span>{/if}
+          <!-- Whole, on as many lines as it takes (round seventy-six; rule 4): two lines cut "Photo: CC BY, Sandy Wolkenberg" to
+               "Sandy…" on a phone. The strip's tiles share one grid row, so every tile takes the tallest one's height. -->
+          <!-- A photograph that does not load takes its credit with it, but not the credit's height: the strip shrank as the
+               photograph failed, and the rows under the reader moved a moment after a fill had put them back (round
+               sixty-five; smoke 2819). The same words, hidden, keep the same lines. -->
+          {#if tileCredit(c)}<span class="fcred" class:gone={failedTiles.has(c.slug)} aria-hidden={failedTiles.has(c.slug) ? 'true' : undefined}>{tileCredit(c)}</span>{/if}
         </a>
       {/each}
     </div>
@@ -705,8 +704,9 @@
 
   {#if visitor && data.featured.length && !searchMode}
     <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule,
-         rotated daily; above the one toolbar now, so the search, the grouping and the chips sit together (round sixty; visitor 16). -->
-    {@render featured(false, 'wide')}
+         rotated daily; above the one toolbar now, so the search, the grouping and the chips sit together (round sixty; visitor 16).
+         At every width since round seventy-six (the owner's decision): the list below is unbroken on a phone too. -->
+    {@render featured(false)}
   {/if}
 
 
@@ -796,7 +796,6 @@
             </nav>
           {/if}
         {/if}
-        {#if visitor && data.featured.length && start === 0 && i === Math.min(STRIP_AFTER, visibleRows.length) - 1}{@render featured(false, 'phone')}{/if}
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
@@ -834,9 +833,12 @@
   @media (max-width: 900px) { .tools { flex-basis: 100%; } }
   .azbtn.noaz { visibility: hidden; }
   .relaxed { margin: 8px 0 0; }
-  /* Two lines, cut after the second: on one line the licence that leads the credit was cut at 200% text ("Photo: CC …"; round sixty-seven, triage-66 N13, R45-12). */
-  .ftile .fcred, .tile .cred { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; overflow-wrap: anywhere; }
+  /* Whole, on as many lines as it takes: one line cut the licence at 200% text ("Photo: CC …"; round sixty-seven, triage-66
+     N13), and two cut the author ("Photo: CC BY, Sandy…" on the owner's iPhone; round seventy-six, rule 4). The tiles of a
+     row share its height, so the row stays even. */
+  .ftile .fcred, .tile .cred { display: block; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
   .ftile .fcred { padding: 0 9px 8px; margin-top: -4px; }
+  .ftile .fcred.gone { visibility: hidden; }
   .tile .cred { margin-top: 2px; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
   /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
@@ -857,12 +859,10 @@
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */
   .featured { margin: 12px 0 2px; }
-  /* One strip per width: above the search on a desktop, after the first rows on a phone (round sixty-three, V4). */
-  @media (max-width: 700px) { .featured.wideonly { display: none; } .featured.phoneonly { margin: 6px 0 4px; } }
-  @media (min-width: 701px) { .featured.phoneonly { display: none; } }
   /* A sampler, not the page: on a phone the tiles are 112px squares, three and a half across, the first one two tiles
      wide so one photograph gets room; on a desktop the six-up grid as before (round fifty, 1). */
-  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: 112px; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
+  /* The tiles grow with the text past 112 px (7rem at 16 px), so a credit at 200% text is a few lines, not one word a line (round seventy-six). */
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: max(112px, 7rem); gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
   .ftile:first-child { grid-column: span 2; }
   .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 2 / 1; }
   .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
@@ -870,7 +870,6 @@
   /* `height: auto`, or the img's height attribute (240) beats the aspect ratio: a loaded photograph drew 240 px tall in a
      112 px tile, and the live strip was 320 px high (round sixty-two; outside review A10, B1: the fixture's photographs
      never load, so no test saw it). */
-  .ftile picture { display: block; }
   .ftile img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
   .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

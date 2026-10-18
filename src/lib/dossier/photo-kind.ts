@@ -658,15 +658,45 @@ export const LEAD_WIDTH = 500;
 const narrow = (p: { width?: number | null }) => typeof p.width === 'number' && p.width < LEAD_WIDTH;
 
 /** Commons files in their places among the others: those whose title holds the species' epithet first, and of one rank those at least 500 pixels wide first (stable). */
-export function commonsFirstByEpithet<P extends { src?: string; id: string; width?: number | null }>(photos: P[], names?: KindNames | null): P[] {
+export function commonsFirstByEpithet<P extends { src?: string; id: string; width?: number | null; judged?: Judged | null }>(photos: P[], names?: KindNames | null): P[] {
   const at = photos.map((p, i) => (p.src === 'commons' ? i : -1)).filter((i) => i >= 0);
-  const sorted = at.map((i) => photos[i]).map((p, k) => ({ p, k, r: epithetRank(p.id, names), w: narrow(p) ? 1 : 0 })).sort((a, b) => a.r - b.r || a.w - b.w || a.k - b.k).map((x) => x.p);
+  const sorted = at.map((i) => photos[i]).map((p, k) => ({ p, k, r: stored(p, names) ? p.judged!.rank : epithetRank(p.id, names), w: narrow(p) ? 1 : 0 })).sort((a, b) => a.r - b.r || a.w - b.w || a.k - b.k).map((x) => x.p);
   const out = photos.slice();
   at.forEach((i, k) => (out[i] = sorted[k]));
   return out;
 }
 
-type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null; described?: boolean | null };
+type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null; described?: boolean | null; judged?: Judged | null };
+
+/* ---------- The judgement stored by the build (round seventy-six) ---------- */
+
+/** What the rules made of a Commons file with the reference's names, as `--index` stores it (`Photo.judged`). */
+export type Judged = { not?: string; rank: number };
+/**
+ * Whether a file is read by its stored judgement: where no names of the reference are given (the Worker, since round
+ * seventy-six, reads a page without them) and the build stored one. Where names are given, the rules run again.
+ */
+const stored = (p: { judged?: Judged | null }, names?: KindNames | null) => !names?.held && !!p.judged && typeof p.judged.rank === 'number';
+/** A Commons file as `commonsKind` reads it: its stored categories, struck, credit, slips, kind and description. */
+const metaOf = (p: PhotoLike): CommonsMeta => ({ categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described });
+/** The judgement of a Commons file with the names given (the reference's among them), as `--index` writes it. */
+export function judgeOf(p: PhotoLike, names: KindNames): Judged {
+  const not = commonsKind(p.id, names, metaOf(p));
+  return not ? { not, rank: epithetRank(p.id, names) } : { rank: epithetRank(p.id, names) };
+}
+/**
+ * Every Commons file of a dossier judged with the names given and the judgement written on it (`--index`; round
+ * seventy-six); a file of another source carries none. Whether anything changed.
+ */
+export function judgePhotos(photos: Array<PhotoLike & { judged?: Judged }>, names: KindNames): boolean {
+  let changed = false;
+  for (const p of photos) {
+    if (p.src !== 'commons') { if (p.judged) { delete p.judged; changed = true; } continue; }
+    const j = judgeOf(p, names);
+    if (p.judged?.not !== j.not || p.judged?.rank !== j.rank || (p.judged && Object.keys(p.judged).length !== Object.keys(j).length)) { p.judged = j; changed = true; }
+  }
+  return changed;
+}
 const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
 /**
  * iNaturalist's stand-in for a photograph it has not processed (`/attachment_defaults/local_photos/large.png`): a grey
@@ -780,7 +810,7 @@ export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: K
     // A Commons copy of an iNaturalist photograph the page holds: by the number its name ends with, or by the photograph
     // its source names (`inat`, kept by the build and the fill; self-review 70, S-C5).
     else if (inat.has(commonsInatCopy(p.id) ?? '') || (p.inat && inat.has(p.inat))) continue;
-    else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described })) {
+    else if (!(stored(p, names) ? (p.judged!.not ?? null) : commonsKind(p.id, names, metaOf(p)))) {
       const r = readCommonsPhoto(p);
       // An original upload's tile at Commons' largest width below its own, so no smaller slot loads the whole file (C7, R47-9).
       if (r) out.push(r.thumb ? { ...r, thumb: commonsTileOf(r.thumb, r.width) } : r);

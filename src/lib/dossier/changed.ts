@@ -6,7 +6,8 @@
  * day that fingerprint first appeared (`changed.on`); a build or a fill that leaves the fingerprint as it was keeps the
  * day, and one that changes it moves the day to the day of the change.
  *
- * Left out of the fingerprint: `built` and `builtBy` (when, by what), `changed` itself, and each source row's `at` and
+ * Left out of the fingerprint: `built` and `builtBy` (when, by what), `changed` itself, each photograph's stored
+ * judgement (`judged`, round seventy-six), and each source row's `at` and
  * `detail` (when it was asked, and the build's own note, "carried from build of …"): the row's status stays in, since a
  * source that answered where it had refused is a change the page shows. A row carried from a build before counts as the
  * status it carries, which is the status the page shows: left out, every switch between an online build and an offline
@@ -37,12 +38,21 @@ function canon(x: unknown): unknown {
   return x;
 }
 
+/**
+ * A photograph without the judgement `--index` stores on it (round seventy-six): derived from the whole reference's
+ * names, and written on every Commons file the first time, so it moves no page's day; the files it judges are in.
+ */
+const withoutJudged = (p: unknown) => {
+  if (!p || typeof p !== 'object' || !('judged' in p)) return p;
+  const { judged: _, ...rest } = p as Obj;
+  return rest;
+};
 /** The dossier's substance as one string: everything its page shows, without the build's dates and notes. */
 export function substanceOf(d: object): string {
   const o: Obj = {};
   for (const [k, v] of Object.entries(d as Obj)) {
     if (LEFT_OUT.has(k)) continue;
-    o[k] = k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : v;
+    o[k] = k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : k === 'photos' && Array.isArray(v) ? v.map(withoutJudged) : v;
   }
   return JSON.stringify(canon(o));
 }

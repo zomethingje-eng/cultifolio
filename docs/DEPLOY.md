@@ -114,23 +114,50 @@ A /48's twenty new vaults a day are refused as "too many new vaults from this ne
 
 The adapter's own cache at the edge answers a repeated public GET by its full URL before the Worker runs. The client names its build in those URLs (`v=<version>`), and an answer is kept only under the build that made it (`src/lib/server/build.ts`), so a deploy is not answered from the old build's copies. What the edge keeps, by URL: a search, a name lookup, an entries or sheets bucket, a window of catalogue rows, the sitemaps and `robots.txt` for a day; a forecast for an hour (five minutes when the NWS refused or did not answer for its alerts); `/api/index` for five minutes; the world maps for a day; the build's own files for a year. Besides those, the Worker's own copies: the name lookups and old-name checks by query for a day, the sheets by bucket for a day, a forecast by rounded site for the hour, a search by query for a day, the front page and species pages as rendered for a minute.
 
-### A cold start's CPU (round seventy-three)
+### A cold start's CPU and memory (rounds seventy-three and seventy-six)
 
-The first request a fresh copy of the Worker answers reads the species index from R2 (5.8 MB) and builds its name maps; every later request in that copy uses them as built. On the developer's machine that first request cost about 0.4 s of CPU in node; on Cloudflare it has not been measured. Measure it once after a deploy, and again after any round that changes the index or the name maps.
+Since round seventy-six the first request a fresh copy of the Worker answers reads only what it needs, by name: the manifest, the genera file (21 KB), a name file or two (about 110 KB each), and for a species page its dossier and its genus's row file. It no longer reads the species index (5.8 MB) or builds name maps from it; the first search in that copy reads the index, once, and keeps it. Measured in node on round seventy-two's corpus (`scripts/dev/scale/cold-routes.mjs`): a cold species page took 75 ms and held 5.5 MB, where round seventy-five's took 550 ms and held 45 MB; a cold first search 258 ms and 12 MB, where it was 371 ms and 25 MB. On Cloudflare it has not been measured. Measure it once after a deploy, and again after any round that changes what a cold request reads.
 
 1. Deploy with `npm run deploy`. A deploy starts fresh copies, so the next requests are cold ones.
 2. Open a second cmd window in the project folder and type `npx wrangler tail cultifolio --format json > tail.json`. It prints nothing; it writes every request to `tail.json`. Leave it running.
-3. In a private browser window open `https://cultifolio.com/species/copiapoa-cinerea`, then the same page again, then `https://cultifolio.com/`.
+3. In a private browser window open `https://cultifolio.com/species/copiapoa-cinerea`, then the same page again, then `https://cultifolio.com/`, then `https://cultifolio.com/api/search?q=aloe`.
 4. Wait ten seconds, go back to the second window and press Ctrl-C (answer `Y` if it asks to end the batch job).
-5. Type `findstr /C:"cpuTime" /C:"outcome" tail.json`. For each request it lists how it ended and its CPU time in milliseconds.
+5. Type `node scripts/tail-summary.mjs tail.json`. It prints one line a request: how it ended (`outcome`), its CPU time and its wall time in milliseconds, and the address, then the most CPU any request took. (`findstr /C:"cpuTime" /C:"outcome" tail.json` shows the same, less tidily.)
 
-The first request of a fresh copy has by far the largest `cpuTime`; the second visit to the same page takes a few milliseconds. Requests can reach more than one copy, so there may be more than one large figure. When to act:
+The first request of a fresh copy has the largest CPU time; the second visit to the same page takes a few milliseconds. Requests can reach more than one copy, so there may be more than one large figure. When to act:
 
-- Any `"outcome"` other than `"ok"`, and in particular `"exceededCpu"` (the browser shows "Error 1102"): act now. Note the address and tell the developer.
+- Any outcome other than `ok`, in particular `exceededCpu` (the browser shows "Error 1102") or `exceededMemory`: act now. Note the address and tell the developer.
 - On the Workers Free plan, a request may use 10 ms of CPU, which a cold start cannot meet. Move to Workers Paid before the launch: Cloudflare dashboard → Workers & Pages → Plans.
-- On Workers Paid, a request may use 30 s of CPU by default. A cold `cpuTime` under 1,000 ms needs nothing. Over 1,000 ms, more than twice what was measured here, write it in the round's notes: the corpus build should then write the synonym maps and the held names as files, so that a cold start reads them rather than builds them.
+- On Workers Paid, a request may use 30 s of CPU by default. A cold species page under 300 ms, and a first search under 1,000 ms, need nothing. Over that, write it in the round's notes with the figures `tail-summary.mjs` printed.
 
 If `tail.json` has no `"cpuTime"` lines (an older wrangler), the dashboard shows the same: Workers & Pages → cultifolio → Metrics → CPU time, whose highest percentile is the cold starts.
+
+### The memory test at 50,000 species (round seventy-six)
+
+The scaling study (`docs/SCALE-STUDY.md`, section 2) found that the Worker as it was could not hold the reference past 25,000 to 40,000 species in Cloudflare's 128 MB, and that a Worker that holds no whole-index structure can. This test puts a made-up reference of 50,000 species behind a second copy of the Worker and reads whether Cloudflare ran it in its memory. It uses a bucket and a Worker of their own, `cultifolio-scale`, and never touches the live bucket, the live Worker or its counters. It takes about half an hour, most of it the upload (about 260 MB, 2,300 files). Do it once, after round seventy-six is deployed.
+
+1. **Make the bucket.** In cmd in the project folder: `npx wrangler r2 bucket create cultifolio-scale`
+2. **Make the made-up corpus** from the corpus on disk (`static\s\v2`, after round seventy-six's corpus step). Two commands; the second takes a minute or two and prints `50000 species → scale\c50k/s/v2: corpus …`:
+
+   ```
+   npx tsx --tsconfig tsconfig.scripts.json scripts/dev/scale/synth-index.ts static/s/v2/index.json 50000 scale/index-50000.json
+   node --max-old-space-size=8192 --import tsx scripts/dev/scale/synth-corpus.ts scale/index-50000.json static/s/v2 scale/c50k 7284333 2777724
+   ```
+
+   The first 8,945 species are the real ones; the rest are real entries with made-up epithets. Only two species have their data files: Copiapoa cinerea (7284333) and Aloe vera (2777724).
+3. **Upload it to the scale bucket**, the files first and the manifest last:
+
+   ```
+   rclone copy scale\c50k\s\v2 r2:cultifolio-scale/s/v2 --transfers 32 --checkers 32 --exclude manifest.json --s3-no-check-bucket --stats-one-line --stats 30s
+   rclone copy scale\c50k\s\v2\manifest.json r2:cultifolio-scale/s/v2 --s3-no-check-bucket
+   ```
+
+   Check the bucket name twice: `cultifolio-scale`, never `cultifolio`.
+4. **Deploy the scale Worker**: `npm run build`, then `npx wrangler deploy --config wrangler.scale.jsonc`. Its last lines give its address, `https://cultifolio-scale.<your subdomain>.workers.dev`.
+5. **Watch it**: in a second cmd window, `npx wrangler tail cultifolio-scale --format json > tail-scale.json`.
+6. **Open, in a private window, one after another**: `<address>/species/copiapoa-cinerea`, `<address>/`, `<address>/api/dossier/7284333`, `<address>/api/search?q=aloe`, and `<address>/species/aloe-vera`. Then wait ten seconds and press Ctrl-C in the second window.
+7. **Read it**: `node scripts/tail-summary.mjs tail-scale.json`. Each line says `ok` or, where the copy ran out of memory, `exceededMemory` (the page shows an error). Paste the lines back to the developer. What the developer measured here, in Cloudflare's own runtime run locally (`wrangler dev`, which does not enforce the limit): see `scripts/dev/scale/results/workerd-heap.txt`.
+8. **Remove it all**: `npx wrangler delete cultifolio-scale` (answer `y`), then `rclone purge r2:cultifolio-scale`, then `npx wrangler r2 bucket delete cultifolio-scale`, and delete the folder `scale`.
 
 ### A test that passed only on its retry: `scripts/flake-check.mjs` (round seventy-five)
 
@@ -150,7 +177,30 @@ Then the three things the code cannot do for you: confirm in the dashboard that 
 
 ## 5. Refreshing the corpus later
 
-**The corpus step is one command (round seventy-two).** `node scripts/corpus-step.mjs` runs the round's plan (`scripts/corpus-plan.txt`) in order: a backup, the fills, the rebuilds, `--index`, the upload and the live check. Everything it prints also goes to `corpus-step.log` in the project folder, and each finished step is recorded in `corpus-step.json`, so the same command carries on where it stopped. It stops with one sentence and the command to type next. The day's answers of GBIF, Wikidata, Kew and the rest are kept in `cache\upstream\` for that day only, so running it again the same day asks only what did not answer; the folder can be deleted at any time. Type it with `node`, not `npm run`: under `npm run`, Ctrl-C asks "Terminate batch job (Y/N)?" (either answer is safe). The steps below are round seventy-three's; the next section's two rclone lines and `--keep-list` are what the command runs, kept for reference.
+**The corpus step is one command (round seventy-two).** `node scripts/corpus-step.mjs` runs the round's plan (`scripts/corpus-plan.txt`) in order: a backup, the fills, the rebuilds, `--index`, the upload and the live check. Everything it prints also goes to `corpus-step.log` in the project folder, and each finished step is recorded in `corpus-step.json`, so the same command carries on where it stopped. It stops with one sentence and the command to type next. The day's answers of GBIF, Wikidata, Kew and the rest are kept in `cache\upstream\` for that day only, so running it again the same day asks only what did not answer; the folder can be deleted at any time. Type it with `node`, not `npm run`: under `npm run`, Ctrl-C asks "Terminate batch job (Y/N)?" (either answer is safe). The steps below are round seventy-six's, then round seventy-three's; the next section's two rclone lines and `--keep-list` are what the command runs, kept for reference.
+
+### Round seventy-six's corpus step: the Worker without the whole index
+
+**What changes, and why.** Until this round every fresh copy of the Worker read the whole species index (5.8 MB) and built maps of every name from it before it answered its first page: 0.5 s and 43 MB in node, and at 50,000 species more memory than Cloudflare gives a copy (`docs/SCALE-STUDY.md`). The build now writes those maps as small files (the name files `names/`, the catalogue's row files `rows/`, `genera.json`, `featured.json` and the sitemap's files `sitemap/`), and stores in each dossier what the photograph rules made of its Commons files with every name the reference holds (`judged`). A page then reads one or two small files and its dossier; only the search still reads the index. Nothing is asked of any source: the step is one offline re-index, a review, the upload and the live check.
+
+**The order: deploy first, then this step.** Either order is safe, and the code makes it so:
+
+- A Worker of this round, deployed before the upload, finds a manifest without the new files and reads the live corpus as before, through its index (tested: `tests/unit/r76w-lookups.test.ts`, "the fallback").
+- The Worker live now, if the upload comes first, reads the new manifest as before and passes by the new files and the new field.
+
+So: `npm run deploy` as in section 3 (its live check runs against the live corpus), then the steps below, then the cold-start measure in section 3. To go back after both, `npx wrangler rollback` is enough: the Worker before reads the new corpus.
+
+**Step 1.** In cmd in the project folder (`cd /d "C:\path\to\AI Work\cultifolio"`), type `node scripts/corpus-step.mjs`. It copies `static\s\v2` to `backups\v2-<the corpus id>`, then runs `--index` (about a minute). Its lines include:
+
+```
+  index: 8945 species
+  photograph judgement: … Commons files on 8945 pages read with the reference's names; … dossiers written anew
+  corpus …: 8945 species in 32 buckets, 64 posting files → static/s/v2/p/ (… files written, …); manifest.json names it
+```
+
+**Step 2. Review.** It stops with "Review before going on". Good looks like this: "index: 8945 species"; on the dry run of round seventy-two's copy here, 889 dossiers were written anew, each only gaining the judgement, and the review line said about 890 dossiers differ from the backup; the manifest names 227 more files than before (128 name files, 96 row files, the genera, the strip and one sitemap file). `drops.txt` should not be there. Then `node scripts/corpus-step.mjs --go-on`.
+
+**Step 3.** The upload and the live check run by themselves, as in round seventy-three's step. On the dry run the upload's new or changed files were 892 dossiers and 242 products, 53 MB in all, besides the top-level index and the manifest. Then measure the cold start (section 3, "A cold start's CPU and memory"), and if you have half an hour, the memory test after it.
 
 ### Round seventy-three's corpus step, after `npm run deploy`
 

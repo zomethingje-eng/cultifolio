@@ -241,6 +241,9 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   // seventy-three found it in the trace). This test is about what removing asks and what Undo brings back, not about time,
   // so Date.now() is held still and the toast stays; timers run (as r61l-records' guard, round seventy-two).
   await page.clock.setFixedTime(Date.now());
+  // Sixty seconds, not thirty: since round seventy-five it waits for the sheet's answer (up to 20 s) and for each page to be
+  // ready, and in Firefox at two workers the whole took past 30 s on the owner's PC (round seventy-six).
+  test.setTimeout(60_000);
   await page.goto('/settings');
   await ready(page);
   await page.check('#pref-refphotos');

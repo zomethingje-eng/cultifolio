@@ -267,11 +267,13 @@ describe("the front page's photographs (H72)", () => {
     const photos = numberWord(claim(s, /that have (\w+) photographs or more/));
     const perDay = numberWord(claim(s, /(\w+) of those \d+ are shown a day/));
     const page = raw('src/routes/+page.server.ts');
-    expect(Number(/genera\.slice\(0, (\d+)\)/.exec(page)![1]), s.where).toBe(genera);
-    expect(Number(/\(c\.photos \?\? 0\) >= (\d+)/.exec(page)![1])).toBe(photos);
+    // The pool's rule, which the build writes as `featured.json` since round seventy-six (`featuredPoolOf`)
+    const rule = raw('src/lib/dossier/catalogue.ts').split('export function featuredPoolOf')[1];
+    expect(Number(/genera\.slice\(0, (\d+)\)/.exec(rule)![1]), s.where).toBe(genera);
+    expect(Number(/\(c\.photos \?\? 0\) >= (\d+)/.exec(rule)![1])).toBe(photos);
     expect(Number(/Math\.min\((\d+), pool\.length\)/.exec(page)![1])).toBe(perDay);
-    expect(page).toMatch(/c\.climate === 'ok'/); // "and a habitat climate"
-    expect(page).toMatch(/sort\(\(a, b\) => b\.open - a\.open\)\[0\]/); // "the species of each with the most openly licensed records"
+    expect(rule).toMatch(/c\.climate === 'ok'/); // "and a habitat climate"
+    expect(rule).toMatch(/sort\(\(a, b\) => b\.open - a\.open\)\[0\]/); // "the species of each with the most openly licensed records"
   });
 });
 

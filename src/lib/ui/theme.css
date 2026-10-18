@@ -252,14 +252,15 @@ h2.sec:first-child { margin-top: 14px; }
 .hero img { width: 100%; max-height: 430px; object-fit: cover; display: block; }
 /* The credit at the top of the photograph: at the foot, the name card's negative margin covered it on a phone, author,
    licence and link alike (round sixty-one; visitor 2, checked with elementFromPoint at 390 px). */
-.hero .cred { position: absolute; right: 12px; top: 10px; font-size: var(--fs-xs); letter-spacing: 0.03em; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 4px 9px; border-radius: var(--r-sm); max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Whole, wrapped (round seventy-six; rule 4): one line cut at an ellipsis lost the author's name and the date past about
+   sixty characters on a desktop, and on a phone the author's line was cut alone ("(c) Николай Соболев, some rights res…"). */
+.hero .cred { position: absolute; right: 12px; top: 10px; font-size: var(--fs-xs); letter-spacing: 0.03em; line-height: 1.35; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 4px 9px; border-radius: var(--r-sm); max-width: calc(100% - 24px); overflow-wrap: anywhere; }
 .hero .cred:hover { color: #fff; text-decoration: none; }
-/* Licence first, then the author's line; on a phone two lines, each cut alone, so a long author name never takes the
-   licence with it (round sixty-two; outside review A12: one nowrap line lost the licence past about 15 characters). */
+/* Licence first, then the author's line; on a phone each on lines of its own (round sixty-two; outside review A12: one
+   nowrap line lost the licence past about 15 characters), and neither cut (round seventy-six). */
 .hero .cred .lic::after { content: ' · '; }
 @media (max-width: 640px) {
-  .hero .cred { display: flex; flex-direction: column; white-space: normal; line-height: 1.35; }
-  .hero .cred > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero .cred { display: flex; flex-direction: column; }
   .hero .cred .lic::after { content: none; }
 }
 .hero .ph { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--ink3); font-family: var(--mono); font-size: var(--fs-sm); text-align: center; padding: 0 20px; }

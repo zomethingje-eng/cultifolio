@@ -271,7 +271,15 @@ export const Photo = v.object({
    */
   described: v.optional(v.boolean()),
   /** The keys of the other species' pages that hold this same photograph, written by `--index` (round seventy-two, C5): no page shows it. */
-  shared: v.optional(v.array(v.number()))
+  shared: v.optional(v.array(v.number())),
+  /**
+   * For a Commons file: what the photograph rules made of it with every name the reference holds, written by `--index`
+   * (round seventy-six), so the Worker reads a page without the reference's names: `not`, why it is not a photograph of
+   * the species (`commonsKind`), absent when it is one; `rank`, 0 when its title holds the species' own epithet, 1 an
+   * older name's, 2 neither (`epithetRank`), which orders the Commons files. Read where no names are given; where they
+   * are (the build, the fills), the rules run again.
+   */
+  judged: v.optional(v.object({ not: v.optional(v.string()), rank: v.number() }))
 });
 
 export const Paper = v.object({

@@ -54,7 +54,10 @@ describe('the plan', () => {
     expect(() => parsePlan('dosier --index')).toThrow(/line 1: "dosier --index" is not a step/);
   });
   it('the plan in the repository parses', () => {
-    expect(parsePlan(readFileSync('scripts/corpus-plan.txt', 'utf8')).length).toBeGreaterThan(5);
+    // A round's plan is as long as its round needs (round seventy-six's is a backup, one re-index, a review, the upload and the live check)
+    const steps = parsePlan(readFileSync('scripts/corpus-plan.txt', 'utf8'));
+    expect(steps.length).toBeGreaterThan(3);
+    expect(steps.map((s) => s.kind)).toEqual(expect.arrayContaining(['backup', 'dossier', 'review', 'upload', 'live-check']));
   });
 });
 

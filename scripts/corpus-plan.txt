@@ -1,4 +1,4 @@
-# Round seventy-three's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
+# Round seventy-six's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
 # One step a line:
 #   backup                       static/s/v2 copied to backups/v2-<corpus id> (once a corpus)
 #   dossier <arguments>          the builder: npm run dossier -- <arguments>
@@ -10,29 +10,14 @@
 # Each builder step that stops unfinished (a source not answering) exits 3, and the next run starts it again; each
 # picks up where it stopped. The day's answers are kept in cache/upstream/, so a rerun the same day asks again only
 # what did not answer.
+#
+# Round seventy-six asks nothing of any source: one offline re-index, then the upload. Deploy and upload may come in
+# either order (DEPLOY.md, "Round seventy-six: the Worker without the whole index"): a Worker deployed before this
+# upload reads the live corpus as before, and the Worker live now passes by what this upload adds.
 backup
-# K: the other GBIF keys each page reads records and photographs from (the owner's rule; src/lib/dossier/extra-keys.ts),
-# and the two pairs of pages merged (scripts/merged-pages.txt). scripts/extra-keys.txt lists 332 keys on 305 pages,
-# made offline from Kew's file of 2026-06-04 and GBIF's backbone export; this step compares every page with it and
-# writes rebuild-extra.txt (305 pages on the dry run). Offline, a minute.
-dossier --list-extra-keys
-review rebuild-extra.txt in the project folder lists the pages the next step re-derives with their other keys: about 305 lines, among them 11798439 Pelecyphora macromeris, 7281301 Weingartia fidaiana, 8038589 Myrica cerifera, 8793122 Ixora coccinea and 11869920 Eucalyptus camaldulensis. None of the 332 keys is in occurrence.zip (it was made for the reference's own keys), so their records and photographs are asked of GBIF's search API: about 1,000 requests besides reading the download.
-# The range, records, marker and climate re-derived with the other keys' records (the download for the page's own key,
-# the API for the others), and the other keys' photographs; the name block asked of GBIF again (each other key's name
-# joins the older names; a merged page's synonyms and common names join too); Kew's names read again after it.
-if-exists rebuild-extra.txt dossier --keys rebuild-extra.txt --rederive --grid climate --bulk bulk
-# The two merged pages' dossiers deleted (Coryphantha macromeris 3084426, Rebutia fidana 7906297), each only once the page
-# it joined records its key with its old address.
-dossier --prune-followed
-# L's iNaturalist reading against Kew's names below species (round seventy-three): about 60 pages asked once, a few
-# asked again; --index then writes the shared-photograph marks.
-dossier --fill inat --bulk bulk
-# L's Commons rules (round seventy-three): a file the sister-epithet rule would hide has its description read once.
-dossier --fill commons-kind
-# A check: every page now reads the keys the list gives it ("0 pages to rebuild").
-dossier --list-extra-keys
-# The index: 8,945 species, the two old addresses answered by the kept pages.
+# W: the Worker's lookups as files (names/, rows/, genera.json, featured.json, sitemap/), and the photograph judgement
+# with every name of the reference stored in each dossier that holds a Commons file. Offline, a few minutes.
 dossier --index
-review Read drops.txt if it is there, and in corpus-step.log the lines each step printed of what it changed. The index holds 8,945 species: the two merged pages are gone on purpose. The --index output must say "2 old addresses of pages merged into another answered by the kept page: coryphantha-macromeris, rebutia-fidana".
+review In corpus-step.log, the --index step must say "photograph judgement: … Commons files on 8945 pages read with the reference's names" and how many dossiers it wrote anew (889 of 8,947 on the dry run of round seventy-two's copy, every one only gaining the judgement; none on a second run), and "index: 8945 species". The manifest names 227 files more than before (139 then 366 on the dry run): 128 name files, 96 row files, the genera, the strip and one sitemap file. The index and some entries files change too: a tile's credit now always follows its thumbnail. drops.txt should not be there.
 upload
 live-check

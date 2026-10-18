@@ -1,12 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('$lib/server/dossiers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('$lib/server/dossiers')>()),
-  getIndex: async () => [
+vi.mock('$lib/server/dossiers', async (importOriginal) => {
+  const idx = [
     { key: 2776776, slug: 'haworthiopsis-attenuata', name: 'Haworthiopsis attenuata', photos: 0, open: 0, climate: 'ok' },
     { key: 4201127, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', photos: 0, open: 0, climate: 'ok', syn: ['Cotyledon paniculata', 'Cotyledon tardiflora'] }
-  ]
-}));
+  ];
+  // The corpus the names are read from (through its index since round seventy-six's lookups; it was `getIndex`)
+  const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'synonyms-test', etag: null, fromStore: false, manifest: null, buckets: 32 };
+  return { ...(await importOriginal<typeof import('$lib/server/dossiers')>()), getIndex: async () => idx, corpusNow: async () => corpus };
+});
 
 import { nameFromSlug, synonymOf, synonymInIndex } from '$lib/server/synonyms';
 

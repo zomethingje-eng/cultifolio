@@ -102,13 +102,13 @@ describe('the corpus load (proposed)', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => T0);
     expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id);
     for (const [k, v] of b.blobs) m.set(k, v);
-    m.set(manifestPath(), JSON.stringify({ ...b.manifest, files: { ...b.manifest.files, 'index.json': a.manifest.files['index.json'] } }));
+    m.set(manifestPath(), JSON.stringify({ ...b.manifest, files: { ...b.manifest.files, 'index.json': a.manifest.files['index.json'], 'genera.json': a.manifest.files['genera.json'] } })); // and A's genera file, what a corpus read through the lookup files is checked by (round seventy-six)
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
     store.reads.length = 0;
     const after = await corpusNow(platform, noStatic);
     expect(store.reads).toContain(manifestPath()); // the new manifest was read: the test is not vacuous
-    expect({ corpus: after.corpus, species: after.idx.length }).toEqual({ corpus: a.manifest.id, species: X.length });
+    expect({ corpus: after.corpus, species: after.idx?.length ?? after.manifest?.species }).toEqual({ corpus: a.manifest.id, species: X.length });
     store.reads.length = 0;
     for (let i = 2; i <= 4; i++) { vi.spyOn(Date, 'now').mockImplementation(() => T0 + i * 61_000); expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id); }
     expect(store.reads).toEqual([]);

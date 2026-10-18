@@ -14,6 +14,8 @@
  *   sheets/<bucket>.json               the sheets of a bucket (/api/sheets)
  *   postings/<file>.json               the search's postings: which entries each short key can match (/api/search; $core/postings)
  *   catalogue/<by>-<chip>.json         a catalogue's rows (/, /api/rows)
+ *   names/<n>.json, rows/<by>/<n>.json, genera.json, featured.json, sitemap/<n>.json
+ *                                      the Worker's lookups without the index (round seventy-six; ./lookups.ts)
  *
  * A Worker that finds no manifest (a corpus uploaded before the manifest, the fixture corpus) derives as it did.
  */
@@ -21,6 +23,7 @@ import { DOSSIER_V } from './schema';
 import { bucketsFor, bucketNames } from '$core/bucket';
 import { postingFilesFor, postingFileNames } from '$core/postings';
 import { BYS, CHIPS, catalogueFile } from './catalogue';
+import { lookupFileNames } from './lookups';
 
 export interface Manifest {
   v: number;
@@ -72,3 +75,15 @@ export const isManifest = (x: unknown): x is Manifest => {
 
 /** How many of the whole index's hits `short.json` keeps for each key of one or two letters: the search route's most. */
 export const SHORT_HITS = 100;
+
+/**
+ * Whether a manifest names the files the Worker reads names from instead of the index (round seventy-six; ./lookups.ts):
+ * every name file and row file the species count asks for, the genera, the strip, and the sitemap's files from the first
+ * on. A manifest without them (a corpus built before round seventy-six) is read as before: the index whole, and the
+ * maps built from it, so a Worker deployed before the corpus that carries them keeps serving the corpus live then.
+ */
+export function hasLookups(m: Manifest): boolean {
+  const sitemaps = Object.keys(m.files).filter((n) => /^sitemap\/\d+\.json$/.test(n)).length;
+  return sitemaps >= 1 && lookupFileNames(m.species, sitemaps).every((name) => Object.hasOwn(m.files, name));
+}
+

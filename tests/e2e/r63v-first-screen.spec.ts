@@ -1,8 +1,11 @@
 /**
  * Round sixty-three, agent V (V4): the phone's first screen, measured where the owner sees it. Round sixty-two measured
  * 390 × 844, the iPhone's whole screen; Safari's page is about 390 × 664, and there the tab bar began right under the
- * chips and no catalogue row showed (docs/REVIEW-ROUND-62.md, section 7). The photo strip is drawn after the first rows on
- * a phone now. Measured with the live-shaped front page round sixty-two built
+ * chips and no catalogue row showed (docs/REVIEW-ROUND-62.md, section 7). V4 drew the photo strip after the first rows on
+ * a phone. Round seventy-six (the owner's decision) put it back above the search, where a desktop has it: after the rows
+ * it read as three random plants dropped into the A section. So the first screen now holds the strip and the search, and
+ * the first row follows them; the tests below say so, and that the search is still reached at once. Measured with the
+ * live-shaped front page round sixty-two built
  * (`r62w-shapes.ts`), at Safari's page sizes on an iPhone 12 to 15 (390 × 664), an iPhone SE (375 × 548) and a common
  * Android phone (360 × 640), with the welcome line shown (a visitor) and dismissed.
  *
@@ -45,23 +48,37 @@ const measure = (page: Page) => page.evaluate(() => {
     az: b('.tools .azbtn').bottom,
     rowTop: b('.rows .grow').top,
     row: b('.rows .grow').bottom,
-    // The strip that is drawn, wherever it is: on a phone it follows the first rows.
-    strips: [...document.querySelectorAll<HTMLElement>('section.featured')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().top)
+    // The strip that is drawn, and how many are in the page (one since round seventy-six).
+    strips: [...document.querySelectorAll<HTMLElement>('section.featured')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().top),
+    stripBottom: document.querySelector('section.featured')!.getBoundingClientRect().bottom,
+    searchTop: b('.toolrow .searchbar').top,
+    inPage: document.querySelectorAll('section.featured').length
   };
 });
 
 for (const [width, height] of [[390, 664], [375, 548], [360, 640]] as const) {
   for (const welcomed of [false, true]) {
-    test(`r63v V4: at ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}, the search, every grouping control and one whole row are above the tab bar`, { tag: '@phone-only' }, async ({ browser, baseURL }) => {
+    // Round seventy-six: the strip above the search, as on a desktop, and the list under the search unbroken. Round sixty-three
+    // had the search, the grouping, the chips and one whole row above the tab bar here, with the strip after the rows; the
+    // owner chose the strip at the top instead, so the row now comes after a short scroll. The search is still on the
+    // first screen on the owner's iPhone (390 × 664) and a common Android phone (360 × 640); on an iPhone SE (375 × 548) its
+    // top is, and its foot a short flick under the tab bar.
+    test(`r63v V4: at ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}, the strip and then the search are on the first screen, with no row between them`, { tag: '@phone-only' }, async ({ browser, baseURL }) => {
       const { ctx, page } = await liveHome(browser, baseURL, width, height, welcomed);
       const m = await measure(page);
+      console.log(`r63v V4 ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}: strip ${Math.round(m.strips[0])}–${Math.round(m.stripBottom)}, search ${Math.round(m.searchTop)}–${Math.round(m.search)}, chips ${Math.round(m.chips)}, row ${Math.round(m.rowTop)}, tab bar ${Math.round(m.tab)}`);
       expect(m.scrollY).toBe(0);
       expect(m.welcome).toBe(!welcomed);
-      for (const [k, y] of Object.entries({ search: m.search, group: m.group, chips: m.chips, az: m.az, row: m.row })) expect(y, `${k} bottom ${y} against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
-      // One strip drawn, and after the first row, not above the search.
+      // One strip, drawn once, above the search; the first row after the search.
+      expect(m.inPage).toBe(1);
       expect(m.strips.length).toBe(1);
-      expect(m.strips[0]).toBeGreaterThan(m.rowTop);
-      // Its photographs still come in: the strip is the same twelve tiles, further down.
+      expect(m.stripBottom).toBeLessThanOrEqual(m.searchTop);
+      expect(m.rowTop).toBeGreaterThan(m.search);
+      // The search reached at once: its top on the first screen everywhere, the whole box on the larger two phones.
+      expect(m.searchTop, `search top against the tab bar at ${m.tab}`).toBeLessThan(m.tab);
+      if (height >= 640) expect(m.search, `search bottom against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
+      else expect(m.search - m.tab, 'the search under the tab bar by more than a flick').toBeLessThanOrEqual(60);
+      // Its photographs come in: the same twelve tiles, at the top.
       await expect(page.locator('section.featured:visible .ftile')).toHaveCount(12);
       await ctx.close();
     });

@@ -1,0 +1,14 @@
+{
+  // Round seventy-six: the memory test at 50,000 synthetic species (docs/DEPLOY.md, "The memory test at 50,000 species").
+  // A second Worker, `cultifolio-scale`, on a bucket of its own, `cultifolio-scale`, reached only at its workers.dev
+  // address: it never reads or writes the live bucket, KV or counters. Delete both when the test is done.
+  "name": "cultifolio-scale",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" },
+  "observability": { "enabled": false },
+  "vars": { "SYNC_OPEN": "0" },
+  "r2_buckets": [{ "binding": "STORE", "bucket_name": "cultifolio-scale" }]
+}

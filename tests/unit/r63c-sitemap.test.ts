@@ -28,7 +28,7 @@ describe('the sitemap gives each species its own day', () => {
     expect(sitemapChunk(urls, 1, '2026-10-01')).toContain('<loc>https://cultifolio.com/species/aloe-a</loc><lastmod>2026-10-01</lastmod>');
   });
   it('the route passes the index\'s days', () => {
-    expect(readFileSync('src/routes/sitemap-[n].xml/+server.ts', 'utf8')).toContain('sitemapDays(c.idx)');
+    expect(readFileSync('src/routes/sitemap-[n].xml/+server.ts', 'utf8')).toContain('sitemapDays(c.idx!)');
   });
   it('day numbers are five digits and round-trip', () => {
     expect(dayNumber('2026-10-09')).toBe(20735);
