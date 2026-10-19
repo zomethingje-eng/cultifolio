@@ -4,10 +4,14 @@
    * breath: showing them fetches each picture from the image host, which then sees which species this address grows.
    * Shown only where a photograph is being withheld; the preference is the same one Settings holds, and pages that
    * read it update at once. Off again in Settings.
+   *
+   * `hold` keeps the one-line offer's room, unseen, while a plant page still asks for the species' sheet, so the line
+   * arriving does not move the verb bar under a finger (round seventy-eight: it moved 8 px on a desktop and 46 px on a
+   * phone, and a press whose mouse down and up landed either side of the move was lost).
    */
   import { prefs } from '$lib/ui/prefs.svelte';
   import { toast } from '$lib/ui/toast.svelte';
-  let { compact = false, center = false, link = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; link?: boolean; what?: string; buckets?: boolean } = $props();
+  let { compact = false, center = false, link = false, hold = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; link?: boolean; hold?: boolean; what?: string; buckets?: boolean } = $props();
   // "hash groups", not "hash buckets": the glossary's plain words (round fifty-eight; the accessibility review).
   const why = $derived(`They come straight from the image host (iNaturalist, Wikimedia Commons or the GBIF image cache), which then sees which species you grow. ${buckets ? 'This site is asked for the hash groups your species fall in, a few hundred species each, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}`);
   function on() {
@@ -16,7 +20,10 @@
   }
 </script>
 
-{#if link}
+{#if hold}
+  <!-- The link form's summary line, unseen and out of the accessibility tree: the same words wrap as the offer will. -->
+  <div class="rpo link hold" aria-hidden="true"><span class="sum">Show {what}</span></div>
+{:else if link}
   <!-- One line, and what showing it discloses on tap, before the switch is thrown: the first screen of a plant is not the place for a paragraph. -->
   <details class="rpo link">
     <summary>Show {what}</summary>
@@ -44,4 +51,6 @@
   .rpo.link summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .rpo.link[open] summary { margin-bottom: 4px; }
   .rpo.link .why { display: inline; }
+  .rpo.hold { visibility: hidden; }
+  .rpo.hold .sum { display: block; font-weight: 600; width: fit-content; min-height: var(--tap); } /* as theme.css gives every summary */
 </style>

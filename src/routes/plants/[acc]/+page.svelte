@@ -276,6 +276,7 @@
   }
   /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
   const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
+  const offerWhat = $derived(compared ? 'the reference’s photograph of the species it is compared with' : 'the reference’s photograph of this species');
   // One date style on the page, the log's: the card said "4 Oct 2026" over a log of "2026-10-15" (round sixty; the grower review, 16).
   const fmtDate = (d: string | null | undefined) => d ?? '';
   // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when one line is left.
@@ -649,7 +650,8 @@
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
-      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what={compared ? 'the reference’s photograph of the species it is compared with' : 'the reference’s photograph of this species'} />{/if}
+      <!-- While the sheet is asked the offer's line is held, so its arrival does not move the verb bar below (round seventy-eight). A species without a photograph gives the room back: the rarer move. -->
+      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what={offerWhat} />{:else if !hasHero && ref === 'loading' && kind !== 'hybrid' && !prefs.referencePhotos}<RefPhotoOffer hold what={offerWhat} />{/if}
       {#if a.status !== 'growing' || collection.isDue(a)}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
