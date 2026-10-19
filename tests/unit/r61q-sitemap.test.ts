@@ -4,7 +4,7 @@ import { sitemapChunk, sitemapUrls } from '$lib/server/sitemap';
 
 describe('the sitemap\'s lastmod', () => {
   it('is not given to the pages that change with a deploy, and is given to species and genus rows', () => {
-    const urls = sitemapUrls([{ key: 1, slug: 'aloe-vera', name: 'Aloe vera', photos: 0, open: 0, climate: 'ok' }]);
+    const urls = sitemapUrls([{ key: 'k1', slug: 'aloe-vera', name: 'Aloe vera', photos: 0, open: 0, climate: 'ok' }]);
     expect(urls).toEqual(['/', '/about/how', '/about/formats', '/species/aloe-vera', '/?by=genus&open=aloe']);
     const xml = sitemapChunk(urls, 1, '2026-10-01');
     for (const u of ['/', '/about/how', '/about/formats']) expect(xml).toContain(`<url><loc>https://cultifolio.com${u}</loc></url>`); // base: each had <lastmod>2026-10-01</lastmod>

@@ -11,6 +11,7 @@
  * and backed off); an error leaves that dossier as it was, to be asked on the next run. Kept apart from
  * build-dossiers.ts, which runs its build when imported, so a test can drive it against fixtures with no network.
  */
+import { DOSSIER_FILE } from '../src/lib/dossier/rekey';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { writeAtomic } from './write-atomic';
 import { vernacular } from '../src/lib/dossier/sources/gbif';
@@ -46,11 +47,12 @@ export interface NamesRun {
   refused?: string;
 }
 
-type Stored = { key: number; name: { vernacular: unknown[] }; upstream?: Record<string, { status: string; at: string; detail?: string }> };
+/** `ids.gbif` is the GBIF key the names are asked by (round seventy-eight: `key` is the page's id, `k…` or `g…`). */
+type Stored = { key: string; ids: { gbif: number }; name: { vernacular: unknown[] }; upstream?: Record<string, { status: string; at: string; detail?: string }> };
 
 export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: () => Date; progress?: (done: number, of: number) => void } = {}): Promise<NamesRun> {
   const now = opts.now ?? (() => new Date());
-  const files = existsSync(dir) ? readdirSync(dir).filter((x) => /^\d+\.json$/.test(x)).sort((a, b) => parseInt(a) - parseInt(b)) : [];
+  const files = existsSync(dir) ? readdirSync(dir).filter((x) => DOSSIER_FILE.test(x)).sort() : [];
   const run: NamesRun = { done: 0, truncated: 0, kept: 0, errors: 0, left: 0 };
   for (let i = 0; i < files.length; i++) {
     const path = `${dir}/${files[i]}`;
@@ -61,7 +63,7 @@ export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: ()
       continue; // a half-written file from a killed build: rebuilt when its name comes round
     }
     if (d.upstream?.['gbif.vernacular']?.detail?.startsWith(NAMES_MARK)) { run.kept++; continue; }
-    const r = await vernacular(f, d.key);
+    const r = await vernacular(f, d.ids.gbif);
     if (r.status === 'refused') {
       run.refused = r.detail;
       run.left = files.length - i;

@@ -15,14 +15,14 @@ type Call = { cmd: string; args: string[]; env?: Record<string, string | undefin
 let root: string;
 let calls: Call[];
 let out: string;
-const manifest = (id: string) => JSON.stringify({ v: 2, id, built: 'x', species: 3, buckets: 32, postings: 64, files: {} });
+const manifest = (id: string) => JSON.stringify({ v: 3, id, built: 'x', species: 3, buckets: 32, postings: 64, files: {} });
 
 function setup(plan: string) {
   root = mkdtempSync(join(tmpdir(), 'corpus-step-'));
-  mkdirSync(join(root, 'static/s/v2'), { recursive: true });
+  mkdirSync(join(root, 'static/s/v3'), { recursive: true });
   mkdirSync(join(root, 'scripts'));
-  writeFileSync(join(root, 'static/s/v2/manifest.json'), manifest('aaaa1111'));
-  writeFileSync(join(root, 'static/s/v2/index.json'), JSON.stringify([{ key: 1 }, { key: 2 }, { key: 3 }]));
+  writeFileSync(join(root, 'static/s/v3/manifest.json'), manifest('aaaa1111'));
+  writeFileSync(join(root, 'static/s/v3/index.json'), JSON.stringify([{ key: 'g1' }, { key: 'g2' }, { key: 'g3' }]));
   writeFileSync(join(root, 'scripts/corpus-plan.txt'), plan);
   calls = [];
   out = '';
@@ -92,7 +92,7 @@ describe('the run', () => {
   it('runs every step in order, backs up once, uploads with a check before the manifest, and checks the site serves the corpus on disk', async () => {
     expect(await go()).toBe(EXIT.review);
     expect(builderSteps()).toEqual(['--fill gbif-open', '--fill kew-links', '--index']);
-    expect(existsSync(join(root, 'backups/v2-aaaa1111/manifest.json'))).toBe(true);
+    expect(existsSync(join(root, 'backups/v3-aaaa1111/manifest.json'))).toBe(true);
     expect(out).toMatch(/Review before going on: Read drops\.txt\. \(corpus on disk aaaa1111, was aaaa1111; 3 species; 0 dossiers differ from the backup of corpus aaaa1111; drops\.txt not there\)\. When it is as expected, carry on with: node scripts\/corpus-step\.mjs --go-on/);
     // Run again without --go-on: the same stop, and nothing run.
     calls = [];
@@ -100,7 +100,7 @@ describe('the run', () => {
     expect(calls).toEqual([]);
     expect(await go(['--go-on'])).toBe(EXIT.done);
     expect(calls.map((c) => `${c.cmd} ${c.args[0]}`)).toEqual(['rclone copy', 'rclone check', 'rclone copy', 'rclone lsf', `${process.execPath} scripts/live-check.mjs`]);
-    expect(calls[2].args.slice(1, 3)).toEqual(['static/s/v2/manifest.json', 'r2:cultifolio/s/v2']); // the manifest last
+    expect(calls[2].args.slice(1, 3)).toEqual(['static/s/v3/manifest.json', 'r2:cultifolio/s/v3']); // the manifest last
     expect(state().steps.every((s: { status: string }) => s.status === 'done')).toBe(true);
     expect(readFileSync(join(root, 'corpus-step.log'), 'utf8')).toMatch(/step 2 of 7: dossier --fill gbif-open[\s\S]*every step is done/);
   });
@@ -188,27 +188,27 @@ describe('the run', () => {
 describe('the upload commands', () => {
   it('everything but the manifest, a one-way check of the same files, then the manifest alone', () => {
     const [copy, check, man] = uploadCommands();
-    expect(copy[1].slice(0, 3)).toEqual(['copy', 'static/s/v2', 'r2:cultifolio/s/v2']);
+    expect(copy[1].slice(0, 3)).toEqual(['copy', 'static/s/v3', 'r2:cultifolio/s/v3']);
     for (const x of ['report.txt', 'manifest.json', 'manifest.prev.json']) { expect(copy[1]).toContain(x); expect(check[1]).toContain(x); }
-    expect(check[1].slice(0, 4)).toEqual(['check', 'static/s/v2', 'r2:cultifolio/s/v2', '--one-way']);
-    expect(man[1].slice(0, 3)).toEqual(['copy', 'static/s/v2/manifest.json', 'r2:cultifolio/s/v2']);
+    expect(check[1].slice(0, 4)).toEqual(['check', 'static/s/v3', 'r2:cultifolio/s/v3', '--one-way']);
+    expect(man[1].slice(0, 3)).toEqual(['copy', 'static/s/v3/manifest.json', 'r2:cultifolio/s/v3']);
   });
 });
 
 describe('the review before the upload', () => {
   it('names the dossiers the steps changed, against the backup', async () => {
     setup('backup\ndossier --fill gbif-basis\nreview Read what changed.\n');
-    writeFileSync(join(root, 'static/s/v2/7720070.json'), '{"key":7720070}');
-    writeFileSync(join(root, 'static/s/v2/7438714.json'), '{"key":7438714}');
-    const exec = runner({ '--fill gbif-basis': { then: () => writeFileSync(join(root, 'static/s/v2/7720070.json'), '{"key":7720070,"photos":[]}') } });
+    writeFileSync(join(root, 'static/s/v3/g7720070.json'), '{"key":7720070}');
+    writeFileSync(join(root, 'static/s/v3/g7438714.json'), '{"key":7438714}');
+    const exec = runner({ '--fill gbif-basis': { then: () => writeFileSync(join(root, 'static/s/v3/g7720070.json'), '{"key":7720070,"photos":[]}') } });
     expect(await go([], exec)).toBe(EXIT.review);
-    expect(out).toMatch(/1 dossier differs from the backup of corpus aaaa1111 \(7720070\)/);
+    expect(out).toMatch(/1 dossier differs from the backup of corpus aaaa1111 \(g7720070\)/);
   });
 });
 
 describe('the prune (--prune)', () => {
   const H = (n: number) => n.toString(16).padStart(32, '0');
-  const live = { v: 2, id: 'live0001', built: 'x', species: 3, buckets: 32, postings: 64, files: { 'index.json': H(1), 'entries/00.json': H(2) } };
+  const live = { v: 3, id: 'live0001', built: 'x', species: 3, buckets: 32, postings: 64, files: { 'index.json': H(1), 'entries/00.json': H(2) } };
   function bucket(files: string[], o: { copyFails?: boolean; dry?: string } = {}) {
     return async (cmd: string, args: string[], onOutput: (s: string) => void) => {
       calls.push({ cmd, args });
@@ -229,7 +229,7 @@ describe('the prune (--prune)', () => {
     calls = [];
     expect(await go(['--prune', '--go-on'], exec as never, async () => 'live0001')).toBe(EXIT.done);
     expect(calls.map((c) => c.args[0])).toEqual(['node_modules/@sveltejs/kit/svelte-kit.js', 'copyto', '--import', 'lsf', 'delete']);
-    expect(calls[4].args).toEqual(['delete', 'r2:cultifolio/s/v2/p', '--exclude-from', 'keep.txt', '--min-age', '24h', '--use-server-modtime', '--stats-one-line']);
+    expect(calls[4].args).toEqual(['delete', 'r2:cultifolio/s/v3/p', '--exclude-from', 'keep.txt', '--min-age', '24h', '--use-server-modtime', '--stats-one-line']);
   });
 
   it('a live manifest that cannot be read deletes nothing, and an earlier prune\'s copy is not used', async () => {
@@ -272,14 +272,14 @@ describe('the bucket\'s dossiers the index does not list', () => {
     setup('upload\n');
     const exec = async (cmd: string, args: string[], onOutput: (s: string) => void) => {
       calls.push({ cmd, args });
-      if (args[0] === 'lsf') onOutput('1.json\n2.json\n3.json\n4242.json\n9999.json\nindex.json\nmanifest.json\n');
+      if (args[0] === 'lsf') onOutput('g1.json\ng2.json\ng3.json\ng4242.json\nk9999.json\n1.json\nindex.json\nmanifest.json\n');
       return 0;
     };
     expect(await go([], exec as never)).toBe(EXIT.done);
-    expect(out).toMatch(/2 dossiers in the bucket are not in the index \(keys in bucket-unlisted\.txt: 4242, 9999\)\. They are left as they are: a report only, nothing deleted\./);
-    expect(readFileSync(join(root, 'bucket-unlisted.txt'), 'utf8')).toBe('4242\n9999\n');
+    expect(out).toMatch(/2 dossiers in the bucket are not in the index \(keys in bucket-unlisted\.txt: g4242, k9999\)\. They are left as they are: a report only, nothing deleted\./);
+    expect(readFileSync(join(root, 'bucket-unlisted.txt'), 'utf8')).toBe('g4242\nk9999\n');
     expect(calls.some((c) => c.args[0] === 'delete' || c.args[0] === 'deletefile' || c.args[0] === 'purge')).toBe(false);
-    expect(calls.find((c) => c.args[0] === 'lsf')!.args).toEqual(['lsf', 'r2:cultifolio/s/v2', '--files-only']);
+    expect(calls.find((c) => c.args[0] === 'lsf')!.args).toEqual(['lsf', 'r2:cultifolio/s/v3', '--files-only']);
   });
 });
 

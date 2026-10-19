@@ -1,0 +1,16 @@
+{
+ "api.inaturalist.org /v1/observations": {
+  "n": 93,
+  "ms": 60611,
+  "status": {
+   "200": 93
+  }
+ },
+ "api.inaturalist.org /v1/taxa": {
+  "n": 8,
+  "ms": 1075,
+  "status": {
+   "200": 8
+  }
+ }
+}

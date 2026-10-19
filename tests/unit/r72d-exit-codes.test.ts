@@ -16,9 +16,9 @@ const ROOT = resolve('.');
 describe('an unfinished fill exits 3', () => {
   it('--fill kew-links with GBIF not answering: the sentence, and exit 3', () => {
     const dir = mkdtempSync(join(tmpdir(), 'r72d-exit-'));
-    const v2 = join(dir, 'static/s/v2');
+    const v2 = join(dir, 'static/s/v3');
     mkdirSync(v2, { recursive: true });
-    for (const f of readdirSync(join(ROOT, 'fixtures/dossiers/s/v2')).filter((x) => /^\d+\.json$/.test(x))) copyFileSync(join(ROOT, 'fixtures/dossiers/s/v2', f), join(v2, f));
+    for (const f of readdirSync(join(ROOT, 'fixtures/dossiers/s/v3')).filter((x) => /^[kg]\d+\.json$/.test(x))) copyFileSync(join(ROOT, 'fixtures/dossiers/s/v3', f), join(v2, f));
     // Every request fails as a dropped connection does.
     writeFileSync(join(dir, 'offline.mjs'), "globalThis.fetch = async () => { throw new TypeError('fetch failed'); };\n");
     const r = spawnSync(process.execPath, ['--import', pathToFileURL(join(dir, 'offline.mjs')).href, '--import', pathToFileURL(join(ROOT, 'node_modules/tsx/dist/loader.mjs')).href, join(ROOT, 'scripts/build-dossiers.ts'), '--fill', 'kew-links', '--no-cache'], { cwd: dir, encoding: 'utf8', env: { ...process.env, TSX_TSCONFIG_PATH: join(ROOT, 'tsconfig.json') } });

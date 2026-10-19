@@ -33,8 +33,9 @@ const corpus: Corpus = { index: JSON.parse(readFileSync(`${idxDir}/index.json`, 
 if (existsSync(`${idxDir}/report.txt`)) corpus.report = readFileSync(`${idxDir}/report.txt`, 'utf8');
 const sDir = existsSync(`${dir}/s/v${DOSSIER_V}`) ? `${dir}/s/v${DOSSIER_V}` : dir;
 for (const f of readdirSync(sDir)) {
-  const m = /^(\d+)\.json$/.exec(f);
-  if (m) corpus.dossiers.set(Number(m[1]), JSON.parse(readFileSync(`${sDir}/${f}`, 'utf8')));
+  // A dossier is stored under its page's id (round seventy-eight): `k<plant_name_id>.json` or `g<GBIF key>.json`.
+  const m = /^([kg][1-9][0-9]*)\.json$/.exec(f);
+  if (m) corpus.dossiers.set(m[1], JSON.parse(readFileSync(`${sDir}/${f}`, 'utf8')));
 }
 
 const b = buildBundle(corpus, { version, homepage, repo, today });

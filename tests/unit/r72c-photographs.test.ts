@@ -10,29 +10,30 @@ import { dropsBetween } from '$dossier/drops';
 import * as fill from '$dossier/commons-fill';
 import * as inat from '$dossier/sources/inat';
 import type { FetchResult } from '$dossier/fetch';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 /** The live index's names these cases read: "Cactus", "Bahia" and "Croton" are genera of older names only; Crocus, Aloe, Yucca and Dinteranthus of accepted names. */
 const INDEX = [
-  { key: 3084579, name: 'Sclerocactus brevispinus' },
-  { key: 7282091, name: 'Mammillaria vetula' },
-  { key: 7283149, name: 'Mammillaria mammillaris', syn: ['Cactus mammillaris'] },
-  { key: 5620541, name: 'Melocactus paucispinus' },
-  { key: 9000001, name: 'Verbesina bahiensis', syn: ['Bahia ambrosioides'] },
-  { key: 3071716, name: 'Excoecaria cochinchinensis' },
-  { key: 9000002, name: 'Acalypha integrifolia', syn: ['Croton integrifolius'] },
-  { key: 2739938, name: 'Colchicum neapolitanum' },
-  { key: 9000003, name: 'Crocus sativus' },
-  { key: 2771040, name: 'Hesperaloe chiangii' },
-  { key: 2775604, name: 'Yucca carnerosana' },
-  { key: 4054801, name: 'Cyphostemma juttae' },
-  { key: 2777537, name: 'Aloe arborescens' },
-  { key: 3706668, name: 'Pleiospilos nelii' },
-  { key: 9000004, name: 'Dinteranthus vanzylii' },
-  { key: 3705430, name: 'Mesembryanthemum eurystigmatum', syn: ['Cryophytum clavatum', 'Eurystigma clavatum'] },
-  { key: 7219396, name: 'Nepenthes monticola' },
-  { key: 3702163, name: 'Nepenthes lamii' },
-  { key: 10953066, name: 'Parodia lenninghausii', syn: ['Notocactus lenninghausii'] },
-  { key: 9467410, name: 'Ceropegia barberae', syn: ['Brachystelma barberae'] }
+  { key: gbifPage(3084579), name: 'Sclerocactus brevispinus' },
+  { key: gbifPage(7282091), name: 'Mammillaria vetula' },
+  { key: gbifPage(7283149), name: 'Mammillaria mammillaris', syn: ['Cactus mammillaris'] },
+  { key: gbifPage(5620541), name: 'Melocactus paucispinus' },
+  { key: gbifPage(9000001), name: 'Verbesina bahiensis', syn: ['Bahia ambrosioides'] },
+  { key: gbifPage(3071716), name: 'Excoecaria cochinchinensis' },
+  { key: gbifPage(9000002), name: 'Acalypha integrifolia', syn: ['Croton integrifolius'] },
+  { key: gbifPage(2739938), name: 'Colchicum neapolitanum' },
+  { key: gbifPage(9000003), name: 'Crocus sativus' },
+  { key: gbifPage(2771040), name: 'Hesperaloe chiangii' },
+  { key: gbifPage(2775604), name: 'Yucca carnerosana' },
+  { key: gbifPage(4054801), name: 'Cyphostemma juttae' },
+  { key: gbifPage(2777537), name: 'Aloe arborescens' },
+  { key: gbifPage(3706668), name: 'Pleiospilos nelii' },
+  { key: gbifPage(9000004), name: 'Dinteranthus vanzylii' },
+  { key: gbifPage(3705430), name: 'Mesembryanthemum eurystigmatum', syn: ['Cryophytum clavatum', 'Eurystigma clavatum'] },
+  { key: gbifPage(7219396), name: 'Nepenthes monticola' },
+  { key: gbifPage(3702163), name: 'Nepenthes lamii' },
+  { key: gbifPage(10953066), name: 'Parodia lenninghausii', syn: ['Notocactus lenninghausii'] },
+  { key: gbifPage(9467410), name: 'Ceropegia barberae', syn: ['Brachystelma barberae'] }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
@@ -98,7 +99,7 @@ describe('C-3: GBIF\'s second spelling of a name, by the same author, is the spe
     expect(slipStanding('conophytum auctum', { scientific: 'Conophytum actum', authorship: 'N.E.Br.', key: 1 }, [], { matchType: 'EXACT', status: 'ACCEPTED', rank: 'SPECIES', usageKey: 2, speciesKey: 2, canonicalName: 'Conophytum auctum', scientificName: 'Conophytum auctum Rawé' }).own).toBe(false);
   });
   it('--fill commons-kind asks again a slip an earlier fill left out, and the page shows the file', async () => {
-    const d = { v: 2, key: 10953066, slug: 'parodia-lenninghausii', name: { scientific: 'Parodia lenninghausii', authorship: parodia.authorship, synonyms: parodia.synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: [commonsFile('File:Golden Ball Cactus (Parodia leninghausii) (3104097728).jpg', { categories: ['Parodia lenninghausii'] })] };
+    const d = { v: 3, key: gbifPage(10953066), slug: 'parodia-lenninghausii', name: { scientific: 'Parodia lenninghausii', authorship: parodia.authorship, synonyms: parodia.synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: [commonsFile('File:Golden Ball Cactus (Parodia leninghausii) (3104097728).jpg', { categories: ['Parodia lenninghausii'] })] };
     const files = new Map([['10953066.json', JSON.parse(JSON.stringify(d))]]);
     const store = { files: () => [...files.keys()], read: <T,>(k: string) => JSON.parse(JSON.stringify(files.get(k))) as T, write: (k: string, v: unknown) => void files.set(k, JSON.parse(JSON.stringify(v))) };
     expect(page('Parodia lenninghausii', d.photos, parodia.synonyms)).toHaveLength(0);
@@ -124,21 +125,21 @@ describe('C-4: a rebuild\'s drops count the photographs the page shows, not thos
   const inat = (id: string) => ({ src: 'inat', id, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/large.jpg`, thumb: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/medium.jpg`, licence: 'by', attribution: '(c) A. Grower, some rights reserved (CC BY)' });
   const name = { scientific: 'Adenia tisserantii', synonyms: [] };
   it('Adenia tisserantii: two Coimbra sheets the page never showed are not "dropped to none (2 before)"', () => {
-    expect(dropsBetween({ key: 5527897, name, photos: [gbifSheet('COI00005498'), gbifSheet('COI00005510')] }, { key: 5527897, name, photos: [] }, HELD)).toEqual([]);
+    expect(dropsBetween({ key: gbifPage(5527897), name, photos: [gbifSheet('COI00005498'), gbifSheet('COI00005510')] }, { key: gbifPage(5527897), name, photos: [] }, HELD)).toEqual([]);
   });
   it('a page whose every shown photograph went, a hidden one staying, is flagged', () => {
-    expect(dropsBetween({ key: 5527897, name, photos: [inat('1'), inat('2'), gbifSheet('COI1')] }, { key: 5527897, name, photos: [gbifSheet('COI1')] }, HELD)).toEqual(['photographs dropped to none (2 before)']);
+    expect(dropsBetween({ key: gbifPage(5527897), name, photos: [inat('1'), inat('2'), gbifSheet('COI1')] }, { key: gbifPage(5527897), name, photos: [gbifSheet('COI1')] }, HELD)).toEqual(['photographs dropped to none (2 before)']);
   });
 });
 
 describe('C-5: an iNaturalist observation filed below the species, that Kew holds as another species, is not its photograph', () => {
   it('Epithelantha greggii: "Epithelantha greggii polycephala" is Kew\'s Epithelantha polycephala (13 of the page\'s photographs, and its lead)', async () => {
-    const held = heldNamesOf([{ key: 3944896, name: 'Epithelantha greggii' }, { key: 3944682, name: 'Epithelantha polycephala', syn: ['Epithelantha greggii subsp. polycephala'] }]);
+    const held = heldNamesOf([{ key: gbifPage(3944896), name: 'Epithelantha greggii' }, { key: gbifPage(3944682), name: 'Epithelantha polycephala', syn: ['Epithelantha greggii subsp. polycephala'] }]);
     const obs = (id: number, taxon: string) => ({ id, taxon: { name: taxon, rank: taxon.split(' ').length > 2 ? 'subspecies' : 'species' }, photos: [{ id: id * 10, license_code: 'cc-by', url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id * 10}/square.jpg`, attribution: '(c) A. Grower, some rights reserved (CC BY)' }] });
     const f = async <T,>(url: string): Promise<FetchResult<T>> => (url.startsWith('https://api.inaturalist.org/v1/observations?') ? { status: 'ok', data: { results: [obs(146197, 'Epithelantha greggii polycephala'), obs(5, 'Epithelantha greggii'), obs(6, 'Epithelantha greggii greggii')] } as T } : { status: 'error', detail: 'no fixture' });
-    const r = await inat.photos(f, 129048, true, 24, { key: 3944896, held });
+    const r = await inat.photos(f, 129048, true, 24, { key: gbifPage(3944896), held });
     expect(r.status === 'ok' ? r.data.map((p) => p.id) : r).toEqual(['50', '60']);
-    const s = await inat.photos(f, 129048, true, 24, { key: 3944682, held }); // guard: on its own page, read from its parent's taxon, it stays
+    const s = await inat.photos(f, 129048, true, 24, { key: gbifPage(3944682), held }); // guard: on its own page, read from its parent's taxon, it stays
     expect(s.status === 'ok' ? s.data.map((p) => p.id) : s).toEqual(['1461970', '50', '60']);
   });
 });

@@ -14,7 +14,8 @@
  *     (`ownByAuthor`), every row so read being of that type; a citation that is only a shorter abbreviation of Kew's one
  *     row of the words ("Dehn." of "Dehnh.") is read as that row. A heterotypic synonym (Lonicera pileata on Lonicera
  *     ligustrina) or a taxon Kew accepts below the entry is listed as refused, "the owner's decision": pulling another
- *     type's records onto a page is a taxonomic claim the owner has not made;
+ *     type's records onto a page is a taxonomic claim the owner has not made. The key of a page the owner has merged
+ *     into this one (`scripts/merged-pages.txt`) is that claim made, and is read whatever its type (round seventy-eight);
  *   - GBIF does not already file the key's records under the page's own key (a synonym of the page key, or a variety
  *     under it, is in the page key's records already);
  *   - the key is not another reference page's key, is not filed by GBIF under one (Adenia gummifera (Harv.) Harms is
@@ -175,9 +176,10 @@ const statusWord = (r: KewRow) => (r.status === 'Accepted' ? 'accepted' : r.stat
 
 /**
  * The extra keys of one page, and the keys considered and refused. `reference` is the set of the reference's page keys
- * (a page merged away is not one), `holders` maps a key to the reference pages GBIF files under it.
+ * (a page merged away is not one), `holders` maps a key to the reference pages GBIF files under it, `merged` a merged
+ * page's key to its old address and `into` to the page it joins.
  */
-export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map()): { keys: ExtraKey[]; refused: Refused[] } {
+export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number> = new Map()): { keys: ExtraKey[]; refused: Refused[] } {
   const keys: ExtraKey[] = [], refused: Refused[] = [];
   if (!page.entry) return { keys, refused };
   const plant = plantOf(page.entry, idx);
@@ -215,7 +217,10 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     if (at !== undefined) return { why: at === u.key ? 'it is another page of this reference' : `GBIF files it under key ${at}, another page of this reference` };
     const holds = (holders.get(u.key) ?? []).filter((k) => k !== page.key);
     if (holds.length) return { why: `GBIF files another page of this reference under it (${holds.join(', ')})` };
-    const other = mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
+    // The key of a page merged into this one (`into`, scripts/merged-pages.txt) is read whatever its type: the merge is the
+    // owner's taxonomic claim that the two are one plant (round seventy-eight: six of the seven pairs that held one Kew entry
+    // are Kew's heterotypic synonyms of it). What GBIF files under it is still judged name by name, below.
+    const other = into.get(u.key) === page.key ? null : mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
     if (other) return { why: other };
     // What GBIF files under it that is another plant's (or a pro parte synonym), and what GBIF files under those: left out.
     const below = bb.under?.(u.key) ?? [];

@@ -1,0 +1,870 @@
+{
+ "at": "2026-10-19T14:32:23.268Z",
+ "kewFile": "2026-06-04",
+ "loadMs": 15326,
+ "kewRowsHeld": 496935,
+ "genera": 73,
+ "names": 155,
+ "rowsEqual": 143,
+ "species": 50,
+ "ipniEqual": 49,
+ "stats": {
+  "answered": 206,
+  "through": 0
+ },
+ "rowDiffs": [
+  {
+   "name": "Agave variegata",
+   "gbif": [
+    {
+     "taxonID": "294307",
+     "scientificName": "Agave variegata Jacobi",
+     "canonicalName": "Agave variegata",
+     "authorship": "Jacobi",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Manfreda variegata (Jacobi) Rose",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:62333-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "294306",
+     "scientificName": "Agave variegata Steud.",
+     "canonicalName": "Agave variegata",
+     "authorship": "Steud.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Agave americana subsp. americana",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:62332-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "294306",
+     "scientificName": "Agave variegata Steud.",
+     "canonicalName": "Agave variegata",
+     "authorship": "Steud.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Agave americana subsp. americana",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:62332-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "294307",
+     "scientificName": "Agave variegata Jacobi",
+     "canonicalName": "Agave variegata",
+     "authorship": "Jacobi",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Manfreda variegata (Jacobi) Rose",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:62333-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    }
+   ]
+  },
+  {
+   "name": "Cotyledon lutea",
+   "gbif": [
+    {
+     "taxonID": "3008827",
+     "scientificName": "Cotyledon lutea van Jaarsv.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "van Jaarsv.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Cotyledon xanthantha van Jaarsv. & Eggli",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:77158759-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "2740209",
+     "scientificName": "Cotyledon lutea Huds.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "Huds.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Umbilicus luteus (Huds.) Webb & Berthel.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272721-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "2740210",
+     "scientificName": "Cotyledon lutea Lam.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "Lam.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Crassula ovata (Mill.) Druce",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272720-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2740209",
+     "scientificName": "Cotyledon lutea Huds.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "Huds.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Umbilicus luteus (Huds.) Webb & Berthel.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272721-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "2740210",
+     "scientificName": "Cotyledon lutea Lam.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "Lam.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Crassula ovata (Mill.) Druce",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272720-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "3008827",
+     "scientificName": "Cotyledon lutea van Jaarsv.",
+     "canonicalName": "Cotyledon lutea",
+     "authorship": "van Jaarsv.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Cotyledon xanthantha van Jaarsv. & Eggli",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:77158759-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    }
+   ]
+  },
+  {
+   "name": "Cotyledon ovata",
+   "gbif": [
+    {
+     "taxonID": "2740257",
+     "scientificName": "Cotyledon ovata Haw.",
+     "canonicalName": "Cotyledon ovata",
+     "authorship": "Haw.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Cotyledon orbiculata var. orbiculata",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272764-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "2740256",
+     "scientificName": "Cotyledon ovata Mill.",
+     "canonicalName": "Cotyledon ovata",
+     "authorship": "Mill.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Crassula ovata (Mill.) Druce",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272765-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2740256",
+     "scientificName": "Cotyledon ovata Mill.",
+     "canonicalName": "Cotyledon ovata",
+     "authorship": "Mill.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Crassula ovata (Mill.) Druce",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272765-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "2740257",
+     "scientificName": "Cotyledon ovata Haw.",
+     "canonicalName": "Cotyledon ovata",
+     "authorship": "Haw.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Cotyledon orbiculata var. orbiculata",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272764-1",
+     "rank": "SPECIES",
+     "family": "Crassulaceae"
+    }
+   ]
+  },
+  {
+   "name": "Rubus parviflorus",
+   "gbif": [
+    {
+     "taxonID": "2985175",
+     "scientificName": "Rubus parviflorus Weston",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Weston",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus creticus Tourn. ex L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30006007-2",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985179",
+     "scientificName": "Rubus parviflorus Figert ex Sprib.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Figert ex Sprib.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus schmidelyanus var. parviflorus Sudre",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738960-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985178",
+     "scientificName": "Rubus ×parviflorus Sudre",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Sudre",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus ×celatus Sudre",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738961-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985177",
+     "scientificName": "Rubus parviflorus Hegetschw.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Hegetschw.",
+     "taxonomicStatus": "DOUBTFUL",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738962-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985176",
+     "scientificName": "Rubus parviflorus Nutt.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Nutt.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:298093-2",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2985175",
+     "scientificName": "Rubus parviflorus Weston",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Weston",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus creticus Tourn. ex L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30006007-2",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985176",
+     "scientificName": "Rubus parviflorus Nutt.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Nutt.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:298093-2",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985177",
+     "scientificName": "Rubus parviflorus Hegetschw.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Hegetschw.",
+     "taxonomicStatus": "DOUBTFUL",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738962-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985178",
+     "scientificName": "Rubus ×parviflorus Sudre",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Sudre",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus ×celatus Sudre",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738961-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    },
+    {
+     "taxonID": "2985179",
+     "scientificName": "Rubus parviflorus Figert ex Sprib.",
+     "canonicalName": "Rubus parviflorus",
+     "authorship": "Figert ex Sprib.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rubus schmidelyanus var. parviflorus Sudre",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738960-1",
+     "rank": "SPECIES",
+     "family": "Rosaceae"
+    }
+   ]
+  },
+  {
+   "name": "Welwitschia",
+   "gbif": [
+    {
+     "taxonID": "2464871",
+     "scientificName": "Welwitschia Rchb.",
+     "canonicalName": "Welwitschia",
+     "authorship": "Rchb.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Eriastrum Wooton & Standl.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30054454-2",
+     "rank": "GENUS",
+     "family": "Polemoniaceae"
+    },
+    {
+     "taxonID": "339839",
+     "scientificName": "Welwitschia Hook.f.",
+     "canonicalName": "Welwitschia",
+     "authorship": "Hook.f.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:331129-2",
+     "rank": "GENUS",
+     "family": "Welwitschiaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "339839",
+     "scientificName": "Welwitschia Hook.f.",
+     "canonicalName": "Welwitschia",
+     "authorship": "Hook.f.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:331129-2",
+     "rank": "GENUS",
+     "family": "Welwitschiaceae"
+    },
+    {
+     "taxonID": "2464871",
+     "scientificName": "Welwitschia Rchb.",
+     "canonicalName": "Welwitschia",
+     "authorship": "Rchb.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Eriastrum Wooton & Standl.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30054454-2",
+     "rank": "GENUS",
+     "family": "Polemoniaceae"
+    }
+   ]
+  },
+  {
+   "name": "Brugmansia",
+   "gbif": [
+    {
+     "taxonID": "2683992",
+     "scientificName": "Brugmansia Blume",
+     "canonicalName": "Brugmansia",
+     "authorship": "Blume",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rhizanthes Dumort.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:14123-1",
+     "rank": "GENUS",
+     "family": "Rafflesiaceae"
+    },
+    {
+     "taxonID": "2683991",
+     "scientificName": "Brugmansia Pers.",
+     "canonicalName": "Brugmansia",
+     "authorship": "Pers.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:38303-1",
+     "rank": "GENUS",
+     "family": "Solanaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2683991",
+     "scientificName": "Brugmansia Pers.",
+     "canonicalName": "Brugmansia",
+     "authorship": "Pers.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:38303-1",
+     "rank": "GENUS",
+     "family": "Solanaceae"
+    },
+    {
+     "taxonID": "2683992",
+     "scientificName": "Brugmansia Blume",
+     "canonicalName": "Brugmansia",
+     "authorship": "Blume",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Rhizanthes Dumort.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:14123-1",
+     "rank": "GENUS",
+     "family": "Rafflesiaceae"
+    }
+   ]
+  },
+  {
+   "name": "Brugmansia aurea",
+   "gbif": [
+    {
+     "taxonID": "2869953",
+     "scientificName": "Brugmansia aurea J.Harrison",
+     "canonicalName": "Brugmansia aurea",
+     "authorship": "J.Harrison",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Brugmansia sanguinea (Ruiz & Pav.) D.Don",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:2869953-4",
+     "rank": "SPECIES",
+     "family": "Solanaceae"
+    },
+    {
+     "taxonID": "2683997",
+     "scientificName": "Brugmansia aurea Lagerh.",
+     "canonicalName": "Brugmansia aurea",
+     "authorship": "Lagerh.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:37434-2",
+     "rank": "SPECIES",
+     "family": "Solanaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2683997",
+     "scientificName": "Brugmansia aurea Lagerh.",
+     "canonicalName": "Brugmansia aurea",
+     "authorship": "Lagerh.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:37434-2",
+     "rank": "SPECIES",
+     "family": "Solanaceae"
+    },
+    {
+     "taxonID": "2869953",
+     "scientificName": "Brugmansia aurea J.Harrison",
+     "canonicalName": "Brugmansia aurea",
+     "authorship": "J.Harrison",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Brugmansia sanguinea (Ruiz & Pav.) D.Don",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:2869953-4",
+     "rank": "SPECIES",
+     "family": "Solanaceae"
+    }
+   ]
+  },
+  {
+   "name": "Pereskia",
+   "gbif": [
+    {
+     "taxonID": "2414658",
+     "scientificName": "Pereskia Mill.",
+     "canonicalName": "Pereskia",
+     "authorship": "Mill.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30387425-2",
+     "rank": "GENUS",
+     "family": "Cactaceae"
+    },
+    {
+     "taxonID": "2408475",
+     "scientificName": "Pereskia Vell.",
+     "canonicalName": "Pereskia",
+     "authorship": "Vell.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Hippocratea L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30395194-2",
+     "rank": "GENUS",
+     "family": "Celastraceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2408475",
+     "scientificName": "Pereskia Vell.",
+     "canonicalName": "Pereskia",
+     "authorship": "Vell.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Hippocratea L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30395194-2",
+     "rank": "GENUS",
+     "family": "Celastraceae"
+    },
+    {
+     "taxonID": "2414658",
+     "scientificName": "Pereskia Mill.",
+     "canonicalName": "Pereskia",
+     "authorship": "Mill.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30387425-2",
+     "rank": "GENUS",
+     "family": "Cactaceae"
+    }
+   ]
+  },
+  {
+   "name": "Pachypodium",
+   "gbif": [
+    {
+     "taxonID": "145210",
+     "scientificName": "Pachypodium Lindl.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Lindl.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30028643-2",
+     "rank": "GENUS",
+     "family": "Apocynaceae"
+    },
+    {
+     "taxonID": "2412994",
+     "scientificName": "Pachypodium Webb & Berthel.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Webb & Berthel.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Sisymbrium L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:12882-1",
+     "rank": "GENUS",
+     "family": "Brassicaceae"
+    },
+    {
+     "taxonID": "2412993",
+     "scientificName": "Pachypodium Nutt.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Nutt.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Thelypodium Endl.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:60437224-2",
+     "rank": "GENUS",
+     "family": "Brassicaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "145210",
+     "scientificName": "Pachypodium Lindl.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Lindl.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30028643-2",
+     "rank": "GENUS",
+     "family": "Apocynaceae"
+    },
+    {
+     "taxonID": "2412993",
+     "scientificName": "Pachypodium Nutt.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Nutt.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Thelypodium Endl.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:60437224-2",
+     "rank": "GENUS",
+     "family": "Brassicaceae"
+    },
+    {
+     "taxonID": "2412994",
+     "scientificName": "Pachypodium Webb & Berthel.",
+     "canonicalName": "Pachypodium",
+     "authorship": "Webb & Berthel.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Sisymbrium L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:12882-1",
+     "rank": "GENUS",
+     "family": "Brassicaceae"
+    }
+   ]
+  },
+  {
+   "name": "Stephania",
+   "gbif": [
+    {
+     "taxonID": "3136825",
+     "scientificName": "Stephania Kuntze",
+     "canonicalName": "Stephania",
+     "authorship": "Kuntze",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Anisopappus Hook. & Arn.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:11144-1",
+     "rank": "GENUS",
+     "family": "Asteraceae"
+    },
+    {
+     "taxonID": "2486400",
+     "scientificName": "Stephania Willd.",
+     "canonicalName": "Stephania",
+     "authorship": "Willd.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Morisonia Plum. ex L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:6028-1",
+     "rank": "GENUS",
+     "family": "Capparaceae"
+    },
+    {
+     "taxonID": "2933172",
+     "scientificName": "Stephania Lour.",
+     "canonicalName": "Stephania",
+     "authorship": "Lour.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:27017-1",
+     "rank": "GENUS",
+     "family": "Menispermaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "2486400",
+     "scientificName": "Stephania Willd.",
+     "canonicalName": "Stephania",
+     "authorship": "Willd.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Morisonia Plum. ex L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:6028-1",
+     "rank": "GENUS",
+     "family": "Capparaceae"
+    },
+    {
+     "taxonID": "2933172",
+     "scientificName": "Stephania Lour.",
+     "canonicalName": "Stephania",
+     "authorship": "Lour.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:27017-1",
+     "rank": "GENUS",
+     "family": "Menispermaceae"
+    },
+    {
+     "taxonID": "3136825",
+     "scientificName": "Stephania Kuntze",
+     "canonicalName": "Stephania",
+     "authorship": "Kuntze",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Anisopappus Hook. & Arn.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:11144-1",
+     "rank": "GENUS",
+     "family": "Asteraceae"
+    }
+   ]
+  },
+  {
+   "name": "Anacampseros",
+   "gbif": [
+    {
+     "taxonID": "500244",
+     "scientificName": "Anacampseros L.",
+     "canonicalName": "Anacampseros",
+     "authorship": "L.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326007-2",
+     "rank": "GENUS",
+     "family": "Anacampserotaceae"
+    },
+    {
+     "taxonID": "500243",
+     "scientificName": "Anacampseros Mill.",
+     "canonicalName": "Anacampseros",
+     "authorship": "Mill.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Hylotelephium H.Ohba",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326006-2",
+     "rank": "GENUS",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "500242",
+     "scientificName": "Anacampseros P.Browne",
+     "canonicalName": "Anacampseros",
+     "authorship": "P.Browne",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Talinum Adans.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326008-2",
+     "rank": "GENUS",
+     "family": "Talinaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "500242",
+     "scientificName": "Anacampseros P.Browne",
+     "canonicalName": "Anacampseros",
+     "authorship": "P.Browne",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Talinum Adans.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326008-2",
+     "rank": "GENUS",
+     "family": "Talinaceae"
+    },
+    {
+     "taxonID": "500243",
+     "scientificName": "Anacampseros Mill.",
+     "canonicalName": "Anacampseros",
+     "authorship": "Mill.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Hylotelephium H.Ohba",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326006-2",
+     "rank": "GENUS",
+     "family": "Crassulaceae"
+    },
+    {
+     "taxonID": "500244",
+     "scientificName": "Anacampseros L.",
+     "canonicalName": "Anacampseros",
+     "authorship": "L.",
+     "taxonomicStatus": "ACCEPTED",
+     "accepted": null,
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:326007-2",
+     "rank": "GENUS",
+     "family": "Anacampserotaceae"
+    }
+   ]
+  },
+  {
+   "name": "Hyacinthus bifolius",
+   "gbif": [
+    {
+     "taxonID": "278579",
+     "scientificName": "Hyacinthus bifolius (L.) E.H.L.Krause",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "(L.) E.H.L.Krause",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Scilla bifolia L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536705-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "278578",
+     "scientificName": "Hyacinthus bifolius Gouan ex Schult. & Schult.f.",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "Gouan ex Schult. & Schult.f.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Muscari commutatum Guss.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536704-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "278580",
+     "scientificName": "Hyacinthus bifolius Boutelou ex Cav.",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "Boutelou ex Cav.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Lachenalia pygmaea (Jacq.) G.D.Duncan",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536703-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    }
+   ],
+   "kew": [
+    {
+     "taxonID": "278578",
+     "scientificName": "Hyacinthus bifolius Gouan ex Schult. & Schult.f.",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "Gouan ex Schult. & Schult.f.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Muscari commutatum Guss.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536704-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "278579",
+     "scientificName": "Hyacinthus bifolius (L.) E.H.L.Krause",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "(L.) E.H.L.Krause",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Scilla bifolia L.",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536705-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    },
+    {
+     "taxonID": "278580",
+     "scientificName": "Hyacinthus bifolius Boutelou ex Cav.",
+     "canonicalName": "Hyacinthus bifolius",
+     "authorship": "Boutelou ex Cav.",
+     "taxonomicStatus": "SYNONYM",
+     "accepted": "Lachenalia pygmaea (Jacq.) G.D.Duncan",
+     "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:536703-1",
+     "rank": "SPECIES",
+     "family": "Asparagaceae"
+    }
+   ]
+  }
+ ],
+ "ipniDiffs": [
+  {
+   "name": "Rubus parviflorus",
+   "gbif": {
+    "status": "ok",
+    "data": {
+     "ids": [
+      "298093-2"
+     ],
+     "label": "Rubus parviflorus Nutt.",
+     "labels": {
+      "298093-2": "Rubus parviflorus Nutt."
+     },
+     "plantIds": {
+      "298093-2": "2985176"
+     },
+     "others": [
+      {
+       "id": "30006007-2",
+       "label": "Rubus parviflorus Weston"
+      },
+      {
+       "id": "738960-1",
+       "label": "Rubus parviflorus Figert ex Sprib."
+      },
+      {
+       "id": "738962-1",
+       "label": "Rubus parviflorus Hegetschw."
+      }
+     ],
+     "acceptedId": "298093-2"
+    }
+   },
+   "kew": {
+    "status": "ok",
+    "data": {
+     "ids": [
+      "298093-2"
+     ],
+     "label": "Rubus parviflorus Nutt.",
+     "labels": {
+      "298093-2": "Rubus parviflorus Nutt."
+     },
+     "plantIds": {
+      "298093-2": "2985176"
+     },
+     "others": [
+      {
+       "id": "30006007-2",
+       "label": "Rubus parviflorus Weston"
+      },
+      {
+       "id": "738962-1",
+       "label": "Rubus parviflorus Hegetschw."
+      },
+      {
+       "id": "738960-1",
+       "label": "Rubus parviflorus Figert ex Sprib."
+      }
+     ],
+     "acceptedId": "298093-2"
+    }
+   }
+  }
+ ]
+}

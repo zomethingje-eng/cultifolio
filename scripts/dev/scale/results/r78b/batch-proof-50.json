@@ -1,0 +1,445 @@
+{
+ "at": "2026-10-19T13:56:27.240Z",
+ "species": 50,
+ "equal": 42,
+ "times": {
+  "perSpecies": 478442,
+  "batched": 22487,
+  "prefetch": 10533
+ },
+ "counts": {
+  "perSpecies": {
+   "www.wikidata.org": {
+    "n": 108,
+    "ms": 13122
+   },
+   "en.wikipedia.org": {
+    "n": 50,
+    "ms": 29582
+   }
+  },
+  "batched": {
+   "query.wikidata.org": {
+    "n": 1,
+    "ms": 257
+   },
+   "www.wikidata.org": {
+    "n": 10,
+    "ms": 1296
+   },
+   "en.wikipedia.org": {
+    "n": 3,
+    "ms": 505
+   }
+  },
+  "shared": {
+   "api.gbif.org": {
+    "n": 255,
+    "ms": 50818
+   }
+  }
+ },
+ "stats": {
+  "sparql": 1,
+  "entities": 1,
+  "extracts": 3,
+  "held": 146,
+  "served": 149
+ },
+ "out": [
+  {
+   "key": 2777724,
+   "name": "Aloe vera",
+   "equal": true
+  },
+  {
+   "key": 5362063,
+   "name": "Crassula ovata",
+   "equal": true
+  },
+  {
+   "key": 2779722,
+   "name": "Haworthia decipiens",
+   "equal": true
+  },
+  {
+   "key": 10911827,
+   "name": "Kroenleinia grusonii",
+   "equal": true
+  },
+  {
+   "key": 5275521,
+   "name": "Welwitschia mirabilis",
+   "equal": true
+  },
+  {
+   "key": 2859789,
+   "name": "Strumaria pubescens",
+   "equal": true
+  },
+  {
+   "key": 12234854,
+   "name": "Haemanthus humanii",
+   "equal": true
+  },
+  {
+   "key": 4053217,
+   "name": "Cyphostemma segmentatum",
+   "equal": true
+  },
+  {
+   "key": 7509313,
+   "name": "Brugmansia insignis",
+   "equal": true
+  },
+  {
+   "key": 9328992,
+   "name": "Ceropegia hardyi",
+   "equal": true
+  },
+  {
+   "key": 3039203,
+   "name": "Parthenocissus inserta",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Parthenocissus inserta, also known as thicket creeper, false Virginia creeper, woodbine, or grape woodbine, is a woody vine native to North America. Contact with it may cause dermatitis.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Parthenocissus_inserta",
+      "licence": "CC BY-SA 4.0",
+      "title": "Parthenocissus inserta"
+     },
+     "batched": {
+      "text": "Parthenocissus inserta (syn. Parthenocissus vitacea), also known as thicket creeper, false Virginia creeper, woodbine, or grape woodbine, is a woody vine native to North America. Contact with it may cause dermatitis.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Parthenocissus_inserta",
+      "licence": "CC BY-SA 4.0",
+      "title": "Parthenocissus inserta"
+     }
+    }
+   }
+  },
+  {
+   "key": 3573069,
+   "name": "Raphionacme velutina",
+   "equal": true
+  },
+  {
+   "key": 7281152,
+   "name": "Parodia schwebsiana",
+   "equal": true
+  },
+  {
+   "key": 3659786,
+   "name": "Operculicarya hirsutissima",
+   "equal": true
+  },
+  {
+   "key": 4189674,
+   "name": "Peperomia urvilleana",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Peperomia urvilleana is a species of flowering plant in the family Piperaceae, native to the Solomon Islands, New Caledonia, Norfolk Island, the southwestern Pacific and warmer areas of New Zealand. It is a succulent subshrub of the forest floor and occasionally grows as a low trunk epiphyte. Its Māori name is wharanui.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Peperomia_urvilleana",
+      "licence": "CC BY-SA 4.0",
+      "title": "Peperomia urvilleana"
+     },
+     "batched": {
+      "text": "Peperomia urvilleana is a species of flowering plant in the family Piperaceae, native to the Solomon Islands, New Caledonia, Norfolk Island, the southwestern Pacific and warmer areas of New Zealand (only Marlborough Sounds and Golden Bay / Mohua to the Heaphy in South Island). It is a succulent subshrub of the forest floor and occasionally grows as a low trunk epiphyte. Its Māori name is wharanui.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Peperomia_urvilleana",
+      "licence": "CC BY-SA 4.0",
+      "title": "Peperomia urvilleana"
+     }
+    }
+   }
+  },
+  {
+   "key": 3707634,
+   "name": "Cheiridopsis ponderosa",
+   "equal": true
+  },
+  {
+   "key": 5298502,
+   "name": "Iris douglasiana",
+   "equal": true
+  },
+  {
+   "key": 5625805,
+   "name": "Mammillaria muehlenpfordtii",
+   "equal": true
+  },
+  {
+   "key": 5535474,
+   "name": "Pachypodium lamerei",
+   "equal": true
+  },
+  {
+   "key": 5592851,
+   "name": "Stephania hainanensis",
+   "equal": true
+  },
+  {
+   "key": 5421429,
+   "name": "Malpighia glabra",
+   "equal": true
+  },
+  {
+   "key": 3647903,
+   "name": "Urginea grandiflora",
+   "equal": true
+  },
+  {
+   "key": 11008739,
+   "name": "Heptapleurum actinophyllum",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Heptapleurum actinophyllum is a tree in the family Araliaceae. It is native to tropical rainforests and gallery forests in northern and northeastern Queensland coasts and the Northern Territory of Australia, as well as New Guinea and Java. Common names include Australian umbrella tree, Queensland umbrella tree, octopus tree and amate.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Heptapleurum_actinophyllum",
+      "licence": "CC BY-SA 4.0",
+      "title": "Heptapleurum actinophyllum"
+     },
+     "batched": {
+      "text": "Heptapleurum actinophyllum (formerly Schefflera actinophylla) is a tree in the family Araliaceae. It is native to tropical rainforests and gallery forests in northern and northeastern Queensland coasts and the Northern Territory of Australia, as well as New Guinea and Java. Common names include Australian umbrella tree, Queensland umbrella tree, octopus tree and amate.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Heptapleurum_actinophyllum",
+      "licence": "CC BY-SA 4.0",
+      "title": "Heptapleurum actinophyllum"
+     }
+    }
+   }
+  },
+  {
+   "key": 3121581,
+   "name": "Artemisia dracunculus",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Tarragon, also known as estragon, is a species of perennial herb in the family Asteraceae. It is widespread in the wild across much of Eurasia and North America and is cultivated for culinary and medicinal purposes.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Tarragon",
+      "licence": "CC BY-SA 4.0",
+      "title": "Tarragon"
+     },
+     "batched": {
+      "text": "Tarragon (Artemisia dracunculus), also known as estragon, is a species of perennial herb in the family Asteraceae. It is widespread in the wild across much of Eurasia and North America and is cultivated for culinary and medicinal purposes.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Tarragon",
+      "licence": "CC BY-SA 4.0",
+      "title": "Tarragon"
+     }
+    }
+   }
+  },
+  {
+   "key": 2874484,
+   "name": "Carica papaya",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "The papaya is the plant species Carica papaya, one of the 3 accepted species in the genus Carica of the family Caricaceae.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Papaya",
+      "licence": "CC BY-SA 4.0",
+      "title": "Papaya"
+     },
+     "batched": {
+      "text": "The papaya (US: ) is the plant species Carica papaya, one of the 3 accepted species in the genus Carica of the family Caricaceae.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Papaya",
+      "licence": "CC BY-SA 4.0",
+      "title": "Papaya"
+     }
+    }
+   }
+  },
+  {
+   "key": 3925307,
+   "name": "Eriocapitella japonica",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Eriocapitella japonica is a species of flowering plant in the buttercup family Ranunculaceae commonly cultivated as an ornamental. The specific epithet japonica means \"from Japan\", which is a misnomer since the species is introduced in Japan. It is native to China, Taiwan, and Vietnam. It was formerly a member of genus Anemone and shares the common name Japanese anemone with several other Eriocapitella species.\n",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Eriocapitella_japonica",
+      "licence": "CC BY-SA 4.0",
+      "title": "Eriocapitella japonica"
+     },
+     "batched": {
+      "text": "Eriocapitella japonica is a species of flowering plant in the buttercup family Ranunculaceae commonly cultivated as an ornamental. The specific epithet japonica means \"from Japan\", which is a misnomer since the species is introduced in Japan. It is native to China, Taiwan, and Vietnam. It was formerly a member of genus Anemone and shares the common name Japanese anemone with several other Eriocapitella species.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Eriocapitella_japonica",
+      "licence": "CC BY-SA 4.0",
+      "title": "Eriocapitella japonica"
+     }
+    }
+   }
+  },
+  {
+   "key": 3585321,
+   "name": "Uncarina ankaranensis",
+   "equal": true
+  },
+  {
+   "key": 3573475,
+   "name": "Ceropegia scabriflora",
+   "equal": true
+  },
+  {
+   "key": 2743540,
+   "name": "Geissorhiza similis",
+   "equal": true
+  },
+  {
+   "key": 3084136,
+   "name": "Echinocereus poselgeri",
+   "equal": true
+  },
+  {
+   "key": 2768019,
+   "name": "Beaucarnea goldmanii",
+   "equal": true
+  },
+  {
+   "key": 2988390,
+   "name": "Physocarpus capitatus",
+   "equal": true
+  },
+  {
+   "key": 7668873,
+   "name": "Felicia amelloides",
+   "equal": true
+  },
+  {
+   "key": 8174785,
+   "name": "Rosa rubiginosa",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Rosa rubiginosa is a species of rose native to Europe and western Asia.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Rosa_rubiginosa",
+      "licence": "CC BY-SA 4.0",
+      "title": "Rosa rubiginosa"
+     },
+     "batched": {
+      "text": "Rosa rubiginosa (sweet briar, sweetbriar rose, sweet brier or eglantine; syn. R. eglanteria) is a species of rose native to Europe and western Asia.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Rosa_rubiginosa",
+      "licence": "CC BY-SA 4.0",
+      "title": "Rosa rubiginosa"
+     }
+    }
+   }
+  },
+  {
+   "key": 2769872,
+   "name": "Furcraea depauperata",
+   "equal": true
+  },
+  {
+   "key": 2743790,
+   "name": "Romulea tabularis",
+   "equal": true
+  },
+  {
+   "key": 3706122,
+   "name": "Dicrocaulon humile",
+   "equal": true
+  },
+  {
+   "key": 5361785,
+   "name": "Myriophyllum aquaticum",
+   "equal": true
+  },
+  {
+   "key": 3084837,
+   "name": "Mesembryanthemum nodiflorum",
+   "equal": true
+  },
+  {
+   "key": 3094385,
+   "name": "Othonna graveolens",
+   "equal": true
+  },
+  {
+   "key": 4198965,
+   "name": "Adromischus nanus",
+   "equal": true
+  },
+  {
+   "key": 3190855,
+   "name": "Drosera peltata",
+   "equal": false,
+   "diff": {
+    "summary": {
+     "perSpecies": {
+      "text": "Drosera peltata, commonly called the shield sundew or pale sundew, is a climbing or scrambling perennial tuberous species in the carnivorous plant genus Drosera. Among the tuberous sundews, D. peltata has the largest distribution, which includes eastern and western Australia, New Zealand, India, and most of Southeast Asia including the Philippines. The specific epithet is Latin for \"shield shaped\", a reference to the shape of the cauline leaves. It is either a single extremely variable species, or a complex of several closely related species of uncertain taxonomic boundaries. In Australia at least four forms have had or still have specific taxonomic recognition: Drosera peltata subsp. peltata, D. peltata subsp. auriculata, D. foliosa and D. gracilis.",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Drosera_peltata",
+      "licence": "CC BY-SA 4.0",
+      "title": "Drosera peltata"
+     },
+     "batched": {
+      "text": "Drosera peltata, commonly called the shield sundew or pale sundew, is a climbing or scrambling perennial tuberous species in the carnivorous plant genus Drosera. Among the tuberous sundews, D. peltata has the largest distribution, which includes eastern and western Australia, New Zealand, India, and most of Southeast Asia including the Philippines. The specific epithet is Latin for \"shield shaped\", a reference to the shape of the cauline leaves. It is either a single extremely variable species, or a complex of several closely related species of uncertain taxonomic boundaries. In Australia at least four forms have had or still have specific taxonomic recognition: Drosera peltata subsp. peltata (an autonym), D. peltata subsp. auriculata, D. foliosa (also as D. peltata var. foliosa) and D. gracilis (also as D. peltata var. gracilis).",
+      "source": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Drosera_peltata",
+      "licence": "CC BY-SA 4.0",
+      "title": "Drosera peltata"
+     }
+    }
+   }
+  },
+  {
+   "key": 4023279,
+   "name": "Anacampseros bayeriana",
+   "equal": true
+  },
+  {
+   "key": 2766800,
+   "name": "Agave delamateri",
+   "equal": true
+  },
+  {
+   "key": 2739780,
+   "name": "Colchicum fharii",
+   "equal": true
+  },
+  {
+   "key": 9574648,
+   "name": "Ceropegia villetiae",
+   "equal": true
+  },
+  {
+   "key": 2775330,
+   "name": "Lachenalia purpureocaerulea",
+   "equal": true
+  },
+  {
+   "key": 8979757,
+   "name": "Agave pablocarrilloi",
+   "equal": true
+  },
+  {
+   "key": 11238281,
+   "name": "Parodia roseolutea",
+   "equal": true
+  },
+  {
+   "key": 7281706,
+   "name": "Mammillaria aureilanata",
+   "equal": true
+  }
+ ]
+}

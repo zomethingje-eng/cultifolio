@@ -17,7 +17,7 @@ import { viaSource, viaDetail, wcvpBase, settleRange, withPage, homonymChecked }
 import * as inat from './sources/inat';
 import * as wm from './sources/wikimedia';
 import * as commons from './sources/commons';
-import { literature } from './sources/openalex';
+import { LITERATURE_OFF } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
@@ -28,6 +28,7 @@ import type { Reference } from './reference';
 import type { KewInfra } from './kew-infra';
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
+import { gbifPage, type PageId } from '../core/page-id';
 import { extraWhy, type ExtraKey } from './extra-keys';
 
 export interface ClimateProvider {
@@ -90,6 +91,12 @@ export interface BuildOptions {
    * as the Worker and the index read it (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
    */
   held?: HeldNames | null;
+  /**
+   * The id of the page for a GBIF key (round seventy-eight; `$core/page-id`), asked for the key the build ends on (a name
+   * followed to its accepted key asks for that one): the builder gives the id of the page already on disk under that key,
+   * else the id the rule gives a new page. Absent, or no answer: `g<key>`, which `--index` puts right by the rule.
+   */
+  pageIdOf?: (gbifKey: number) => PageId | undefined;
   /** Kew's names below species (`--bulk`; round seventy-two, C1): an iNaturalist observation of a taxon Kew places under another species is not taken. */
   kewInfra?: KewInfra;
   /**
@@ -238,6 +245,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   const s = sp.data;
   const scientific = s.canonicalName ?? s.scientificName;
+  const pageId: PageId = o.pageIdOf?.(key) ?? gbifPage(key);
   // The other keys listed for the key this build ends on (a name followed to another key reads that key's list, if any).
   const extraList = (o.extraKeys ?? []).filter((x) => x.page === key);
   const status = /accepted/i.test(s.taxonomicStatus ?? '') ? 'accepted' : /synonym/i.test(s.taxonomicStatus ?? '') ? 'synonym' : /doubtful/i.test(s.taxonomicStatus ?? '') ? 'doubtful' : 'unknown';
@@ -651,12 +659,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     skipped('inat.photos.cultivated');
   } else if (inatId) {
     links.inat = `https://www.inaturalist.org/taxa/${inatId}`;
-    const owner = { key, held: o.held, kew: o.kewInfra ? (t: string) => o.kewInfra!.placedElsewhere(t, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], ipni: ids.ipni }) : null };
+    const owner = { key: pageId, held: o.held, kew: o.kewInfra ? (t: string) => o.kewInfra!.placedElsewhere(t, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], ipni: ids.ipni }) : null };
     const wild = await inat.photos(f, inatId, true, 24, owner);
     mark('inat.photos.wild', wild);
     if (wild.status === 'ok') photos.push(...wild.data);
     const cult = await inat.photos(f, inatId, false, 12, owner);
-    mark('inat.photos.cultivated', cult);
+    // The record names the rule it was asked by (round seventy-eight), so `--fill inat` knows a record of the rule before.
+    mark('inat.photos.cultivated', cult.status === 'ok' || cult.status === 'none' ? { status: cult.status, detail: inat.CULTIVATED_RULE } : cult);
     if (cult.status === 'ok') photos.push(...cult.data);
   }
   // GBIF's media before Commons, and only the photographs of the species' own sources count towards "fewer than six":
@@ -672,20 +681,19 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (!o.quick && photos.length < 12) {
     const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
     // The species' own and older names, by which a file named as another species is left out (triage-68 K1).
-    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key, held: o.held, authorship });
+    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key: pageId, gbif: key, held: o.held, authorship });
     mark('commons', c);
     if (c.status === 'ok') photos.push(...c.data);
   }
 
   const photosOut = dedupePhotos(photos);
 
-  /* ---- 7. Literature (not load-bearing) ---- */
-  let papers: Dossier['literature'] = [];
-  if (!o.quick && !skip('openalex')) {
-    const l = await literature(f, scientific);
-    mark('openalex', l);
-    if (l.status === 'ok') papers = l.data;
-  } else upstream.openalex = { status: 'skipped', at: now() };
+  /* ---- 7. Literature: off (round seventy-eight, the owner's decision 2) ---- */
+  // The build asks OpenAlex nothing: a search a species is $54 or 54 free days at 54,000 species (docs/SCALE-STUDY.md
+  // 3.2). The record says why, and the page says "not checked" with it, never "none"; a later round fills the papers
+  // from OpenAlex's free snapshot. A previous build's papers are not carried into a page built now (`LITERATURE_OFF`).
+  const papers: Dossier['literature'] = [];
+  upstream.openalex = { status: 'skipped', at: now(), detail: LITERATURE_OFF };
 
   const classification = (['kingdom', 'phylum', 'class', 'order', 'family', 'genus'] as const)
     .filter((r) => s[r])
@@ -693,7 +701,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 
   const dossier: Dossier = {
     v: DOSSIER_V,
-    key,
+    key: pageId,
     slug: slugify(scientific),
     built: now(),
     builtBy: o.builtBy,
@@ -716,7 +724,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     ids,
     summary,
-    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, doubtful: doubtful.length ? doubtful : undefined, kew, ambiguous, source: rangeSource(dist), boxes, verified, ...(rangeVia ? { via: withPage(rangeVia, key, o.reference) } : {}) },
+    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, doubtful: doubtful.length ? doubtful : undefined, kew, ambiguous, source: rangeSource(dist), boxes, verified, ...(rangeVia ? { via: withPage(rangeVia, pageId, o.reference ? { keyOf: (n) => { const g = o.reference!.keyOf(n); return g == null ? undefined : (o.pageIdOf?.(g) ?? gbifPage(g)); } } : null) } : {}) },
     occurrences: {
       open,
       nOpenInRange: open.length,

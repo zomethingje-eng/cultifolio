@@ -321,11 +321,12 @@ export async function sheetForNameOr(name: string, key: number | null | undefine
   const m = await sheetsOr([slug]);
   if (isUnreached(m)) return m;
   const s = m.get(slug);
-  // A homonym's sheet is filed under `<slug>-<key>`. When the plain slug answers with another key than the plant's, that
+  // A homonym's sheet is filed under `<slug>-<GBIF key>`, and a plant's key is a GBIF key: compared with the sheet's
+  // `gbif`, never its page id (round seventy-eight). When the plain slug answers with another key than the plant's, that
   // is looked for first (round seventeen, 6): one more bucket request only in that case, so the ordinary plant still
   // asks for one bucket. Nothing is written either way: a reading of the reference does not write to the log, and a key
   // that differs is said on the plant's page with a button to take the reference's (round fifty-eight; rule 5).
-  if (s && key && s.key !== key) {
+  if (s && key && s.gbif !== key) {
     const suffixed = `${slug}-${key}`;
     const m2 = await sheetsOr([suffixed]);
     if (isUnreached(m2)) return m2; // not reached: not "the other species"

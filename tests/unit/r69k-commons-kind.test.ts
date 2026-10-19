@@ -8,6 +8,7 @@ import { commonsPhotos } from '$dossier/sources/commons';
 import { fixtureFetcher } from '$dossier/fetch';
 import { safeUrls } from '$dossier/schema';
 import { heldNamesOf, type HeldNames } from '$dossier/photo-kind';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const answer = (files: Array<{ title: string; cats?: string; width?: number }>) => ({
   query: {
@@ -126,7 +127,7 @@ describe('a misspelt epithet is the species\' own', () => {
   ];
   // Round 71 (S-C9): a slip is shown once Kew and GBIF were asked of it and the build or the fill kept it (`slips`).
   const slipOf = (sp: string, title: string) => `${sp.split(' ')[0].toLowerCase()} ${/^File:\S+ ([a-z-]+)/.exec(title)![1]}`;
-  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title], [], heldNamesOf([{ key: 1, name: sp }]), [slipOf(sp, title)])).toEqual([title]));
+  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title], [], heldNamesOf([{ key: gbifPage(1), name: sp }]), [slipOf(sp, title)])).toEqual([title]));
   const LEFT: Array<[string, string]> = [
     ['Nepenthes robcantleyi', 'File:Nepenthes truncata 2011 Chelsea Flower Show.jpg'],
     ['Colchicum raddeanum', 'File:Aragats, colchicum bifolium - panoramio.jpg'],

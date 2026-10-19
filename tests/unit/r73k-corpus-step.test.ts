@@ -11,10 +11,10 @@ import { run, mergedAway, EXIT } from '../../scripts/corpus-step.mjs';
 
 function setup(plan: string) {
   const root = mkdtempSync(join(tmpdir(), 'corpus-step-73-'));
-  mkdirSync(join(root, 'static/s/v2'), { recursive: true });
+  mkdirSync(join(root, 'static/s/v3'), { recursive: true });
   mkdirSync(join(root, 'scripts'));
-  writeFileSync(join(root, 'static/s/v2/manifest.json'), JSON.stringify({ v: 2, id: 'aaaa1111', built: 'x', species: 3, buckets: 32, postings: 64, files: {} }));
-  writeFileSync(join(root, 'static/s/v2/index.json'), JSON.stringify([{ key: 1 }, { key: 2 }, { key: 3 }, { key: 4 }]));
+  writeFileSync(join(root, 'static/s/v3/manifest.json'), JSON.stringify({ v: 3, id: 'aaaa1111', built: 'x', species: 3, buckets: 32, postings: 64, files: {} }));
+  writeFileSync(join(root, 'static/s/v3/index.json'), JSON.stringify([{ key: 1 }, { key: 2 }, { key: 3 }, { key: 4 }]));
   writeFileSync(join(root, 'scripts/corpus-plan.txt'), plan);
   return root;
 }

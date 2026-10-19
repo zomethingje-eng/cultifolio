@@ -11,25 +11,26 @@ import * as kind from '$dossier/photo-kind';
 import * as infra from '$dossier/kew-infra';
 import { inatKewFill } from '$dossier/inat-kew-fill';
 import type { FetchResult } from '$dossier/fetch';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const INDEX = [
-  { key: 7400459, name: 'Heliamphora purpurascens' },
-  { key: 7263157, name: 'Heliamphora heterodoxa', syn: ['Heliamphora heterodoxa var. heterodoxa'] },
-  { key: 11145800, name: 'Nepenthes domei' },
-  { key: 3702018, name: 'Nepenthes benstonei' },
-  { key: 2771037, name: 'Hesperaloe nocturna' },
-  { key: 5421356, name: 'Boswellia papyrifera', syn: ['Amyris papyrifera', 'Boswellia odorata'] },
-  { key: 3994082, name: 'Commiphora myrrha', syn: ['Balsamea myrrha', 'Commiphora molmol'] },
-  { key: 4169836, name: 'Rhododendron mucronatum', syn: ['Azalea alba'] },
-  { key: 4936864, name: 'Rhododendron kanehirae' },
-  { key: 5620541, name: 'Melocactus paucispinus' },
-  { key: 2739938, name: 'Colchicum neapolitanum' }
+  { key: gbifPage(7400459), name: 'Heliamphora purpurascens' },
+  { key: gbifPage(7263157), name: 'Heliamphora heterodoxa', syn: ['Heliamphora heterodoxa var. heterodoxa'] },
+  { key: gbifPage(11145800), name: 'Nepenthes domei' },
+  { key: gbifPage(3702018), name: 'Nepenthes benstonei' },
+  { key: gbifPage(2771037), name: 'Hesperaloe nocturna' },
+  { key: gbifPage(5421356), name: 'Boswellia papyrifera', syn: ['Amyris papyrifera', 'Boswellia odorata'] },
+  { key: gbifPage(3994082), name: 'Commiphora myrrha', syn: ['Balsamea myrrha', 'Commiphora molmol'] },
+  { key: gbifPage(4169836), name: 'Rhododendron mucronatum', syn: ['Azalea alba'] },
+  { key: gbifPage(4936864), name: 'Rhododendron kanehirae' },
+  { key: gbifPage(5620541), name: 'Melocactus paucispinus' },
+  { key: gbifPage(2739938), name: 'Colchicum neapolitanum' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
 const C = 'https://upload.wikimedia.org/wikipedia/commons';
 const commonsFile = (title: string, categories: string[] = []) => ({ src: 'commons', id: title, url: `${C}/thumb/a/ab/x.jpg/960px-x.jpg`, thumb: `${C}/thumb/a/ab/x.jpg/500px-x.jpg`, width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', categories, sourceRead: true });
-const dossier = (scientific: string, photos: unknown[], synonyms: string[] = []) => ({ key: KEY.get(scientific) ?? 1, name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
+const dossier = (scientific: string, photos: unknown[], synonyms: string[] = []) => ({ key: KEY.get(scientific) ?? gbifPage(1), name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
 const page = (scientific: string, photos: unknown[], synonyms: string[] = [], held: HeldNames | null = HELD) => safeUrls(dossier(scientific, photos, synonyms) as never, held).photos;
 const shows = (scientific: string, title: string, categories: string[] = [], synonyms: string[] = []) => page(scientific, [commonsFile(title, categories)], synonyms).length === 1;
 
@@ -117,7 +118,7 @@ describe('L-4: Kew\'s accepted species outrank GBIF\'s older name of the same wo
       if (url.includes('captive=false')) return { status: 'ok', data: { results: [obs(251153181, 'Crassula exilis cooperi'), obs(7, 'Crassula exilis picturata')] } as T };
       return { status: 'none' };
     };
-    const d = { key: 7334223, name: exilisName, ids: { inat: 582911, ipni: '273135-1' }, photos: [inatPhoto('251153181'), inatPhoto('8')], upstream: { 'inat.photos.wild': { status: 'ok', at: '2026-09-20', detail: "filled 2026-10-16; descendants read against Kew's file of 2026-06-04" } } };
+    const d = { key: gbifPage(7334223), name: exilisName, ids: { inat: 582911, ipni: '273135-1' }, photos: [inatPhoto('251153181'), inatPhoto('8')], upstream: { 'inat.photos.wild': { status: 'ok', at: '2026-09-20', detail: "filled 2026-10-16; descendants read against Kew's file of 2026-06-04" } } };
     const r = await inatKewFill(d as never, f, k, '2026-06-04', () => '2026-10-17T00:00:00Z');
     expect(r).toMatchObject({ done: 'asked again', placed: [['Crassula exilis cooperi', 'Crassula cooperi']] });
     expect(d.photos.map((p) => p.id)).toEqual(['7']);
@@ -129,7 +130,7 @@ describe('L-4: Kew\'s accepted species outrank GBIF\'s older name of the same wo
 });
 
 describe('L-5: an observation GBIF files under an older name Kew accepts as another page\'s species is that page\'s', () => {
-  const gummiferaKey = 8357296, cissKey = 5527841;
+  const gummiferaKey = gbifPage(8357296), cissKey = gbifPage(5527841);
   const ciss = { scientific: 'Adenia cissampeloides', kew: { acceptedElsewhere: ['Adenia gummifera (Harv.) Harms', 'Adenia gracilis Harms'] } };
   const photo = inatPhoto('247854950', { page: 'https://www.inaturalist.org/observations/144417725', attribution: '(c) Mahomed Desai, some rights reserved (CC BY)' });
   const copy = { ...gbifCopy('247854950', '0'), id: '4006551795:0', attribution: 'Mahomed Desai, CC BY, iNaturalist via GBIF' };
@@ -140,11 +141,11 @@ describe('L-5: an observation GBIF files under an older name Kew accepts as anot
   });
   it('guard: two observations of two plants sharing one photograph, and pages whose names Kew does not set apart, are still shown on neither', () => {
     const twig = inatPhoto('475391379');
-    const both = kind.sharedPhotos([{ key: 3034002, name: { scientific: 'Sassafras albidum' }, photos: [twig] }, { key: 3082227, name: { scientific: 'Cornus amomum' }, photos: [{ ...twig, page: 'https://www.inaturalist.org/observations/264729417' }] }]);
+    const both = kind.sharedPhotos([{ key: gbifPage(3034002), name: { scientific: 'Sassafras albidum' }, photos: [twig] }, { key: gbifPage(3082227), name: { scientific: 'Cornus amomum' }, photos: [{ ...twig, page: 'https://www.inaturalist.org/observations/264729417' }] }]);
     expect(both.size).toBe(2);
     const noKew = kind.sharedPhotos([{ key: gummiferaKey, name: { scientific: 'Adenia gummifera' }, photos: [photo] }, { key: cissKey, name: { scientific: 'Adenia cissampeloides' }, photos: [copy] }]);
     expect(noKew.size).toBe(2);
-    const exilis = kind.sharedPhotos([{ key: 7334223, name: { scientific: 'Crassula exilis' }, photos: [inatPhoto('251153181')] }, { key: 7334310, name: { scientific: 'Crassula cooperi', kew: { acceptedElsewhere: [] } }, photos: [gbifCopy('251153181', '2')] }]);
+    const exilis = kind.sharedPhotos([{ key: gbifPage(7334223), name: { scientific: 'Crassula exilis' }, photos: [inatPhoto('251153181')] }, { key: gbifPage(7334310), name: { scientific: 'Crassula cooperi', kew: { acceptedElsewhere: [] } }, photos: [gbifCopy('251153181', '2')] }]);
     expect(exilis.size).toBe(2);
   });
 });

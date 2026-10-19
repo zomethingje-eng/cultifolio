@@ -41,9 +41,12 @@ export type JsonFetcher = <T = unknown>(url: string, opts?: FetchOptions) => Pro
 const MIN_GAP_MS: Record<string, number> = {
   'api.inaturalist.org': 1100,
   'api.gbif.org': 250,
-  'en.wikipedia.org': 250,
-  'www.wikidata.org': 250,
-  'commons.wikimedia.org': 250,
+  // Wikimedia's hosts share one allowance from 2026: 200 requests a minute for a client named by a User-Agent with an
+  // address, across every site and API (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits, read 2026-10-19).
+  // They are paced as one host (`paceKey`), one request every 0.35 s, 171 a minute (round seventy-eight).
+  'wikimedia': 350,
+  // Wikidata's query service: a SPARQL query a second at most, inside its 60 s of processing a minute for a client.
+  'query.wikidata.org': 1100,
   'api.openalex.org': 1100,
   // IPNI's own records, asked by the Wikidata proof (round seventy-c; `ipniNames` in sources/wikimedia.ts): at most once a second.
   'www.ipni.org': 1100,
@@ -101,11 +104,14 @@ export function markCooledRecently(host: string): void {
 }
 
 /** Reserve the next slot for a host before waiting for it, so two concurrent callers take two slots, not the same one. */
+/** The pacing key of a host: Wikimedia's API hosts are one (their allowance is shared); the query service is its own. */
+export const paceKey = (host: string) => (host !== 'query.wikidata.org' && /(^|\.)(wikipedia|wikidata|wikimedia)\.org$/.test(host) ? 'wikimedia' : host);
 async function pace(host: string): Promise<void> {
-  const gap = MIN_GAP_MS[host] ?? 100;
-  const prev = lastAt.get(host) ?? 0;
+  const k = paceKey(host);
+  const gap = MIN_GAP_MS[k] ?? 100;
+  const prev = lastAt.get(k) ?? 0;
   const slot = Math.max(prev + gap, Date.now());
-  lastAt.set(host, slot);
+  lastAt.set(k, slot);
   const wait = slot - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }

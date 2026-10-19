@@ -33,10 +33,10 @@ export const askedCommons = (d: Pick<Dossier, 'upstream'>) => {
 export const COMMONS_FILL_BELOW = 6;
 export const wantsCommons = (d: Pick<Dossier, 'photos' | 'upstream'>) => (d.photos?.length ?? 0) < COMMONS_FILL_BELOW && !askedCommons(d);
 
-export async function fillCommons(d: Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string; synonyms?: string[] } }, f: JsonFetcher, now = () => new Date().toISOString(), held?: HeldNames | null): Promise<CommonsFill> {
+export async function fillCommons(d: Pick<Dossier, 'key' | 'photos' | 'upstream'> & { ids?: { gbif?: number } } & { name: { scientific: string; synonyms?: string[] } }, f: JsonFetcher, now = () => new Date().toISOString(), held?: HeldNames | null): Promise<CommonsFill> {
   // The species' older names go with it, so a file named under one is the species and one named as another is not (round sixty-nine; triage-68 K1);
   // and the reference's names when the caller has them, so an uploader's slip is the species' (round seventy; REVIEW-TRIAGE-69 C1).
-  const r = await commonsPhotos(f, d.name.scientific, 12, { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held });
+  const r = await commonsPhotos(f, d.name.scientific, 12, { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), held });
   if (r.status === 'ok') {
     const have = new Set((d.photos ?? []).map((p) => p.id));
     const fresh = r.data.filter((p) => !have.has(p.id));
@@ -99,7 +99,7 @@ export type KindCounts = {
 };
 
 type KindAnswer = { categories: string[]; struck: boolean; inat: string | null; artist: string | null; kind: string | null; description?: string | null } | 'missing';
-type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[]; authorship?: string; kew?: KindNames['kew'] }; photos?: Photo[] };
+type Stored = Pick<Dossier, 'key'> & { ids?: { gbif?: number } } & { name: { scientific: string; synonyms?: string[]; authorship?: string; kew?: KindNames['kew'] }; photos?: Photo[] };
 /**
  * A Commons photograph the fill asks for: one without its categories, or (round seventy-one; self-review 70, S-C5, S-C9,
  * S-C11) one whose source, slips and credit have not been read since; `sourceRead` marks it done, so a rerun resumes.
@@ -177,7 +177,7 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       if (!needsAsking(p, names, held)) continue;
       const a = answers.get(p.id);
       if (!a) continue;
-      if (a === 'missing') { c.lines.push(`${d.key}\t${d.name.scientific}\tno longer on Commons (left as it is)\t${p.id}`); continue; }
+      if (a === 'missing') { c.lines.push(`${d.ids?.gbif ?? d.key}\t${d.name.scientific}\tno longer on Commons (left as it is)\t${p.id}`); continue; }
       // What the read decided before, with every rule it reads (the credit's and the slips' too: S-C12).
       const was = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described });
       p.categories = a.categories;
@@ -196,12 +196,12 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       let unchecked = false;
       for (const name of held ? slipsToAsk(p.id, names, p.slips) : []) {
         if (!slipAnswers.has(name)) {
-          const r = await askSlip(f, name, { scientific: d.name.scientific, authorship: d.name.authorship, key: d.key, synonyms: d.name.synonyms ?? [] });
+          const r = await askSlip(f, name, { scientific: d.name.scientific, authorship: d.name.authorship, key: d.ids?.gbif, synonyms: d.name.synonyms ?? [] });
           slipAnswers.set(name, r.status === 'ok' ? r.data.own : null);
           c.slipsAsked++;
           if (r.status === 'ok' && r.data.own) c.slipsOwn++;
           if (r.status !== 'ok') c.slipsUnchecked++;
-          if (r.status === 'ok') c.lines.push(`${d.key}\t${d.name.scientific}\tslip ${name}: ${r.data.why}\t${p.id}`);
+          if (r.status === 'ok') c.lines.push(`${d.ids?.gbif ?? d.key}\t${d.name.scientific}\tslip ${name}: ${r.data.why}\t${p.id}`);
         }
         const v = slipAnswers.get(name);
         if (v === true) p.slips = [...(p.slips ?? []), name];
@@ -210,8 +210,8 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       if (!unchecked) p.sourceRead = true;
       changed = true;
       const why = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described });
-      if (why && !was) { c.hidden++; c.lines.push(`${d.key}\t${d.name.scientific}\t${why}\t${p.id}`); }
-      if (!why && was) { c.shownAgain++; c.lines.push(`${d.key}\t${d.name.scientific}\tnow shown (was: ${was})\t${p.id}`); }
+      if (why && !was) { c.hidden++; c.lines.push(`${d.ids?.gbif ?? d.key}\t${d.name.scientific}\t${why}\t${p.id}`); }
+      if (!why && was) { c.shownAgain++; c.lines.push(`${d.ids?.gbif ?? d.key}\t${d.name.scientific}\tnow shown (was: ${was})\t${p.id}`); }
     }
     if (changed && JSON.stringify(d) !== was0) { store.write(file, d); c.dossiers++; }
   }

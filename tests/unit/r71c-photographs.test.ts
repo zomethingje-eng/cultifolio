@@ -11,28 +11,29 @@ import { commonsAuthor, readCommonsPhoto } from '$dossier/photo-credit';
 import { commonsPhotos, inatSource } from '$dossier/sources/commons';
 import * as fill from '$dossier/commons-fill';
 import { fixtureFetcher, type FetchResult } from '$dossier/fetch';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 /** The live index's names for the species these cases read (2026-10-15). */
 const INDEX = [
-  { key: 5421356, name: 'Boswellia papyrifera' },
-  { key: 3994082, name: 'Commiphora myrrha', syn: ['Balsamea myrrha'] },
-  { key: 3832851, name: 'Zanthoxylum beecheyanum', syn: ['Zanthoxylum beecheyanum var. alatum', 'Fagara piperita'] },
-  { key: 2777724, name: 'Aloe vera' },
-  { key: 2777537, name: 'Aloe arborescens' },
-  { key: 2767031, name: 'Agave americana' },
-  { key: 3067157, name: 'Euphorbia milii' },
-  { key: 7329207, name: 'Lithops lesliei' },
-  { key: 7329209, name: 'Lithops karasmontana' },
-  { key: 7284127, name: 'Mammillaria matudae' },
-  { key: 4252157, name: 'Othonna cakilefolia' },
-  { key: 3702156, name: 'Nepenthes hurrelliana' },
-  { key: 7284176, name: 'Echinocereus adustus' },
-  { key: 2743932, name: 'Romulea gigantea' },
-  { key: 2772601, name: 'Dasylirion graminifolium' },
-  { key: 7693710, name: 'Adenia lobata' },
-  { key: 7288903, name: 'Talinella grevei' },
-  { key: 9999001, name: 'Ceropegia maritae' },
-  { key: 9999002, name: 'Salvia azurea' }
+  { key: gbifPage(5421356), name: 'Boswellia papyrifera' },
+  { key: gbifPage(3994082), name: 'Commiphora myrrha', syn: ['Balsamea myrrha'] },
+  { key: gbifPage(3832851), name: 'Zanthoxylum beecheyanum', syn: ['Zanthoxylum beecheyanum var. alatum', 'Fagara piperita'] },
+  { key: gbifPage(2777724), name: 'Aloe vera' },
+  { key: gbifPage(2777537), name: 'Aloe arborescens' },
+  { key: gbifPage(2767031), name: 'Agave americana' },
+  { key: gbifPage(3067157), name: 'Euphorbia milii' },
+  { key: gbifPage(7329207), name: 'Lithops lesliei' },
+  { key: gbifPage(7329209), name: 'Lithops karasmontana' },
+  { key: gbifPage(7284127), name: 'Mammillaria matudae' },
+  { key: gbifPage(4252157), name: 'Othonna cakilefolia' },
+  { key: gbifPage(3702156), name: 'Nepenthes hurrelliana' },
+  { key: gbifPage(7284176), name: 'Echinocereus adustus' },
+  { key: gbifPage(2743932), name: 'Romulea gigantea' },
+  { key: gbifPage(2772601), name: 'Dasylirion graminifolium' },
+  { key: gbifPage(7693710), name: 'Adenia lobata' },
+  { key: gbifPage(7288903), name: 'Talinella grevei' },
+  { key: gbifPage(9999001), name: 'Ceropegia maritae' },
+  { key: gbifPage(9999002), name: 'Salvia azurea' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
@@ -64,7 +65,7 @@ describe('S-C2: a herbarium sheet by its source or description', () => {
   });
   it('a new answer is left out by its source', async () => {
     const answer = { query: { pages: { '1': { title: 'File:Commiphora myrrha.jpg', imageinfo: [{ url: `${C}/a/ab/Commiphora_myrrha.jpg`, thumburl: `${C}/thumb/a/ab/Commiphora_myrrha.jpg/771px-Commiphora_myrrha.jpg`, width: 771, height: 1000, extmetadata: { LicenseShortName: { value: 'CC0' }, Artist: { value: 'W. C. Burger' }, Categories: { value: 'Commiphora myrrha|CC-Zero' }, ImageDescription: { value: description }, Credit: { value: credit } } }] } } } };
-    const r = await commonsPhotos(fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': answer }), 'Commiphora myrrha', 12, { scientific: 'Commiphora myrrha', key: 3994082, held: HELD });
+    const r = await commonsPhotos(fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': answer }), 'Commiphora myrrha', 12, { scientific: 'Commiphora myrrha', key: gbifPage(3994082), held: HELD });
     expect(r.status).toBe('none');
   });
   it('a garden\'s living specimen is no sheet (a guard of the new rule; fails on the base only for want of `sourceKind`)', () => {
@@ -124,7 +125,7 @@ describe('S-C6: the group exemption needs the species named as a name', () => {
     expect(epithetRank('File:Nepenthesdubia1.jpg', { scientific: 'Nepenthes dubia' })).toBe(0); // guard: run together
   });
   it('an own epithet written with a capital names the species', () => {
-    expect(commonsKind('File:Mammillaria Matudae & Mexico (1) (11982771215).jpg', { scientific: 'Mammillaria matudae', key: 7284127, held: HELD }, { categories: ['Mammillaria matudae', 'Lithops lesliei'] })).toBeNull();
+    expect(commonsKind('File:Mammillaria Matudae & Mexico (1) (11982771215).jpg', { scientific: 'Mammillaria matudae', key: gbifPage(7284127), held: HELD }, { categories: ['Mammillaria matudae', 'Lithops lesliei'] })).toBeNull();
   });
 });
 
@@ -162,8 +163,8 @@ describe('S-C9 (with S-B7, S-F13): a name Kew or GBIF accepts as a species is ne
   it('the read shows a slip only once the build or the fill asked; without it, another plant', () => {
     expect(shows('Mammillaria matudae', 'File:Mammillaria mabudae, ve zkumavce (001).jpg')).toBe(false);
     expect(shows('Mammillaria matudae', 'File:Mammillaria mabudae, ve zkumavce (001).jpg', { slips: ['mammillaria mabudae'] })).toBe(true); // guard
-    expect(slipsToAsk('File:Mammillaria mabudae, ve zkumavce (001).jpg', { scientific: 'Mammillaria matudae', key: 7284127, held: HELD })).toEqual(['mammillaria mabudae']);
-    expect(slipsToAsk('File:Mammillaria matudae.jpg', { scientific: 'Mammillaria matudae', key: 7284127, held: HELD })).toEqual([]); // guard
+    expect(slipsToAsk('File:Mammillaria mabudae, ve zkumavce (001).jpg', { scientific: 'Mammillaria matudae', key: gbifPage(7284127), held: HELD })).toEqual(['mammillaria mabudae']);
+    expect(slipsToAsk('File:Mammillaria matudae.jpg', { scientific: 'Mammillaria matudae', key: gbifPage(7284127), held: HELD })).toEqual([]); // guard
   });
   it('askSlip asks GBIF\'s copy of Kew, then GBIF\'s backbone strictly; a source that does not answer takes nothing', async () => {
     const f = fixtureFetcher({ 'https://api.gbif.org/v1/species?datasetKey=': { results: [] }, 'https://api.gbif.org/v1/species/match?strict=true': { matchType: 'NONE' } });
@@ -174,7 +175,7 @@ describe('S-C9 (with S-B7, S-F13): a name Kew or GBIF accepts as a species is ne
   it('the build asks and keeps the slip with the photograph', async () => {
     const answer = { query: { pages: { '1': { title: 'File:Mammillaria mabudae, ve zkumavce (001).jpg', imageinfo: [{ url: `${C}/a/ab/M.jpg`, thumburl: `${C}/thumb/a/ab/M.jpg/960px-M.jpg`, width: 1539, height: 2000, extmetadata: { LicenseShortName: { value: 'CC BY-SA 3.0' }, Artist: { value: 'Juandev' }, Categories: { value: 'Mammillaria matudae|In vitro' } } }] } } } };
     const f = fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': answer, 'https://api.gbif.org/v1/species?datasetKey=': { results: [] }, 'https://api.gbif.org/v1/species/match?strict=true': { matchType: 'NONE' } });
-    const r = await commonsPhotos(f, 'Mammillaria matudae', 12, { scientific: 'Mammillaria matudae', key: 7284127, held: HELD, authorship: 'Bravo' });
+    const r = await commonsPhotos(f, 'Mammillaria matudae', 12, { scientific: 'Mammillaria matudae', key: gbifPage(7284127), held: HELD, authorship: 'Bravo' });
     expect(r.status === 'ok' && r.data[0].slips).toEqual(['mammillaria mabudae']);
   });
 });
@@ -189,9 +190,9 @@ describe('S-C11: a derivative work credits both authors, and never a file\'s nam
 });
 
 describe('S-C12 and the fill: --fill commons-kind reads the source, the slips and the credit, and counts what the read does', () => {
-  const dossier = (key: number, scientific: string, photos: unknown[], authorship?: string) => ({ v: 2, key, slug: scientific.toLowerCase().replace(/ /g, '-'), name: { scientific, synonyms: [], vernacular: [], status: 'accepted', ...(authorship ? { authorship } : {}) }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
+  const dossier = (key: number, scientific: string, photos: unknown[], authorship?: string) => ({ v: 3, key: gbifPage(key), ids: { gbif: key }, slug: scientific.toLowerCase().replace(/ /g, '-'), name: { scientific, synonyms: [], vernacular: [], status: 'accepted', ...(authorship ? { authorship } : {}) }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
   const memory = (ds: unknown[]) => {
-    const files = new Map(ds.map((d) => [`${(d as { key: number }).key}.json`, JSON.parse(JSON.stringify(d))]));
+    const files = new Map(ds.map((d) => [`${(d as { key: string }).key}.json`, JSON.parse(JSON.stringify(d))]));
     return { files: () => [...files.keys()], read: <T,>(f: string) => JSON.parse(JSON.stringify(files.get(f))) as T, write: (f: string, d: unknown) => void files.set(f, JSON.parse(JSON.stringify(d))), get: (f: string) => files.get(f) };
   };
   it('keeps the slip, the iNaturalist source and the sheet, and lists what is shown again', async () => {
@@ -216,10 +217,10 @@ describe('S-C12 and the fill: --fill commons-kind reads the source, the slips an
     };
     const c = await fill.fillCommonsKindAll(store as never, f, HELD);
     expect(c).toMatchObject({ slipsAsked: 1, slipsOwn: 1, copies: 1, shownAgain: 1 });
-    expect(store.get('7284127.json').photos[0]).toMatchObject({ slips: ['mammillaria mabudae'], sourceRead: true });
-    expect(safeUrls(store.get('7284127.json') as never, HELD).photos).toHaveLength(1);
-    expect(safeUrls(store.get('7284176.json') as never, HELD).photos.map((p) => p.src)).toEqual(['inat']);
-    expect(safeUrls(store.get('3994082.json') as never, HELD).photos).toEqual([]);
+    expect(store.get('g7284127.json').photos[0]).toMatchObject({ slips: ['mammillaria mabudae'], sourceRead: true });
+    expect(safeUrls(store.get('g7284127.json') as never, HELD).photos).toHaveLength(1);
+    expect(safeUrls(store.get('g7284176.json') as never, HELD).photos.map((p) => p.src)).toEqual(['inat']);
+    expect(safeUrls(store.get('g3994082.json') as never, HELD).photos).toEqual([]);
     expect(c.lines.some((l) => l.includes('a herbarium sheet') && l.includes('Commiphora myrrha.jpg'))).toBe(true);
   });
   it('the fill\'s "was" reads the credit, as the read does: a stamp left out by its credit is not counted again', () => {

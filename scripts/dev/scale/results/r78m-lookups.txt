@@ -1,0 +1,14 @@
+# Round seventy-eight (M): scripts/dev/scale/r78-lookups.ts, round seventy-seven's code (r78base) over the version 2 copy against the merged code over the same corpus as version 3, 2026-10-19. 251,026 keys, 85,363 addresses, 9,280 GBIF keys.
+864824 answers: 864824 the same, 0 different
+  slug        251026 asked,  251026 the same
+  accepted    251026 asked,  251026 the same
+  older       251026 asked,  251026 the same
+  address      85363 asked,   85363 the same
+  gbif          9280 asked,    9280 the same
+  genera           1 asked,       1 the same
+  row           1564 asked,    1564 the same
+  catalogue       12 asked,      12 the same
+  opened        6244 asked,    6244 the same
+  featured         1 asked,       1 the same
+  sitemap          1 asked,       1 the same
+  api           9280 asked,    9280 the same

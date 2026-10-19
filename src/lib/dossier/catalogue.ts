@@ -1,4 +1,5 @@
 import type { IndexEntry } from '$dossier/index-entry';
+import type { PageId } from '$core/page-id';
 import { groupFor, unitName } from '$core/regions';
 import { slugify, genusOf } from '$core/names';
 import { worldSvg } from '$lib/map/still';
@@ -23,7 +24,10 @@ export const byOf = (v: string | null): By => ((BYS as readonly string[]).includ
 export const chipOf = (v: string | null): Chip => (v === 'climate' || v === 'noclimate' || v === 'grown' ? v : 'all');
 
 export type Item = {
-  key: number;
+  /** The page's id (round seventy-eight). */
+  key: PageId;
+  /** The page's GBIF key, which a grower's plants are matched by (`IndexEntry.gbif`). */
+  gbif?: number;
   slug: string;
   name: string;
   family?: string;
@@ -135,6 +139,7 @@ export function catalogueItems(index: IndexEntry[]): Item[] {
   let list = items.get(index);
   if (!list) items.set(index, (list = index.map((e) => ({
     key: e.key,
+    ...(e.gbif != null ? { gbif: e.gbif } : {}),
     slug: e.slug,
     name: e.name,
     family: e.family,

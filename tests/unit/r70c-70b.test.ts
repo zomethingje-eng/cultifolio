@@ -7,31 +7,32 @@ import { describe, it, expect } from 'vitest';
 import { safeUrls } from '$dossier/schema';
 import { heldNamesOf, shownPhotos, type HeldNames } from '$dossier/photo-kind';
 import { spellingKey } from '$dossier/epithet';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const INDEX = [
-  { key: 10754356, name: 'Aztekonia hintonii', syn: ['Aztekium hintonii'] },
-  { key: 3944658, name: 'Epithelantha spinosior', syn: ['Mammillaria micromeris var. unguispina', 'Epithelantha micromeris subsp. unguispina', 'Epithelantha micromeris var. unguispina', 'Epithelantha unguispina'] },
-  { key: 8013485, name: 'Epithelantha micromeris', syn: ['Cactus micromeris'] },
-  { key: 7329164, name: 'Lithops schwantesii', syn: ['Lithops dinteri var. marthae'], older: ['Lithops marthae'] },
-  { key: 3035891, name: 'Polyscias balfouriana', syn: ['Aralia balfouriana', 'Panax balfourii'] },
-  { key: 3035778, name: 'Polyscias scutellaria', syn: ['Aralia cochleata'] },
-  { key: 4053092, name: 'Cyphostemma adenopodum', syn: ['Cissus adenopoda'] },
-  { key: 2779618, name: 'Haworthia magnifica' },
-  { key: 2780316, name: 'Haworthia blackburniae' },
-  { key: 2780001, name: 'Haworthia wittebergensis' },
-  { key: 2779601, name: 'Haworthia retusa' },
-  { key: 2779602, name: 'Haworthia cooperi' },
-  { key: 3947849, name: 'Parodia ritteri', syn: ['Parodia camargensis'] },
-  { key: 7281971, name: 'Parodia comarapana' },
-  { key: 3949766, name: 'Parodia hausteiniana' },
-  { key: 7281638, name: 'Parodia maassii' },
-  { key: 10911827, name: 'Kroenleinia grusonii', syn: ['Echinocactus grusonii'], older: ['Ferocactus grusonii'] },
-  { key: 2777724, name: 'Aloe vera' },
-  { key: 5421082, name: 'Franklinia alatamaha', syn: ['Gordonia alatamaha'] },
-  { key: 5384245, name: 'Melocactus broadwayi', syn: ['Cactus broadwayi'] },
-  { key: 7280974, name: 'Melocactus conoideus' },
-  { key: 2768242, name: 'Dipcadi erythraeum' },
-  { key: 7658604, name: 'Uncarina grandidieri' }
+  { key: gbifPage(10754356), name: 'Aztekonia hintonii', syn: ['Aztekium hintonii'] },
+  { key: gbifPage(3944658), name: 'Epithelantha spinosior', syn: ['Mammillaria micromeris var. unguispina', 'Epithelantha micromeris subsp. unguispina', 'Epithelantha micromeris var. unguispina', 'Epithelantha unguispina'] },
+  { key: gbifPage(8013485), name: 'Epithelantha micromeris', syn: ['Cactus micromeris'] },
+  { key: gbifPage(7329164), name: 'Lithops schwantesii', syn: ['Lithops dinteri var. marthae'], older: ['Lithops marthae'] },
+  { key: gbifPage(3035891), name: 'Polyscias balfouriana', syn: ['Aralia balfouriana', 'Panax balfourii'] },
+  { key: gbifPage(3035778), name: 'Polyscias scutellaria', syn: ['Aralia cochleata'] },
+  { key: gbifPage(4053092), name: 'Cyphostemma adenopodum', syn: ['Cissus adenopoda'] },
+  { key: gbifPage(2779618), name: 'Haworthia magnifica' },
+  { key: gbifPage(2780316), name: 'Haworthia blackburniae' },
+  { key: gbifPage(2780001), name: 'Haworthia wittebergensis' },
+  { key: gbifPage(2779601), name: 'Haworthia retusa' },
+  { key: gbifPage(2779602), name: 'Haworthia cooperi' },
+  { key: gbifPage(3947849), name: 'Parodia ritteri', syn: ['Parodia camargensis'] },
+  { key: gbifPage(7281971), name: 'Parodia comarapana' },
+  { key: gbifPage(3949766), name: 'Parodia hausteiniana' },
+  { key: gbifPage(7281638), name: 'Parodia maassii' },
+  { key: gbifPage(10911827), name: 'Kroenleinia grusonii', syn: ['Echinocactus grusonii'], older: ['Ferocactus grusonii'] },
+  { key: gbifPage(2777724), name: 'Aloe vera' },
+  { key: gbifPage(5421082), name: 'Franklinia alatamaha', syn: ['Gordonia alatamaha'] },
+  { key: gbifPage(5384245), name: 'Melocactus broadwayi', syn: ['Cactus broadwayi'] },
+  { key: gbifPage(7280974), name: 'Melocactus conoideus' },
+  { key: gbifPage(2768242), name: 'Dipcadi erythraeum' },
+  { key: gbifPage(7658604), name: 'Uncarina grandidieri' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));

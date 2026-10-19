@@ -80,7 +80,7 @@ export type FillCounts = { asked: number; filled: number; photos: number; none: 
 export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void): Promise<FillCounts> {
   const c: FillCounts = { asked: 0, filled: 0, photos: 0, none: 0, failed: 0, before: 0 };
   for (const file of store.files()) {
-    const d = store.read<Pick<Dossier, 'key' | 'photos' | 'upstream'>>(file);
+    const d = store.read<Pick<Dossier, 'key' | 'ids' | 'photos' | 'upstream'>>(file);
     if (d.photos?.length) continue;
     if (askedOpen(d)) { c.before++; continue; }
     c.asked++;
@@ -101,7 +101,7 @@ export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progr
 export async function fillCommonsAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void, held?: HeldNames | null): Promise<FillCounts> {
   const c: FillCounts = { asked: 0, filled: 0, photos: 0, none: 0, failed: 0, before: 0 };
   for (const file of store.files()) {
-    const d = store.read<Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string } }>(file);
+    const d = store.read<Pick<Dossier, 'key' | 'ids' | 'photos' | 'upstream'> & { name: { scientific: string } }>(file);
     if (!wantsCommons(d)) { if (askedCommons(d) && !d.photos?.length) c.before++; continue; }
     c.asked++;
     // The reference's names, so an uploader's slip is the species' as the Worker reads it (round seventy, a suggestion of C; C1).

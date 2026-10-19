@@ -9,13 +9,14 @@ import { load } from '../../src/routes/species/[slug]/+page.server';
 import { sharedNameMessage, cachedMatch } from '$lib/server/synonyms';
 import { workerKey } from '$lib/server/worker-cache';
 import type { IndexEntry, Loaded } from '$lib/server/dossiers';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const entry = (key: number, name: string, syn: string[] = []): IndexEntry => ({ key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}) });
+const entry = (key: number, name: string, syn: string[] = []): IndexEntry => ({ key: gbifPage(key), gbif: key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}) });
 // As the live index and dossiers hold them (2026-10-15), cut to the case.
 const idx: IndexEntry[] = [entry(2, 'Annona montana', ['Annona marcgravii', 'Annona muricata']), entry(5, 'Annona muricata', ['Annona macrocarpa']), entry(3952140, 'Trichocereus macrogonus', ['Cereus macrogonus'])];
 const synonyms: Record<number, string[]> = { 2: ['Annona marcgravii Mart.', 'Annona muricata Vell.', 'Annona pisonis Mart.'], 5: ['Annona macrocarpa Wercklé'], 3952140: ['Cereus macrogonus Salm-Dyck'] };
-const FIXTURE = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')) as { key: number; slug: string; name: { scientific: string; synonyms: string[] } };
-const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.key] ?? [] } });
+const FIXTURE = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')) as { key: string; slug: string; name: { scientific: string; synonyms: string[] } };
+const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, ids: { ...(FIXTURE as { ids?: object }).ids, gbif: e.gbif }, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.gbif!] ?? [] } });
 const STORE = { get: async (path: string) => { const e = idx.find((x) => path.endsWith(`/${x.key}.json`)); return e ? { json: async () => dossierOf(e) } : null; } };
 const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'r71f', etag: null, fromStore: true, manifest: null, buckets: 32 } as unknown as Loaded;
 const noGbif = (async (u: string | URL) => { throw new Error(`asked ${String(u)}`); }) as typeof fetch;

@@ -136,7 +136,7 @@ const doc = {
   hash: says(/the species slug is hashed \((FNV-1a)\) into one of a number of buckets of roughly three hundred species \((\d+) at the catalogue's present size/),
   bucketRoutes: says(/the device asks (\/api\/sheets)\?b= or (\/api\/entries)\?b= for the buckets/),
   corpusRoute: says(/carries it, from (\/api\/corpus)\)/)[1],
-  dossierRoute: says(/served at (\/api\/dossier)\/<gbifKey>/)[1],
+  dossierRoute: says(/served at (\/api\/dossier)\/<id>/)[1],
   provenance: says(/provenance \(([a-z0-9, ]+)\), status \(([a-z, ]+)\)/),
   nameKinds: says(/nameKind \(([a-z, ]+) or ([a-z]+)\)/),
   batchShape: says(/A log batch decrypts to \{ "v": (\d), "device": "\.\.\.", "changes": \[\.\.\.\] \}/),

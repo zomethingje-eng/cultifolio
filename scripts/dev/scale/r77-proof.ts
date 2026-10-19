@@ -14,6 +14,11 @@
  * hits it gives (`n=100`; a smaller n is the same list cut). The answers are compared whole: every hit in order, every
  * field, the words searched (`relaxed`), the similar-spelling mark (`near`); `narrow` is the key files' answer when a
  * query of several words has every word too common to list.
+ *
+ * Round seventy-eight: the corpus directory may be of any dossier version (`s/v2` or `s/v3`), and each hit is recorded with
+ * its page named by its GBIF key, as the hits of round seventy-seven were: a hit that carries `gbif` (a page keyed by its
+ * id) has `key` set to it and `gbif` taken out, and its `near` named by GBIF key from the corpus's index. So a run on a
+ * corpus of version 3 compares with a run of round seventy-seven on version 2 (`compare`), and rank for rank.
  */
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -28,18 +33,29 @@ const noStatic = (async () => new Response('', { status: 404 })) as unknown as t
 if (mode === 'run') {
   const [dir, how, queries, out] = args;
   const manifest = JSON.parse(readFileSync(`${dir}/manifest.json`, 'utf8'));
-  const indexPath = `s/v2/p/${manifest.files['index.json']}.json`;
-  const old = new Set(Object.entries(manifest.files as Record<string, string>).filter(([n]) => /^postings\/|^short\.json$/.test(n)).map(([, h]) => `s/v2/p/${h}.json`));
+  const v = `s/v${manifest.v}/`;
+  const indexPath = `${v}p/${manifest.files['index.json']}.json`;
+  const old = new Set(Object.entries(manifest.files as Record<string, string>).filter(([n]) => /^postings\/|^short\.json$/.test(n)).map(([, h]) => `${v}p/${h}.json`));
   let reads = 0, bytes = 0, indexReads = 0, oldReads = 0;
-  const at = (k: string) => `${dir}/${k.replace(/^s\/v2\//, '')}`; // a bucket key, on disk
+  const at = (k: string) => `${dir}/${k.slice(v.length)}`; // a bucket key, on disk
   const text = (k: string) => readFileSync(at(k), 'utf8');
-  const has = (k: string) => k.startsWith('s/v2/') && existsSync(at(k));
+  const has = (k: string) => k.startsWith(v) && existsSync(at(k));
   const obj = (k: string, body: string) => ({ text: async () => body, json: async () => JSON.parse(body), etag: `"${k}"`, body });
+  // Each page by its GBIF key (round seventy-eight), from the corpus's index: what a hit's `near` is named by.
+  const gbifOf = new Map((JSON.parse(readFileSync(`${dir}/index.json`, 'utf8')) as Array<{ key: number | string; gbif?: number }>).map((e) => [e.key, e.gbif ?? e.key]));
+  const byGbif = (h: Record<string, unknown>) => {
+    const o: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(h)) {
+      if (k === 'gbif') continue;
+      o[k] = k === 'key' ? (h.gbif ?? x) : k === 'near' && Array.isArray(x) ? x.map((n) => gbifOf.get(n as never) ?? n) : x;
+    }
+    return o;
+  };
   const store = how === 'whole'
-    ? { get: async (k: string) => (k === 's/v2/index.json' ? obj(k, readFileSync(`${dir}/index.json`, 'utf8')) : null), head: async (k: string) => (k === 's/v2/index.json' ? { etag: '"index"' } : null) }
+    ? { get: async (k: string) => (k === `${v}index.json` ? obj(k, readFileSync(`${dir}/index.json`, 'utf8')) : null), head: async (k: string) => (k === `${v}index.json` ? { etag: '"index"' } : null) }
     : {
         get: async (k: string) => {
-          if (k === indexPath || k === 's/v2/index.json') { indexReads++; throw new Error('the index was read'); }
+          if (k === indexPath || k === `${v}index.json`) { indexReads++; throw new Error('the index was read'); }
           if (old.has(k)) oldReads++;
           reads++;
           if (!has(k)) return null;
@@ -63,9 +79,10 @@ if (mode === 'run') {
     const res = await searchGet({ url, platform, fetch: noStatic, request: new Request(url), getClientAddress: () => '192.0.2.77', params: {}, setHeaders: () => {} } as never);
     const ms = performance.now() - t;
     const body = await res.text();
-    let a: { hits?: Array<{ key: number }>; relaxed?: unknown; near?: unknown; narrow?: unknown } = {};
+    let a: { hits?: Array<Record<string, unknown>>; relaxed?: unknown; near?: unknown; narrow?: unknown } = {};
     try { a = JSON.parse(body); } catch { /* a refusal */ }
-    rows.push(JSON.stringify({ q, kind, status: res.status, keys: (a.hits ?? []).map((h) => h.key), hits: md5(JSON.stringify(a.hits ?? [])), relaxed: a.relaxed ?? null, near: a.near ?? false, narrow: a.narrow ?? false, reads: reads - r0, bytes: bytes - b0, ms: Math.round(ms * 10) / 10 }));
+    const hits = (a.hits ?? []).map(byGbif);
+    rows.push(JSON.stringify({ q, kind, status: res.status, keys: hits.map((h) => h.key), hits: md5(JSON.stringify(hits)), relaxed: a.relaxed ?? null, near: a.near ?? false, narrow: a.narrow ?? false, reads: reads - r0, bytes: bytes - b0, ms: Math.round(ms * 10) / 10 }));
   }
   writeFileSync(out, rows.join('\n') + '\n');
   console.log(`${how}: ${lines.length} queries in ${Math.round((performance.now() - t0) / 1000)} s${how === 'files' ? `; the index read ${indexReads} times, the postings and short.json ${oldReads} times` : ''}`);

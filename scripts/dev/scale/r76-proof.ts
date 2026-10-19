@@ -3,7 +3,10 @@
  * the same through the build's lookup files as through the maps over the whole index, and every dossier shows the same
  * photographs read with its stored judgement as with every name of the reference.
  *
- *   SCALE_TMP=<scratch> node scripts/dev/scale/run-ts.mjs scripts/dev/scale/r76-proof.ts <corpus dir: s/v2 after --index>
+ *   SCALE_TMP=<scratch> node scripts/dev/scale/run-ts.mjs scripts/dev/scale/r76-proof.ts <corpus dir: s/v3 after --index>
+ *
+ * Round seventy-eight: a page is keyed by its id (`k<Kew plant_name_id>` or `g<GBIF key>`); the merges are listed by GBIF key
+ * and applied by each page's `gbif`, and each page's own GBIF key is looked up too (the alias the card files hold).
  *
  * The corpus directory is read, never written. Two passes over the lookups:
  *   1. the corpus as it is on disk: its manifest, its files and its index;
@@ -24,11 +27,12 @@ import { slugify, genusOf, canonicalSynonym } from '$core/names';
 import { nameFromSlug } from '$lib/server/synonyms';
 import { parseDossier } from '$dossier/schema';
 import { heldNamesOf } from '$dossier/photo-kind';
+import type { PageId } from '$core/page-id';
 import { sitemapUrls, sitemapDays, sitemapChunk, sitemapPart, lastmodOf, SITEMAP_CHUNK } from '$lib/server/sitemap';
 
 const dir = process.argv[2];
-if (!dir || !existsSync(`${dir}/manifest.json`)) { console.error('usage: r76-proof.ts <s/v2 directory with manifest.json>'); process.exit(2); }
-const root = dir.replace(/\/s\/v2\/?$/, '');
+if (!dir || !existsSync(`${dir}/manifest.json`)) { console.error('usage: r76-proof.ts <s/v3 directory with manifest.json>'); process.exit(2); }
+const root = dir.replace(/\/s\/v\d+\/?$/, '');
 const noStatic = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
 /** As the page and the API carry a value: a field whose value is undefined is no field (JSON, and SvelteKit's own serialiser, read it as absent). */
 const json = (x: unknown) => JSON.stringify(x);
@@ -36,7 +40,7 @@ const json = (x: unknown) => JSON.stringify(x);
 type Tally = { label: string; n: number; same: number; diffs: string[] };
 const tallies: Tally[] = [];
 const tally = (label: string): Tally => { const t = { label, n: 0, same: 0, diffs: [] as string[] }; tallies.push(t); return t; };
-const check = (t: Tally, what: string, a: unknown, b: unknown) => { t.n++; const x = json(a), y = json(b); if (x === y) t.same++; else if (t.diffs.length < 20) t.diffs.push(`${what}\n      files: ${x.slice(0, 300)}\n      index: ${y.slice(0, 300)}`); };
+const check = (t: Tally, what: string, a: unknown, b: unknown) => { t.n++; const x = json(a), y = json(b); if (x === y) t.same++; else if (t.diffs.length < 20) { let i = 0; while (x[i] === y[i]) i++; const from = Math.max(0, i - 120); t.diffs.push(`${what}\n      files: ${x.slice(from, from + 300)}\n      index: ${y.slice(from, from + 300)}`); } };
 const report = (title: string) => {
   console.log(`\n== ${title}`);
   for (const t of tallies.splice(0)) console.log(`  ${t.label}: ${t.n} compared, ${t.same} the same, ${t.n - t.same} different${t.diffs.length ? `\n    ${t.diffs.join('\n    ')}` : ''}`);
@@ -54,7 +58,7 @@ function diskBucket() {
   return bucket(new Proxy(m, { get: (t, p) => (p === 'has' ? (k: string) => existsSync(`${root}/${k}`) : p === 'get' ? (k: string) => readFileSync(`${root}/${k}`, 'utf8') : Reflect.get(t, p)) }) as Map<string, string>);
 }
 
-async function compareLookups(idx: IndexEntry[], files: Loaded, platform: App.Platform, synonymsOf: (k: number) => string[], aliases: readonly Alias[]) {
+async function compareLookups(idx: IndexEntry[], files: Loaded, platform: App.Platform, synonymsOf: (k: PageId) => string[], aliases: readonly Alias[]) {
   const viaFiles: Lookup = filesLookup(files, platform, noStatic);
   const viaIndex: Lookup = indexLookup(idx);
   const held: Loaded = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'index', etag: null, fromStore: false, manifest: null, buckets: files.buckets };
@@ -92,7 +96,10 @@ async function compareLookups(idx: IndexEntry[], files: Loaded, platform: App.Pl
   for (const k of keys) { const e = maps.byName.get(k); check(t, k, [await viaFiles.slug(k), await viaFiles.accepted(k)], [held.bySlug!.get(k) ?? null, e ? [e.key, e.slug, e.name] : null]); }
   t = tally('key → species (`byKey`: card, older names, nearest climates, place)');
   for (const e of idx) { const a = await viaFiles.species(e.key); check(t, String(e.key), a && { ...a, x: undefined }, await viaIndex.species(e.key)); } // `x` is the files' own (namedElsewhere, compared below)
-  for (const k of [1, 0, -1, 99999999999]) check(t, String(k), await viaFiles.species(k), await viaIndex.species(k));
+  for (const k of ['k1', 'g1', 'k9999999999', 'g9999999999'] as PageId[]) check(t, k, await viaFiles.species(k), await viaIndex.species(k));
+  t = tally("a page's own GBIF key → the species (`byGbif`, the card files' `@<key>`)");
+  for (const e of idx) { const a = await viaFiles.gbif(e.gbif!); check(t, String(e.gbif), a && { ...a, x: undefined }, await viaIndex.gbif(e.gbif!)); } // `x` as above
+  for (const k of [1, 0, 99999999999]) check(t, String(k), await viaFiles.gbif(k), await viaIndex.gbif(k));
   t = tally('genera and their counts');
   check(t, 'genera', [...(await viaFiles.genera())], [...(await viaIndex.genera())]);
   t = tally("a record's older names that are another species' accepted name (`namedElsewhere`)");
@@ -164,7 +171,7 @@ const t0 = Date.now();
   _forgetIndex();
   const files = await corpusNow(platform, noStatic);
   console.log(`corpus ${files.corpus} on disk: ${idx.length} species, read through its lookup files: ${!files.idx}`);
-  const syn = new Map<number, string[]>();
+  const syn = new Map<PageId, string[]>();
   for (const e of idx) syn.set(e.key, (JSON.parse(readFileSync(`${dir}/${e.key}.json`, 'utf8')) as { name: { synonyms?: string[] } }).name.synonyms ?? []);
   const readsBefore = store.reads();
   await compareLookups(idx, files, platform, (k) => syn.get(k) ?? [], []);
@@ -175,13 +182,15 @@ const t0 = Date.now();
 
   // 2. Round seventy-three's merges, applied to this copy as the live corpus has them.
   const merges = readFileSync('scripts/merged-pages.txt', 'utf8').split('\n').filter((l) => /^\d/.test(l)).map((l) => l.split('\t')).map(([from, to]) => ({ from: Number(from), to: Number(to) }));
-  const gone = new Map(idx.filter((e) => merges.some((m) => m.from === e.key)).map((e) => [e.key, e]));
-  const merged = idx.filter((e) => !gone.has(e.key)).map((e) => {
-    const m = merges.find((x) => x.to === e.key);
+  // The merges are by GBIF key; each page by its own (round seventy-eight).
+  const gone = new Map(idx.filter((e) => merges.some((m) => m.from === e.gbif)).map((e) => [e.gbif!, e]));
+  const merged = idx.filter((e) => !gone.has(e.gbif!)).map((e) => {
+    const m = merges.find((x) => x.to === e.gbif);
     const away = m && gone.get(m.from);
     return away ? { ...e, syn: [...new Set([...(e.syn ?? []), away.name, ...(away.syn ?? [])])].slice(0, 6), older: [...new Set([...(e.older ?? []), ...(away.older ?? [])])] } : e;
   });
-  const aliases: Alias[] = [...gone.values()].map((e) => ({ slug: e.slug, key: merges.find((m) => m.from === e.key)!.to }));
+  const idOf = new Map(idx.map((e) => [e.gbif!, e.key]));
+  const aliases: Alias[] = [...gone.values()].map((e) => ({ slug: e.slug, key: idOf.get(merges.find((m) => m.from === e.gbif)!.to)! }));
   const text = JSON.stringify(merged, null, 1);
   const p = buildProducts(merged, text, () => new Map(), manifest.built, aliases, (k) => syn.get(k));
   const blobs = new Map<string, string>([[manifestPath(), JSON.stringify(p.manifest)], ...[...p.files].map(([n, body]) => [productPath(p.manifest.files[n]), body] as [string, string])]);

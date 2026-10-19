@@ -1,0 +1,33 @@
+# Round seventy-eight (I): scripts/dev/scale/r77-proof.ts (adapted: hits named by GBIF key) run over the version 3 corpus (bfb1edeee7862289) with this round's code: 69,021 queries in 1,239 s, the index read 0 times. Compared here with round seventy-seven's whole-index run on the version 2 corpus (/tmp/claude-0/rev77/M-old-work/k-whole.jsonl, the merge's r77m proof); against round seventy-seven's own key-file run (M-work/k-files.jsonl) all 69,021 answers are the same, hits, order and fields, the 100 narrow included.
+69021 queries: 68921 the same, 100 "type another letter", 0 other differences
+  common                14017 asked,  14017 the same, 0 narrow, 0 other
+  common-lower           1480 asked,   1480 the same, 0 narrow, 0 other
+  family                  209 asked,    209 the same, 0 narrow, 0 other
+  genus                  2485 asked,   2485 the same, 0 narrow, 0 other
+  grower                 4766 asked,   4766 the same, 0 narrow, 0 other
+  heavy                     8 asked,      8 the same, 0 narrow, 0 other
+  heavy-multi             138 asked,     71 the same, 67 narrow, 0 other
+  multi-common            393 asked,    392 the same, 1 narrow, 0 other
+  multi-genus-place       300 asked,    300 the same, 0 narrow, 0 other
+  multi-genus-word        200 asked,    200 the same, 0 narrow, 0 other
+  multi-random           1431 asked,   1426 the same, 5 narrow, 0 other
+  multi-reversed         1000 asked,   1000 the same, 0 narrow, 0 other
+  name                   8947 asked,   8947 the same, 0 narrow, 0 other
+  name-lower             8947 asked,   8947 the same, 0 narrow, 0 other
+  older                  5965 asked,   5965 the same, 0 narrow, 0 other
+  place                   348 asked,    348 the same, 0 narrow, 0 other
+  prefix                 4031 asked,   4028 the same, 3 narrow, 0 other
+  prefix-epithet         6565 asked,   6565 the same, 0 narrow, 0 other
+  punctuation            1444 asked,   1444 the same, 0 narrow, 0 other
+  punctuation-genus      1000 asked,   1000 the same, 0 narrow, 0 other
+  punctuation-short       142 asked,    131 the same, 11 narrow, 0 other
+  short                   375 asked,    375 the same, 0 narrow, 0 other
+  tests                   845 asked,    832 the same, 13 narrow, 0 other
+  typo                   2393 asked,   2393 the same, 0 narrow, 0 other
+  typo-common             799 asked,    799 the same, 0 narrow, 0 other
+  typo-genus              793 asked,    793 the same, 0 narrow, 0 other
+files read per query, cold (directories, key files, answers): median 11, 90% 28, 99% 76, most 122; bytes median 146746, 90% 374661, 99% 1036839, most 2110253
+
+Every "type another letter" (narrow):
+  "Cape D" (prefix): the whole index answers 100 hits
+  "Cape S" (prefix): the whole index answers 100 hits

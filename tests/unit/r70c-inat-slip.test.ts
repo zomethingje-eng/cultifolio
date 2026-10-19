@@ -21,16 +21,16 @@ const CASES = [
   { key: 3084103, name: 'Echinocereus chisoensis', taxon: 438545, taxonName: 'Echinocereus chisosensis', photos: 41 },
   { key: 4252157, name: 'Othonna cakilefolia', taxon: 591068, taxonName: 'Othonna cakilifolia', photos: 40 }
 ];
-type D = { key: number; name: { scientific: string; family?: string }; ids: { inat?: number }; links: Record<string, string>; photos: Array<{ src: string }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+type D = { key: number; name: { scientific: string; family?: string }; ids: { gbif?: number; inat?: number }; links: Record<string, string>; photos: Array<{ src: string }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
 const inatPhotos = (n: number) => Array.from({ length: n }, (_, i) => ({ src: 'inat', id: String(i), url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${i}/large.jpg`, thumb: '', licence: 'by', attribution: 'a' }));
 function corpus(mode: 'found' | 'left'): Record<string, D> {
   const docs: Record<string, D> = {};
-  for (const e of W.reference) docs[`${e.key}.json`] = { key: e.key, name: { scientific: e.name, family: e.family }, ids: {}, links: {}, photos: [], upstream: {} };
+  for (const e of W.reference) docs[`${e.key}.json`] = { key: e.key, name: { scientific: e.name, family: e.family }, ids: { gbif: e.key }, links: {}, photos: [], upstream: {} };
   for (const c of CASES) {
     const d = docs[`${c.key}.json`];
     const before = `iNaturalist's taxon 1 (${c.name}) is inactive; followed to its current taxon ${c.taxon}`;
     if (mode === 'found') {
-      Object.assign(d, { ids: { inat: c.taxon }, links: { inat: `https://www.inaturalist.org/taxa/${c.taxon}` }, photos: inatPhotos(c.photos) });
+      Object.assign(d, { ids: { gbif: d.key, inat: c.taxon }, links: { inat: `https://www.inaturalist.org/taxa/${c.taxon}` }, photos: inatPhotos(c.photos) });
       d.upstream['inat.taxon'] = { status: 'ok', at: 'x', detail: before };
     } else {
       // As 70b's fill left it (the owner's second run).

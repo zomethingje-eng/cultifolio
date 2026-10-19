@@ -21,7 +21,7 @@ const mk = (names: string[]) => names.map((name, i) => ({ key: 1000 + i, slug: n
 const IDX = mk(['Copiapoa cinerea', 'Copiapoa humilis', 'Aloe vera', 'Lithops lesliei']);
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 function platform() {
-  const m = new Map([['s/v2/index.json', JSON.stringify(IDX)]]);
+  const m = new Map([['s/v3/index.json', JSON.stringify(IDX)]]);
   const store = {
     get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: md5(m.get(k)!) } : null),
     head: async (k: string) => (m.has(k) ? { etag: md5(m.get(k)!) } : null)

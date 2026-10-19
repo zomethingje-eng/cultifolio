@@ -34,7 +34,7 @@ afterEach(() => vi.restoreAllMocks());
 const W = { key: 5411106, slug: 'welwitschia-mirabilis', name: 'Welwitschia mirabilis', family: 'Welwitschiaceae', open: 900, photos: 20, climate: 'ok', thumb: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpg' };
 
 it('finding 13, fixed in round sixty-two: without a manifest a bucket whose species cannot be read answers 503, never 200 without it', async () => {
-  const b = bucket([['s/v2/index.json', JSON.stringify([W])]]);
+  const b = bucket([['s/v3/index.json', JSON.stringify([W])]]);
   const c = await corpusNow(plat(b), noStatic);
   const { GET } = await import('../../src/routes/api/sheets/+server');
   const r = await GET(ev(`/api/sheets?b=${bucketOf(W.slug, c.buckets)}&n=${c.buckets}`, plat(b)));

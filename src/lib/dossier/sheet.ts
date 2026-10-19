@@ -1,4 +1,5 @@
 import type { Dossier } from '$dossier/schema';
+import type { PageId } from '$core/page-id';
 
 /**
  * A sheet: what a plant's page, a label and a batch need of its species, and nothing a species page shows beyond that:
@@ -12,7 +13,10 @@ export type SheetClimate =
   | { status: 'ok'; cells: number; records: number; at: { lat: number }; months: SheetMonth[]; p10: Pick<SheetMonth, 'tmin' | 'dli'>[]; p90: Pick<SheetMonth, 'tmin' | 'dli'>[]; extremes?: Ok['extremes']; extremesStatus?: Ok['extremesStatus'] }
   | { status: 'pending' | 'none' | 'refused'; detail?: string };
 export type Sheet = {
-  key: number;
+  /** The page's id (round seventy-eight). */
+  key: PageId;
+  /** The page's GBIF key (`ids.gbif`), which a plant's `taxonKey` is compared with: a homonym's sheet is under `<slug>-<gbif>`. */
+  gbif: number;
   slug: string;
   name: { scientific: string; family?: string };
   thumb?: string;
@@ -32,6 +36,7 @@ export function sheetOf(d: Dossier, thumb?: string, credit?: string): Sheet {
   const c = d.climate;
   return {
     key: d.key,
+    gbif: d.ids.gbif,
     slug: d.slug,
     name: { scientific: d.name.scientific, family: d.name.family },
     thumb,

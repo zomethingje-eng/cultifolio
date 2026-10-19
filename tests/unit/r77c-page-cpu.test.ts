@@ -26,15 +26,17 @@ import { before77 } from './helpers/before-r77';
 import { slugify, genusOf } from '$core/names';
 import { resetRateLimits } from '$lib/server/sync';
 import { load as speciesLoad } from '../../src/routes/species/[slug]/+page.server';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const e = (key: number, name: string, o: Partial<IndexEntry> = {}): IndexEntry => ({ key, slug: slugify(name), name, family: 'Asphodelaceae', origin: ['Cape Provinces'], photos: 9, open: key % 97, climate: 'ok', thumb: `https://inaturalist-open-data.s3.amazonaws.com/photos/${key}/medium.jpg`, credit: 'CC BY, someone', changed: 20_000, ...o });
+// Each page keyed by its GBIF key, in GBIF's namespace (round seventy-eight); `near` as GBIF keys, written as ids.
+const e = (key: number, name: string, { near, ...o }: Omit<Partial<IndexEntry>, 'near'> & { near?: number[] } = {}): IndexEntry => ({ key: gbifPage(key), gbif: key, ...(near ? { near: near.map(gbifPage) } : {}), slug: slugify(name), name, family: 'Asphodelaceae', origin: ['Cape Provinces'], photos: 9, open: key % 97, climate: 'ok', thumb: `https://inaturalist-open-data.s3.amazonaws.com/photos/${key}/medium.jpg`, credit: 'CC BY, someone', changed: 20_000, ...o });
 const IDX: IndexEntry[] = [
   e(11, 'Aloe arborescens', { syn: ['Aloe fruticosa'], near: [12, 13, 31] }),
   e(12, 'Aloe ferox', { syn: ['Aloe horrida'], common: 'Bitter aloe' }),
   e(13, 'Aloe vera', { syn: ['Aloe barbadensis'], climate: 'none' }),
   e(31, 'Gasteria carinata', { syn: ['Aloe carinata'] })
 ];
-const template = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
+const template = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
 const dossierOf = (x: IndexEntry) => JSON.stringify({ ...template, key: x.key, slug: x.slug, name: { ...template.name, scientific: x.name, genus: genusOf(x.name), synonyms: x.syn ?? [] } });
 
 function bucket(m: Map<string, string>) {
@@ -142,7 +144,7 @@ describe('the parsed products an isolate holds (round seventy-seven)', () => {
       m.set(productPath(h), JSON.stringify({ i, pad: 'x'.repeat(1024 * 1024) }));
     }
     const store = bucket(m);
-    const c = { at: Date.now(), idx: null, bySlug: null, corpus: 'test', etag: null, fromStore: true, manifest: { v: 2, id: 'test', built: '', species: 1, buckets: 32, postings: 64, files } as Manifest, buckets: 32 } as Loaded;
+    const c = { at: Date.now(), idx: null, bySlug: null, corpus: 'test', etag: null, fromStore: true, manifest: { v: 3, id: 'test', built: '', species: 1, buckets: 32, postings: 64, files } as Manifest, buckets: 32 } as Loaded;
     for (let i = 0; i < 30; i++) expect(((await product<{ i: number }>(c, platformOf(store), noStatic, `catalogue/x-${i}.json`)) ?? { i: -1 }).i).toBe(i);
     const held = dossiers._productsHeld();
     expect(dossiers._PRODUCTS_BYTES).toBe(12 * 1024 * 1024);

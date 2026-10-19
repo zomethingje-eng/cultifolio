@@ -13,9 +13,10 @@ import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
 import { dossierPath } from '$dossier/schema';
 import { readFileSync } from 'node:fs';
+import type { PageId } from '../../src/lib/core/page-id';
 
-const mk = (names: string[]) => names.map((name, i) => ({ key: 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
-const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei']).map((e) => (e.name === 'Copiapoa cinerea' ? { ...e, key: 5384013 } : e));
+const mk = (names: string[]) => names.map((name, i) => ({ key: `g${1000 + i}` as PageId, gbif: 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
+const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei']).map((e) => (e.name === 'Copiapoa cinerea' ? { ...e, key: 'k2735933' as PageId, gbif: 5384013 } : e));
 const B = mk(['Adenia globosa', 'Aloe vera', 'Lithops lesliei', 'Welwitschia mirabilis']);
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 
@@ -67,7 +68,7 @@ describe('the page cache stores a page under the corpus it was rendered from (ro
   it('the species page renders from the corpus the hook holds, even when the current one has dropped the species', async () => {
     _forgetIndex();
     const a = products(A), b = products(B);
-    const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)], [dossierPath(5384013), readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')]]);
+    const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)], [dossierPath('k2735933'), readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')]]);
     const tag = (k: string) => { let h = 0; for (const ch of m.get(k)!) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return `"${h.toString(16)}"`; };
     const store = {
       get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: tag(k) } : null),

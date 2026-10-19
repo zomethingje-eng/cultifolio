@@ -13,11 +13,12 @@
  * Round seventy's second pass (triage-69 B6, R47-5): a Wikidata item that changed, and an IPNI identifier that newly
  * disagrees with the POWO one.
  */
+import type { PageId } from '../core/page-id';
 import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
 
 type Row = { status?: string; detail?: string } | undefined;
 export interface Dossierish {
-  key?: number;
+  key?: PageId;
   name?: { scientific: string; synonyms?: string[]; kew?: { synonyms?: string[]; acceptedElsewhere?: string[] } };
   photos?: unknown[];
   climate?: { status?: string };
@@ -72,7 +73,7 @@ function lostParts(prev: Dossierish, next: Dossierish): string[] {
  */
 const shownCount = (d: Dossierish, held?: HeldNames | null): number => {
   const ps = (d.photos ?? []) as Parameters<typeof shownPhotos>[0];
-  return d.name ? shownPhotos(ps.filter((p) => p && typeof p.url === 'string'), kindNamesOf(d, held)).length : ps.length;
+  return d.name ? shownPhotos(ps.filter((p) => p && typeof p.url === 'string'), kindNamesOf({ key: d.key, name: d.name }, held)).length : ps.length;
 };
 
 /** The losses from `prev` to `next`, as lines to print; empty when nothing was lost. `held` is the reference's names, as the page reads them. */

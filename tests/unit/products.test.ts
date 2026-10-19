@@ -19,13 +19,14 @@ import { GET as searchGET } from '../../src/routes/api/search/+server';
 import { GET as rowsGET } from '../../src/routes/api/rows/+server';
 import { GET as sheetsGET } from '../../src/routes/api/sheets/+server';
 import { resetRateLimits } from '$lib/server/sync';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const GENERA = ['Aloe', 'Copiapoa', 'Conophytum', 'Haworthia', 'Lithops', 'Mammillaria', 'Echeveria', 'Gasteria', 'Tulista', 'Welwitschia'];
 const index = (n: number): IndexEntry[] =>
   Array.from({ length: n }, (_, i) => {
     const g = GENERA[i % GENERA.length];
     const name = `${g} sp${i}`;
-    return { key: i + 1, slug: name.toLowerCase().replace(/ /g, '-'), name, family: i % 3 ? 'Cactaceae' : 'Asphodelaceae', common: i % 7 ? undefined : 'silver cactus', origin: [i % 2 ? 'Chile North' : 'Cape Provinces'], photos: 3, open: i, climate: i % 2 ? 'ok' : 'none', syn: i % 5 ? undefined : [`Oldname sp${i}`] };
+    return { key: gbifPage(i + 1), gbif: i + 1, slug: name.toLowerCase().replace(/ /g, '-'), name, family: i % 3 ? 'Cactaceae' : 'Asphodelaceae', common: i % 7 ? undefined : 'silver cactus', origin: [i % 2 ? 'Chile North' : 'Cape Provinces'], photos: 3, open: i, climate: i % 2 ? 'ok' : 'none', syn: i % 5 ? undefined : [`Oldname sp${i}`] };
   });
 
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
@@ -43,7 +44,7 @@ function bucketFor(idx: IndexEntry[], opts: { manifest?: boolean; drop?: string[
   // Round seventy-seven: `before77`, a manifest built before the search's key files, which the postings path answers.
   const { files, stored } = built;
   const manifest = opts.before77 ? before77(built.manifest) : built.manifest;
-  const objects: Record<string, unknown> = { 's/v2/index.json': idx };
+  const objects: Record<string, unknown> = { 's/v3/index.json': idx };
   if (opts.manifest !== false) {
     objects[manifestPath()] = manifest;
     for (const [name, body] of files) if (!opts.drop?.includes(name) && manifest.files[name]) objects[productPath(manifest.files[name])] = JSON.parse(body);
@@ -92,7 +93,7 @@ describe('the products', () => {
     expect(a.manifest.buckets).toBe(32);
     expect(a.manifest.species).toBe(200);
     const entries = bucketNames(32).flatMap((bk) => JSON.parse(a.files.get(`entries/${bk}.json`)!) as IndexEntry[]);
-    expect(entries.map((e) => e.key).sort((x, y) => x - y)).toEqual(idx.map((e) => e.key));
+    expect(entries.map((e) => e.gbif!).sort((x, y) => x - y)).toEqual(idx.map((e) => e.gbif));
     for (const bk of bucketNames(32)) for (const e of JSON.parse(a.files.get(`entries/${bk}.json`)!) as IndexEntry[]) expect(bucketOf(e.slug, 32)).toBe(bk);
     // every entry is posted under every key of every word it is searched by, older names and common names included, and each posting file is there, empty or not
     expect(a.manifest.postings).toBe(64);
@@ -103,7 +104,7 @@ describe('the products', () => {
     expect(posting('zzz')).toEqual([]);
     expect([...a.files.keys()].filter((n) => n.startsWith('postings/')).length).toBe(64);
     // each product's hash is the md5 of its body: its name in the bucket
-    for (const [name, body] of a.files) expect(a.manifest.files[name]).toMatch(/^[0-9a-f]{32}$/), expect(productPath(a.manifest.files[name])).toBe(`s/v2/p/${a.manifest.files[name]}.json`), void body;
+    for (const [name, body] of a.files) expect(a.manifest.files[name]).toMatch(/^[0-9a-f]{32}$/), expect(productPath(a.manifest.files[name])).toBe(`s/v3/p/${a.manifest.files[name]}.json`), void body;
     expect(JSON.parse(a.files.get('catalogue/genus-all.json')!)).toEqual(JSON.parse(JSON.stringify(rowsOnly(catalogueOf(idx, 'genus', 'all')))));
     expect(a.files.has('catalogue/origin-noclimate.json')).toBe(true);
     expect(JSON.parse(a.files.get('index.json')!)).toEqual(idx);
@@ -205,7 +206,7 @@ describe('the Worker and the manifest', () => {
     expect(b.manifest.files['index.json']).toBe(a.manifest.files['index.json']);
     expect(b.manifest.id).not.toBe(a.manifest.id);
     // an isolate holding corpus A (no manifest) sees a manifest for B land before B's index: it keeps A, under A's id
-    const objects: Record<string, unknown> = { 's/v2/index.json': idx };
+    const objects: Record<string, unknown> = { 's/v3/index.json': idx };
     const store = { get: async (k: string) => (k in objects ? { json: async () => objects[k], text: async () => JSON.stringify(objects[k]), etag: `"${contentHash(JSON.stringify(objects[k])).slice(0, 8)}"` } : null), head: async (k: string) => (k in objects ? { etag: `"${contentHash(JSON.stringify(objects[k])).slice(0, 8)}"` } : null) };
     const platform = platformWith(store as never);
     const before = await getCorpus(platform, noStatic);

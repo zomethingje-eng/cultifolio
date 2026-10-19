@@ -11,27 +11,28 @@ import { photoAt } from '$dossier/photo-size';
 import * as size from '$dossier/photo-size';
 import { commonsAuthor } from '$dossier/photo-credit';
 import { spellingKey } from '$dossier/epithet';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const INDEX = [
-  { key: 3170241, name: 'Asclepias curassavica', syn: ['Asclepias aurantiaca'], older: ['Asclepias margaritacea', 'Asclepias syriaca'] },
-  { key: 3170247, name: 'Asclepias syriaca', syn: ['Asclepias cornuti'] },
-  { key: 2777724, name: 'Aloe vera', syn: ['Aloe barbadensis'], older: ['Aloe maculata', 'Aloe vulgaris'] },
-  { key: 2777430, name: 'Aloe maculata', syn: ['Aloe picta subsp. major'] },
-  { key: 5829525, name: 'Pachypodium windsorii', syn: ['Pachypodium baronii var. windsorii'] },
-  { key: 5535507, name: 'Pachypodium baronii', syn: ['Pachypodium baronii var. erythreum'] },
-  { key: 3702051, name: 'Nepenthes dubia', syn: ['Nepenthes tenuis'] },
-  { key: 10896199, name: 'Nepenthes sumagaya', syn: ['Nepenthes amabilis'] },
-  { key: 3702095, name: 'Nepenthes aristolochioides' },
-  { key: 3702163, name: 'Nepenthes rajah' },
-  { key: 3943031, name: 'Eriosyce villosa', older: ['Neoporteria villosa'] },
-  { key: 10705370, name: 'Eriosyce spinosior', syn: ['Chilenia fobeana'] },
-  { key: 2771040, name: 'Hesperaloe chiangii', syn: ['Hesperaloe funifera subsp. chiangii'] },
-  { key: 2775604, name: 'Yucca carnerosana', syn: ['Samuela carnerosana'] },
-  { key: 9485745, name: 'Aloidendron dichotomum', syn: ['Aloe dichotoma'] },
-  { key: 4054801, name: 'Cyphostemma juttae', syn: ['Cissus juttae'] },
-  { key: 4198251, name: 'Dudleya pachyphytum' },
-  { key: 4198252, name: 'Pachyphytum oviferum' },
-  { key: 2766653, name: 'Agave cocui' }
+  { key: gbifPage(3170241), name: 'Asclepias curassavica', syn: ['Asclepias aurantiaca'], older: ['Asclepias margaritacea', 'Asclepias syriaca'] },
+  { key: gbifPage(3170247), name: 'Asclepias syriaca', syn: ['Asclepias cornuti'] },
+  { key: gbifPage(2777724), name: 'Aloe vera', syn: ['Aloe barbadensis'], older: ['Aloe maculata', 'Aloe vulgaris'] },
+  { key: gbifPage(2777430), name: 'Aloe maculata', syn: ['Aloe picta subsp. major'] },
+  { key: gbifPage(5829525), name: 'Pachypodium windsorii', syn: ['Pachypodium baronii var. windsorii'] },
+  { key: gbifPage(5535507), name: 'Pachypodium baronii', syn: ['Pachypodium baronii var. erythreum'] },
+  { key: gbifPage(3702051), name: 'Nepenthes dubia', syn: ['Nepenthes tenuis'] },
+  { key: gbifPage(10896199), name: 'Nepenthes sumagaya', syn: ['Nepenthes amabilis'] },
+  { key: gbifPage(3702095), name: 'Nepenthes aristolochioides' },
+  { key: gbifPage(3702163), name: 'Nepenthes rajah' },
+  { key: gbifPage(3943031), name: 'Eriosyce villosa', older: ['Neoporteria villosa'] },
+  { key: gbifPage(10705370), name: 'Eriosyce spinosior', syn: ['Chilenia fobeana'] },
+  { key: gbifPage(2771040), name: 'Hesperaloe chiangii', syn: ['Hesperaloe funifera subsp. chiangii'] },
+  { key: gbifPage(2775604), name: 'Yucca carnerosana', syn: ['Samuela carnerosana'] },
+  { key: gbifPage(9485745), name: 'Aloidendron dichotomum', syn: ['Aloe dichotoma'] },
+  { key: gbifPage(4054801), name: 'Cyphostemma juttae', syn: ['Cissus juttae'] },
+  { key: gbifPage(4198251), name: 'Dudleya pachyphytum' },
+  { key: gbifPage(4198252), name: 'Pachyphytum oviferum' },
+  { key: gbifPage(2766653), name: 'Agave cocui' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
@@ -60,7 +61,7 @@ describe('C6: an older name is the species\' own only where no species of the re
   });
   it('epithetRank reads a joined name: "Nepenthesdubia1" leads before a file under the older name', () => {
     const ps = ['File:Nepenthes tenuis1.jpg', 'File:Nepenthesdubia1.jpg'].map((t) => photo({ title: t }));
-    expect(leadOf(ps, { scientific: 'Nepenthes dubia', synonyms: ['Nepenthes tenuis Nerz & Wistuba'], key: 3702051, held: HELD })?.id).toBe('File:Nepenthesdubia1.jpg');
+    expect(leadOf(ps, { scientific: 'Nepenthes dubia', synonyms: ['Nepenthes tenuis Nerz & Wistuba'], key: gbifPage(3702051), held: HELD })?.id).toBe('File:Nepenthesdubia1.jpg');
   });
 });
 

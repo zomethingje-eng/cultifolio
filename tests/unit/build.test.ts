@@ -27,7 +27,9 @@ describe('dossier builder', () => {
     expect(d.photos.filter((p) => p.captive).length).toBe(3);
     expect(d.summary?.licence).toBe('CC BY-SA 4.0');
     expect(d.links.powo).toContain('powo.science.kew.org');
-    expect(d.literature.length).toBe(1);
+    // Literature is off from round seventy-eight (the owner's decision 2): the fixture's paper is not asked for.
+    expect(d.literature.length).toBe(0);
+    expect(d.upstream.openalex.status).toBe('skipped');
     expect(d.upstream['gbif.occurrences'].status).toBe('ok');
   });
 
@@ -69,7 +71,8 @@ describe('dossier builder', () => {
     const r = await buildDossier('Echinocactus cinereus', opts(fx));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.dossier.key).toBe(5384013);
+    expect(r.dossier.ids.gbif).toBe(5384013);
+    expect(r.dossier.key).toBe('g5384013'); // a new page: its GBIF key, until --index gives it Kew's id by the rule (round seventy-eight)
     expect(r.dossier.name.scientific).toBe('Copiapoa cinerea');
     expect(r.dossier.name.status).toBe('accepted');
     expect(r.dossier.upstream['gbif.accepted']?.detail).toMatch(/followed from Echinocactus cinereus/);
@@ -85,7 +88,8 @@ describe('dossier builder', () => {
     const r = await buildDossier('Copiapoa columna-alba', opts(fx));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.dossier.key).toBe(5384013);
+    expect(r.dossier.ids.gbif).toBe(5384013);
+    expect(r.dossier.key).toBe('g5384013'); // a new page: its GBIF key, until --index gives it Kew's id by the rule (round seventy-eight)
     expect(r.dossier.name.scientific).toBe('Copiapoa cinerea');
     expect(r.dossier.upstream['gbif.accepted']?.detail).toMatch(/followed from Copiapoa columna-alba, which the backbone holds as a synonym, a synonym of Copiapoa cinerea columna-alba/);
   });
@@ -227,14 +231,14 @@ describe('round five: an offline re-derivation carries the name block', () => {
     // The backbone is gone: every /species request is refused. Only the range and the records are served.
     const table = copiapoa();
     for (const k of Object.keys(table)) if (/\/species\/\d+$|\/species\/\d+\/(synonyms|vernacularNames)|species\/match/.test(k)) table[k] = { __status: 'refused', status: 'refused', detail: 'offline' };
-    const again = await buildDossier(prev.key, { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.key, name: prev.name, accepted: prev.upstream['gbif.accepted'], builtOn: prev.built } });
+    const again = await buildDossier(prev.ids.gbif, { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif, name: prev.name, accepted: prev.upstream['gbif.accepted'], builtOn: prev.built } });
     if (!again.ok) throw new Error(again.reason);
     expect(again.dossier.name).toEqual(prev.name);
     expect(again.dossier.upstream['gbif.species'].detail).toMatch(/carried from build of \d{4}-\d{2}-\d{2} \(offline re-derivation/);
     expect(again.dossier.upstream['gbif.synonyms'].detail).toMatch(/carried/);
     expect(again.dossier.occurrences.nOpenInRange).toBe(prev.occurrences.nOpenInRange);
     // By name, the carried block is ignored and the backbone is asked (and here refused).
-    const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.key, name: prev.name } });
+    const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif, name: prev.name } });
     expect(byName.ok).toBe(false);
   });
 });

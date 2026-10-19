@@ -19,18 +19,19 @@ import { error, isHttpError } from '@sveltejs/kit';
 
 export type { IndexEntry } from '$dossier/index-entry';
 import type { IndexEntry } from '$dossier/index-entry';
+import type { PageId } from '$core/page-id';
 
 export type Fetch = typeof fetch;
 
-const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v2/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v3/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 const fixtureIndex = (import.meta.glob('/fixtures/dossiers/index.json', { eager: true, import: 'default' }) as Record<string, IndexEntry[]>)['/fixtures/dossiers/index.json'] ?? [];
 
 /**
  * The fixture's dossiers, parsed when the fixture corpus is first read (round seventy-seven): parsed as the module
  * loaded, every new isolate of the live site checked four test dossiers against the schema before its first page.
  */
-let fixturesParsed: Map<number, Dossier> | null = null;
-function fixturesByKey(): Map<number, Dossier> {
+let fixturesParsed: Map<PageId, Dossier> | null = null;
+function fixturesByKey(): Map<PageId, Dossier> {
   if (fixturesParsed) return fixturesParsed;
   fixturesParsed = new Map();
   for (const [path, json] of Object.entries(fixtureFiles)) {
@@ -66,7 +67,7 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
  * fixture. Under a manifest that names them (`fromFiles`), both are null: every name a page asks for is read from the
  * build's files by key (./lookup.ts), and the index is read only by the search, on its first query (`indexOf`).
  */
-export type Loaded = { at: number; idx: IndexEntry[] | null; bySlug: Map<string, number> | null; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
+export type Loaded = { at: number; idx: IndexEntry[] | null; bySlug: Map<string, PageId> | null; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
 /** Whether a corpus is read through the build's lookup files rather than its index (round seventy-six). */
 export const fromFiles = (c: Pick<Loaded, 'manifest'>): boolean => !!c.manifest && hasLookups(c.manifest);
 /**
@@ -329,7 +330,17 @@ async function fromStore(store: R2Bucket, previous: Loaded | null): Promise<Load
     throw new Refused('the top-level index is not a list of species');
   }
   if (refused || manifest) throw new Refused('the bucket holds a corpus this build cannot read');
-  return keep();
+  const k = keep();
+  if (k) return k;
+  // A bucket that holds the corpus of the version before and none of this one (round seventy-eight: `s/v2/` under a
+  // Worker of `s/v3/`) is a deploy that came before its corpus's upload: a 503 that says the reference could not be read,
+  // never the fixture's species. `scripts/corpus-ready.mjs` stops such a deploy; this is the Worker's own guard.
+  const before = `s/v${DOSSIER_V - 1}/manifest.json`;
+  if (await (typeof store.head === 'function' ? store.head(before) : store.get(before))) {
+    console.error(`the bucket holds ${before} and no ${mPath}: this Worker reads only version ${DOSSIER_V}; upload its corpus (the corpus step)`);
+    throw new Refused(`the bucket holds no version ${DOSSIER_V} corpus`);
+  }
+  return null;
 }
 function parseIndex(text: string): IndexEntry[] | null {
   try {
@@ -471,7 +482,7 @@ function trim(keep: string): void {
  * the first /api/dossier on a cold isolate could answer 404 (round sixty; the harness review, 10). A read that fails (R2
  * did not answer) throws; a stored dossier that does not parse is null, and logged.
  */
-export async function getDossier(platform: Platform, fetch: Fetch, key: number, held?: Loaded): Promise<Dossier | null> {
+export async function getDossier(platform: Platform, fetch: Fetch, key: PageId, held?: Loaded): Promise<Dossier | null> {
   const c = held ?? (await loadIndex(platform, fetch));
   // The reference's names, read from the index (memoised by the index array), so an uploader's slip in a Commons title is
   // read as the index reads it when it is written (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
@@ -504,7 +515,7 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number, 
   return c.corpus === 'fixture' ? (fixturesByKey().get(key) ?? null) : null;
 }
 
-export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<number | null> {
+export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<PageId | null> {
   const c = held ?? (await loadIndex(platform, fetch)); // the request's corpus, and its own slug map (round fifty-nine: it read whichever was current)
   const hit = await lookupOf(c, platform, fetch).slug(slug);
   if (hit != null) return hit;
@@ -513,7 +524,7 @@ export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string
   return null;
 }
 
-const fixtureGenera = import.meta.glob('/fixtures/dossiers/s/v2/g/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+const fixtureGenera = import.meta.glob('/fixtures/dossiers/s/v3/g/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 
 /** A genus's record (its Wikipedia lead), or null when none was ever written. R2, then the static corpus, then the fixtures. */
 export async function getGenus(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<GenusRecord | null> {
@@ -529,7 +540,7 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string, h
   }
   const stat = c.fromStore ? null : await staticJson<unknown>(fetch, genusPath(slug));
   if (stat) return parse(stat);
-  return c.corpus === 'fixture' ? (parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null) : null;
+  return c.corpus === 'fixture' ? (parse(fixtureGenera[`/fixtures/dossiers/s/v3/g/${slug}.json`]) ?? null) : null;
 }
 
 /**

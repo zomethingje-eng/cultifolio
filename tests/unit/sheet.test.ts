@@ -210,7 +210,7 @@ describe('round five: seasons the rules do not earn', () => {
 describe('the sheet carries the habitat latitude (round twelve, 1)', () => {
   it('a species with a climate and no map marker still tells the label which hemisphere it grows in', async () => {
     const { sheetOf } = await import('$lib/server/sheets');
-    const d = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v2/5384013.json')).default));
+    const d = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v3/k2735933.json')).default));
     d.centroid = null; // a species with too few in-range records for a marker
     const s = sheetOf(d);
     expect(s.centroid).toBeNull();

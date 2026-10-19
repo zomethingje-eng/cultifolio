@@ -45,7 +45,7 @@ function clause(t: string, start: string, end: string): string {
 
 /* ---- the photographs' addresses ---- */
 const policy = new Set([...(/'img-src':\s*\[([^\]]*)\]/.exec(raw('svelte.config.js'))![1].matchAll(/https:\/\/([^'"]+)/g))].map((m) => m[1]));
-const base = JSON.parse(raw('fixtures/dossiers/s/v2/5384013.json'));
+const base = JSON.parse(raw('fixtures/dossiers/s/v3/k2735933.json'));
 const C = 'https://upload.wikimedia.org/wikipedia/commons';
 /** One photograph of each shape a dossier stores, each as its source gives it. */
 const photos = [

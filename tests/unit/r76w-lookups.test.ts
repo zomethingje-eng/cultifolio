@@ -32,9 +32,11 @@ import { GET as sitemapGet } from '../../src/routes/sitemap.xml/+server';
 import { GET as sitemapPartGet } from '../../src/routes/sitemap-[n].xml/+server';
 import { GET as searchGet } from '../../src/routes/api/search/+server';
 import { GET as indexGet } from '../../src/routes/api/index/+server';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const thumb = (k: number) => `https://inaturalist-open-data.s3.amazonaws.com/photos/${k}/medium.jpg`;
-const e = (key: number, name: string, o: Partial<IndexEntry> = {}): IndexEntry => ({ key, slug: slugify(name), name, family: name.startsWith('Rosa') ? 'Rosaceae' : 'Asphodelaceae', origin: ['Cape Provinces'], photos: 9, open: key % 97, climate: key % 3 ? 'ok' : 'none', thumb: thumb(key), credit: 'CC BY, someone', changed: 20_000 + key % 7, ...o });
+// Each page keyed by its GBIF key, in GBIF's namespace (round seventy-eight); `near` as GBIF keys, written as ids.
+const e = (key: number, name: string, { near, ...o }: Omit<Partial<IndexEntry>, 'near'> & { near?: number[] } = {}): IndexEntry => ({ key: gbifPage(key), gbif: key, ...(near ? { near: near.map(gbifPage) } : {}), slug: slugify(name), name, family: name.startsWith('Rosa') ? 'Rosaceae' : 'Asphodelaceae', origin: ['Cape Provinces'], photos: 9, open: key % 97, climate: key % 3 ? 'ok' : 'none', thumb: thumb(key), credit: 'CC BY, someone', changed: 20_000 + key % 7, ...o });
 const IDX: IndexEntry[] = [
   e(11, 'Aloe arborescens', { syn: ['Aloe fruticosa'], near: [12, 13, 31] }),
   e(12, 'Aloe ferox', { syn: ['Aloe horrida', 'Cotyledon mammillaris'], common: 'Bitter aloe' }),
@@ -50,10 +52,10 @@ const IDX: IndexEntry[] = [
   e(52, 'Rosa rugosa', { thumb: undefined, credit: undefined }),
   e(53, 'Rosa × alba', { slug: 'rosa-x-alba' })
 ];
-const ALIASES: Alias[] = [{ slug: 'coryphantha-macromeris', key: 41 }];
-const template = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
+const ALIASES: Alias[] = [{ slug: 'coryphantha-macromeris', key: gbifPage(41) }];
+const template = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
 const SYN: Record<number, string[]> = { 31: ['Annona muricata Vell.', 'Annona marcgravii Mart.'], 12: ['Aloe horrida Haw.', 'Cotyledon mammillaris L.f.', 'Aloe vera (L.) Burm.f.'], 15: ['Cotyledon mammillaris Thunb.'] };
-const dossierOf = (x: IndexEntry) => JSON.stringify({ ...template, key: x.key, slug: x.slug, name: { ...template.name, scientific: x.name, genus: genusOf(x.name), synonyms: SYN[x.key] ?? x.syn ?? [] } });
+const dossierOf = (x: IndexEntry) => JSON.stringify({ ...template, key: x.key, slug: x.slug, name: { ...template.name, scientific: x.name, genus: genusOf(x.name), synonyms: SYN[x.gbif!] ?? x.syn ?? [] } });
 
 /** A bucket over a map, counting the reads of each object. */
 function bucket(m: Map<string, string>) {
@@ -64,7 +66,7 @@ function bucket(m: Map<string, string>) {
 /** The corpus as the build writes it, under a manifest that names the lookup files, or (`before`) one built before them. */
 function corpus(before = false) {
   const text = JSON.stringify(IDX, null, 1);
-  const p = buildProducts(IDX, text, () => new Map(), '2026-10-17T00:00:00Z', ALIASES, (k) => SYN[k] ?? IDX.find((x) => x.key === k)?.syn);
+  const p = buildProducts(IDX, text, () => new Map(), '2026-10-17T00:00:00Z', ALIASES, (k) => SYN[Number(k.slice(1))] ?? IDX.find((x) => x.key === k)?.syn);
   let manifest: Manifest = p.manifest;
   if (before) {
     const old = new Set(lookupFileNames(IDX.length, 1));
@@ -120,7 +122,7 @@ describe('the lookup files answer as the maps over the index (round seventy-six)
     for (const x of IDX) {
       const s = await a.species(x.key);
       same(`species ${x.key}`, s && { ...s, x: undefined }, await b.species(x.key));
-      const names = (SYN[x.key] ?? []).map((n) => plainName(n.split(' ').slice(0, 2).join(' ')));
+      const names = (SYN[x.gbif!] ?? []).map((n) => plainName(n.split(' ').slice(0, 2).join(' ')));
       same(`elsewhere ${x.key}`, [...(await a.elsewhere(x.key, names))], [...(await b.elsewhere(x.key, names))]);
     }
     same('genera', [...(await a.genera())], [...(await b.genera())]);
@@ -131,10 +133,10 @@ describe('the lookup files answer as the maps over the index (round seventy-six)
     // and the cases are all there: the test is not vacuous
     expect([...kinds].sort()).toEqual(['ask', 'genus', 'move', 'older', 'page', 'shared']);
     const shared = await a.older('cotyledon mammillaris');
-    expect(shared && 'many' in shared ? shared.many.map(([k]) => k).sort() : null).toEqual([12, 15]);
-    expect(await addressOf(a, 'coryphantha-macromeris')).toEqual({ kind: 'older', slug: 'pelecyphora-macromeris', matched: 'Coryphantha macromeris', name: 'Pelecyphora macromeris', key: 41 });
+    expect(shared && 'many' in shared ? shared.many.map(([k]) => k).sort() : null).toEqual([gbifPage(12), gbifPage(15)]);
+    expect(await addressOf(a, 'coryphantha-macromeris')).toEqual({ kind: 'older', slug: 'pelecyphora-macromeris', matched: 'Coryphantha macromeris', name: 'Pelecyphora macromeris', key: gbifPage(41) });
     expect(await addressOf(a, 'arbutus-uva-ursi')).toMatchObject({ kind: 'shared' }); // two spellings an address cannot tell apart, held by two species
-    expect([...(await a.elsewhere(31, ['annona muricata']))]).toEqual([['annona muricata', [32, 'annona-muricata', 'Annona muricata']]]);
+    expect([...(await a.elsewhere(gbifPage(31), ['annona muricata']))]).toEqual([['annona muricata', [gbifPage(32), 'annona-muricata', 'Annona muricata']]]);
   });
 
   it('the routes answer page for page alike through the files and through the index of a corpus built before them (the fallback)', async () => {

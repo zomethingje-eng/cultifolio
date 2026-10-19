@@ -13,7 +13,7 @@ import { dossierPath } from '$dossier/schema';
 import { prepare, search } from '$core/search';
 import { clip } from '$core/text';
 
-const mk = (names: string[], keys: Record<string, number> = {}) => names.map((name, i) => ({ key: keys[name] ?? 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
+const mk = (names: string[], keys: Record<string, [string, number]> = {}) => names.map((name, i) => ({ key: keys[name]?.[0] ?? `g${1000 + i}`, gbif: keys[name]?.[1] ?? 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 const hash = (s: string) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return `"${h.toString(16)}"`; };
 function products(idx: object[]) {
@@ -32,13 +32,13 @@ function bucket(m: Map<string, string>) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('one corpus per request, through the real loads (proposed)', () => {
-  const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei'], { 'Copiapoa cinerea': 5384013 });
+  const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei'], { 'Copiapoa cinerea': ['k2735933', 5384013] });
   const B = mk(['Adenia globosa', 'Aloe vera', 'Lithops lesliei', 'Welwitschia mirabilis']);
   function setup() {
     _forgetIndex();
     const a = products(A), b = products(B);
     const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)]]);
-    m.set(dossierPath(5384013), readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
+    m.set(dossierPath('k2735933'), readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
     const T0 = Date.UTC(2026, 9, 4, 12);
     vi.spyOn(Date, 'now').mockImplementation(() => T0);
     const flip = () => { for (const [k, v] of b.blobs) m.set(k, v); m.set(manifestPath(), JSON.stringify(b.manifest)); vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000); };
@@ -133,7 +133,7 @@ describe('/api/dossier (proposed)', () => {
     _forgetIndex();
     await corpusNow(undefined, noStatic); // warm: getDossier serves the fixtures only once the fixture corpus is loaded
     const { GET } = await import('../../src/routes/api/dossier/[key]/+server');
-    const ask = async (q: string) => (await GET({ params: { key: '5384013' }, platform: undefined, fetch: noStatic, getClientAddress: () => '1.2.3.6', url: new URL(`https://x/api/dossier/5384013${q}`) } as never)).headers.get('cache-control');
+    const ask = async (q: string) => (await GET({ params: { key: 'k2735933' }, platform: undefined, fetch: noStatic, getClientAddress: () => '1.2.3.6', url: new URL(`https://x/api/dossier/k2735933${q}`) } as never)).headers.get('cache-control');
     expect(await ask('')).toBe('no-store');
     expect(await ask('?c=someoldcorpus')).toBe('no-store');
     expect(await ask('?c=fixture')).toBe('no-store');

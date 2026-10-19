@@ -236,7 +236,7 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
 
 describe('the fixture is true (visitor-words 14)', () => {
   it("humilis's cells are the used side and the equatorial ones, and its north side passes the rule", () => {
-    const d = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384999.json', 'utf8'));
+    const d = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735990.json', 'utf8'));
     const hs = d.climate.hemispheres;
     expect(d.climate.cells).toBe(hs.south + hs.equatorial);
     expect(hs.north).toBeGreaterThanOrEqual(3);
@@ -244,8 +244,8 @@ describe('the fixture is true (visitor-words 14)', () => {
   });
   it('every fixture photograph names the licence it is tagged with', () => {
     const lab: Record<string, string> = { cc0: 'CC0', by: 'CC BY', 'by-sa': 'CC BY-SA' };
-    for (const f of ['5384013', '5411106']) {
-      const d = JSON.parse(readFileSync(`fixtures/dossiers/s/v2/${f}.json`, 'utf8'));
+    for (const f of ['k2735933', 'k339841']) {
+      const d = JSON.parse(readFileSync(`fixtures/dossiers/s/v3/${f}.json`, 'utf8'));
       expect(d.photos.length).toBeGreaterThan(0);
       for (const p of d.photos) expect(p.attribution, `${f} ${p.id}`).toContain(`(${lab[p.licence]})`);
     }

@@ -207,19 +207,19 @@ describe('--fill inat-ids reads the follows of earlier runs again', () => {
   });
   it('a newly inactive id is followed only by the rule', async () => {
     const fresh = (key: number, id: number) => ({ key, name: { scientific: SPECIES[key].name }, ids: { gbif: key, inat: id }, links: { inat: `https://www.inaturalist.org/taxa/${id}` }, photos: [], upstream: {} });
-    const docs: Record<string, unknown> = { a: fresh(5667820, 506182), b: fresh(2735935, 133599), c: { key: 5667863, name: { scientific: 'Pinguicula antarctica' }, ids: {}, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { a: fresh(5667820, 506182), b: fresh(2735935, 133599), c: { key: 5667863, name: { scientific: 'Pinguicula antarctica' }, ids: { gbif: 5667863 }, links: {}, photos: [], upstream: {} } };
     const c = await fillInatIds(store(docs), all(), () => '2026-10-13T00:00:00Z');
     expect(c).toMatchObject({ followed: 1, refused: 1 });
     expect((docs.a as D).ids.inat).toBeUndefined(); // base: 816267
     expect((docs.b as D).ids.inat).toBe(276548);
   });
   it('an id dropped with no successor loses its link too (guard; mutation C2)', async () => {
-    const docs: Record<string, unknown> = { a: { key: 1, name: { scientific: 'Aus bus' }, ids: { inat: 999999 }, links: { inat: 'https://www.inaturalist.org/taxa/999999' }, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { a: { key: 1, name: { scientific: 'Aus bus' }, ids: { gbif: 1, inat: 999999 }, links: { inat: 'https://www.inaturalist.org/taxa/999999' }, photos: [], upstream: {} } };
     await fillInatIds(store(docs), all(), () => '2026-10-13T00:00:00Z');
     expect((docs.a as D).links.inat).toBeUndefined();
   });
   it('a refusal stops the fill and leaves the dossier as it was (fails safe)', async () => {
-    const docs: Record<string, unknown> = { '5667820.json': followed(5667820, 506182, 'Pinguicula chilensis', 816267, 33), '5667863.json': { key: 5667863, name: { scientific: 'Pinguicula antarctica' }, ids: {}, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { '5667820.json': followed(5667820, 506182, 'Pinguicula chilensis', 816267, 33), '5667863.json': { key: 5667863, name: { scientific: 'Pinguicula antarctica' }, ids: { gbif: 5667863 }, links: {}, photos: [], upstream: {} } };
     const before = structuredClone(docs);
     const c = await fillInatIds(store(docs), all([], /taxa\?q=/), () => '2026-10-13T00:00:00Z');
     expect(c.failed).toBe('api.inaturalist.org 429'); // base: no failure, nothing read again

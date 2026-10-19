@@ -11,7 +11,8 @@
 import { growingYear, span } from '../src/lib/core/sheet';
 
 interface IndexRow {
-  key: number;
+  /** The page's id (round seventy-eight): `k<Kew plant_name_id>`, or `g<GBIF key>`. */
+  key: string;
   slug: string;
   name: string;
   family: string;
@@ -23,8 +24,8 @@ interface IndexRow {
 
 export interface Corpus {
   index: IndexRow[];
-  /** key → dossier JSON as built (kept as parsed objects; written back verbatim) */
-  dossiers: Map<number, Record<string, unknown>>;
+  /** page id → dossier JSON as built (kept as parsed objects; written back verbatim) */
+  dossiers: Map<string, Record<string, unknown>>;
   /** report.txt from the build, if present */
   report?: string;
 }
@@ -143,13 +144,13 @@ This is the reference data behind ${opts.homepage}, packaged so it can be read, 
 One file per species, exactly as the build wrote it: the accepted name and its synonyms (GBIF Backbone), native and introduced regions at TDWG level 3 (WCVP), the sampled in-range occurrence records, the map marker and how it was placed, the climate envelope (CHELSA V2.1 normals read at every distinct grid cell holding an in-range record: the median year and the 10th–90th percentile range; daily extremes from NASA POWER at the typical cell where they were usable), photo references with their licence and credit (links only; no image files are redistributed), literature references (OpenAlex), a Wikipedia summary, and an \`upstream\` section recording every request the build made, with its status, so a refusal can be told from an absence.
 
 \`species.csv\`
-One row per species: identifiers, name, family, regions, the map marker (the densest population of in-range records: latitude, longitude, how many records and what share), the climate status and how many distinct grid cells and records the climate envelope rests on, annual precipitation of the median year, the growing season read from the rain and temperature curves (\`summer\`, \`winter\`, \`even\`, or \`cool\` where under 120 mm a year the temperature rule named the cooler six months instead; \`even\` also covers a flat year with nothing to name; the months given in habitat time), the coldest month's mean minimum, the 1st-percentile daily minimum and frost days per year where extremes were usable, counts, and the build date; then the year's rain taken cell by cell (each grid cell's own yearly total, then their 10th percentile, median and 90th percentile across the cells, the median being the "Rain a year" the species page shows; blank for a species built before round sixty-three kept them). \`annual_precip_mm\` is the median year's total, the twelve monthly medians added, which the growing-season rules read. Empty cells are values the build could not derive.
+One row per species: identifiers, name, family, regions, the map marker (the densest population of in-range records: latitude, longitude, how many records and what share), the climate status and how many distinct grid cells and records the climate envelope rests on, annual precipitation of the median year, the growing season read from the rain and temperature curves (\`summer\`, \`winter\`, \`even\`, or \`cool\` where under 120 mm a year the temperature rule named the cooler six months instead; \`even\` also covers a flat year with nothing to name; the months given in habitat time), the coldest month's mean minimum, the 1st-percentile daily minimum and frost days per year where extremes were usable, counts, and the build date; then the year's rain taken cell by cell (each grid cell's own yearly total, then their 10th percentile, median and 90th percentile across the cells, the median being the "Rain a year" the species page shows; blank for a species built before round sixty-three kept them). \`annual_precip_mm\` is the median year's total, the twelve monthly medians added, which the growing-season rules read. Empty cells are values the build could not derive. In both files \`key\` is the page's id, as in \`index.json\`; \`gbif_id\` in \`species.csv\` is its GBIF key.
 
 \`climate.csv\`
 Twelve rows per species with climate: the median year across every grid cell holding an in-range record (mean daily maximum, minimum and mean temperature in °C, precipitation in mm, daily light integral in mol/m²/day, relative humidity in %), and the 10th and 90th percentiles across those cells for night and day temperature and rainfall, month by month.
 
 \`index.json\`
-The list the app serves: key, slug, name, family, origin, photo count, count of open records and climate status.
+The list the app serves: key (the page's id: \`k\` and Kew's plant_name_id, or \`g\` and GBIF's key where Kew's file gives no one taxon that is the page's alone), its GBIF key, slug, name, family, origin, photo count, count of open records and climate status.
 
 \`build-report.txt\`
 The build's own log for this corpus, when it was kept: which species were built, which sources refused and why.

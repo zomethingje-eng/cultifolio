@@ -10,8 +10,9 @@ import { readFileSync } from 'node:fs';
 import { load } from '../../src/routes/species/[slug]/+page.server';
 import { indexMaps, ambiguousSynonym, type IndexEntry, type Loaded } from '$lib/server/dossiers';
 import { synonymInIndex, authorsOf, sharedNameMessage } from '$lib/server/synonyms';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
+const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key: gbifPage(key), gbif: key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
 // As the live index holds them (other names cut to what the cases need).
 const idx: IndexEntry[] = [
   entry(2777724, 'Aloe vera', ['Aloe barbadensis', 'Aloe chinensis', 'Aloe elongata', 'Aloe flava', 'Aloe indica', 'Aloe lanzae'], ['Aloe variegata', 'Aloe vulgaris']),
@@ -35,8 +36,8 @@ const synonyms: Record<number, string[]> = {
   3184509: ['Eugenia malaccensis L.'],
   9528502: ['Aloe variegata L.', 'Aloe variegata var. haworthii A.Berger']
 };
-const FIXTURE = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')) as { key: number; slug: string; name: { scientific: string; synonyms: string[] } };
-const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.key] ?? [] } });
+const FIXTURE = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')) as { key: string; slug: string; name: { scientific: string; synonyms: string[] } };
+const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, ids: { ...(FIXTURE as { ids?: object }).ids, gbif: e.gbif }, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.gbif!] ?? [] } });
 const STORE = { get: async (path: string) => { const e = idx.find((x) => path.endsWith(`/${x.key}.json`)); return e ? { json: async () => dossierOf(e) } : null; } };
 const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'r70n', etag: null, fromStore: true, manifest: null, buckets: 32 } as unknown as Loaded;
 const noGbif = (async (u: string | URL) => { throw new Error(`asked ${String(u)}`); }) as typeof fetch;
@@ -72,7 +73,7 @@ describe('F1: an older name two species hold never redirects, whichever shows it
   });
   it('a record that cannot be read names its holder without an author, and the 404 is kept by no one', async () => {
     const headers: Record<string, string> = {};
-    const half = { get: async (path: string) => (path.endsWith('/2985894.json') ? null : STORE.get(path)) };
+    const half = { get: async (path: string) => (path.endsWith('/g2985894.json') ? null : STORE.get(path)) };
     const ev = event('echeveria-farinosa', '', half) as unknown as { setHeaders: (h: Record<string, string>) => void };
     ev.setHeaders = (h) => Object.assign(headers, h);
     const e = await caught(load(ev as never));
@@ -113,7 +114,7 @@ describe('N3 (S-F3): a hyphenated older name is found by its slug', () => {
   });
   it('a shared hyphenated name is found by its slug too, and named as written', () => {
     const two = [entry(1, 'Aa one', ['Xx uva-ursi']), entry(2, 'Bb two', [], ['Xx uva-ursi'])];
-    expect(ambiguousSynonym(two, 'xx-uva-ursi')?.map((e) => e.key).sort()).toEqual([1, 2]);
+    expect(ambiguousSynonym(two, 'xx-uva-ursi')?.map((e) => e.gbif).sort()).toEqual([1, 2]);
     expect(indexMaps(two).sharedName.get('xx-uva-ursi')).toBe('Xx uva-ursi');
   });
 });

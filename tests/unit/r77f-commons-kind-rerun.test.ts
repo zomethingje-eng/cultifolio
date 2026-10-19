@@ -16,11 +16,12 @@ import { describe, it, expect } from 'vitest';
 import * as fill from '$dossier/commons-fill';
 import { heldNamesOf, sourceKind, SOURCE_KIND_RULE } from '$dossier/photo-kind';
 import type { FetchResult } from '$dossier/fetch';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const HELD = heldNamesOf([
-  { key: 5421356, name: 'Boswellia papyrifera', syn: ['Amyris papyrifera', 'Ploesslia floribunda', 'Boswellia chariensis', 'Boswellia occidentalis', 'Boswellia odorata'] },
-  { key: 7263157, name: 'Heliamphora heterodoxa', syn: ['Heliamphora heterodoxa var. heterodoxa'] },
-  { key: 7400459, name: 'Heliamphora purpurascens' }
+  { key: gbifPage(5421356), name: 'Boswellia papyrifera', syn: ['Amyris papyrifera', 'Ploesslia floribunda', 'Boswellia chariensis', 'Boswellia occidentalis', 'Boswellia odorata'] },
+  { key: gbifPage(7263157), name: 'Heliamphora heterodoxa', syn: ['Heliamphora heterodoxa var. heterodoxa'] },
+  { key: gbifPage(7400459), name: 'Heliamphora purpurascens' }
 ]);
 const boswellia = {
   key: 5421356, name: { scientific: 'Boswellia papyrifera', authorship: '(Caill.) Hochst.', synonyms: ['Amyris papyrifera Caill. ex Delile', 'Amyris papyrifera Delile ex Caill.', 'Boswellia chariensis Guillaumin', 'Boswellia occidentalis Engl.', 'Boswellia odorata Hutch.', 'Ploesslia floribunda Endl.'], vernacular: [], status: 'accepted' },

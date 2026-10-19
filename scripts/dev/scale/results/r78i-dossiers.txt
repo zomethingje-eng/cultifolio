@@ -1,0 +1,22 @@
+# Round seventy-eight (I): scripts/dev/scale/r78-dossiers.ts on a copy of the real corpus (/tmp/claude-0/rev78/real-s/v2, round seventy-two's corpus re-indexed by round seventy-seven, 8,947 dossiers, corpus a98be27f26a097fe) and the same written as version 3 by the real corpus step's --rekey (corpus bfb1edeee7862289), 2026-10-19. Every count is of the 8,947 pages; exit 0 means no difference.
+{
+ "pages": 8947,
+ "found": 8947,
+ "id": 8947,
+ "file": 8947,
+ "version": 8947,
+ "same": 8947,
+ "shared": 8947,
+ "sharedRefs": 148,
+ "via": 8947,
+ "viaRefs": 6,
+ "day": 8947,
+ "stamp": 8947,
+ "currentBefore": 8947,
+ "kew": 8916,
+ "gbif": 31,
+ "extra": 0,
+ "index": 8947,
+ "entries": 8947,
+ "near": 8947
+}

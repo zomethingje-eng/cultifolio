@@ -14,6 +14,7 @@
  *
  * Depicts statements (P180) are not used as a gate: they catch 16 of the 40 bad leads and are missing from 55% of good files.
  */
+import { byId, type PageId } from '../core/page-id';
 import { readCommonsPhoto } from './photo-credit';
 import { heroOf, oneCopyEach, inatPhotoId, isSpecimenMedia } from './dedupe';
 import { spellingKey } from './epithet';
@@ -32,13 +33,13 @@ import type { JsonFetcher, FetchResult } from './fetch';
  */
 export interface HeldNames {
   /** The keys of the species holding this genus and epithet (by `spellingKey`) as their name or an older name of species rank; empty when none does. */
-  holders(genus: string, epithet: string): readonly number[];
+  holders(genus: string, epithet: string): readonly PageId[];
   /** Whether a name the reference holds, accepted or older, is of this genus. */
   hasGenus(genus: string): boolean;
   /** The epithets the reference holds in this genus, in lower case, as written. */
   epithets(genus: string): readonly string[];
   /** The key of the species whose accepted name this genus and epithet is (by `spellingKey`), or null (round seventy, second pass; REVIEW-TRIAGE-69 C6). */
-  accepted(genus: string, epithet: string): number | null;
+  accepted(genus: string, epithet: string): PageId | null;
   /**
    * Whether a species of the reference has this genus in its accepted name (round seventy-two): "Cactus", "Croton",
    * "Bahia" and "Palma" are genera only of older names, and words of an English title or a place ("Pariette Cactus",
@@ -46,14 +47,17 @@ export interface HeldNames {
    */
   acceptedGenus?(genus: string): boolean;
   /** The keys of the species holding this name below species (genus, epithet, last epithet) as an older name (round seventy-two). */
-  infraHolders?(genus: string, epithet: string, infra: string): readonly number[];
+  infraHolders?(genus: string, epithet: string, infra: string): readonly PageId[];
 }
 
 /** The species' names a title is read against: its own and its older names, as the dossier keeps them (authors allowed); its key and the reference's names when known. */
 export interface KindNames {
   scientific: string;
   synonyms?: readonly string[] | null;
-  key?: number;
+  /** The page's id (round seventy-eight), which the reference's names (`held`) give their holders by. */
+  key?: PageId;
+  /** The page's GBIF key, which an uploader's slip is asked of GBIF by (`slipStanding`'s own key). */
+  gbif?: number;
   held?: HeldNames | null;
   /** The species' author, which tells GBIF's second spelling of this name from another species (`slipStanding`). */
   authorship?: string | null;
@@ -66,9 +70,9 @@ export interface KindNames {
 }
 
 /** The names a dossier's photographs are read against, as the page, the index and the fills read them (round seventy-two). */
-export function kindNamesOf(d: { key?: number; name?: { scientific: string; synonyms?: readonly string[] | null; authorship?: string | null; kew?: KindNames['kew'] } | null }, held?: HeldNames | null): KindNames | null {
+export function kindNamesOf(d: { key?: PageId; ids?: { gbif?: number } | null; name?: { scientific: string; synonyms?: readonly string[] | null; authorship?: string | null; kew?: KindNames['kew'] } | null }, held?: HeldNames | null): KindNames | null {
   if (!d.name) return null;
-  return { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held, authorship: d.name.authorship ?? undefined, ...(d.name.kew ? { kew: d.name.kew } : {}) };
+  return { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), held, authorship: d.name.authorship ?? undefined, ...(d.name.kew ? { kew: d.name.kew } : {}) };
 }
 
 /**
@@ -79,18 +83,18 @@ export function kindNamesOf(d: { key?: number; name?: { scientific: string; syno
 type ReadCtx = { slips?: readonly string[] | null; asked?: string[] };
 
 /** What `heldNamesOf` reads of an index entry: the accepted name and the older names the index carries (`syn`, `older`). */
-export type HeldSource = { key: number; name: string; syn?: readonly string[] | null; older?: readonly string[] | null };
+export type HeldSource = { key: PageId; name: string; syn?: readonly string[] | null; older?: readonly string[] | null };
 
 const heldMemo = new WeakMap<readonly HeldSource[], HeldNames>();
 /** The reference's names from its index, made once an index (the Worker keeps one parsed index a minute). */
 export function heldNamesOf(entries: readonly HeldSource[]): HeldNames {
   const known = heldMemo.get(entries);
   if (known) return known;
-  const by = new Map<string, number[]>();
+  const by = new Map<string, PageId[]>();
   const words = new Map<string, Set<string>>();
-  const acc = new Map<string, number>();
+  const acc = new Map<string, PageId>();
   const accGenera = new Set<string>();
-  const infra = new Map<string, number[]>();
+  const infra = new Map<string, PageId[]>();
   for (const e of entries) {
     const a = nameOf(e.name);
     if (a) accGenera.add(a.genus.toLowerCase());
@@ -666,7 +670,7 @@ export function commonsFirstByEpithet<P extends { src?: string; id: string; widt
   return out;
 }
 
-type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null; described?: boolean | null; judged?: Judged | null };
+type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly PageId[] | null; described?: boolean | null; judged?: Judged | null };
 
 /* ---------- The judgement stored by the build (round seventy-six) ---------- */
 
@@ -741,9 +745,9 @@ export const photoIdentity = (p: { src?: string; id: string; url: string }): str
  * photographs of Adenia gummifera (iNaturalist's "Adenia gummifera gummifera", Kew's A. gummifera var. gummifera) reached
  * Adenia cissampeloides through GBIF, which holds "Adenia gummifera (Harv.) Harms" as its synonym; Kew accepts it apart.
  */
-type SharedPage = { key: number; name?: { scientific: string; kew?: { acceptedElsewhere?: readonly string[] | null } | null } | null; photos: ReadonlyArray<{ src?: string; id: string; url: string }> };
-export function sharedPhotos(shown: ReadonlyArray<SharedPage>): Map<number, Map<string, number[]>> {
-  const holders = new Map<string, Set<number>>();
+type SharedPage = { key: PageId; name?: { scientific: string; kew?: { acceptedElsewhere?: readonly string[] | null } | null } | null; photos: ReadonlyArray<{ src?: string; id: string; url: string }> };
+export function sharedPhotos(shown: ReadonlyArray<SharedPage>): Map<PageId, Map<string, PageId[]>> {
+  const holders = new Map<string, Set<PageId>>();
   const via = new Map<string, string>(); // `${key} ${identity}` → the sources the page holds it from
   for (const d of shown) for (const p of d.photos) {
     const k = photoIdentity(p);
@@ -753,27 +757,27 @@ export function sharedPhotos(shown: ReadonlyArray<SharedPage>): Map<number, Map<
   const page = new Map(shown.map((d) => [d.key, d]));
   const binOf = (n: string) => { const b = nameOf(n); return b && !b.infra ? `${lower(b.genus)} ${spellingKey(b.epithet)}` : null; };
   /** Whether page `b`, holding the photograph only through GBIF, holds it by an older name Kew accepts as page `a`'s species, which holds it from iNaturalist. */
-  const filedUnder = (id: string, a: number, b: number) => {
+  const filedUnder = (id: string, a: PageId, b: PageId) => {
     const pa = page.get(a), pb = page.get(b);
     if (!pa?.name || !pb?.name || !id.startsWith('inat:')) return false;
     const fromA = (via.get(`${a} ${id}`) ?? '').split(' '), fromB = (via.get(`${b} ${id}`) ?? '').split(' ').filter(Boolean);
     const mine = binOf(pa.name.scientific);
     return fromA.includes('inat') && fromB.every((s) => s === 'gbif') && !!mine && (pb.name.kew?.acceptedElsewhere ?? []).some((x) => binOf(x) === mine);
   };
-  const out = new Map<number, Map<string, number[]>>();
+  const out = new Map<PageId, Map<string, PageId[]>>();
   for (const [id, keys] of holders) {
     if (keys.size < 2) continue;
     const ks = [...keys];
     const owner = ks.length === 2 ? ks.find((a) => filedUnder(id, a, ks.find((b) => b !== a)!)) : undefined;
     for (const k of keys) {
       if (k === owner) continue;
-      (out.get(k) ?? out.set(k, new Map()).get(k)!).set(id, ks.filter((x) => x !== k).sort((a, b) => a - b));
+      (out.get(k) ?? out.set(k, new Map()).get(k)!).set(id, ks.filter((x) => x !== k).sort(byId));
     }
   }
   return out;
 }
 /** A dossier's photographs with `shared` written from `sharedPhotos` (set, changed or removed); whether anything changed. */
-export function markShared(photos: Array<{ src?: string; id: string; url: string; shared?: number[] }>, marks: Map<string, number[]> | undefined): boolean {
+export function markShared(photos: Array<{ src?: string; id: string; url: string; shared?: PageId[] }>, marks: Map<string, PageId[]> | undefined): boolean {
   let changed = false;
   for (const p of photos) {
     const want = marks?.get(photoIdentity(p));

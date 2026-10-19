@@ -9,9 +9,10 @@ import { sitemapUrls, sitemapChunk, sitemapDays } from '$lib/server/sitemap';
 import { stampOnBuild, restamp, substanceHash, lastReading, dayNumber, dayIso } from '$dossier/changed';
 import { parseDossier } from '$dossier/schema';
 import type { IndexEntry } from '$lib/server/dossiers';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const fixture = () => JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')) as Record<string, unknown> & { built: string; upstream: Record<string, { status: string; at?: string; detail?: string }>; photos: unknown[] };
-const e = (key: number, slug: string, name: string, changed?: number): IndexEntry => ({ key, slug, name, photos: 0, open: 0, climate: 'ok', ...(changed ? { changed } : {}) });
+const fixture = () => JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')) as Record<string, unknown> & { built: string; upstream: Record<string, { status: string; at?: string; detail?: string }>; photos: unknown[] };
+const e = (key: number, slug: string, name: string, changed?: number): IndexEntry => ({ key: gbifPage(key), slug, name, photos: 0, open: 0, climate: 'ok', ...(changed ? { changed } : {}) });
 
 describe('the sitemap gives each species its own day', () => {
   it('a species with a day gets it, one without the build day; the fixed pages none; a genus row its latest species\' day', () => {
@@ -81,6 +82,6 @@ describe('the day a dossier last changed in substance', () => {
     const s = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(s).toContain('d.changed = stampOnBuild(d, prevFile, sha1);');
     expect(s).toContain('const changed = dayNumber(d.changed?.on);');
-    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n(?: {2}markSharedPhotos\([^\n]*\);\n)? {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
+    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n(?: {2}\/\/[^\n]*\n {2}if \(!fixtures && !rekeyDisk\(\)\)[^\n]*\n)?(?: {2}markSharedPhotos\([^\n]*\);\n)? {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
   });
 });

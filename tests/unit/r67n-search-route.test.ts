@@ -42,7 +42,7 @@ beforeAll(() => {
   });
   text = JSON.stringify(index);
   ({ manifest, files, stored } = buildProducts(index, text, () => new Map()));
-  byPath.set(`s/v2/index.json`, text);
+  byPath.set(`s/v3/index.json`, text);
   byPath.set(manifestPath(), JSON.stringify(manifest));
   for (const [name, body] of files) byPath.set(productPath(manifest.files[name]), body);
   // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.

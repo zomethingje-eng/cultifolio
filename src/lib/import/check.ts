@@ -8,17 +8,21 @@
 import { parseName, speciesOf, speciesSlug } from '$core/names';
 
 export type NameCheck =
-  /** The reference has the species: its page exists. `key` only when the name is at species rank (a subspecies keeps none rather than its species'). */
+  /**
+   * The reference has the species: its page exists. `key` only when the name is at species rank (a subspecies keeps none
+   * rather than its species'): the page's GBIF key, which a plant files (round seventy-eight: never the page's id).
+   */
   | { s: 'found'; slug: string; refName: string; key: number | null }
-  /** Not under this name; the search offers another, for the grower to take or not: never taken on its own. */
-  | { s: 'near'; suggestion: string; key: number; why: 'older name' | 'spelling' | 'similar' }
+  /** Not under this name; the search offers another, for the grower to take or not: never taken on its own. Its GBIF key, when the reference gives one. */
+  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'spelling' | 'similar' }
   | { s: 'missing' }
   /** The reference was not reached, or the search allowance was spent: not checked, which is not "missing". */
   | { s: 'unchecked' }
   /** A cross is filed under its genus, as the add form files it; there is no species to check. */
   | { s: 'hybrid' };
 
-type Entry = { slug: string; name: string; key: number; syn?: string[]; older?: string[] };
+/** An entry as the check reads it: `gbif` is the page's GBIF key (round seventy-eight), what a plant files. */
+type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[] };
 export interface Lookup {
   entries(slugs: string[]): Promise<Map<string, Entry> | null>;
   search(q: string): Promise<Entry[] | { limited: number } | null>;
@@ -60,7 +64,7 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
   const ask: string[] = [];
   for (const [k, x] of todo) {
     const e = got?.get(x.slug);
-    if (e) out.set(k, { s: 'found', slug: e.slug, refName: e.name, key: x.rankSpecies ? e.key : null });
+    if (e) out.set(k, { s: 'found', slug: e.slug, refName: e.name, key: x.rankSpecies ? (e.gbif ?? null) : null });
     else ask.push(k);
   }
   let stopped = false;
@@ -87,13 +91,13 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
 export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry[]): NameCheck {
   const want = speciesOf(scientific).toLowerCase();
   const exact = hits.find((h) => h.name.toLowerCase() === want);
-  if (exact) return { s: 'found', slug: exact.slug, refName: exact.name, key: rankSpecies ? exact.key : null };
+  if (exact) return { s: 'found', slug: exact.slug, refName: exact.name, key: rankSpecies ? (exact.gbif ?? null) : null };
   // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
   const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? [])].some((n) => n.toLowerCase() === want));
-  if (older) return { s: 'near', suggestion: older.name, key: older.key, why: 'older name' };
+  if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name' };
   const genus = want.split(' ')[0];
   const close = hits.find((h) => h.name.toLowerCase().split(' ')[0] === genus && editDistance(h.name.toLowerCase(), want) <= 2);
-  if (close) return { s: 'near', suggestion: close.name, key: close.key, why: 'spelling' };
+  if (close) return { s: 'near', suggestion: close.name, key: close.gbif ?? null, why: 'spelling' };
   return { s: 'missing' };
 }
 

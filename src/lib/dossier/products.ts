@@ -7,6 +7,7 @@
  * files that differ, and the copy up carries only those.
  */
 import type { IndexEntry } from './index-entry';
+import type { PageId } from '$core/page-id';
 import type { Sheet } from './sheet';
 import { DOSSIER_V } from './schema';
 import { bucketOf, bucketsFor, bucketNames } from '$core/bucket';
@@ -32,15 +33,15 @@ export interface Products {
   storedHashes: Set<string>;
 }
 
-/** A page merged into another by the owner's decision (round seventy-three): its old address, and the key of the page it joined. */
-export type Alias = { slug: string; key: number };
+/** A page merged into another by the owner's decision (round seventy-three): its old address, and the id of the page it joined. */
+export type Alias = { slug: string; key: PageId };
 
 /**
  * The old addresses the products answer for (round seventy-three): each alias whose page the index lists and whose slug no
  * entry holds, with that page's entry. A grower's plant, label or followed species under the old name finds the species
  * by its slug's bucket (the device asks by slug, never by key), and the entry or sheet it gets carries the old slug, so
  * the device's own lookup matches; a link to it is the old address, which the species route redirects as an older name.
- * Never in the index: the reference is its pages, and `/api/dossier/<old key>` answers 404.
+ * Never in the index: the reference is its pages, and `/api/dossier/<old key>` answers 404 (its GBIF key is no page's own).
  */
 export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[]): Array<{ slug: string; entry: IndexEntry }> {
   const bySlug = new Set(index.map((e) => e.slug));
@@ -54,7 +55,7 @@ export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[
   return out;
 }
 
-export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: number) => readonly string[] | undefined, sink?: (hash: string, body: string) => void): Products {
+export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: PageId) => readonly string[] | undefined, sink?: (hash: string, body: string) => void): Products {
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = md5(body); };

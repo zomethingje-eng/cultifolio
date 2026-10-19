@@ -21,7 +21,7 @@
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
-  import { isDatasetDoi } from '$dossier/sources/openalex';
+  import { isDatasetDoi, literatureOff } from '$dossier/sources/openalex';
   import { photoAt, photoOf, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
@@ -87,7 +87,7 @@
       alternateName: common,
       taxonRank: d.name.rank?.toLowerCase(),
       parentTaxon: d.name.family ? { '@type': 'Taxon', name: d.name.family, taxonRank: 'family' } : undefined,
-      identifier: [{ '@type': 'PropertyValue', propertyID: 'GBIF', value: String(d.key) }],
+      identifier: [{ '@type': 'PropertyValue', propertyID: 'GBIF', value: String(d.ids.gbif) }],
       url: `https://cultifolio.com/species/${d.slug}`,
       image: heroSrc
     })
@@ -206,7 +206,7 @@
   const otherSlugs = $derived(new Set(otherKeys.map((k) => k.slug).filter((s): s is string => !!s)));
   // Yours: by the name's slug, or by the reference key, so a suffixed homonym's page lists its own plants (round eighteen, 6);
   // and by any other key the page reads, or a merged page's old address, so a plant recorded under the old name is listed (round seventy-three).
-  const joined = $derived(collection.ready ? collection.accessions.filter((a) => { const s = speciesSlug(a.taxonName); return s === d.slug || otherSlugs.has(s) || (a.taxonKey != null && (a.taxonKey === d.key || otherKeySet.has(a.taxonKey))); }) : []);
+  const joined = $derived(collection.ready ? collection.accessions.filter((a) => { const s = speciesSlug(a.taxonName); return s === d.slug || otherSlugs.has(s) || (a.taxonKey != null && (a.taxonKey === d.ids.gbif || otherKeySet.has(a.taxonKey))); }) : []);
   /** Notes and follow kept under a merged page's old address: shown here, under the old name (round seventy-three). */
   const oldTaxa = $derived(collection.ready ? otherKeys.filter((k) => k.slug).map((k) => ({ k, t: collection.taxon(k.slug!) })).filter((x) => x.t && (x.t.myNotes || x.t.followed)) : []);
   const fromWords = (f: OtherKey['from']) => (f === 'download' ? "GBIF's download" : "GBIF's search API on the day of the build");
@@ -238,7 +238,7 @@
     if (myDirty()) e.preventDefault();
   }
   async function saveMy() {
-    await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null, myNotesBase: myBase });
+    await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.ids.gbif, myNotes: myDraft.trim() || null, myNotesBase: myBase });
     editingMy = false;
   }
   // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
@@ -441,7 +441,7 @@
     </div>
     <!-- One primary action, the grower's own numbers beside it, and the other four verbs as a quieter row: five equal buttons were a bar nobody could read (round fifty, 3). -->
     <div class="acts">
-      <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.key}`)}>Add one to my plants</a>
+      <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.ids.gbif}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.ids.gbif}`)}>Add one to my plants</a>
       {#if mine.length}
         <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href={plantHref(a)} title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
       {/if}
@@ -450,8 +450,8 @@
       {/if}
     </div>
     <div class="acts acts2">
-      <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}" onclick={(e) => addLeavesExample(e, `/propagation/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.key}`)}>Sow seed</a><!-- leads out of the example first (round sixty-nine; triage-68 X7; S-C4) -->
-      <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
+      <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.ids.gbif}" onclick={(e) => addLeavesExample(e, `/propagation/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.ids.gbif}`)}>Sow seed</a><!-- leads out of the example first (round sixty-nine; triage-68 X7; S-C4) -->
+      <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.ids.gbif} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
       {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null, annualRain: d.climate.annualRain ?? null }} />{/if}
     </div>
@@ -694,7 +694,12 @@
 
   {#if refused('openalex') && !papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
-    <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
+    <!-- Literature off (round seventy-eight, the owner's decision 2): said as not checked, with why, never as none. -->
+    {#if literatureOff(d.upstream['openalex'])}
+      <div class="notice"><b>Not checked.</b> Papers are not yet asked for this reference; a later fill takes them from OpenAlex's free snapshot.</div>
+    {:else}
+      <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
+    {/if}
   {/if}
   {#if papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>

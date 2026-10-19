@@ -13,12 +13,13 @@ import { lookupOf } from './lookup';
 import { upstreamCall } from './sync';
 import { workerKey } from './worker-cache';
 import { canonicalSynonym } from '$core/names';
+import type { PageId } from '$core/page-id';
 
 export interface SynonymAnswer {
   /** The name as the backbone matched it. */
   matched: string;
-  /** The accepted species' backbone key and canonical name. */
-  acceptedKey: number;
+  /** The accepted species: its page's id when the reference's own older names answered (round seventy-eight), GBIF's backbone key when GBIF did; and its canonical name. */
+  acceptedKey: PageId | number;
   acceptedName: string;
   /** The reference's slug for the accepted species, when it holds it. */
   slug: string | null;
@@ -115,8 +116,9 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
   const look = lookupOf(held ?? (await corpusNow(platform, fetch)), platform, fetch); // the request's own corpus (round sixty; A27)
   // The accepted usage of a variety is the variety; the reference files species, so its `speciesKey` is what the index may hold.
   const keys = [body.acceptedUsageKey, typeof body.speciesKey === 'number' ? body.speciesKey : null].filter((k): k is number => typeof k === 'number');
-  // Of the two, the one the index lists first, as the scan of the index found it (round seventy-six: read by key).
-  const found = (await Promise.all(keys.map((k) => look.species(k)))).filter((e) => !!e).sort((a, b) => a!.at - b!.at);
+  // Of the two, the one the index lists first, as the scan of the index found it (round seventy-six: read by key). Each is
+  // a GBIF key: the page whose own GBIF key it is (round seventy-eight; the alias), never a page's id.
+  const found = (await Promise.all(keys.map((k) => look.gbif(k)))).filter((e) => !!e).sort((a, b) => a!.at - b!.at);
   return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: found[0]?.slug ?? null };
 }
 

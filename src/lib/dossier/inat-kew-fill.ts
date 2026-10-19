@@ -6,13 +6,14 @@
  * each). A set the page never held (six wild photographs already from GBIF's download) is not asked. The mark on the
  * wild row names Kew's file's day, so a rerun passes the page by.
  */
+import type { PageId } from '../core/page-id';
 import type { JsonFetcher } from './fetch';
 import type { Photo } from './schema';
 import * as inat from './sources/inat';
 import type { KewInfra, KewOwn } from './kew-infra';
 
 type Row = { status: string; at?: string; detail?: string };
-export type InatKewDossier = { key: number; name: { scientific: string; synonyms?: string[]; kew?: { entry?: string; synonyms?: string[]; acceptedElsewhere?: string[] } }; ids: { inat?: number; ipni?: string }; photos: Array<Pick<Photo, 'src'> & { captive?: boolean }>; upstream: Record<string, Row> };
+export type InatKewDossier = { key: PageId; name: { scientific: string; synonyms?: string[]; kew?: { entry?: string; synonyms?: string[]; acceptedElsewhere?: string[] } }; ids: { inat?: number; ipni?: string }; photos: Array<Pick<Photo, 'src'> & { captive?: boolean }>; upstream: Record<string, Row> };
 export type InatKewResult =
   | { done: 'not a candidate' | 'read before' | 'unanswered' }
   | { done: 'refused'; detail?: string }
@@ -56,6 +57,6 @@ export async function inatKewFill(d: InatKewDossier, f: JsonFetcher, kew: KewInf
   d.photos = [...fresh, ...d.photos.filter((p) => p.src !== 'inat' || (!wild && !p.captive) || (!cult && p.captive))];
   const t = now();
   d.upstream['inat.photos.wild'] = wild ? { status: wild.status, at: t, detail: `filled ${t.slice(0, 10)}; ${mark}` } : stamp(row);
-  if (cult) d.upstream['inat.photos.cultivated'] = { status: cult.status, at: t, detail: `filled ${t.slice(0, 10)}` };
+  if (cult) d.upstream['inat.photos.cultivated'] = { status: cult.status, at: t, detail: `${inat.CULTIVATED_RULE}; filled ${t.slice(0, 10)}` };
   return { done: 'asked again', placed, was, now: fresh.length };
 }

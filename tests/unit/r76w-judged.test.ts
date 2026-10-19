@@ -19,13 +19,13 @@ import { manifestPath, productPath } from '$dossier/manifest';
 import { lookupFileNames } from '$dossier/lookups';
 import { corpusNow, getDossier, _forgetIndex, fromFiles, type IndexEntry } from '$lib/server/dossiers';
 
-const template = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
+const template = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
 const slip = { src: 'commons', id: 'File:Adromischus mammilaris 0zz.jpg', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Adromischus_mammilaris_0zz.jpg/960px-Adromischus_mammilaris_0zz.jpg', thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Adromischus_mammilaris_0zz.jpg/500px-Adromischus_mammilaris_0zz.jpg', width: 1000, height: 665, licence: 'by-sa', attribution: 'David J. Stang, CC BY-SA 4.0, via Wikimedia Commons', page: 'https://commons.wikimedia.org/wiki/File:Adromischus_mammilaris_0zz.jpg', categories: ['Adromischus mammillaris'], slips: ['adromischus mammilaris'], sourceRead: true };
 const own = { src: 'commons', id: 'File:Adromischus mammillaris flowering.jpg', url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Adromischus_mammillaris_flowering.jpg', thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Adromischus_mammillaris_flowering.jpg/500px-Adromischus_mammillaris_flowering.jpg', width: 400, height: 300, licence: 'by', attribution: 'Someone, CC BY 4.0, via Wikimedia Commons', categories: ['Adromischus mammillaris'] };
-const dossier = () => JSON.parse(JSON.stringify({ ...template, key: 7981215, slug: 'adromischus-mammillaris', name: { ...template.name, scientific: 'Adromischus mammillaris', genus: 'Adromischus', authorship: '(L.f.) Lem.', synonyms: ['Adromischu mammillaris (L.f.) Lem.', 'Cotyledon mammillaris L.fil.'], kew: { entry: '2623288', synonyms: ['Cotyledon mammillaris'], acceptedElsewhere: [], file: '2026-06-04' } }, photos: [slip, own, ...template.photos.slice(0, 2)] }));
+const dossier = () => JSON.parse(JSON.stringify({ ...template, key: 'g7981215', ids: { ...template.ids, gbif: 7981215 }, slug: 'adromischus-mammillaris', name: { ...template.name, scientific: 'Adromischus mammillaris', genus: 'Adromischus', authorship: '(L.f.) Lem.', synonyms: ['Adromischu mammillaris (L.f.) Lem.', 'Cotyledon mammillaris L.fil.'], kew: { entry: '2623288', synonyms: ['Cotyledon mammillaris'], acceptedElsewhere: [], file: '2026-06-04' } }, photos: [slip, own, ...template.photos.slice(0, 2)] }));
 const IDX: IndexEntry[] = [
-  { key: 7981215, slug: 'adromischus-mammillaris', name: 'Adromischus mammillaris', family: 'Crassulaceae', origin: ['Cape Provinces'], photos: 4, open: 1, climate: 'none', syn: ['Adromischu mammillaris', 'Cotyledon mammillaris'] },
-  { key: 7981216, slug: 'adromischus-cristatus', name: 'Adromischus cristatus', family: 'Crassulaceae', origin: ['Cape Provinces'], photos: 4, open: 1, climate: 'none' }
+  { key: 'g7981215', gbif: 7981215, slug: 'adromischus-mammillaris', name: 'Adromischus mammillaris', family: 'Crassulaceae', origin: ['Cape Provinces'], photos: 4, open: 1, climate: 'none', syn: ['Adromischu mammillaris', 'Cotyledon mammillaris'] },
+  { key: 'g7981216', gbif: 7981216, slug: 'adromischus-cristatus', name: 'Adromischus cristatus', family: 'Crassulaceae', origin: ['Cape Provinces'], photos: 4, open: 1, climate: 'none' }
 ];
 const ids = (d: { photos: Array<{ id: string }> }) => d.photos.map((p) => p.id);
 const bare = (d: { photos: object[] }) => d.photos.map((p) => { const { judged: _, ...rest } = p as Record<string, unknown>; return rest; });
@@ -66,12 +66,12 @@ describe('the photograph judgement, stored by --index (round seventy-six)', () =
     const old = new Set(lookupFileNames(IDX.length));
     for (const [which, manifest, body] of [['files', p.manifest, judged], ['index', { ...p.manifest, files: Object.fromEntries(Object.entries(p.manifest.files).filter(([n]) => !old.has(n))) }, dossier()]] as const) {
       _forgetIndex();
-      const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, b]) => [productPath(p.manifest.files[n]), b] as [string, string]), ...[...p.stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath(7981215), JSON.stringify(body)]]);
+      const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, b]) => [productPath(p.manifest.files[n]), b] as [string, string]), ...[...p.stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath('g7981215'), JSON.stringify(body)]]);
       const store = { get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${k}"` } : null), head: async (k: string) => (m.has(k) ? { etag: `"${k}"` } : null) };
       const platform = { env: { STORE: store } } as unknown as App.Platform;
       const c = await corpusNow(platform, noStatic);
       expect(fromFiles(c)).toBe(which === 'files');
-      const d = await getDossier(platform, noStatic, 7981215, c);
+      const d = await getDossier(platform, noStatic, 'g7981215', c);
       expect(ids(d!)).toContain(slip.id);
       expect(ids(d!)).toEqual(ids(parseDossier(dossier(), heldNamesOf(IDX))));
     }

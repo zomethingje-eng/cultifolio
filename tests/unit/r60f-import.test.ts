@@ -113,8 +113,8 @@ describe('a CSV', () => {
 
 describe('the names, against the reference', () => {
   const ref = new Map([
-    ['copiapoa-cinerea', { slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', key: 5384013, syn: ['Copiapoa columna-alba'] }],
-    ['copiapoa-humilis', { slug: 'copiapoa-humilis', name: 'Copiapoa humilis', key: 5384999 }]
+    ['copiapoa-cinerea', { slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', key: 'k2735933', gbif: 5384013, syn: ['Copiapoa columna-alba'] }],
+    ['copiapoa-humilis', { slug: 'copiapoa-humilis', name: 'Copiapoa humilis', key: 'g5384999', gbif: 5384999 }]
   ]);
   const searched: string[] = [];
   const look = (searchAnswer: 'ok' | 'down' | 'limited' = 'ok'): Lookup => ({

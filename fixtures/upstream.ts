@@ -38,7 +38,12 @@ function inatObs(taxon: number, n: number, seed: number, captive: boolean) {
       observed_on: `20${10 + (i % 15)}-0${1 + (i % 9)}-1${i % 9}`,
       place_guess: captive ? 'Greenhouse' : 'Habitat',
       captive,
-      quality_grade: 'research',
+      // A captive observation is casual on iNaturalist; it is taken when its identifications agree (round seventy-eight).
+      quality_grade: captive ? 'casual' : 'research',
+      taxon: { id: taxon, ancestor_ids: [47126, taxon] },
+      community_taxon_id: taxon,
+      num_identification_disagreements: 0,
+      identifications: [{ current: true, taxon: { id: taxon } }, { current: true, taxon: { id: taxon } }],
       photos: [
         {
           id,
@@ -82,7 +87,7 @@ export function welwitschia(): Record<string, unknown> {
     // iNaturalist's own word on the id Wikidata gives: active (round sixty-nine; triage-68 M5).
     [`${INAT}/taxa/75434`]: { results: [{ id: 75434, name: 'Welwitschia mirabilis', rank: 'species', is_active: true }] },
     [`${INAT}/observations?taxon_id=75434&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=false`]: inatObs(75434, 9, 7, false),
-    [`${INAT}/observations?taxon_id=75434&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=true`]: inatObs(75434, 3, 8, true),
+    [`${INAT}/observations?taxon_id=75434&photo_license=cc0,cc-by,cc-by-sa&photos=true&captive=true&identifications=most_agree`]: inatObs(75434, 3, 8, true),
     'https://commons.wikimedia.org/w/api.php': { query: { pages: { '1': { title: 'File:Welwitschia mirabilis fixture.jpg', imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/x/xx/Welwitschia_fixture.jpg', thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/x/xx/Welwitschia_fixture.jpg/800px-Welwitschia_fixture.jpg', width: 3000, height: 2000, descriptionurl: 'https://commons.wikimedia.org/wiki/File:Welwitschia_mirabilis_fixture.jpg', extmetadata: { LicenseShortName: { value: 'CC BY-SA 3.0' }, Artist: { value: '<a href="#">Fixture Photographer</a>' } } }] } } } },
     'https://api.openalex.org/works': { results: [{ title: 'The biology of Welwitschia mirabilis (fixture)', publication_year: 2001, doi: 'https://doi.org/10.0000/fixture.1', authorships: [{ author: { display_name: 'A. Botanist' } }], primary_location: { source: { display_name: 'Fixture Journal of Botany' } } }] }
   };
@@ -105,7 +110,7 @@ export function copiapoa(): Record<string, unknown> {
     'https://en.wikipedia.org/api/rest_v1/page/summary/Copiapoa_cinerea': { title: 'Copiapoa cinerea', type: 'standard', extract: 'Copiapoa cinerea is a species of cactus from northern Chile. (Fixture text.)', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Copiapoa_cinerea' } } },
     [`${INAT}/taxa/135254`]: { results: [{ id: 135254, name: 'Copiapoa cinerea', rank: 'species', is_active: true }] },
     [`${INAT}/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=false`]: inatObs(135254, 14, 9, false),
-    [`${INAT}/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=true`]: inatObs(135254, 6, 10, true),
+    [`${INAT}/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&captive=true&identifications=most_agree`]: inatObs(135254, 6, 10, true),
     'https://api.openalex.org/works': { results: [] }
   };
 }

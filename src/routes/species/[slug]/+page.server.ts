@@ -7,6 +7,7 @@ import { plainName, synonymKey, type Card } from '$dossier/lookups';
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
+import { isPageId } from '$core/page-id';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
@@ -176,7 +177,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // S-F8: `/species/echinopsis-pachanoi` landed on Trichocereus macrogonus with no word why).
   const listedHere = ownNames.has(wasPlain) || asVariety || ofOlder;
   const m = wellFormed && !listedHere ? await cachedMatch(platform, was!) : null;
-  const wasBelow = !!m && m.status === 'SYNONYM' && m.matchType === 'EXACT' && m.speciesKey === key && m.acceptedUsageKey !== key;
+  // GBIF's keys are compared with the page's own GBIF key, never its id (round seventy-eight).
+  const wasBelow = !!m && m.status === 'SYNONYM' && m.matchType === 'EXACT' && m.speciesKey === d.ids.gbif && m.acceptedUsageKey !== d.ids.gbif;
   const shownWas = wellFormed && (listedHere || wasBelow) ? was : null;
   // A name another species here is accepted under names no one species here, as a shared older name does (round
   // seventy-one; S-F3: `?was=Annona%20muricata` on Annona montana, which holds Vellozo's homonym, said the backbone
@@ -192,9 +194,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const e = elsewhere.get(plain(n));
     return e && e[0] !== key ? [{ name: n, slug: e[1], authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
   });
-  // The other page whose Kew entry gives this page its range, when the dossier names one (round seventy-two; triage B3, F13).
-  const viaKey = Number((d.distribution as { via?: { page?: string } }).via?.page);
-  const viaEntry = Number.isFinite(viaKey) && viaKey !== key ? await look.species(viaKey) : undefined;
+  // The other page whose Kew entry gives this page its range, when the dossier names one (round seventy-two; triage B3, F13),
+  // by its id (round seventy-eight).
+  const viaKey = (d.distribution as { via?: { page?: string } }).via?.page;
+  const viaEntry = isPageId(viaKey) && viaKey !== key ? await look.species(viaKey) : undefined;
   return {
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
     /** English common names, the index's choice first (round sixty-one; decision 7). */

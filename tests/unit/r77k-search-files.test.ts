@@ -42,7 +42,7 @@ const IDX: IndexEntry[] = (synthIndex(2300).idx as unknown as IndexEntry[]).map(
   return out;
 });
 const TEXT = JSON.stringify(IDX, null, 1);
-const template = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
+const template = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
 
 type Built = ReturnType<typeof buildProducts>;
 let built: Built;
@@ -60,7 +60,7 @@ function corpus(kind: 'files' | 'before' | 'whole', refuseIndex = false) {
   const p = built;
   let manifest: Manifest = p.manifest;
   if (kind === 'before') { const drop = new Set(searchFileNames(IDX.length)); manifest = { ...manifest, files: Object.fromEntries(Object.entries(manifest.files).filter(([n]) => !drop.has(n))) }; }
-  if (kind === 'whole') m.set('s/v2/index.json', TEXT);
+  if (kind === 'whole') m.set('s/v3/index.json', TEXT);
   else {
     m.set(manifestPath(), JSON.stringify(manifest));
     for (const [n, body] of p.files) m.set(productPath(p.manifest.files[n]), body);
@@ -69,7 +69,7 @@ function corpus(kind: 'files' | 'before' | 'whole', refuseIndex = false) {
   for (const x of IDX.slice(0, 5)) m.set(dossierPath(x.key), JSON.stringify({ ...template, key: x.key, slug: x.slug, name: { ...template.name, scientific: x.name } }));
   const indexPath = productPath(p.manifest.files['index.json']);
   const old = new Set(Object.entries(p.manifest.files).filter(([n]) => /^postings\/|^short\.json$/.test(n)).map(([, h]) => productPath(h)));
-  return { manifest, store: bucket(m, refuseIndex ? new Set([indexPath, 's/v2/index.json']) : new Set()), indexPath, old };
+  return { manifest, store: bucket(m, refuseIndex ? new Set([indexPath, 's/v3/index.json']) : new Set()), indexPath, old };
 }
 const noStatic = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
 const platformOf = (store: ReturnType<typeof bucket>) => ({ env: { STORE: store } }) as unknown as App.Platform;
@@ -152,7 +152,7 @@ describe('the search from key files (round seventy-seven)', () => {
     await homeLoad(home);
     resetRateLimits();
     expect((await entriesGet(routeEvent(platform, `/api/entries?b=00&n=${c.buckets}`))).status).toBe(200);
-    expect(store.reads.filter((k) => k === indexPath || k === 's/v2/index.json')).toEqual([]);
+    expect(store.reads.filter((k) => k === indexPath || k === 's/v3/index.json')).toEqual([]);
     expect(store.reads.filter((k) => old.has(k))).toEqual([]);
     expect((await corpusNow(platform, noStatic)).idx).toBeNull();
     // an entries file the bucket cannot give is a 503, never the index read whole for it

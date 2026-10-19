@@ -29,10 +29,10 @@ export function climateDistance(a: MonthLike[], b: MonthLike[]): number {
 }
 
 /** For every key with months, the `n` nearest other keys by climateDistance, nearest first. O(k²): thousands of species in seconds, once, at index time. */
-export function nearestByClimate(items: Array<{ key: number; months: MonthLike[] }>, n = 6): Map<number, number[]> {
-  const out = new Map<number, number[]>();
-  const best = items.map(() => [] as Array<[number, number]>); // per item: [distance, key], kept sorted, at most n
-  const admit = (i: number, d: number, key: number) => {
+export function nearestByClimate<K>(items: Array<{ key: K; months: MonthLike[] }>, n = 6): Map<K, K[]> {
+  const out = new Map<K, K[]>();
+  const best = items.map(() => [] as Array<[number, K]>); // per item: [distance, key], kept sorted, at most n
+  const admit = (i: number, d: number, key: K) => {
     const arr = best[i];
     if (arr.length >= n && d >= arr[n - 1][0]) return;
     let j = arr.length;

@@ -104,7 +104,7 @@
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
     const s = await sheetForName(sp, k);
-    return s && s !== 'none' ? s.key : k;
+    return s && s !== 'none' ? s.gbif : k; // the reference's GBIF key, never its page id (round seventy-eight)
   }
   const METHODS = PROP_METHODS.map((x) => x.k);
   const SEED_PROV = ['unknown', 'wild', 'f1', 'fn'] as const;

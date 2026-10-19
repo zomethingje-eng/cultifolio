@@ -11,6 +11,7 @@
  * name. Keys are new and unique; `near` points at other entries of the new index. Deterministic (a fixed seed).
  * Never written to the corpus: dev only.
  */
+import { gbifPage } from '../../../src/lib/core/page-id';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { slugify } from '../../../src/lib/core/names';
 import type { IndexEntry } from '../../../src/lib/dossier/index-entry';
@@ -53,7 +54,9 @@ for (let copy = 1; outIdx.length < N; copy++) {
       if (!taken.has(name.toLowerCase())) break;
     }
     taken.add(name.toLowerCase());
-    const x: IndexEntry = { ...e, key: nextKey++, name, slug: slugify(name) };
+    // Keyed by a made-up GBIF key, in GBIF's namespace (round seventy-eight: a page's key is its id).
+    const g = nextKey++;
+    const x: IndexEntry = { ...e, key: gbifPage(g), gbif: g, name, slug: slugify(name) };
     if (e.common) x.common = swapWord(e.common);
     if (e.commons) x.commons = e.commons.map(swapWord);
     if (e.spellings) x.spellings = e.spellings.map(swapWord);

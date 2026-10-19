@@ -10,7 +10,7 @@
  * letter, which is shown as a capital; of a name's spellings the one more sources give is shown, then GBIF's first.
  *
  * The audit runs only with INDEX=<path to a built index.json>; the same audit is scripts/audit-common-names.ts, for the
- * live index: INDEX=static/s/v2/index.json npx vitest run tests/unit/r61q-common-name-rule.test.ts
+ * live index: INDEX=static/s/v3/index.json npx vitest run tests/unit/r61q-common-name-rule.test.ts
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

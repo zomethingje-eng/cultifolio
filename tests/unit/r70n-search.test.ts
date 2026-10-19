@@ -10,9 +10,11 @@ import { prepare, search, searchGenera } from '$core/search';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
 import { searchAnswer, _forgetIndex, type IndexEntry, type Loaded } from '$lib/server/dossiers';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-type E = Partial<IndexEntry> & { key: number; name: string };
-const at = (e: E): IndexEntry => ({ slug: e.name.toLowerCase().replace(/ /g, '-'), photos: 0, open: 0, climate: 'ok', ...e }) as IndexEntry;
+type E = Omit<Partial<IndexEntry>, 'key'> & { key: number; name: string };
+// Each page keyed by its GBIF key, in GBIF's namespace (round seventy-eight).
+const at = (e: E): IndexEntry => ({ slug: e.name.toLowerCase().replace(/ /g, '-'), photos: 0, open: 0, climate: 'ok', ...e, key: gbifPage(e.key), gbif: e.key }) as IndexEntry;
 const idx: IndexEntry[] = [
   at({ key: 3955786, name: 'Airampoa corrugata', family: 'Cactaceae', syn: ['Cactus corrugatus', 'Echinocactus corrugatus', 'Opuntia albisaetacens', 'Opuntia albisaetacens var. robustior', 'Opuntia armata', 'Opuntia aulacothele'], older: ['Opuntia corrugata', 'Opuntia longispina'], photos: 31 }),
   at({ key: 7282605, name: 'Cylindropuntia leptocaulis', family: 'Cactaceae', common: 'Christmas cactus', syn: ['Grusonia leptocaulis', 'Opuntia brittonii', 'Opuntia fragilis var. frutescens', 'Opuntia frutescens', 'Opuntia frutescens var. brevispina', 'Opuntia frutescens var. longispina'], older: ['Opuntia leptocaulis'], photos: 16 }),
@@ -85,7 +87,7 @@ describe('N2 (S-F6): a family from its start, never by a genus of the reference'
     // genera read from the candidates would not know Crassula; the whole index's do.
     const text = JSON.stringify(idx);
     const { manifest, files, stored } = buildProducts(idx, text, () => new Map());
-    const byPath = new Map<string, string>([['s/v2/index.json', text], [manifestPath(), JSON.stringify(manifest)]]);
+    const byPath = new Map<string, string>([['s/v3/index.json', text], [manifestPath(), JSON.stringify(manifest)]]);
     for (const [name, body] of files) byPath.set(productPath(manifest.files[name]), body);
     // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
     for (const [h, body] of stored) byPath.set(productPath(h), body);

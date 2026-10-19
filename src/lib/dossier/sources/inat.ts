@@ -1,4 +1,5 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
+import type { PageId } from '../../core/page-id';
 import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
 import type { Reference } from '../reference';
@@ -140,8 +141,56 @@ interface Observation {
   captive?: boolean;
   quality_grade?: string;
   /** The observation's own taxon: the species, or a taxon below it that `taxon_id` takes in as a descendant. */
-  taxon?: { id?: number; name?: string; rank?: string };
+  taxon?: { id?: number; name?: string; rank?: string; ancestor_ids?: number[] };
+  /** The taxon iNaturalist's identifiers agree on (the community taxon), and how many current identifications disagree with it. */
+  community_taxon_id?: number | null;
+  num_identification_disagreements?: number;
+  /** Each identification, `current` while it is the identifier's latest for the observation. */
+  identifications?: Array<{ current?: boolean; taxon?: { id?: number; ancestor_ids?: number[] }; taxon_id?: number }>;
   photos: ObsPhoto[];
+}
+
+/**
+ * The cultivated photographs' request (round seventy-eight, the owner's rule of 2026-10-19). iNaturalist makes every
+ * observation marked captive or cultivated "casual", never research grade ("isn't of a captive or cultivated organism"
+ * is a condition of a verifiable observation: https://help.inaturalist.org/en/support/solutions/articles/151000169936),
+ * so the request asked before, `quality_grade=research&captive=true`, found nothing: 3 such plant observations in all of
+ * iNaturalist, and no cultivated photograph on any of 8,947 pages. Its filters, each as iNaturalist's API documents it
+ * (https://api.inaturalist.org/v1/docs/, GET /observations; https://api.inaturalist.org/v1/swagger.json):
+ *   - `captive=true`: "Captive or cultivated observations";
+ *   - `taxon_id`: "Only show observations of these taxa and their descendants" (a descendant is read as the wild set's is);
+ *   - `photos=true` and `photo_license=cc0,cc-by,cc-by-sa`: "Must have at least one photo with this license", each
+ *     photograph's own `license_code` checked again on arrival (rule 4);
+ *   - `identifications=most_agree`: "Identifications must meet these criteria", a first cut that `agreedCaptive` makes exact.
+ */
+export const cultivatedUrl = (taxonId: number, perPage: number) =>
+  `${INAT}/observations?taxon_id=${taxonId}&photo_license=cc0,cc-by,cc-by-sa&photos=true&captive=true&identifications=most_agree&order_by=votes&per_page=${perPage}`;
+/**
+ * The words a cultivated-photograph record carries once asked by this rule (round seventy-eight): a record without them
+ * was asked by the rule before, which could find nothing, and `--fill inat` asks it again.
+ */
+export const CULTIVATED_RULE = 'observations marked captive or cultivated whose identifications agree';
+/** Whether a cultivated-photograph record was asked by today's rule and settled (answered, or answered with none). */
+export const cultivatedSettled = (u?: { status?: string; detail?: string } | null): boolean => !!u && (u.status === 'ok' || u.status === 'none') && (u.detail ?? '').includes(CULTIVATED_RULE);
+/** The wild photographs' request: research grade, not captive (unchanged). */
+export const wildUrl = (taxonId: number, perPage: number) =>
+  `${INAT}/observations?taxon_id=${taxonId}&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=false&order_by=votes&per_page=${perPage}`;
+
+/**
+ * Whether a captive observation's identifications agree, as the owner's rule says, read from the fields iNaturalist's
+ * API gives each observation (the `Observation` and `Identification` models of its swagger): marked captive
+ * (`captive`); at least two current identifications (`identifications[].current`); the community taxon is the
+ * observation's taxon (`community_taxon_id` equal to `taxon.id`); and no identification disagrees, both by iNaturalist's
+ * own count (`num_identification_disagreements` is 0) and by each current identification being of the observation's
+ * taxon, a taxon above it (`taxon.ancestor_ids`, which holds the taxon itself) or one below it.
+ */
+export function agreedCaptive(o: Observation): boolean {
+  const t = o.taxon?.id;
+  if (o.captive !== true || t == null || o.community_taxon_id !== t || o.num_identification_disagreements !== 0) return false;
+  const current = (o.identifications ?? []).filter((i) => i.current === true);
+  if (current.length < 2) return false;
+  const line = new Set(o.taxon?.ancestor_ids ?? [t]);
+  return current.every((i) => { const id = i.taxon?.id ?? i.taxon_id; return id != null && (line.has(id) || (i.taxon?.ancestor_ids ?? []).includes(t)); });
 }
 
 /**
@@ -151,11 +200,11 @@ interface Observation {
  * photographs reached the parent's page and led two of them. `held` is the reference's names, which hold such a name
  * whole as another species' older name (`infraHolders`); `key` is the species being built.
  */
-export function observedAsAnother(taxon: Observation['taxon'], key: number | undefined, held?: HeldNames | null): boolean {
+export function observedAsAnother(taxon: Observation['taxon'], key: PageId | undefined, held?: HeldNames | null): boolean {
   const w = (taxon?.name ?? '').trim().split(/\s+/);
   if (w.length < 3 || !held?.infraHolders) return false;
   const others = held.infraHolders(w[0], w[1], w[w.length - 1]).filter((k) => k !== key);
-  return others.length > 0 && !held.infraHolders(w[0], w[1], w[w.length - 1]).includes(key ?? -1);
+  return others.length > 0 && !(key != null && held.infraHolders(w[0], w[1], w[w.length - 1]).includes(key));
 }
 
 /**
@@ -169,16 +218,17 @@ export function observedAsAnother(taxon: Observation['taxon'], key: number | und
  * and Kew's placement of names below species (`kew`, from `KewInfra.placedElsewhere` bound to this page; round
  * seventy-two, C1), which names the species Kew places the taxon under, or null.
  */
-export type PhotoOwner = { key?: number; held?: HeldNames | null; kew?: ((taxonName: string) => string | null) | null };
+/** `key` is the page's id (round seventy-eight), which the reference's names (`held`) give their holders by. */
+export type PhotoOwner = { key?: PageId; held?: HeldNames | null; kew?: ((taxonName: string) => string | null) | null };
 
 export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, perPage = 30, own?: PhotoOwner): Promise<FetchResult<Photo[]>> {
-  const url =
-    `${INAT}/observations?taxon_id=${taxonId}&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research` +
-    `&captive=${wild ? 'false' : 'true'}&order_by=votes&per_page=${perPage}`;
+  const url = wild ? wildUrl(taxonId, perPage) : cultivatedUrl(taxonId, perPage);
   const r = await f<{ results: Observation[] }>(url);
   if (r.status !== 'ok') return r;
   const out: Photo[] = [];
   for (const o of r.data.results) {
+    // A cultivated photograph only of an observation whose identifications agree (round seventy-eight; `agreedCaptive`).
+    if (!wild && !agreedCaptive(o)) continue;
     if (observedAsAnother(o.taxon, own?.key, own?.held) || (o.taxon?.name && own?.kew?.(o.taxon.name))) continue;
     for (const p of o.photos) {
       const tag = licenceTag(p.license_code);

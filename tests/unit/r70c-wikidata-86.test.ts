@@ -60,7 +60,7 @@ describe('what stays refused', () => {
 
 describe('--fill wikidata gives each "no item" a reason', () => {
   it('a bare none is said as what was looked for', async () => {
-    const docs: Record<string, unknown> = { a: { key: 11120031, name: { scientific: 'Cyphostemma calcarium', authorship: 'Rabarij. & L.M.Lu', family: 'Vitaceae' }, ids: { wikidata: 'Q110694306' }, links: {}, upstream: { wikidata: { status: 'ok', at: 'x', detail: 'found by its label' } } } };
+    const docs: Record<string, unknown> = { a: { key: 11120031, name: { scientific: 'Cyphostemma calcarium', authorship: 'Rabarij. & L.M.Lu', family: 'Vitaceae' }, ids: { gbif: 11120031, wikidata: 'Q110694306' }, links: {}, upstream: { wikidata: { status: 'ok', at: 'x', detail: 'found by its label' } } } };
     const g = (async (u: string) => (u.includes('action=wbgetentities') && /Q110694306&props=claims(&|$)/.test(u) ? { status: 'ok', data: { entities: { Q110694306: { claims: {} } } } } : f(u))) as unknown as JsonFetcher;
     const c = await fillWikidata({ files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { docs[k] = d; } }, g);
     expect(c.lines).toEqual([`Cyphostemma calcarium [11120031]: Q110694306 → no item (none: ${wm.NO_ITEM})`]); // m70b: "no item (none)"

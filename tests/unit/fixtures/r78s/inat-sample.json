@@ -1,0 +1,152 @@
+[
+ {
+  "count": 63288,
+  "taxon": {
+   "id": 1628098,
+   "name": "Hibiscus \u00d7 rosa-sinensis",
+   "rank": "hybrid",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    48796,
+    48797,
+    860115,
+    860846,
+    48891,
+    1628098
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 54118,
+  "taxon": {
+   "id": 63512,
+   "name": "Acer palmatum",
+   "rank": "species",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    47729,
+    58321,
+    47727,
+    1466299,
+    1466300,
+    63512
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 40042,
+  "taxon": {
+   "id": 126882,
+   "name": "Aloe vera",
+   "rank": "species",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47163,
+    47218,
+    71400,
+    465618,
+    71956,
+    126882
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 25270,
+  "taxon": {
+   "id": 76465,
+   "name": "Crassula ovata",
+   "rank": "species",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    71289,
+    51890,
+    884712,
+    57017,
+    978464,
+    1462255,
+    1462257,
+    76465
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 70,
+  "taxon": {
+   "id": 186099,
+   "name": "Lithops aucampiae",
+   "rank": "species",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    47366,
+    49320,
+    624228,
+    624231,
+    186097,
+    186099
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 94,
+  "taxon": {
+   "id": 157475,
+   "name": "Hemigraphis",
+   "rank": "genus",
+   "ancestor_ids": [
+    48460,
+    47126,
+    211194,
+    47125,
+    47124,
+    48151,
+    50151,
+    157475
+   ],
+   "is_active": true
+  }
+ },
+ {
+  "count": 314,
+  "taxon": {
+   "id": 56406,
+   "name": "Marchantia polymorpha",
+   "rank": "species",
+   "ancestor_ids": [
+    48460,
+    47126,
+    64615,
+    152080,
+    1458852,
+    152699,
+    55708,
+    56394,
+    56406
+   ],
+   "is_active": true
+  }
+ }
+]

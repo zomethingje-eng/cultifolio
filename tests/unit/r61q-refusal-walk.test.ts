@@ -95,18 +95,18 @@ describe('a dossier the index lists but cannot be read', () => {
   // species' dossier and sent `feature`.
   it('the front page reads no species dossier and sends no feature, its strip whole either way', async () => {
     const { load } = await import('../../src/routes/+page.server');
-    const b = bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath(5411106), readFileSync('fixtures/dossiers/s/v2/5411106.json', 'utf8')]]);
+    const b = bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath('k339841'), readFileSync('fixtures/dossiers/s/v3/k339841.json', 'utf8')]]);
     const asked: string[] = [];
     const get = b.get;
-    b.get = async (k: string) => { asked.push(k); if (k === dossierPath(5411106)) throw new Error('R2 internal error'); return get(k); };
+    b.get = async (k: string) => { asked.push(k); if (k === dossierPath('k339841')) throw new Error('R2 internal error'); return get(k); };
     _forgetIndex();
     const page = (await load(ev('/', plat(b)))) as Record<string, unknown> & { featured: unknown[] };
     expect(page.featured.length).toBe(1); // W is the pool: eight photographs or more, a thumbnail, a climate
     expect('feature' in page).toBe(false);
-    expect(asked.filter((k) => k === dossierPath(5411106))).toEqual([]);
+    expect(asked.filter((k) => k === dossierPath('k339841'))).toEqual([]);
   });
   it('without a manifest, a bucket whose species cannot be read is answered 503, never left without it (finding 13, fixed in round sixty-two)', async () => {
-    const b = bucket([['s/v2/index.json', JSON.stringify(idx)]]);
+    const b = bucket([['s/v3/index.json', JSON.stringify(idx)]]);
     const c = await corpusNow(plat(b), noStatic);
     const { GET } = await import('../../src/routes/api/sheets/+server');
     const r = await GET(ev(`/api/sheets?b=${bucketOf(W.slug, c.buckets)}&n=${c.buckets}`, plat(b)));

@@ -9,37 +9,38 @@ import { commonsPhotos } from '$dossier/sources/commons';
 import { fixtureFetcher } from '$dossier/fetch';
 import { safeUrls } from '$dossier/schema';
 import { heldNamesOf, shownPhotos, leadOf, commonsKind, slip, type HeldNames } from '$dossier/photo-kind';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 /** The live index's names for the species these cases read (2026-10-12): accepted names and older names as the index carries them. */
 const INDEX = [
-  { key: 9251599, name: 'Othonna daucifolia', syn: ['Doria abrotanifolia', 'Othonna abrotanifolia'] },
-  { key: 5394999, name: 'Euryops pectinatus', syn: ['Euryops pectinatus var. pectinatus'] },
-  { key: 3702141, name: 'Nepenthes lamii' },
-  { key: 7219396, name: 'Nepenthes monticola' },
-  { key: 3702130, name: 'Nepenthes spectabilis' },
-  { key: 7283175, name: 'Echinocereus scheeri' },
-  { key: 3954494, name: 'Echinocereus schereri' },
-  { key: 3190753, name: 'Drosera macrophylla', syn: ['Sondera macrophylla', 'Drosera monantha'] },
-  { key: 3190837, name: 'Drosera microphylla', syn: ['Sondera microphylla', 'Drosera calycina'] },
-  { key: 5592748, name: 'Stephania suberosa' },
-  { key: 5592727, name: 'Stephania tuberosa' },
-  { key: 2773803, name: 'Ledebouria ovalifolia', syn: ['Scilla ovalifolia'] },
-  { key: 2773678, name: 'Ledebouria ovatifolia', syn: ['Scilla lanceifolia var. ovatifolia', 'Scilla ovatifolia'] },
-  { key: 7284127, name: 'Mammillaria matudae', syn: ['Mammillaria compacticaulis', 'Mammillaria matudae f. duocentralis', 'Mammillaria matudae var. serpentiformis'] },
-  { key: 4054801, name: 'Cyphostemma juttae', syn: ['Cissus juttae'] },
-  { key: 4198269, name: 'Aeonium dodrantale', syn: ['Sempervivum dodrantale'] },
-  { key: 3128990, name: 'Plectocephalus americanus', syn: ['Centaurea americana', 'Centaurea caroliniana', 'Centaurea grandiflora', 'Centaurea mexicana', 'Centaurea nuttallii'] },
-  { key: 3947849, name: 'Parodia ritteri', syn: ['Parodia camargensis', 'Parodia camargensis var. camblayana'] },
-  { key: 7281971, name: 'Parodia comarapana', syn: ['Bolivicactus comarapanus'] },
-  { key: 3949766, name: 'Parodia hausteiniana', syn: ['Bolivicactus hausteinianus', 'Parodia laui'] },
-  { key: 7281638, name: 'Parodia maassii', syn: ['Bolivicactus maassii'] },
-  { key: 2779965, name: 'Haworthia chloracantha' },
-  { key: 2779752, name: 'Haworthia monticola', syn: ['Haworthia chloracantha var. monticola'] },
-  { key: 2766653, name: 'Agave cocui', syn: ['Agave cocui var. cucutensis', 'Agave cocui var. laguayrensis'] },
-  { key: 7172987, name: 'Crassula perfoliata' },
-  { key: 7642067, name: 'Crassula perforata', syn: ['Crassula anthurus'] },
-  { key: 10871976, name: 'Agave pax' },
-  { key: 3067157, name: 'Euphorbia milii' }
+  { key: gbifPage(9251599), name: 'Othonna daucifolia', syn: ['Doria abrotanifolia', 'Othonna abrotanifolia'] },
+  { key: gbifPage(5394999), name: 'Euryops pectinatus', syn: ['Euryops pectinatus var. pectinatus'] },
+  { key: gbifPage(3702141), name: 'Nepenthes lamii' },
+  { key: gbifPage(7219396), name: 'Nepenthes monticola' },
+  { key: gbifPage(3702130), name: 'Nepenthes spectabilis' },
+  { key: gbifPage(7283175), name: 'Echinocereus scheeri' },
+  { key: gbifPage(3954494), name: 'Echinocereus schereri' },
+  { key: gbifPage(3190753), name: 'Drosera macrophylla', syn: ['Sondera macrophylla', 'Drosera monantha'] },
+  { key: gbifPage(3190837), name: 'Drosera microphylla', syn: ['Sondera microphylla', 'Drosera calycina'] },
+  { key: gbifPage(5592748), name: 'Stephania suberosa' },
+  { key: gbifPage(5592727), name: 'Stephania tuberosa' },
+  { key: gbifPage(2773803), name: 'Ledebouria ovalifolia', syn: ['Scilla ovalifolia'] },
+  { key: gbifPage(2773678), name: 'Ledebouria ovatifolia', syn: ['Scilla lanceifolia var. ovatifolia', 'Scilla ovatifolia'] },
+  { key: gbifPage(7284127), name: 'Mammillaria matudae', syn: ['Mammillaria compacticaulis', 'Mammillaria matudae f. duocentralis', 'Mammillaria matudae var. serpentiformis'] },
+  { key: gbifPage(4054801), name: 'Cyphostemma juttae', syn: ['Cissus juttae'] },
+  { key: gbifPage(4198269), name: 'Aeonium dodrantale', syn: ['Sempervivum dodrantale'] },
+  { key: gbifPage(3128990), name: 'Plectocephalus americanus', syn: ['Centaurea americana', 'Centaurea caroliniana', 'Centaurea grandiflora', 'Centaurea mexicana', 'Centaurea nuttallii'] },
+  { key: gbifPage(3947849), name: 'Parodia ritteri', syn: ['Parodia camargensis', 'Parodia camargensis var. camblayana'] },
+  { key: gbifPage(7281971), name: 'Parodia comarapana', syn: ['Bolivicactus comarapanus'] },
+  { key: gbifPage(3949766), name: 'Parodia hausteiniana', syn: ['Bolivicactus hausteinianus', 'Parodia laui'] },
+  { key: gbifPage(7281638), name: 'Parodia maassii', syn: ['Bolivicactus maassii'] },
+  { key: gbifPage(2779965), name: 'Haworthia chloracantha' },
+  { key: gbifPage(2779752), name: 'Haworthia monticola', syn: ['Haworthia chloracantha var. monticola'] },
+  { key: gbifPage(2766653), name: 'Agave cocui', syn: ['Agave cocui var. cucutensis', 'Agave cocui var. laguayrensis'] },
+  { key: gbifPage(7172987), name: 'Crassula perfoliata' },
+  { key: gbifPage(7642067), name: 'Crassula perforata', syn: ['Crassula anthurus'] },
+  { key: gbifPage(10871976), name: 'Agave pax' },
+  { key: gbifPage(3067157), name: 'Euphorbia milii' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
@@ -242,7 +243,7 @@ describe('C4: shownPhotos itself drops what the page drops, so the index counts 
   });
   it('the index\'s count of a stored dossier is the page\'s (Albuca paradoxa: 8 shown, 16 in the index)', () => {
     const photos = ['1', '2', '3', '4', '5', '6', '7', '8'].flatMap((id) => [inat(id), viaGbif(id)]);
-    const d = { key: 2772506, name: { scientific: 'Albuca paradoxa', synonyms: ['Ornithogalum dividens'], vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos };
+    const d = { key: gbifPage(2772506), name: { scientific: 'Albuca paradoxa', synonyms: ['Ornithogalum dividens'], vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos };
     expect(shownPhotos(d.photos, { scientific: d.name.scientific, synonyms: d.name.synonyms })).toHaveLength(safeUrls(d as never).photos.length);
     expect(safeUrls(d as never).photos).toHaveLength(8);
   });

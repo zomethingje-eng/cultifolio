@@ -10,8 +10,9 @@
 import { describe, it, expect } from 'vitest';
 import { load } from '../../src/routes/species/[slug]/+page.server';
 import type { IndexEntry, Loaded } from '$lib/server/dossiers';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
+const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key: gbifPage(key), gbif: key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
 const idx: IndexEntry[] = [
   entry(2, 'Adromischus filicaulis', ['Cotyledon mammillaris']),
   entry(3, 'Adromischus mammillaris', ['Cotyledon mammillaris']),

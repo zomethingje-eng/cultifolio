@@ -10,15 +10,15 @@ const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch
 // content-addressed, so a page keyed under corpus A renders what the bucket holds now.
 it('decided: a species page held under corpus A renders the dossier the bucket holds now (mutable path, no-store)', async () => {
   _forgetIndex();
-  const fx = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
-  const A = [{ key: 5384013, slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', family: 'Cactaceae', open: 1, photos: 1, climate: 'ok' }];
+  const fx = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
+  const A = [{ key: 'k2735933', gbif: 5384013, slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', family: 'Cactaceae', open: 1, photos: 1, climate: 'ok' }];
   const { manifest, files, stored } = buildProducts(A as never, JSON.stringify(A), () => new Map());
-  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, b]) => [productPath(manifest.files[n]), b] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), ['s/v2/5384013.json', JSON.stringify(fx)]]);
+  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, b]) => [productPath(manifest.files[n]), b] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), ['s/v3/k2735933.json', JSON.stringify(fx)]]);
   const store = { get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${m.get(k)!.length}"` } : null), head: async (k: string) => (m.has(k) ? { etag: `"${m.get(k)!.length}"` } : null) };
   const platform = { env: { STORE: store } } as unknown as App.Platform;
   const c = await corpusNow(platform, noStatic);
   // the refresh's first copy lands: the dossier object (a mutable path) before the new manifest
-  m.set('s/v2/5384013.json', JSON.stringify({ ...fx, summary: { ...fx.summary, text: 'CORPUS B TEXT' } }));
+  m.set('s/v3/k2735933.json', JSON.stringify({ ...fx, summary: { ...fx.summary, text: 'CORPUS B TEXT' } }));
   const ev = { params: { slug: 'copiapoa-cinerea' }, platform, fetch: noStatic, setHeaders: () => {}, cookies: { get: () => undefined }, request: new Request('https://x/species/copiapoa-cinerea'), url: new URL('https://x/species/copiapoa-cinerea'), getClientAddress: () => '1.2.3.4', locals: { corpus: c } };
   const data = (await load(ev as never)) as { d: { summary?: { text: string } } };
   expect(data.d.summary?.text).toBe('CORPUS B TEXT');

@@ -1,0 +1,31 @@
+g11144626	Ceropegia ananthapuramensis	Kew's rows do not decide which taxon this page is
+g2985894	Dudleya pulverulenta	Kew's entry 2778991 is also the entry of GBIF's 7530398: a merge decides which page is Kew's
+g3084426	Coryphantha macromeris	merged into GBIF's 11798439 (scripts/merged-pages.txt), which takes the Kew id
+g3190812	Drosera paleacea	Kew's entry 64497 is also the entry of GBIF's 3190985: a merge decides which page is Kew's
+g3190985	Drosera parvula	Kew's entry 64497 is also the entry of GBIF's 3190812: a merge decides which page is Kew's
+g3574112	Ceropegia nigra	Kew's entry 502875 is also the entry of GBIF's 3574291: a merge decides which page is Kew's
+g3574291	Ceropegia melanops	Kew's entry 502875 is also the entry of GBIF's 3574112: a merge decides which page is Kew's
+g3702919	Conophytum tomasii	Kew's rows do not decide which taxon this page is
+g3947359	Weingartia pulchra	Kew's entry 2465834 is also the entry of GBIF's 3948341: a merge decides which page is Kew's
+g3948341	Weingartia canigueralii	Kew's entry 2465834 is also the entry of GBIF's 3947359: a merge decides which page is Kew's
+g3959296	Copiapoa boliviana	Kew's entry 2735922 is also the entry of GBIF's 7284393: a merge decides which page is Kew's
+g4052359	Cyphostemma degraerii	Kew's rows do not decide which taxon this page is
+g4092242	Handroanthus impetiginosum	Kew's rows do not decide which taxon this page is
+g4199517	Echeveria pinetorum	Kew's entry 2781299 is also the entry of GBIF's 7334118: a merge decides which page is Kew's
+g7221866	Ceropegia linophylla	Kew's rows do not decide which taxon this page is
+g7263987	Aphelandra squarrosa	Kew's rows do not decide which taxon this page is
+g7281739	Bisnaga hamatacantha	Kew's rows do not decide which taxon this page is
+g7284393	Copiapoa calderana	Kew's entry 2735922 is also the entry of GBIF's 3959296: a merge decides which page is Kew's
+g7334118	Echeveria sessiliflora	Kew's entry 2781299 is also the entry of GBIF's 4199517: a merge decides which page is Kew's
+g7410371	Harpephyllum caffrum	Kew's rows do not decide which taxon this page is
+g7515664	Dorstenia poinsettifolia	Kew's rows do not decide which taxon this page is
+g7530398	Echeveria peacockii	Kew's entry 2778991 is also the entry of GBIF's 2985894: a merge decides which page is Kew's
+g7570556	Albuca longifolia	Kew's rows do not decide which taxon this page is
+g7876017	Tylecodon cacaliodes	Kew's rows do not decide which taxon this page is
+g7906297	Rebutia fidana	merged into GBIF's 7281301 (scripts/merged-pages.txt), which takes the Kew id
+g8005942	Monsonia lheritieri	Kew's rows do not decide which taxon this page is
+g9263110	Ceropegia macrocarpa	Kew's rows do not decide which taxon this page is
+g9449818	Ceropegia marnierana	Kew's rows do not decide which taxon this page is
+g9574874	Ceropegia cereiformis	Kew's entry 505095 is also the entry of GBIF's 9592399: a merge decides which page is Kew's
+g9584756	Ceropegia hadramautica	Kew's rows do not decide which taxon this page is
+g9592399	Ceropegia nubica	Kew's entry 505095 is also the entry of GBIF's 9574874: a merge decides which page is Kew's

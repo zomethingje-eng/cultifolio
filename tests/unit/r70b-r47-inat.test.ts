@@ -102,7 +102,7 @@ type D = ReturnType<typeof dossier>;
 
 describe('--fill inat-ids drops R47-1\'s seven taxa, however each id came', () => {
   it('each page loses another species\' id and photographs, and the report says which', async () => {
-    const docs: Record<string, unknown> = Object.fromEntries(INDEX.map((e) => [`${e.key}.json`, { key: e.key, name: { scientific: e.name, family: e.family }, ids: {}, links: {}, photos: [], upstream: {} }]));
+    const docs: Record<string, unknown> = Object.fromEntries(INDEX.map((e) => [`${e.key}.json`, { key: e.key, name: { scientific: e.name, family: e.family }, ids: { gbif: e.key }, links: {}, photos: [], upstream: {} }]));
     Object.assign(docs, {
       '2776776.json': dossier(2776776, 566079, "iNaturalist's taxon 584148 (Drimia filifolia) is inactive; followed to its current taxon 566079", 77),
       '5667820.json': dossier(5667820, 816267, "iNaturalist's taxon 506182 (Pinguicula chilensis) is inactive; followed to its current taxon 816267", 33),
@@ -126,7 +126,7 @@ describe('--fill inat-ids drops R47-1\'s seven taxa, however each id came', () =
   });
   it('a taxon of the species\' own name asks GBIF nothing (guard)', async () => {
     const asked: string[] = [];
-    const docs: Record<string, unknown> = { a: { key: 9534856, name: { scientific: 'Ceropegia mixta', family: 'Apocynaceae', synonyms: ['Orbea variegata (L.) Haw.'] }, ids: { inat: 431387 }, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { a: { key: 9534856, name: { scientific: 'Ceropegia mixta', family: 'Apocynaceae', synonyms: ['Orbea variegata (L.) Haw.'] }, ids: { gbif: 9534856, inat: 431387 }, links: {}, photos: [], upstream: {} } };
     const w = world({}, asked);
     const f = (async (url: string) => (/\/taxa\/431387/.test(url) ? { status: 'ok', data: { results: [{ id: 431387, name: 'Orbea variegata', rank: 'species', is_active: true }] } } : w(url))) as unknown as JsonFetcher;
     await fillInatIds(store(docs), f, () => '2026-10-13T00:00:00Z');
@@ -134,7 +134,7 @@ describe('--fill inat-ids drops R47-1\'s seven taxa, however each id came', () =
     expect((docs.a as D).ids.inat).toBe(431387);
   });
   it('GBIF refusing stops the fill and leaves the dossier as it was (fails safe)', async () => {
-    const docs: Record<string, unknown> = { '5689714.json': dossier(5689714, 598425, 'carried', 50), '5361969.json': { key: 5361969, name: { scientific: 'Cotyledon orbiculata', family: 'Crassulaceae' }, ids: {}, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { '5689714.json': dossier(5689714, 598425, 'carried', 50), '5361969.json': { key: 5361969, name: { scientific: 'Cotyledon orbiculata', family: 'Crassulaceae' }, ids: { gbif: 5361969 }, links: {}, photos: [], upstream: {} } };
     const before = structuredClone(docs);
     const c = await fillInatIds(store(docs), world({ refuse: /species\/match/ }), () => '2026-10-13T00:00:00Z');
     expect(c.failed).toBe('api.gbif.org 429'); // base: no failure, nothing asked

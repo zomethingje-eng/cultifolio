@@ -29,7 +29,7 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
   it('leaves the corpus held before in place, and is not read again each minute', async () => {
     _forgetIndex();
     const a = blobsFor(X), b = blobsFor(Y);
-    const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)], ['s/v2/index.json', a.text]]);
+    const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)], ['s/v3/index.json', a.text]]);
     const store = {
       get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${k}:${m.get(k)!.length}"` } : null),
       head: async (k: string) => (m.has(k) ? { etag: `"${k}:${m.get(k)!.length}"` } : null)
@@ -41,7 +41,7 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
     expect(first.corpus).toBe(a.manifest.id);
     // the refresh's first copy lands (products and the top-level index), then a manifest this Worker rejects (one product missing)
     for (const [k, v] of b.blobs) m.set(k, v);
-    m.set('s/v2/index.json', b.text);
+    m.set('s/v3/index.json', b.text);
     const files = { ...b.manifest.files }; delete files['catalogue/genus-all.json'];
     m.set(manifestPath(), JSON.stringify({ ...b.manifest, files }));
     vi.spyOn(console, 'warn').mockImplementation(() => {});

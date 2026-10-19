@@ -23,6 +23,7 @@ import * as gbif from '$dossier/sources/gbif';
 import { fillInatIds } from '$dossier/corpus-fills';
 import type { JsonFetcher } from '$dossier/fetch';
 import { recordedFetcher } from './helpers/recorded';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 /* ---- Kew's own file, as `bulk-load.ts` reads it (wcvp_names.csv of 2026-06-04, the rows these cases touch) ---- */
 const H = 'plant_name_id|ipni_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|infraspecific_rank|infraspecies|parenthetical_author|primary_author|publication_author|place_of_publication|volume_and_page|first_published|nomenclatural_remarks|geographic_area|lifeform_description|climate_description|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id|hybrid_formula|reviewed'.split('|');
@@ -97,7 +98,7 @@ describe('"Photographs come first from the media that GBIF\'s occurrence downloa
 
 describe('"A Commons file is shown only as a JPEG or WebP photograph" (70b): the kinds', () => {
   const s = said('how', 'A Commons file is shown only as a JPEG or WebP photograph');
-  const names = { scientific: 'Aloe vera', key: 1, held: heldNamesOf([{ key: 1, name: 'Aloe vera' }, { key: 2, name: 'Aloe ferox' }]) };
+  const names = { scientific: 'Aloe vera', key: gbifPage(1), held: heldNamesOf([{ key: gbifPage(1), name: 'Aloe vera' }, { key: gbifPage(2), name: 'Aloe ferox' }]) };
   it('a map, and seeds, are not shown; "a pod on the plant is the plant"', () => {
     expect(commonsKind('File:Aloe vera map.jpg', names), s.where).not.toBeNull();
     expect(s.text).toMatch(/seeds \(a pod on the plant is the plant\)/);

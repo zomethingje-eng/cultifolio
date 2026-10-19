@@ -13,7 +13,6 @@
  * the 476 synonym ranges said so only in the folded record (self-review 72, B3).
  */
 import { authorKey } from './authors';
-import type { Reference } from './reference';
 
 export type RangeKind = 'own' | 'older-name' | 'synonym-of' | 'kew-entry' | 'spelling';
 
@@ -21,7 +20,7 @@ export interface RangeVia {
   kind: RangeKind;
   /** Kew's name and author of the entry whose range is shown: "Ceropegia nigra N.E.Br.". */
   entry: string;
-  /** The reference key, when that entry is another page's. */
+  /** The other page's id, when that entry is another page's (round seventy-eight: its GBIF key before). */
   page?: string;
   /** The entry's words, without author: "Ceropegia nigra". */
   name?: string;
@@ -77,7 +76,7 @@ export function settleVia(v: RangeVia, scientific: string, authorship?: string):
 }
 
 /** The reference key of the entry, when the entry is another page of the reference (Ceropegia nigra for C. melanops). */
-export function withPage(v: RangeVia, key: number, reference?: Pick<Reference, 'keyOf'> | null): RangeVia {
+export function withPage(v: RangeVia, key: string | number, reference?: { keyOf(name: string): string | number | undefined } | null): RangeVia {
   if (!reference || !v.name || v.kind === 'own' || v.kind === 'kew-entry') return v;
   const k = reference.keyOf(v.name);
   return k != null && k !== key ? { ...v, page: String(k) } : v;

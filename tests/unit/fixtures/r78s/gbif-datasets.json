@@ -1,0 +1,181 @@
+{
+ "source": "GBIF dataset/<key> and organization/<key>, read 2026-10-19; descriptions cut to their opening and the sentence the rule reads",
+ "datasets": [
+  {
+   "key": "c16570d5-882f-4626-9511-3e8c0b288b08",
+   "records": 1684056,
+   "title": "Straßen- und Anlagenbaumbestand Berlin",
+   "type": "OCCURRENCE",
+   "publisher": "Senate Department for Urban Development and the Environment, Berlin",
+   "keywords": [
+    "germany",
+    "tree",
+    "berlin"
+   ],
+   "description": "<p>Straßen- und Anlagenbaumbestand Berlins im Geoportal auf Grundlage des\nBaumkataster des Berliner Grünflächeninformations- und managementsystems\n(GRIS), in dem die Bäume und Grünflächen verwaltet werden, die sich in der\nZuständigkeit der bezirklichen Straßen- und Grünflächenämter befinden. Im\nBaum"
+  },
+  {
+   "key": "be2dc14a-3f5b-44dd-81fc-4d0a8b5cad84",
+   "records": 1338990,
+   "title": "Svalbard Global Seed Vault Collection",
+   "type": "OCCURRENCE",
+   "publisher": "Nordic Genetic Resource Center (NORDGEN)",
+   "keywords": [],
+   "description": ""
+  },
+  {
+   "key": "33795d9d-3f94-4b0e-a2f6-d3a03cfce7aa",
+   "records": 154821,
+   "title": "Bioversity Collecting Mission Database",
+   "type": "OCCURRENCE",
+   "publisher": "Bioversity International",
+   "keywords": [
+    "landraces",
+    "crop wild relatives",
+    "Germplasm collecting missions",
+    "original passport data"
+   ],
+   "description": "<p>Access to original passport data of more than 220,000 crop landrace and wild relative samples collected around the world during Bioversity International supported missions. 27% of samples are crop wild relatives. About 150,000 samples are currently geo-referenced.</p>\n<p>See http://bioversity.git"
+  },
+  {
+   "key": "7adf20e0-c955-11de-95c0-b8a03c50a862",
+   "records": 108350,
+   "title": "Royal Botanic Garden Edinburgh Living Plant Collections (E)",
+   "type": "OCCURRENCE",
+   "publisher": "Royal Botanic Garden Edinburgh",
+   "keywords": [
+    "Living Plant Specimens"
+   ],
+   "description": "The Royal Botanic Garden Edinburgh was established in 1670 and during the 20th century acquired three Regional Gardens – the mountainous Benmore in Argyll; Dawyck in the wooded hills of the Scottish Borders and Logan on the Gulf Stream-warmed southern peninsula of Dumfries &amp; Galloway.\n        To"
+  },
+  {
+   "key": "e17d9bdc-dc88-401a-bb10-6ef560448480",
+   "records": 50682,
+   "title": "CZE National PGR Inventory",
+   "type": "OCCURRENCE",
+   "publisher": "Crop Research Institute (CRI)",
+   "keywords": [],
+   "description": "Plant Genetic Resources collection in the Czech Republic"
+  },
+  {
+   "key": "c692cb7e-46f9-4d3a-8d5f-e9fcd41e5ee0",
+   "records": 39380,
+   "title": "Vegetation Records for Forest GPs, 2007 - 2008, Header Data and Species Identities",
+   "type": "OCCURRENCE",
+   "publisher": "Biodiversity Exploratories",
+   "keywords": [
+    "vegetation data",
+    "forest",
+    "vascular plants",
+    "relevés"
+   ],
+   "description": "<p>Original data comes from a project which takes or took place as part of the DFG priority program &#34;Exploratories for large-scale and long-term functional biodiversity research&#34;. The data is stored together with descriptive metadata, in combination called a dataset, in the project repositor"
+  },
+  {
+   "key": "f885c8c7-8312-4e4d-a9f4-7e5b30a0a2d1",
+   "records": 20471,
+   "title": "Colección Viva del Jardín Botánico de Bogotá",
+   "type": "OCCURRENCE",
+   "publisher": "Jardín Botánico José Celestino Mutis",
+   "keywords": [
+    "Occurrence",
+    "Specimen",
+    "RNJBB",
+    "COLECCIONES",
+    "Occurrence"
+   ],
+   "description": "El Jardín Botánico de Bogotá &#34;José Celestino Mutis&#34; es una colección científica distrital con énfasis en plantas de ecosistemas altoandinos y de páramo, y con la presencia de material vegetal procedente de otras zonas de vida del país. Sus colecciones vivas buscan la conservación ex situ de "
+  },
+  {
+   "key": "9807df89-7446-4aab-8ec8-fd837085c1a1",
+   "records": 18847,
+   "title": "Images and observations of mostly edible plants in Stephen Barstow’s Edible Garden in Norway, taken between 2005 and 2014",
+   "type": "OCCURRENCE",
+   "publisher": "GBIF Norway",
+   "keywords": [
+    "Occurrence",
+    "garden",
+    "Observation"
+   ],
+   "description": "<p>These observations are of cultivated plants in a private garden.</p>\n<p>All pictures were taken by Stephen Barstow, mostly in his garden known as The Edible Garden at 63.4N in Norway. NB! The vast majority but not all plants are edible (some are poisonous, included to demonstrate confusion specie"
+  },
+  {
+   "key": "651b5e3a-393c-48ca-bd51-99028caae52d",
+   "records": 11625,
+   "title": "Records of the WA Seed Technology Centre",
+   "type": "OCCURRENCE",
+   "publisher": "WA Botanic Gardens and Parks Authority",
+   "keywords": [],
+   "description": "<p>The Western Australian Seed Technology Centre in Kings Park is managed by the Botanic Gardens and Parks Authority in Perth.  Kings Park has had a strong botanical collection program since 1963 with a focus on the Western Australian flora. Field collecting trips are undertaken throughout Western A …  \nThe Authority has been an inaugural partner with the international Millennium Seed Bank Project and continues to liaise with staff at the Royal Botanic Garden"
+  },
+  {
+   "key": "b7ef1d60-b0a0-11dd-aa14-b8a03c50a862",
+   "records": 8385,
+   "title": "SBT-Living",
+   "type": "OCCURRENCE",
+   "publisher": "The Bergius Botanic Garden",
+   "keywords": [
+    "Occurrence",
+    "Specimen",
+    "Occurrence"
+   ],
+   "description": "<p>This dataset consists of data on living organism from the Bergius Botanical Garden, Stockholm. The living collections of the Bergius Botanical Garden - that is, the plants in the garden and in the conservatories, consist of thousands of publicly displayed species. The major sections are the herb "
+  },
+  {
+   "key": "886049b4-d276-4e8c-baee-5e876bb6eaa1",
+   "records": 4072,
+   "title": "Seed bank and bryophyte propagule content in top soil (2008-2009, all grassland Eps)",
+   "type": "OCCURRENCE",
+   "publisher": "Biodiversity Exploratories",
+   "keywords": [
+    "vascular plants",
+    "seed bank",
+    "grassland",
+    "bryophytes",
+    "seedling"
+   ],
+   "description": "<p>Original data comes from a project which takes or took place as part of the DFG priority program &#34;Exploratories for large-scale and long-term functional biodiversity research&#34;. The data is stored together with descriptive metadata, in combination called a dataset, in the project repositor … s part of the metadata of the original dataset.  In this project we investigate seed bank and bryophyte propagule content in top soil in grasslands.  "
+  },
+  {
+   "key": "c3937703-e166-402a-9826-556206aaa1f4",
+   "records": 3247,
+   "title": "Museu de Ciències Naturals de Barcelona: BGJBB",
+   "type": "OCCURRENCE",
+   "publisher": "Botanical Garden of Barcelona",
+   "keywords": [
+    "germoplasma",
+    "semilla",
+    "Jardín Botánico",
+    "banco",
+    "Metadata"
+   ],
+   "description": "Conservation of the endangered flora of a territory is mainly based on preserving its natural habitat, which we know as in-situ or on-site conservation, but it is necessary to reinforce this protection with ex-situ interventions, i.e. outside its natural habitat, whether in collections of living pla … i.e. outside its natural habitat, whether in collections of living plants or in germplasm banks.\n\nThe Botanical Garden of Barcelona was created to contribute to"
+  },
+  {
+   "key": "c6cd34b7-52d1-40a6-868f-dadaa473f62f",
+   "records": 216,
+   "title": "Clonal Citrus trees collection (PPGR-CITRUS-01)",
+   "type": "OCCURRENCE",
+   "publisher": "Consiglio Nazionale delle Ricerche, Istituti del Dipartimento di Scienze Bio-AgroAlimentari (CNR-DiSBA)",
+   "keywords": [
+    "Occurrence",
+    "Preservation of neglected species",
+    "local varieties and cultivars",
+    "Agriculture",
+    "Fruit trees",
+    "Lemon trees",
+    "Specimen"
+   ],
+   "description": "<p>The dataset comprises 220 clonal accessions of the genus Citrus (Rutaceae), recognized for their agronomic, historical, and ornamental significance. The plants are cultivated in open fields. Maintenance: Callus and seeds are stored under controlled temperature and humidity conditions. Germination … eds and cuttings. The main objective of the PPGR collection is to safeguard the genetic resources of perennial plants that are valuable for Italian and Mediterr"
+  },
+  {
+   "key": "3c59bd42-7bfd-421b-8da4-275780390e4c",
+   "records": 2,
+   "title": "Desert Botanical Garden Herbarium",
+   "type": "OCCURRENCE",
+   "publisher": "Desert Botanical Garden Herbarium",
+   "keywords": [],
+   "description": "<p>Over 103,000 specimens in collection, with emphasis on plants of the Southwest and northern Mexico, Cactaceae and Agavaceae.</p>"
+  }
+ ]
+}

@@ -42,7 +42,7 @@ beforeAll(() => {
   // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
   for (const [h, body] of stored) blobs.set(productPath(h), body);
   platform = { env: { QUEUE: kv(), STORE: store(blobs) } } as unknown as App.Platform;
-  plain = { env: { QUEUE: kv(), STORE: store(new Map([['s/v2/index.json', JSON.stringify(IDX)]])) } } as unknown as App.Platform;
+  plain = { env: { QUEUE: kv(), STORE: store(new Map([['s/v3/index.json', JSON.stringify(IDX)]])) } } as unknown as App.Platform;
 }, 60_000);
 beforeEach(() => { resetRateLimits(); _forgetIndex(); });
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;

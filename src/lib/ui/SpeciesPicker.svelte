@@ -188,7 +188,8 @@
       refGenus = !!shape && !!relaxed && sameName(relaxed, shape.genus);
       const similar = Array.isArray(answer) && 'near' in answer && answer.near === true;
       const offered = !relaxed || (relaxed.trim().split(/\s+/).length === 2 && !!species && sameName(words(relaxed), species));
-      local = (offered ? hits : []).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
+      // A row's key is the GBIF key a plant files (round seventy-eight): the page's `gbif`, never its id.
+      local = (offered ? hits : []).map((e) => ({ key: e.gbif ?? -1, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
       show();
       // The reference answered after the field's check had concluded (a leave, or Enter, before this answer, with the name
       // service silent), or after the grower had left the field (a leave within the search's 180 ms, whose check this

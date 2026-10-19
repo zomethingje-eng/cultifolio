@@ -1,0 +1,2 @@
+# Round seventy-eight (I): scripts/dev/scale/r78-page-proof.mjs: round seventy-seven's build (r78base) over the version 2 corpus against this round's build over the same corpus as version 3, every species page, the front page, two groupings and 60 opened genus rows (9,010 pages): HTML the same (the species page's data-key read as its GBIF key), page data the same with ids read as GBIF keys, 2026-10-19.
+{"pages":9010,"html":9010,"data":9010,"statuses":{"200":9010},"ids":8947}

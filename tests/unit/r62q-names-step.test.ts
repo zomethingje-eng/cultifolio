@@ -13,11 +13,12 @@ import { parseDossier } from '$dossier/schema';
 import { englishNames } from '$dossier/index-entry';
 
 let dir: string;
-const keys = () => readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)).map((f) => parseInt(f)).sort((a, b) => a - b);
-const read = (k: number) => JSON.parse(readFileSync(join(dir, `${k}.json`), 'utf8'));
+// Each dossier under its page's id (round seventy-eight), in the order the step reads them; GBIF is asked by `ids.gbif`.
+const keys = () => readdirSync(dir).filter((f) => /^[kg]\d+\.json$/.test(f)).map((f) => f.slice(0, -5)).sort();
+const read = (k: string) => JSON.parse(readFileSync(join(dir, `${k}.json`), 'utf8'));
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'r62q-names-'));
-  cpSync('fixtures/dossiers/s/v2', dir, { recursive: true });
+  cpSync('fixtures/dossiers/s/v3', dir, { recursive: true });
 });
 const NOW = () => new Date('2026-10-08T12:00:00Z');
 /** A fetcher answering every species' vernacularNames with `rows`, in pages of `size`, counting the requests. */
@@ -53,7 +54,7 @@ describe('the --names step', () => {
       expect(a.name.vernacular).toEqual([
         { name: 'Money plant', lang: 'eng', source: 'A', preferred: true },
         { name: 'money plant', lang: 'eng', source: 'B' },
-        { name: `Name ${b.key}`, lang: 'eng', source: 'C' },
+        { name: `Name ${b.ids.gbif}`, lang: 'eng', source: 'C' },
         { name: 'Geldboom', lang: 'afr', source: 'D' }
       ]);
       expect(a.upstream['gbif.vernacular']).toEqual({ status: 'ok', at: '2026-10-08T12:00:00.000Z', detail: `${NAMES_MARK} 2026-10-08` });
@@ -83,9 +84,9 @@ describe('the --names step', () => {
     const many = (key: number) => Array.from({ length: key === 999 ? 4500 : 3 }, (_, i) => ({ vernacularName: `N${i}`, language: 'eng', source: `S${i}` }));
     const r = await refetchNames(dir, gbif(many, 1000).f, { now: NOW });
     expect(r.truncated).toBe(1);
-    expect(read(999).upstream['gbif.vernacular'].detail).toBe(`${NAMES_MARK} 2026-10-08; truncated: the first 4000 rows only`);
-    expect(read(999).name.vernacular).toHaveLength(4000);
-    expect(read(keys().find((k) => k !== 999)!).name.vernacular).toHaveLength(3);
+    expect(read('g999').upstream['gbif.vernacular'].detail).toBe(`${NAMES_MARK} 2026-10-08; truncated: the first 4000 rows only`);
+    expect(read('g999').name.vernacular).toHaveLength(4000);
+    expect(read(keys().find((k) => k !== 'g999')!).name.vernacular).toHaveLength(3);
   });
   it('an error leaves the dossier as it was, to be asked next run', async () => {
     const k = keys()[0];

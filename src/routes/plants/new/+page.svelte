@@ -26,7 +26,7 @@
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
     const s = await sheetForName(sp, k);
-    return s && s !== 'none' ? s.key : k;
+    return s && s !== 'none' ? s.gbif : k; // the reference's GBIF key, never its page id (round seventy-eight)
   }
   onMount(async () => {
     await collection.load();

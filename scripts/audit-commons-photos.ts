@@ -8,6 +8,8 @@
  * uploader's slip is the species' only where the index holds no such name), and with each file's categories where the
  * build or `--fill commons-kind` kept them. It says how many files have no categories kept yet.
  */
+import { DOSSIER_FILE } from '../src/lib/dossier/rekey';
+import type { PageId } from '../src/lib/core/page-id';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { commonsKind, leadOf, heldNamesOf, type HeldSource } from '../src/lib/dossier/photo-kind';
 import { readCommonsPhoto } from '../src/lib/dossier/photo-credit';
@@ -15,10 +17,10 @@ import { isGif } from '../src/lib/dossier/dedupe';
 import { DOSSIER_V } from '../src/lib/dossier/schema';
 
 type P = { src?: string; id: string; url: string; thumb: string; captive?: boolean; licence: string; attribution: string; categories?: string[]; struck?: boolean };
-type D = { key: number; name: { scientific: string; synonyms?: string[] }; photos: P[] };
+type D = { key: PageId; name: { scientific: string; synonyms?: string[] }; photos: P[] };
 
 const dir = process.argv[2] ?? `static/s/v${DOSSIER_V}`;
-const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+const files = existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)) : [];
 // The reference's names, as the Worker reads them: the index written beside the dossiers. Without it no slip is read as the species'.
 const index = existsSync(`${dir}/index.json`) ? (JSON.parse(readFileSync(`${dir}/index.json`, 'utf8')) as HeldSource[]) : null;
 const held = index ? heldNamesOf(index) : null;

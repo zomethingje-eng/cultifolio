@@ -29,6 +29,7 @@ import { WAIT_PAST_MS, TRUST_SERVER_TWICE_PAST_MS } from '$core/hlc';
 import { VAULT_WRITES_PER_HOUR } from '$lib/server/caps';
 import { Counters } from '$lib/server/counters';
 import { pagedStorage } from './helpers/r61s-fake';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const raw = (f: string) => readFileSync(f, 'utf8');
 function walk(dir: string, out: string[] = []): string[] {
@@ -70,8 +71,8 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
       're:srsearch=haswbstatement%3AP846%3D7555524(&|$)': { query: { search: [] } },
       [`${W}?action=wbsearchentities`]: { search: [{ id: 'Q15605262', label: 'Peperomia monticola' }] },
       're:wbgetentities&format=json&ids=Q15605262&': { entities: { Q15605262: item('Peperomia monticola', ['4183999'], ['679160-1']) } },
-      'https://api.gbif.org/v1/species/4183999': { key: 4183999, scientificName: 'Peperomia monticola Hook.fil.', canonicalName: 'Peperomia monticola', authorship: 'Hook.fil.', rank: 'SPECIES', taxonomicStatus: 'HETEROTYPIC_SYNONYM', kingdom: 'Plantae', acceptedKey: 4188553, speciesKey: 4188553 },
-      [`re:datasetKey=${WCVP_DATASET}`]: { results: [['Peperomia monticola Hook.f.', 'Hook.f.', 'SYNONYM', '679160-1'], ['Peperomia monticola Miq.', 'Miq.', 'ACCEPTED', '679159-1']].map(([scientificName, authorship, taxonomicStatus, ipni], i) => ({ key: 206000000 + i, scientificName, canonicalName: 'Peperomia monticola', authorship, taxonomicStatus, rank: 'SPECIES', references: `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${ipni}` })), endOfRecords: true },
+      'https://api.gbif.org/v1/species/4183999': { key: gbifPage(4183999), scientificName: 'Peperomia monticola Hook.fil.', canonicalName: 'Peperomia monticola', authorship: 'Hook.fil.', rank: 'SPECIES', taxonomicStatus: 'HETEROTYPIC_SYNONYM', kingdom: 'Plantae', acceptedKey: 4188553, speciesKey: 4188553 },
+      [`re:datasetKey=${WCVP_DATASET}`]: { results: [['Peperomia monticola Hook.f.', 'Hook.f.', 'SYNONYM', '679160-1'], ['Peperomia monticola Miq.', 'Miq.', 'ACCEPTED', '679159-1']].map(([scientificName, authorship, taxonomicStatus, ipni], i) => ({ key: gbifPage(206000000) + i, scientificName, canonicalName: 'Peperomia monticola', authorship, taxonomicStatus, rank: 'SPECIES', references: `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${ipni}` })), endOfRecords: true },
       're:srsearch=haswbstatement%3AP961': { query: { search: [] } }
     }) as JsonFetcher;
     const r = await crossIds(f, 'Peperomia monticola', 7555524, [], { authorship: 'Miq.' });
@@ -127,24 +128,24 @@ describe('the Commons file rules (/about/how)', () => {
   const b = said('how', 'Every binomial in the name, of the species');
   const y = said('how', 'A credit naming a lithographer or draughtsman');
   const HELD = heldNamesOf([
-    { key: 7284127, name: 'Mammillaria matudae' },
-    { key: 7283175, name: 'Echinocereus scheeri' },
-    { key: 3954494, name: 'Echinocereus schereri' },
-    { key: 2, name: 'Babiana purpurea', syn: ['Babiana stricta var. purpurea'] },
-    { key: 3, name: 'Babiana stricta' }
+    { key: gbifPage(7284127), name: 'Mammillaria matudae' },
+    { key: gbifPage(7283175), name: 'Echinocereus scheeri' },
+    { key: gbifPage(3954494), name: 'Echinocereus schereri' },
+    { key: gbifPage(2), name: 'Babiana purpurea', syn: ['Babiana stricta var. purpurea'] },
+    { key: gbifPage(3), name: 'Babiana stricta' }
   ]);
-  const shown = (file: string, scientific: string, key: number, synonyms: string[] = []) => commonsKind(`File:${file}.jpg`, { scientific, synonyms, key, held: HELD }) === null;
+  const shown = (file: string, scientific: string, key: number, synonyms: string[] = []) => commonsKind(`File:${file}.jpg`, { scientific, synonyms, key: gbifPage(key), held: HELD }) === null;
   // Round seventy-one (C's S-C9, the merge's one rule): a slip is shown only once Kew and GBIF were asked of it and hold it
   // as no species (`Photo.slips`); until then the file is not shown. Kew's synonym of another plant is no slip, and GBIF's
   // second spelling of the same name by the same author is one name.
   it('an uploader\'s slip is the species\' only once Kew and GBIF were asked of it: the sentence\'s own cases', () => {
     const [slipped, species] = [claim(s, /"(Mammillaria \w+)" is Mammillaria \w+;/), claim(s, /"Mammillaria \w+" is (Mammillaria \w+);/)];
-    const shownWith = (slips: string[]) => commonsKind(`File:${slipped}.jpg`, { scientific: species, key: 7284127, held: HELD }, { slips: slips.map((x) => x.toLowerCase()) }) === null;
+    const shownWith = (slips: string[]) => commonsKind(`File:${slipped}.jpg`, { scientific: species, key: gbifPage(7284127), held: HELD }, { slips: slips.map((x) => x.toLowerCase()) }) === null;
     expect(s.text, s.where).toMatch(/until then the file is not shown/);
     expect(shownWith([]), s.where).toBe(false); // not yet asked
     expect(shownWith([slipped])).toBe(true); // asked, and held as no species
     const own = claim(s, /"(Echinocereus \w+)" is a species of its own/);
-    expect(commonsKind(`File:${own}.jpg`, { scientific: 'Echinocereus scheeri', key: 7283175, held: HELD }, { slips: [own.toLowerCase()] })).not.toBeNull();
+    expect(commonsKind(`File:${own}.jpg`, { scientific: 'Echinocereus scheeri', key: gbifPage(7283175), held: HELD }, { slips: [own.toLowerCase()] })).not.toBeNull();
     expect(numberWord(claim(s, /an uploader's slip of (\w+) letters or more/))).toBe(5);
     const [mariae, scut] = [claim(s, /"(Ceropegia mariae)" Kew's synonym of/), claim(s, /"Ceropegia mariae" Kew's synonym of (Echidnopsis scutellata)/)];
     expect(slipStanding(mariae, { scientific: 'Ceropegia maritae' }, [{ canonicalName: mariae, scientificName: `${mariae} Lavranos`, taxonomicStatus: 'SYNONYM', accepted: `${scut} (Deflers) A.Berger` }], null).own).toBe(false);
@@ -172,7 +173,7 @@ describe('the Commons file rules (/about/how)', () => {
     const cited = claim(y, /a year cited after a page \("([^"]+)"\) is no year/);
     expect(shown(`Dasylirion graminifolium Ecklon${cited} vol 2`, 'Dasylirion graminifolium', 9)).toBe(true);
     // A licence for old works is evidence too.
-    expect(commonsKind(`File:Dasylirion graminifolium Zuccarini ${year}.jpg`, { scientific: 'Dasylirion graminifolium', key: 9, held: HELD }, { credit: 'Zuccarini, PD-old, via Wikimedia Commons' })).not.toBeNull();
+    expect(commonsKind(`File:Dasylirion graminifolium Zuccarini ${year}.jpg`, { scientific: 'Dasylirion graminifolium', key: gbifPage(9), held: HELD }, { credit: 'Zuccarini, PD-old, via Wikimedia Commons' })).not.toBeNull();
     expect(shown('Mammillaria matudae hybrid', 'Mammillaria matudae', 7284127)).toBe(false);
   });
 });

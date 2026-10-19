@@ -4,8 +4,9 @@
  * and the older names behind the redirects and the shared-name 404. The build writes those maps as small products,
  * read by key, so a species page reads its own few small files and the files it shows, and nothing of the whole:
  *
- *   cards/<h>.json            what a species page reads (round seventy-seven): each page's address to its key, and
- *                             `#<key>` to the species' card; split by an FNV hash of the key, about 35 species a file
+ *   cards/<h>.json            what a species page reads (round seventy-seven): each page's address to its id, `#<id>`
+ *                             to the species' card, and (round seventy-eight) `@<GBIF key>` to the id of the page whose
+ *                             own GBIF key it is; split by an FNV hash of the record's name, about 35 species a file
  *                             (`cardFilesFor`)
  *   older/<h>.json            the names that are not a page's address (round seventy-seven): each accepted name in
  *                             lower case, and each older name in lower case and as a slug (as `indexMaps` keys them);
@@ -27,6 +28,7 @@
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { prepare, search } from '$core/search';
 import type { IndexEntry } from './index-entry';
+import { gbifAlias, type PageId } from '$core/page-id';
 import { BYS, catalogueItems, rowGroupsOf, featuredPoolOf, featuredOf, type By, type Item, type Featured } from './catalogue';
 
 /* ---------- the maps over the whole index, as the Worker built them per isolate until round seventy-six ---------- */
@@ -36,13 +38,16 @@ import { BYS, catalogueItems, rowGroupsOf, featuredPoolOf, featuredOf, type By, 
  * two species or more hold, with every species that holds it, under both keys too; `sharedName`, the name as an entry
  * writes it, under both (round sixty-nine; triage-68 N1; round seventy; triage-69 F1, N3).
  */
-export type IndexMaps = { byKey: Map<number, IndexEntry>; byName: Map<string, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
+export type IndexMaps = { byKey: Map<PageId, IndexEntry>; byGbif: Map<number, IndexEntry>; byName: Map<string, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
 const maps = new WeakMap<readonly IndexEntry[], IndexMaps>();
 /** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
 export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
   let m = maps.get(index);
   if (m) return m;
-  const byKey = new Map<number, IndexEntry>();
+  const byKey = new Map<PageId, IndexEntry>();
+  // Each page's own GBIF key (round seventy-eight): the alias a GBIF answer, a plant's key or an old API path finds the
+  // page by. The last in the index's order under one key, as `byKey` keeps (no two pages of a corpus share one).
+  const byGbif = new Map<number, IndexEntry>();
   const byName = new Map<string, IndexEntry>(); // each accepted name in lower case (round seventy-one; S-F3)
   const byGenus = new Map<string, IndexEntry[]>();
   // Each older name's holders, under its name in lower case and under its slug: "Arbutus uva-ursi" is
@@ -57,6 +62,7 @@ export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
   };
   for (const e of index) {
     byKey.set(e.key, e);
+    if (e.gbif != null) byGbif.set(e.gbif, e);
     byName.set(e.name.toLowerCase(), e);
     const g = genusOf(e.name);
     const xs = byGenus.get(g);
@@ -81,7 +87,7 @@ export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
     sharedName.set(k, by[0].matched);
   }
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-  maps.set(index, (m = { byKey, byName, byGenus, bySynonym, ambiguous, sharedName }));
+  maps.set(index, (m = { byKey, byGbif, byName, byGenus, bySynonym, ambiguous, sharedName }));
   return m;
 }
 /** An older name as the maps key it: a slug as it is, a name in lower case with its spaces closed up. */
@@ -115,11 +121,13 @@ export const rowFileOf = (id: string, files: number) => String(fnv32(id) % files
 /** Addresses a sitemap file holds (the protocol's cap is 50,000). */
 export const SITEMAP_CHUNK = 40_000;
 
-/** A species as a lookup answers it: its key, slug and accepted name. */
-export type Ref = [key: number, slug: string, name: string];
-/** A species as its page needs it of the index (`#<key>`): what its card shows, its older names and nearest climates, and its place in the index. */
+/** A species as a lookup answers it: its id, slug and accepted name. */
+export type Ref = [key: PageId, slug: string, name: string];
+/** A species as its page needs it of the index (`#<id>`): what its card shows, its older names and nearest climates, and its place in the index. */
 export type Card = {
-  key: number;
+  key: PageId;
+  /** Its own GBIF key (round seventy-eight), absent in an index without it. */
+  gbif?: number;
   slug: string;
   name: string;
   /** Its place in the index's order, which settles which of two keys a GBIF answer names comes first, as the index did. */
@@ -131,15 +139,16 @@ export type Card = {
   open: number;
   climate?: string;
   syn?: string[];
-  near?: number[];
+  near?: PageId[];
   /** The record's older names (its dossier's `name.synonyms`, as `plainName`) that are another species' accepted name here, with that species. */
   x?: Record<string, Ref>;
 };
 /**
- * A card file's records (`cards/<h>.json`): a page's address (its slug) to its key, the last species in the index's order
- * under that slug, as the slug map kept; and `#<key>` to the species' card. A slug never begins with `#`.
+ * A card file's records (`cards/<h>.json`): a page's address (its slug) to its id, the last species in the index's order
+ * under that slug, as the slug map kept; `#<id>` to the species' card; and `@<GBIF key>` to the id of the page whose own
+ * GBIF key it is (round seventy-eight). A slug never begins with `#` or `@`.
  */
-export type CardFile = Record<string, number | Card>;
+export type CardFile = Record<string, PageId | Card>;
 /**
  * A file of names (`older/<h>.json`): a name in lower case or as a slug to its answers. A name can be both, so each kind
  * has its own field, as each had its own map: `n` the species whose accepted name it is in lower case (the last in the
@@ -147,21 +156,23 @@ export type CardFile = Record<string, number | Card>;
  * more, and `m` the name as the first holder in the index writes it.
  */
 export type NameRecord = { n?: Ref; o?: { m: string; h: Ref[] } };
-export const keyName = (key: number) => `#${key}`;
+export const keyName = (key: PageId) => `#${key}`;
 const ref = (e: IndexEntry): Ref => [e.key, e.slug, e.name];
 
 /**
  * The card files of an index: `synonymsOf` gives each species' dossier synonyms (the build passes them; without it no
  * species records the older names that are another's accepted name, `Card.x`).
  */
-export function buildCardFiles(index: readonly IndexEntry[], synonymsOf?: (key: number) => readonly string[] | undefined): Map<string, CardFile> {
+export function buildCardFiles(index: readonly IndexEntry[], synonymsOf?: (key: PageId) => readonly string[] | undefined): Map<string, CardFile> {
   const files = cardFilesFor(index.length);
   const m = indexMaps(index);
   const out = new Map<string, CardFile>();
   for (let i = 0; i < files; i++) out.set(String(i), {});
-  const put = (k: string, v: number | Card) => { out.get(keyFileOf(k, files))![k] = v; };
+  const put = (k: string, v: PageId | Card) => { out.get(keyFileOf(k, files))![k] = v; };
   // The slug map was `new Map(idx.map((e) => [e.slug, e.key]))`: the last entry under a slug wins.
   for (const e of index) put(e.slug, e.key);
+  // Each page's own GBIF key to its id (round seventy-eight), as `byGbif` keeps it.
+  for (const [g, e] of m.byGbif) put(gbifAlias(g), e.key);
   index.forEach((e, i) => {
     if (m.byKey.get(e.key) !== e) return; // a key twice: the map kept the last
     const x: Record<string, Ref> = {};
@@ -169,7 +180,7 @@ export function buildCardFiles(index: readonly IndexEntry[], synonymsOf?: (key: 
       const o = m.byName.get(plainName(n));
       if (o && o.key !== e.key) x[plainName(n)] = ref(o);
     }
-    put(keyName(e.key), { key: e.key, slug: e.slug, name: e.name, at: i, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate, ...(e.syn ? { syn: e.syn } : {}), ...(e.near ? { near: e.near } : {}), ...(Object.keys(x).length ? { x } : {}) });
+    put(keyName(e.key), { key: e.key, ...(e.gbif != null ? { gbif: e.gbif } : {}), slug: e.slug, name: e.name, at: i, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate, ...(e.syn ? { syn: e.syn } : {}), ...(e.near ? { near: e.near } : {}), ...(Object.keys(x).length ? { x } : {}) });
   });
   return out;
 }

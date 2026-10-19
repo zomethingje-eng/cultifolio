@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/server/dossiers', async (importOriginal) => {
   const idx = [
-    { key: 2776776, slug: 'haworthiopsis-attenuata', name: 'Haworthiopsis attenuata', photos: 0, open: 0, climate: 'ok' },
-    { key: 4201127, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', photos: 0, open: 0, climate: 'ok', syn: ['Cotyledon paniculata', 'Cotyledon tardiflora'] }
+    { key: 'g2776776', gbif: 2776776, slug: 'haworthiopsis-attenuata', name: 'Haworthiopsis attenuata', photos: 0, open: 0, climate: 'ok' },
+    { key: 'g4201127', gbif: 4201127, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', photos: 0, open: 0, climate: 'ok', syn: ['Cotyledon paniculata', 'Cotyledon tardiflora'] }
   ];
   // The corpus the names are read from (through its index since round seventy-six's lookups; it was `getIndex`)
   const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'synonyms-test', etag: null, fromStore: false, manifest: null, buckets: 32 };
@@ -42,7 +42,7 @@ describe('an old name at a species address (round thirty, R2-8)', () => {
     const asked: string[] = [];
     const f = (url: string) => { asked.push(url); return gbif({ matchType: 'HIGHERRANK', usageKey: 2406, canonicalName: 'Crassulaceae' })(url); }; // what the live service says to "Cotyledon paniculata"
     const a = await synonymInIndex(undefined, f as unknown as typeof fetch, 'cotyledon-paniculata');
-    expect(a).toEqual({ matched: 'Cotyledon paniculata', acceptedKey: 4201127, acceptedName: 'Tylecodon paniculatus', slug: 'tylecodon-paniculatus' });
+    expect(a).toEqual({ matched: 'Cotyledon paniculata', acceptedKey: 'g4201127', acceptedName: 'Tylecodon paniculatus', slug: 'tylecodon-paniculatus' });
     expect(asked).toEqual([]);
     expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'cotyledon-nosuch')).toBeNull();
     expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'tylecodon')).toBeNull();

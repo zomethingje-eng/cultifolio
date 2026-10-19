@@ -26,6 +26,7 @@ import { readDate } from '$lib/import/csv';
 import { isUS } from '$lib/weather/forecast';
 import type { JsonFetcher } from '$dossier/fetch';
 import { world, SPECIES, type World } from './r70a-summary-world';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const H = 'plant_name_id|ipni_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|infraspecific_rank|infraspecies|parenthetical_author|primary_author|publication_author|place_of_publication|volume_and_page|first_published|nomenclatural_remarks|geographic_area|lifeform_description|climate_description|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id|hybrid_formula|reviewed'.split('|');
 const D = 'plant_name_id|area_code_l3|area|introduced|extinct|location_doubtful'.split('|');
@@ -82,7 +83,7 @@ describe('B: Wikidata\'s POWO proof, and the genitive', () => {
       if (url.includes('haswbstatement')) return ok({ query: { search: [] } });
       if (url.includes('action=wbsearchentities')) return ok({ search: [{ id: 'Q15605262', label: 'Peperomia monticola' }] });
       if (url.includes('action=wbgetentities')) return ok({ entities: { Q15605262: { claims: { P31: [c({ id: 'Q16521' })], P225: [c('Peperomia monticola')], P961: [c('679160-1')], P846: [c('4183999')], P5037: [c('urn:lsid:ipni.org:names:679159-1')] } } } });
-      if (url.endsWith('/species/4183999')) return ok({ key: 4183999, scientificName: 'Peperomia monticola Miq.', canonicalName: 'Peperomia monticola', authorship: 'Miq.', rank: 'SPECIES', kingdom: 'Plantae', taxonomicStatus: 'DOUBTFUL' });
+      if (url.endsWith('/species/4183999')) return ok({ key: gbifPage(4183999), scientificName: 'Peperomia monticola Miq.', canonicalName: 'Peperomia monticola', authorship: 'Miq.', rank: 'SPECIES', kingdom: 'Plantae', taxonomicStatus: 'DOUBTFUL' });
       if (url.includes('ipni.org')) return ok({});
       return { status: 'none' };
     }) as unknown as JsonFetcher;
@@ -116,14 +117,14 @@ describe('B: identifiers kept through a lag, and GBIF\'s media', () => {
     const s = said('how', 'When Wikidata does not answer');
     expect(claim(s, /kept for at most (\d+) days from the build that first kept them/), s.where).toBe('90');
     const row = { status: 'error', at: '2026-10-14T10:00:00Z', detail: 'wikidata maxlag; the identifiers of an earlier build, of a day not known, are kept' };
-    const d = { key: 3706589, name: { scientific: 'Pleiospilos simulans', synonyms: [] }, distribution: { source: 'WCVP' }, ids: { wikidata: 'Q1' }, upstream: { wikidata: row }, built: '2026-10-14T10:00:00Z' };
+    const d = { key: gbifPage(3706589), name: { scientific: 'Pleiospilos simulans', synonyms: [] }, distribution: { source: 'WCVP' }, ids: { wikidata: 'Q1' }, upstream: { wikidata: row }, built: '2026-10-14T10:00:00Z' };
     expect(prevIdsFor(d as never)).toMatchObject({ prevIdsOn: '2026-10-14', prevIdsDayUnknown: true }); // driven in full by B's r71b-lag-kept
   });
   it('"asked of GBIF instead, human observations only": a record of another basis is a specimen', async () => {
     const s = said('how', "Photographs come first from the media that GBIF's occurrence download carries");
     expect(s.text, s.where).toMatch(/asked of GBIF instead, human observations only, as the download is read;/);
     const asked: string[] = [];
-    const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { results: [{ key: 7, basisOfRecord: 'PRESERVED_SPECIMEN', media: [{ type: 'StillImage', identifier: 'https://x/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A' }] }], endOfRecords: true } }; }) as unknown as JsonFetcher;
+    const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { results: [{ key: gbifPage(7), basisOfRecord: 'PRESERVED_SPECIMEN', media: [{ type: 'StillImage', identifier: 'https://x/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A' }] }], endOfRecords: true } }; }) as unknown as JsonFetcher;
     const r = await media(f, 3092);
     expect(asked[0]).toMatch(/&basisOfRecord=HUMAN_OBSERVATION&limit=100$/);
     expect(r.status === 'ok' && r.data.map((m) => !!m.specimen)).toEqual([true]);
@@ -165,7 +166,7 @@ describe('A: a summary under another title', () => {
     const r = said('how', 'A summary quoted from under another title');
     expect(r.text, r.where).toMatch(/because Wikidata, GBIF, Kew or IPNI did not answer is recorded as not checked, and is not shown until it is read/);
     const NOW = () => '2026-10-15T00:00:00.000Z';
-    const docs: Record<string, any> = { d: { key: 1, name: { scientific: 'Drosera montana', synonyms: [] }, ids: { wikidata: 'Q5308558', wikipedia: 'Drosera tomentosa' }, links: {}, summary: { text: 'x', source: 'wikipedia', url: 'u', licence: 'CC BY-SA 4.0', title: 'Drosera tomentosa' }, upstream: { wikipedia: { status: 'ok', detail: 'carried from build of 2026-09-29; this build: skipped' } } } };
+    const docs: Record<string, any> = { d: { key: gbifPage(1), name: { scientific: 'Drosera montana', synonyms: [] }, ids: { wikidata: 'Q5308558', wikipedia: 'Drosera tomentosa' }, links: {}, summary: { text: 'x', source: 'wikipedia', url: 'u', licence: 'CC BY-SA 4.0', title: 'Drosera tomentosa' }, upstream: { wikipedia: { status: 'ok', detail: 'carried from build of 2026-09-29; this build: skipped' } } } };
     const store = { files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { docs[k] = d; } };
     await checkSummaries(store as never, world({ refuse: /wbgetentities/ } as World).f, NOW);
     expect(docs.d.summary, s.where).toBeUndefined();
@@ -176,8 +177,8 @@ describe('A: a summary under another title', () => {
 /* ---------------- C: Commons ---------------- */
 describe('C: the kinds a Commons file is shown as none of', () => {
   const s = said('how', 'A Commons file is shown only as a JPEG or WebP photograph');
-  const HELD = heldNamesOf([{ key: 1, name: 'Aloe vera' }, { key: 2, name: 'Aloe ferox' }]);
-  const n = { scientific: 'Aloe vera', key: 1, held: HELD };
+  const HELD = heldNamesOf([{ key: gbifPage(1), name: 'Aloe vera' }, { key: gbifPage(2), name: 'Aloe ferox' }]);
+  const n = { scientific: 'Aloe vera', key: gbifPage(1), held: HELD };
   it('"a map (in any language …)": each word the sentence gives hides a file', () => {
     const words = claim(s, /a map \(in any language: ([^)]*)\)/).split(/, /).map((w) => w.replace(/^"|"$/g, ''));
     expect(words.length, s.where).toBe(4);
@@ -274,7 +275,7 @@ describe('F: the species address, the records, the search order', () => {
   it('/formats: an older name typed whole before a genus the query only begins ("Tecoma speciosa")', () => {
     const f = said('formats', 'Search puts a name typed as a name first');
     const [typed, holder, other] = [claim(f, /: "(Tecoma speciosa)" is/), claim(f, /is (Campsis radicans) before/), claim(f, /before (Tecomanthe speciosa)\)/)];
-    const P = prepare([{ key: 1, name: other, family: 'X' }, { key: 2, name: holder, family: 'X', syn: [typed] }]);
+    const P = prepare([{ key: gbifPage(1), name: other, family: 'X' }, { key: gbifPage(2), name: holder, family: 'X', syn: [typed] }]);
     expect(search(P, typed).map((x) => x.name), f.where).toEqual([holder, other]);
   });
   it('iNaturalist under older names: "asked under these older names" (the follow\'s wider rule is its own sentence)', () => {

@@ -235,8 +235,8 @@ describe('the corpus when R2 blips at the minute check', () => {
     const idx = [{ key: 1, slug: 'aloe-vera', name: 'Aloe vera', open: 0 }, { key: 2, slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', open: 0 }];
     let down = false; let asked = 0;
     const store = {
-      get: async (k: string) => { asked++; if (down) throw new Error('R2 internal error'); return k === 's/v2/index.json' ? { text: async () => JSON.stringify(idx), json: async () => idx, etag: '"e1"' } : null; },
-      head: async (k: string) => { asked++; if (down) throw new Error('R2 internal error'); return k === 's/v2/index.json' ? { etag: '"e1"' } : null; }
+      get: async (k: string) => { asked++; if (down) throw new Error('R2 internal error'); return k === 's/v3/index.json' ? { text: async () => JSON.stringify(idx), json: async () => idx, etag: '"e1"' } : null; },
+      head: async (k: string) => { asked++; if (down) throw new Error('R2 internal error'); return k === 's/v3/index.json' ? { etag: '"e1"' } : null; }
     };
     const platform = { env: { STORE: store } } as unknown as App.Platform;
     const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;

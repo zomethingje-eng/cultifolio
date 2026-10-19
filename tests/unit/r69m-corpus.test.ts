@@ -122,7 +122,7 @@ describe('the script\'s wiring (M11, S-F5, R46-31)', () => {
     expect([held('Weingartia canigueralii'), held('Weingartia pulchra'), held('Nobody')]).toEqual([true, false, false]);
   });
   it('--fill gbif-open resumes: a dossier an earlier fill found none for is not asked again', async () => {
-    const docs = { 'a.json': { key: 1, photos: [], upstream: { 'gbif.media': { status: 'none', at: 'x', detail: OPEN_NONE } } }, 'b.json': { key: 2, photos: [], upstream: {} } };
+    const docs = { 'a.json': { key: 'g1', ids: { gbif: 1 }, photos: [], upstream: { 'gbif.media': { status: 'none', at: 'x', detail: OPEN_NONE } } }, 'b.json': { key: 'g2', ids: { gbif: 2 }, photos: [], upstream: {} } };
     const { f, asked } = counting();
     const c = await fillOpenGbifAll(store(docs), f);
     expect(asked.map((u) => /taxonKey=(\d+)/.exec(u)?.[1])).toEqual(['2']);
@@ -148,7 +148,7 @@ describe('GBIF\'s media before Commons, and Commons not counted towards "fewer t
     const t = copiapoa() as Record<string, unknown>;
     const obs = (n: number, captive: boolean) => ({ results: Array.from({ length: n }, (_, i) => ({ id: 900 + i + (captive ? 50 : 0), photos: [{ id: 900 + i + (captive ? 50 : 0), license_code: 'cc-by', url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${900 + i + (captive ? 50 : 0)}/square.jpg`, attribution: '(c) a, some rights reserved (CC BY)' }] })) });
     t['https://api.inaturalist.org/v1/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=false'] = obs(3, false);
-    t['https://api.inaturalist.org/v1/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&quality_grade=research&captive=true'] = { results: [] };
+    t['https://api.inaturalist.org/v1/observations?taxon_id=135254&photo_license=cc0,cc-by,cc-by-sa&photos=true&captive=true&identifications=most_agree'] = { results: [] };
     for (const k of Object.keys(t)) if (k.includes('mediaType')) delete t[k];
     t['re:api\\.gbif\\.org/v1/occurrence/search\\?taxonKey=5384013&mediaType'] = { results: [{ key: 4242, media: [{ type: 'StillImage', identifier: 'https://example.org/gbif.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A Grower' }] }], endOfRecords: true, count: 1 };
     t['https://commons.wikimedia.org/w/api.php'] = { query: { pages: Object.fromEntries(Array.from({ length: 6 }, (_, i) => [String(i + 1), { title: `File:Copiapoa cinerea ${i}.jpg`, imageinfo: [{ url: `https://upload.wikimedia.org/wikipedia/commons/a/ab/C${i}.jpg`, thumburl: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/C${i}.jpg/960px-C${i}.jpg`, width: 3000, height: 2000, descriptionurl: `https://commons.wikimedia.org/wiki/File:C${i}.jpg`, extmetadata: { LicenseShortName: { value: 'CC BY-SA 4.0' }, Artist: { value: 'A Photographer' } } }] }])) } };

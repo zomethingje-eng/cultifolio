@@ -1,6 +1,7 @@
 [
  {
-  "key": 5384013,
+  "key": "k2735933",
+  "gbif": 5384013,
   "slug": "copiapoa-cinerea",
   "name": "Copiapoa cinerea",
   "family": "Cactaceae",
@@ -12,11 +13,12 @@
   "open": 52,
   "climate": "ok",
   "near": [
-   5384999
+   "k2735990"
   ]
  },
  {
-  "key": 5384999,
+  "key": "k2735990",
+  "gbif": 5384999,
   "slug": "copiapoa-humilis",
   "name": "Copiapoa humilis",
   "family": "Cactaceae",
@@ -27,12 +29,13 @@
   "open": 52,
   "climate": "ok",
   "near": [
-   5384013,
-   5411106
+   "k2735933",
+   "k339841"
   ]
  },
  {
-  "key": 999,
+  "key": "g999",
+  "gbif": 999,
   "slug": "refusia-testii",
   "name": "Refusia testii",
   "family": "Testaceae",
@@ -44,7 +47,8 @@
   "climate": "refused"
  },
  {
-  "key": 5411106,
+  "key": "k339841",
+  "gbif": 5411106,
   "slug": "welwitschia-mirabilis",
   "name": "Welwitschia mirabilis",
   "family": "Welwitschiaceae",

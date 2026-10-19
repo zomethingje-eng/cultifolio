@@ -22,7 +22,7 @@ describe('/api/search', () => {
     expect(r.headers.get('cache-control')).toBe('public, max-age=86400');
     const hits = (await r.json()) as Array<{ slug: string; name: string; key: number; thumb?: string; climate: string }>;
     expect(hits.map((h) => h.slug)).toEqual(['copiapoa-cinerea', 'copiapoa-humilis']);
-    expect(hits[0]).toMatchObject({ key: 5384013, climate: 'ok' }); // the tile's fields come with it
+    expect(hits[0]).toMatchObject({ key: 'k2735933', gbif: 5384013, climate: 'ok' }); // the tile's fields come with it
     expect(((await (await call('q=welwit%20mirab&c=fixture')).json()) as Array<{ slug: string }>).map((h) => h.slug)).toEqual(['welwitschia-mirabilis']);
     expect(((await (await call('q=copiapao&c=fixture')).json()) as Array<{ slug: string }>).length).toBeGreaterThan(0); // one typing error forgiven, as before
     expect(((await (await call('q=namibia&c=fixture')).json()) as Array<{ slug: string }>).map((h) => h.slug)).toContain('welwitschia-mirabilis');

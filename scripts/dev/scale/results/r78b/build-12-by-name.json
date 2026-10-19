@@ -1,0 +1,100 @@
+{
+ "api.gbif.org /v1/species/match": {
+  "n": 12,
+  "ms": 2079,
+  "status": {
+   "200": 12
+  }
+ },
+ "query.wikidata.org /sparql": {
+  "n": 1,
+  "ms": 184,
+  "status": {
+   "200": 1
+  }
+ },
+ "www.wikidata.org /w/api.php?action=wbgetentities": {
+  "n": 1,
+  "ms": 264,
+  "status": {
+   "200": 1
+  }
+ },
+ "en.wikipedia.org /w/api.php?action=query&prop=extracts|pageprops": {
+  "n": 1,
+  "ms": 171,
+  "status": {
+   "200": 1
+  }
+ },
+ "api.gbif.org /v1/species/:id": {
+  "n": 12,
+  "ms": 4345,
+  "status": {
+   "200": 12
+  }
+ },
+ "api.gbif.org /v1/species/:id/synonyms": {
+  "n": 12,
+  "ms": 1703,
+  "status": {
+   "200": 12
+  }
+ },
+ "api.gbif.org /v1/species/:id/vernacularNames": {
+  "n": 12,
+  "ms": 1656,
+  "status": {
+   "200": 12
+  }
+ },
+ "api.gbif.org /v1/species": {
+  "n": 12,
+  "ms": 1858,
+  "status": {
+   "200": 12
+  }
+ },
+ "api.gbif.org /v1/occurrence/search": {
+  "n": 23,
+  "ms": 5233,
+  "status": {
+   "200": 23
+  }
+ },
+ "api.inaturalist.org /v1/taxa": {
+  "n": 2,
+  "ms": 476,
+  "status": {
+   "200": 2
+  }
+ },
+ "api.inaturalist.org /v1/observations": {
+  "n": 22,
+  "ms": 2371,
+  "status": {
+   "200": 22
+  }
+ },
+ "api.gbif.org /v1/occurrence/search?mediaType": {
+  "n": 4,
+  "ms": 1650,
+  "status": {
+   "200": 4
+  }
+ },
+ "commons.wikimedia.org /w/api.php?action=query&prop=imageinfo": {
+  "n": 4,
+  "ms": 555,
+  "status": {
+   "200": 4
+  }
+ },
+ "api.inaturalist.org /v1/taxa/:id": {
+  "n": 10,
+  "ms": 3502,
+  "status": {
+   "200": 10
+  }
+ }
+}

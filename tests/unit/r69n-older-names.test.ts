@@ -14,9 +14,10 @@ import { describe, it, expect } from 'vitest';
 import { indexMaps, ambiguousSynonym, type IndexEntry, type Loaded } from '$lib/server/dossiers';
 import { synonymInIndex } from '$lib/server/synonyms';
 import { prepare, search } from '$core/search';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const six = (g: string) => ['a', 'b', 'c', 'd', 'e'].map((x) => `${g} ${x}x`);
-const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
+const entry = (key: number, name: string, syn: string[] = [], older: string[] = []): IndexEntry => ({ key: gbifPage(key), gbif: key, slug: name.toLowerCase().replace(/ /g, '-'), name, photos: 0, open: 0, climate: 'ok', ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) });
 // In the index's order, the alphabet: on the base the first holder took every name.
 const idx: IndexEntry[] = [
   entry(1, 'Acanthocereus tetragonus', six('Cereus'), ['Cereus undulatus']),
@@ -67,7 +68,7 @@ describe('N1: a name two species show, or two hold only for the search, does not
   });
   it('names the species that show it first, then those that hold it for the search', () => {
     const three = [entry(1, 'Aa one', [], ['Xx yy']), entry(2, 'Bb two', ['Xx yy']), entry(3, 'Cc three', ['Xx yy'])];
-    expect(ambiguousSynonym(three, 'Xx yy')?.map((e) => e.key)).toEqual([2, 3, 1]);
+    expect(ambiguousSynonym(three, 'Xx yy')?.map((e) => e.gbif)).toEqual([2, 3, 1]);
   });
 });
 

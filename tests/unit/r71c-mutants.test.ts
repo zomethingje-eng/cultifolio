@@ -7,43 +7,44 @@
 import { describe, it, expect } from 'vitest';
 import { safeUrls } from '$dossier/schema';
 import { heldNamesOf, commonsKind, commonsInatCopy, slip, commonsFirstByEpithet, epithetRank, slipStanding, askSlip, type HeldNames } from '$dossier/photo-kind';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const INDEX = [
-  { key: 2746001, name: 'Babiana purpurea', syn: ['Babiana stricta var. purpurea'] },
-  { key: 2746002, name: 'Babiana stricta' },
-  { key: 2777724, name: 'Aloe vera', syn: ['Aloe barbadensis'] },
-  { key: 2777537, name: 'Aloe arborescens' },
-  { key: 7329207, name: 'Lithops lesliei' },
-  { key: 7329209, name: 'Lithops karasmontana', syn: ['Lithops karasmontana subsp. bella var. lericheana'] },
-  { key: 3943001, name: 'Eriosyce villosa', syn: ['Neoporteria villosa'] },
-  { key: 3943002, name: 'Neoporteria wagenknechtii' },
-  { key: 3954001, name: 'Gymnocalycium mihanovichii' },
-  { key: 3128990, name: 'Plectocephalus americanus', syn: ['Centaurea americana'] },
-  { key: 7284127, name: 'Mammillaria matudae' },
-  { key: 7283175, name: 'Echinocereus scheeri' },
-  { key: 3954494, name: 'Echinocereus schereri' },
-  { key: 2745782, name: 'Sparaxis pillansii' },
-  { key: 9475270, name: 'Ceropegia breviflora', syn: ['Brachystelma pygmaeum'] },
-  { key: 7281328, name: 'Weingartia cylindrica', syn: ['Sulcorebutia cylindrica var. crucensis'] },
-  { key: 8000001, name: 'Titanopsis hugo-schlechteri' },
-  { key: 8000002, name: 'Titanopsis hugo' },
-  { key: 8000003, name: 'Sinningia leucotricha' },
-  { key: 8000004, name: 'Sinningia leucotricha-caudex' },
-  { key: 8000005, name: 'Centaurea americanaflower' },
-  { key: 8000006, name: 'Aloe brevq', syn: ['Aloe xyzq var. foo'] },
-  { key: 2743932, name: 'Romulea gigantea' }
+  { key: gbifPage(2746001), name: 'Babiana purpurea', syn: ['Babiana stricta var. purpurea'] },
+  { key: gbifPage(2746002), name: 'Babiana stricta' },
+  { key: gbifPage(2777724), name: 'Aloe vera', syn: ['Aloe barbadensis'] },
+  { key: gbifPage(2777537), name: 'Aloe arborescens' },
+  { key: gbifPage(7329207), name: 'Lithops lesliei' },
+  { key: gbifPage(7329209), name: 'Lithops karasmontana', syn: ['Lithops karasmontana subsp. bella var. lericheana'] },
+  { key: gbifPage(3943001), name: 'Eriosyce villosa', syn: ['Neoporteria villosa'] },
+  { key: gbifPage(3943002), name: 'Neoporteria wagenknechtii' },
+  { key: gbifPage(3954001), name: 'Gymnocalycium mihanovichii' },
+  { key: gbifPage(3128990), name: 'Plectocephalus americanus', syn: ['Centaurea americana'] },
+  { key: gbifPage(7284127), name: 'Mammillaria matudae' },
+  { key: gbifPage(7283175), name: 'Echinocereus scheeri' },
+  { key: gbifPage(3954494), name: 'Echinocereus schereri' },
+  { key: gbifPage(2745782), name: 'Sparaxis pillansii' },
+  { key: gbifPage(9475270), name: 'Ceropegia breviflora', syn: ['Brachystelma pygmaeum'] },
+  { key: gbifPage(7281328), name: 'Weingartia cylindrica', syn: ['Sulcorebutia cylindrica var. crucensis'] },
+  { key: gbifPage(8000001), name: 'Titanopsis hugo-schlechteri' },
+  { key: gbifPage(8000002), name: 'Titanopsis hugo' },
+  { key: gbifPage(8000003), name: 'Sinningia leucotricha' },
+  { key: gbifPage(8000004), name: 'Sinningia leucotricha-caudex' },
+  { key: gbifPage(8000005), name: 'Centaurea americanaflower' },
+  { key: gbifPage(8000006), name: 'Aloe brevq', syn: ['Aloe xyzq var. foo'] },
+  { key: gbifPage(2743932), name: 'Romulea gigantea' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
 const C = 'https://upload.wikimedia.org/wikipedia/commons';
 const file = (title: string, extra: Record<string, unknown> = {}) => ({ src: 'commons', id: title, url: `${C}/thumb/a/ab/x.jpg/960px-x.jpg`, thumb: `${C}/thumb/a/ab/x.jpg/500px-x.jpg`, width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', ...extra });
 const shows = (scientific: string, title: string, extra: Record<string, unknown> = {}, synonyms: string[] = [], held: HeldNames | null = HELD) =>
-  safeUrls({ key: KEY.get(scientific) ?? 1, name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: [file(title, extra)] } as never, held).photos.length === 1;
+  safeUrls({ key: KEY.get(scientific) ?? 'g1', name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: [file(title, extra)] } as never, held).photos.length === 1;
 
 describe('the reference\'s names (held-infra, held-acc-infra)', () => {
   it('an older name below species is held only whole, so "Babiana stricta" on its own is Babiana stricta\'s', () => {
-    expect(HELD.holders('Babiana', 'stricta')).toEqual([2746002]);
-    expect(HELD.accepted('Babiana', 'stricta')).toBe(2746002);
+    expect(HELD.holders('Babiana', 'stricta')).toEqual(['g2746002']);
+    expect(HELD.accepted('Babiana', 'stricta')).toBe('g2746002');
     expect(shows('Babiana purpurea', 'File:Babiana stricta 1.jpg', {}, ['Babiana stricta var. purpurea (Jacq.) Ker Gawl.'])).toBe(false);
   });
 });
@@ -93,7 +94,7 @@ describe('kinds by single words', () => {
     expect(commonsKind('File:Aloe vera volume 3 ABCDE 1850.jpg', { scientific: 'Aloe vera' })).toBe('a plate or drawing');
   });
   it('a reason given in order: the name before the category (order-cat-before-read)', () => {
-    expect(commonsKind('File:Aloe arborescens 1.jpg', { scientific: 'Aloe vera', key: 2777724, held: HELD }, ['Seeds'])).toBe('named as another species');
+    expect(commonsKind('File:Aloe arborescens 1.jpg', { scientific: 'Aloe vera', key: gbifPage(2777724), held: HELD }, ['Seeds'])).toBe('named as another species');
   });
 });
 

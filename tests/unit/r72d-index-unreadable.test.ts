@@ -18,10 +18,10 @@ const index = (cwd: string) => spawnSync(process.execPath, ['--import', pathToFi
 describe('--index and a dossier it cannot read', () => {
   it('names the file, exits 1, and writes no index, products or manifest', () => {
     const dir = mkdtempSync(join(tmpdir(), 'r72d-index-'));
-    const v2 = join(dir, 'static/s/v2');
+    const v2 = join(dir, 'static/s/v3');
     mkdirSync(v2, { recursive: true });
-    const files = readdirSync(join(ROOT, 'fixtures/dossiers/s/v2')).filter((f) => /^\d+\.json$/.test(f));
-    for (const f of files) copyFileSync(join(ROOT, 'fixtures/dossiers/s/v2', f), join(v2, f));
+    const files = readdirSync(join(ROOT, 'fixtures/dossiers/s/v3')).filter((f) => /^[kg]\d+\.json$/.test(f));
+    for (const f of files) copyFileSync(join(ROOT, 'fixtures/dossiers/s/v3', f), join(v2, f));
     // A write-then-rename a stopped run left half done: the temporary file goes, the dossier it was replacing stays.
     writeFileSync(join(v2, `${files[0]}.4242.tmp`), '{"cut');
     const first = index(dir);

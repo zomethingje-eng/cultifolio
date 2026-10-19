@@ -1,6 +1,11 @@
+import type { PageId } from '../core/page-id';
+
 /** One species as the index lists it: what the catalogue, the search and the bucket files are built from, on the PC and in the Worker alike. */
 export interface IndexEntry {
-  key: number;
+  /** The page's id (round seventy-eight; `$core/page-id`). */
+  key: PageId;
+  /** The page's GBIF backbone key (its dossier's `ids.gbif`): what a grower's plant records and the name service give, compared with this, never with `key`. Absent in an index built before round seventy-eight. */
+  gbif?: number;
   slug: string;
   name: string;
   family?: string;
@@ -20,8 +25,8 @@ export interface IndexEntry {
   photos: number;
   open: number;
   climate: string;
-  /** The six species whose habitat climate is nearest (src/lib/core/near.ts), written at index time. */
-  near?: number[];
+  /** The six species whose habitat climate is nearest (src/lib/core/near.ts), written at index time, by id. */
+  near?: PageId[];
   /** Older names for the species, as binomials, written at index time (round thirty-one, 3). */
   syn?: string[];
   /** Every other older name of species rank, past the six of `syn`: searched, never shown (round sixty-seven; triage-66 N1). Absent in an index built before, and where there is none. */

@@ -1,0 +1,2 @@
+# Round seventy-eight (M): scripts/dev/scale/r78-page-proof.mjs, round seventy-seven's build (r78base) over the version 2 copy against the merged build over the same corpus as version 3, the 9,010 pages of I's list, 2026-10-19.
+{"pages":9010,"html":9010,"data":9010,"statuses":{"200":9010},"ids":8947}

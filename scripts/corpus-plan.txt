@@ -1,6 +1,7 @@
-# Round seventy-seven's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
+# Round seventy-eight's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
 # One step a line:
-#   backup                       static/s/v2 copied to backups/v2-<corpus id> (once a corpus)
+#   backup                       static/s/v3 copied to backups/v3-<corpus id> (once a corpus); while static/s/v3 is not
+#                                there yet, static/s/v2, which this round reads and never changes, is the backup
 #   dossier <arguments>          the builder: npm run dossier -- <arguments>
 #   if-exists <file> <step>      the step only when the file is there
 #   review <what to read>        a stop: read it, then `node scripts/corpus-step.mjs --go-on`
@@ -11,15 +12,17 @@
 # picks up where it stopped. The day's answers are kept in cache/upstream/, so a rerun the same day asks again only
 # what did not answer.
 #
-# Round seventy-seven asks nothing of any source: one offline re-index, then the upload. Deploy first, then this step
-# (DEPLOY.md, "Round seventy-seven's corpus step"), though either order is safe: a Worker of this round meeting round
-# seventy-six's corpus, or round seventy-six's Worker meeting this round's, finds no lookup files of its own layout and
-# reads the corpus through its index, as before round seventy-six, until the other half lands.
+# Round seventy-eight asks nothing of any source: each page is keyed by Kew's plant_name_id (src/lib/core/page-id.ts), so
+# the corpus is written again as dossier version 3, under s/v3/, offline, in a few minutes. **This step comes before the
+# deploy** (docs/DEPLOY.md, "Round seventy-eight's corpus step"): the Worker deployed now (round seventy-seven) reads only
+# s/v2/, which this step neither changes locally nor in the bucket, so it serves the corpus it serves now until the deploy;
+# the new Worker reads only s/v3/, and `npm run deploy` stops (scripts/corpus-ready.mjs) until the bucket holds it.
 backup
-# K: the search's files (search/top.json, search/<n>.json, search/genera.json, search/tables.json, search/blocks.json, and
-# the key, answer, photograph-count and entry files they name by hash under p/). C: round seventy-six's names/ split in
-# two, cards/ (what a species page reads) and older/ (the accepted and older names). Offline, a minute or two.
-dossier --index
-review In corpus-step.log, the --index step must say "index: 8945 species", "0 dossiers written anew" for the photograph judgement (nothing in any dossier changes), and on its corpus line "… search key files (… MB)" and "… files written": about 13,200 search key files of about 280 MB, most of them a few kilobytes. On the dry run of round seventy-six's copy here (8,947 species), it said 13210 search key files (278.0 MB), and 13662 files written (307 MB, what the upload sends), 238 already on disk under their hash, 16 of older corpora deleted. The manifest names 690 files where it named 366: 452 added (256 cards/ files, 128 older/ files, and the search's 68: search/top.json, sixty-four search/<n>.json, search/genera.json, search/tables.json and search/blocks.json) and the 128 names/ files gone; every other product is the same by hash, so the review line should say 0 dossiers differ from the backup. drops.txt should not be there. (A second --index on the dry run wrote 0 files and said "unchanged", and every file under s/v2 was the same by md5.)
+# static/s/v2 written as static/s/v3: every dossier under its page's id (k<plant_name_id>, or g<GBIF key> where Kew's file
+# gives no one taxon that is the page's alone; ids-gbif.txt lists those and why), the genus records copied, then the
+# index, the products and the manifest of version 3.
+dossier --rekey
+review In corpus-step.log, the --rekey step must say "page ids: 8916 by Kew's plant_name_id, 29 by GBIF's key" and "8945 dossiers written under a new id" (then the same line again, from the index, with "0 dossiers written under a new id"), "index: 8945 species", and on its corpus line about 13,900 files written and "manifest.json names it". ids-gbif.txt lists the 29: 15 whose Kew rows do not decide, and 7 pairs that hold one Kew entry each, which a merge would settle. The review line below must say 0 dossiers differ from the backup apart from their ids, and drops.txt should not be there. On the dry run of round seventy-seven's copy here (8,947 species, the two merged pages not yet pruned, so 31 by GBIF's key), it said 8947 dossiers written under a new id, 1321 genus records copied, 13899 product files written (365 MB; with the dossiers, 289 MB, and the genus records, 5 MB, about 660 MB for the upload), and 0 dossiers differing apart from their ids. A second --index on the dry run wrote 0 files and said "unchanged", and every file under s/v3 was the same by md5.
 upload
+review The corpus is in the bucket under s/v3/, which the site does not read yet: it still serves round seventy-seven's s/v2/. Deploy now, as docs/DEPLOY.md section 3 says: the test run, then node scripts/corpus-ready.mjs && npm run deploy (its first line must say "corpus-ready: the bucket holds corpus … under s/v3/"; if it says the bucket holds no version 3 corpus, nothing was deployed). Then carry on, and the live check reads the new corpus.
 live-check

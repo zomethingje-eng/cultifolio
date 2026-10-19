@@ -1,0 +1,37 @@
+# Round seventy-eight (I): scripts/dev/scale/r78-merge-proof.mjs on the 18 real dossiers of the nine merges (round seventy-three's two, scripts/merged-pages.txt, and round seventy-eight's seven, scripts/merged-pages-79.txt), from /tmp/claude-0/rev78/real-s/v2: --rekey, the kept pages' re-derive simulated in the two fields the index and the prune read, --prune-followed, then each merge asked of the Worker's functions. 2026-10-19
+1. --rekey, 9 merges listed (2 of round seventy-three, 7 of round seventy-eight)
+  page ids: 9 by Kew's plant_name_id, 9 by GBIF's key (ids-gbif.txt says why); 18 dossiers written under a new id
+  page ids: 9 by Kew's plant_name_id, 9 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  index: 18 species
+  photograph judgement: 9 Commons files on 18 pages read with the reference's names; 0 dossiers written anew
+  corpus e0b78ec207cb6f3f: 18 species in 32 buckets, 64 posting files, 101 search key files (0.1 MB) → static/s/v3/p/ (387 files written, 100 already on disk under their hash, 0 of older corpora deleted); manifest.json names it
+  k3294939 Pelecyphora macromeris kept; g3084426 Coryphantha macromeris leaves
+  k2465732 Weingartia fidaiana kept; g7906297 Rebutia fidana leaves
+  k2778991 Dudleya pulverulenta kept; g7530398 Echeveria peacockii leaves
+  k2465834 Weingartia canigueralii kept; g3947359 Weingartia pulchra leaves
+  k64497 Drosera paleacea kept; g3190985 Drosera parvula leaves
+  k505095 Ceropegia cereiformis kept; g9592399 Ceropegia nubica leaves
+  k502875 Ceropegia nigra kept; g3574291 Ceropegia melanops leaves
+  k2735922 Copiapoa calderana kept; g3959296 Copiapoa boliviana leaves
+  k2781299 Echeveria pinetorum kept; g7334118 Echeveria sessiliflora leaves
+2. the re-derive of each kept page with the key of the page that leaves (simulated: the fields the index and the prune read)
+3. --prune-followed
+  0 dossiers under synonym names deleted; each has an accepted species' page that says it was followed from that name.
+  9 dossiers of pages merged into another deleted (3084426, 7906297, 7530398, 3947359, 3190985, 9592399, 3574291, 3959296, 7334118); each kept page reads its key and answers its old address.
+  page ids: 9 by Kew's plant_name_id, 0 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  index: 9 species
+  9 old addresses of pages merged into another answered by the kept page: rebutia-fidana, weingartia-pulchra, copiapoa-boliviana, echeveria-peacockii, echeveria-sessiliflora, coryphantha-macromeris, ceropegia-melanops, ceropegia-nubica, drosera-parvula
+  photograph judgement: 4 Commons files on 9 pages read with the reference's names; 0 dossiers written anew
+  corpus efd5b14a7f24357f: 9 species in 32 buckets, 64 posting files, 62 search key files (0.1 MB) → static/s/v3/p/ (298 files written, 150 already on disk under their hash, 0 of older corpora deleted); manifest.json names it
+  9 dossiers left: every page that leaves is gone, every kept page is there
+4. asked of the Worker
+as round 73	Coryphantha macromeris [3084426] into 11798439	{"kept":"k3294939 pelecyphora-macromeris","keptById":"200","keptByGbif":"302 /api/dossier/k3294939","oldSlugIsPage":null,"oldAddress":"older → pelecyphora-macromeris (k3294939)","oldName":"older of k3294939 pelecyphora-macromeris","search":"pelecyphora-macromeris","plantEntry":"coryphantha-macromeris → k3294939 Pelecyphora macromeris (GBIF 11798439)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Rebutia fidana [7906297] into 7281301	{"kept":"k2465732 weingartia-fidaiana","keptById":"200","keptByGbif":"302 /api/dossier/k2465732","oldSlugIsPage":null,"oldAddress":"older → weingartia-fidaiana (k2465732)","oldName":"older of k2465732 weingartia-fidaiana","search":"weingartia-fidaiana","plantEntry":"rebutia-fidana → k2465732 Weingartia fidaiana (GBIF 7281301)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Echeveria peacockii [7530398] into 2985894	{"kept":"k2778991 dudleya-pulverulenta","keptById":"200","keptByGbif":"302 /api/dossier/k2778991","oldSlugIsPage":null,"oldAddress":"older → dudleya-pulverulenta (k2778991)","oldName":"older of k2778991 dudleya-pulverulenta","search":"dudleya-pulverulenta","plantEntry":"echeveria-peacockii → k2778991 Dudleya pulverulenta (GBIF 2985894)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Weingartia pulchra [3947359] into 3948341	{"kept":"k2465834 weingartia-canigueralii","keptById":"200","keptByGbif":"302 /api/dossier/k2465834","oldSlugIsPage":null,"oldAddress":"older → weingartia-canigueralii (k2465834)","oldName":"older of k2465834 weingartia-canigueralii","search":"weingartia-canigueralii","plantEntry":"weingartia-pulchra → k2465834 Weingartia canigueralii (GBIF 3948341)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Drosera parvula [3190985] into 3190812	{"kept":"k64497 drosera-paleacea","keptById":"200","keptByGbif":"302 /api/dossier/k64497","oldSlugIsPage":null,"oldAddress":"older → drosera-paleacea (k64497)","oldName":"older of k64497 drosera-paleacea","search":"drosera-paleacea","plantEntry":"drosera-parvula → k64497 Drosera paleacea (GBIF 3190812)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Ceropegia nubica [9592399] into 9574874	{"kept":"k505095 ceropegia-cereiformis","keptById":"200","keptByGbif":"302 /api/dossier/k505095","oldSlugIsPage":null,"oldAddress":"older → ceropegia-cereiformis (k505095)","oldName":"older of k505095 ceropegia-cereiformis","search":"ceropegia-cereiformis","plantEntry":"ceropegia-nubica → k505095 Ceropegia cereiformis (GBIF 9574874)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Ceropegia melanops [3574291] into 3574112	{"kept":"k502875 ceropegia-nigra","keptById":"200","keptByGbif":"302 /api/dossier/k502875","oldSlugIsPage":null,"oldAddress":"older → ceropegia-nigra (k502875)","oldName":"older of k502875 ceropegia-nigra","search":"ceropegia-nigra","plantEntry":"ceropegia-melanops → k502875 Ceropegia nigra (GBIF 3574112)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Copiapoa boliviana [3959296] into 7284393	{"kept":"k2735922 copiapoa-calderana","keptById":"200","keptByGbif":"302 /api/dossier/k2735922","oldSlugIsPage":null,"oldAddress":"older → copiapoa-calderana (k2735922)","oldName":"older of k2735922 copiapoa-calderana","search":"copiapoa-calderana","plantEntry":"copiapoa-boliviana → k2735922 Copiapoa calderana (GBIF 7284393)","oldGbif":null,"oldGbifApi":"404"}
+as round 73	Echeveria sessiliflora [7334118] into 4199517	{"kept":"k2781299 echeveria-pinetorum","keptById":"200","keptByGbif":"302 /api/dossier/k2781299","oldSlugIsPage":null,"oldAddress":"older → echeveria-pinetorum (k2781299)","oldName":"older of k2781299 echeveria-pinetorum","search":"echeveria-pinetorum","plantEntry":"echeveria-sessiliflora → k2781299 Echeveria pinetorum (GBIF 4199517)","oldGbif":null,"oldGbifApi":"404"}
+9 merges asked, 9 answering as round seventy-three's do, 0 otherwise; corpus efd5b14a7f24357f

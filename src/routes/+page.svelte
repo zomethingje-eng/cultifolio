@@ -5,6 +5,7 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
+  import type { PageId } from '$core/page-id';
   import { photoAt, photoHosts } from '$dossier/photo-size';
   import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, type Found } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
@@ -417,7 +418,7 @@
     if (ownFailed) return;
     const m = await entriesFor([...mine.keys()]);
     if (!m) { ownFailed = true; return; }
-    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, credit: prefs.referencePhotos ? e.credit : undefined, photos: e.photos, open: e.open, climate: e.climate } as Item]));
+    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, ...(e.gbif != null ? { gbif: e.gbif } : {}), slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, credit: prefs.referencePhotos ? e.credit : undefined, photos: e.photos, open: e.open, climate: e.climate } as Item]));
   }
   $effect(() => { if (hasMine) { mine.size; prefs.referencePhotos; loadOwn(); } }); // rebuilt when the photograph preference changes
   const retryOwn = () => { ownFailed = false; loadOwn(); };
@@ -455,7 +456,7 @@
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
+  type Tile = { slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
@@ -567,7 +568,7 @@
 {/snippet}
 
 {#snippet tile(c: Tile)}
-  {@const own = owned.get(c.slug) ?? (c.key != null ? owned.get(`key:${c.key}`) : undefined)}
+  {@const own = owned.get(c.slug) ?? (c.gbif != null ? owned.get(`key:${c.gbif}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
     {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
     {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}

@@ -140,7 +140,8 @@
       if (seq !== asked) return;
       refWhy = isUnreached(got) ? got : null;
       const d = isUnreached(got) ? null : got;
-      refKey = d && d !== 'none' && typeof d.key === 'number' ? d.key : null;
+      // The reference's GBIF key, which a plant's key is (round seventy-eight: the sheet's `key` is the page's id).
+      refKey = d && d !== 'none' && typeof d.gbif === 'number' ? d.gbif : null;
       dossier = d === 'none' ? null : d;
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
     })();

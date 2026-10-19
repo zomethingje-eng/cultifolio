@@ -1,0 +1,15 @@
+# Round seventy-eight (I): scripts/dev/scale/r78-lookups.ts, round seventy-seven's code (r78base, 5ac6f70) over the version 2 corpus against this round's over the same corpus as version 3, every answer with each page named by its GBIF key, 2026-10-19. 251,026 keys, 85,363 addresses and 9,280 GBIF keys (every page's own, the 332 other keys and the merges' keys, and misses).
+864824 answers: 864824 the same, 0 different
+  slug        251026 asked,  251026 the same
+  accepted    251026 asked,  251026 the same
+  older       251026 asked,  251026 the same
+  address      85363 asked,   85363 the same
+  gbif          9280 asked,    9280 the same
+  genera           1 asked,       1 the same
+  row           1564 asked,    1564 the same
+  catalogue       12 asked,      12 the same
+  opened        6244 asked,    6244 the same
+  featured         1 asked,       1 the same
+  sitemap          1 asked,       1 the same
+  api           9280 asked,    9280 the same
+round seventy-seven's code over a bucket holding both corpora (s/v2 and s/v3): 864824 answers, the same file byte for byte as over s/v2 alone; 0 reads of s/v3/

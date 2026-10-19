@@ -26,6 +26,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { makeFetcher } from '../src/lib/dossier/fetch';
 import { matchName } from '../src/lib/dossier/sources/gbif';
+import { downloadKeysOf, isSpeciesList, parseSpeciesList } from './select-species-lib';
 
 const DIR = 'bulk';
 const WCVP_URL = 'http://sftp.kew.org/pub/data-repositories/WCVP/wcvp.zip';
@@ -73,12 +74,28 @@ async function wcvp(): Promise<void> {
   }
 }
 
-/** names.txt → GBIF species keys, cached. Reports what did not resolve. */
+/**
+ * names.txt → GBIF species keys, cached. Reports what did not resolve.
+ *
+ * A species list (scripts/species-list.txt; round seventy-eight) gives each species' GBIF key in its last column, chosen
+ * by the list's own rule: those keys are taken as they are, with no name matched, and a species the list gives no key is
+ * not matched by its name either (rule 3: the backbone had no one key for it). Each is written into keys.json under its
+ * name, which is how the build finds what the download was asked for.
+ */
 async function keysFor(file: string): Promise<number[]> {
   const cachePath = `${DIR}/keys.json`;
   const cache: Record<string, number | null> = existsSync(cachePath) ? JSON.parse(readFileSync(cachePath, 'utf8')) : {};
+  const text = readFileSync(file, 'utf8');
+  if (isSpeciesList(text)) {
+    const { byName, keys, none } = downloadKeysOf(parseSpeciesList(text));
+    Object.assign(cache, byName);
+    writeFileSync(cachePath, JSON.stringify(cache, null, 1));
+    writeFileSync(`${DIR}/unresolved.txt`, none.join('\n') + '\n');
+    console.log(`  a species list: ${keys.length} GBIF keys from its last column, no name matched; ${none.length} species with no GBIF key in the list are left out of the download (listed in ${DIR}/unresolved.txt)`);
+    return keys;
+  }
   const f = makeFetcher();
-  const names = readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  const names = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
   let n = 0;
   for (const name of names) {
     if (name in cache) continue;

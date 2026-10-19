@@ -79,7 +79,7 @@ describe('--fill gbif-open: a species with no photograph is given GBIF\'s openly
   const page = { results: [{ key: 77, license: 'http://creativecommons.org/licenses/by/4.0/legalcode', datasetKey: 'd', media: [{ type: 'StillImage', identifier: 'https://example.org/sprekelia.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A Grower', references: 'https://example.org/obs/77' }] }], endOfRecords: true, count: 1 };
   it('adds them, and records where they came from', async () => {
     const { fillOpenGbif } = await import('$dossier/open-gbif-fill');
-    const d = { key: 2860360, photos: [], upstream: {} as Record<string, { status: string; at: string; detail?: string }> };
+    const d = { key: 'g2860360', ids: { gbif: 2860360 }, photos: [], upstream: {} as Record<string, { status: string; at: string; detail?: string }> };
     const r = await fillOpenGbif(d as never, fixtureFetcher({ [`re:taxonKey=2860360&mediaType=StillImage&license=CC0_1_0`]: page }), () => '2026-10-11T00:00:00Z');
     expect(r).toEqual({ added: 1 });
     expect(d.photos).toHaveLength(1);
@@ -87,7 +87,7 @@ describe('--fill gbif-open: a species with no photograph is given GBIF\'s openly
   });
   it('a dossier told there is none is passed by the next fill, so a stopped fill resumes (round sixty-eight, third part)', async () => {
     const { fillOpenGbif, askedOpen } = await import('$dossier/open-gbif-fill');
-    const d = { key: 3, photos: [], upstream: {} as Record<string, { status: string; at: string; detail?: string }> };
+    const d = { key: 'g3', ids: { gbif: 3 }, photos: [], upstream: {} as Record<string, { status: string; at: string; detail?: string }> };
     expect(askedOpen(d as never)).toBe(false);
     expect(await fillOpenGbif(d as never, fixtureFetcher({ 're:taxonKey=3&': { results: [], endOfRecords: true, count: 0 } }))).toEqual({ none: true });
     expect(askedOpen(d as never)).toBe(true);
@@ -95,7 +95,7 @@ describe('--fill gbif-open: a species with no photograph is given GBIF\'s openly
   });
   it('a refusal leaves the dossier as it was (guard)', async () => {
     const { fillOpenGbif } = await import('$dossier/open-gbif-fill');
-    const d = { key: 1, photos: [], upstream: { 'gbif.media': { status: 'none', at: 'x' } } };
+    const d = { key: 'g1', ids: { gbif: 1 }, photos: [], upstream: { 'gbif.media': { status: 'none', at: 'x' } } };
     const r = await fillOpenGbif(d as never, fixtureFetcher({}, { status: 'refused', detail: 'api.gbif.org 429' }));
     expect(r).toEqual({ failed: 'api.gbif.org 429' });
     expect(d.upstream['gbif.media']).toEqual({ status: 'none', at: 'x' });

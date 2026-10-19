@@ -4,8 +4,8 @@ import { buildBundle, type Corpus } from '../../scripts/export-corpus-lib';
 
 function fixtures(): Corpus {
   const index = JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8'));
-  const dossiers = new Map<number, Record<string, unknown>>();
-  for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v2/${r.key}.json`, 'utf8')));
+  const dossiers = new Map<string, Record<string, unknown>>();
+  for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v3/${r.key}.json`, 'utf8')));
   return { index, dossiers, report: 'fixture report' };
 }
 
@@ -36,7 +36,7 @@ describe('dataset bundle', () => {
   it('climate.csv has twelve rows per species with climate', () => {
     const lines = b.files['climate.csv'].replace(/^﻿/, '').trim().split('\n');
     expect(lines).toHaveLength(1 + 12 * 2);
-    expect(lines[1].split(',').slice(0, 3)).toEqual(['5384013', 'Copiapoa cinerea', '1']);
+    expect(lines[1].split(',').slice(0, 3)).toEqual(['k2735933', 'Copiapoa cinerea', '1']);
   });
 
   it('README states the counts and the terms name every source', () => {

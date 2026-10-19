@@ -26,12 +26,14 @@ import { clip } from '$core/text';
 import { resetRateLimits } from '$lib/server/sync';
 import { _clean } from '../../src/routes/api/search/+server';
 
-type E = { key: number; slug: string; name: string; open: number; photos: number; climate: string; family?: string; common?: string; commons?: string[]; origin?: string[]; syn?: string[] };
-const mk = (names: string[], keys: Record<string, number> = {}): E[] => names.map((name, i) => ({ key: keys[name] ?? 1000 + i, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name, open: 0, photos: 0, climate: 'ok' }));
+type E = { key: string; gbif?: number; slug: string; name: string; open: number; photos: number; climate: string; family?: string; common?: string; commons?: string[]; origin?: string[]; syn?: string[] };
+// Each page by its id (round seventy-eight): the fixture's Copiapoa cinerea is Kew's k2735933, GBIF's 5384013; the rest GBIF's.
+const idOf = (g: number) => (g === 5384013 ? 'k2735933' : `g${g}`);
+const mk = (names: string[], keys: Record<string, number> = {}): E[] => names.map((name, i) => ({ key: idOf(keys[name] ?? 1000 + i), gbif: keys[name] ?? 1000 + i, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name, open: 0, photos: 0, climate: 'ok' }));
 const X = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei', 'Haworthia cooperi'], { 'Copiapoa cinerea': 5384013 });
 const Y = mk(['Adenia globosa', 'Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei', 'Haworthia cooperi'], { 'Copiapoa cinerea': 5384013 });
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
-const FIXTURE_DOSSIER = readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8');
+const FIXTURE_DOSSIER = readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8');
 
 function productsOf(idx: object[]) {
   const text = JSON.stringify(idx);
@@ -61,7 +63,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('a corpus the Worker cannot read is never answered with the fixture (round sixty; A24)', () => {
   it('a fresh isolate under a refused manifest serves the top-level index, under its own id', async () => {
-    const b = bucket([[manifestPath(), '{"v":99}'], ['s/v2/index.json', JSON.stringify(X)]]);
+    const b = bucket([[manifestPath(), '{"v":99}'], ['s/v3/index.json', JSON.stringify(X)]]);
     const c = await corpusNow(platformOf(b), noStatic);
     expect({ fixture: c.corpus === 'fixture', species: c.idx!.length, manifest: !!c.manifest }).toEqual({ fixture: false, species: X.length, manifest: false });
   });
@@ -155,7 +157,7 @@ describe('an R2 error at the minute\'s check keeps the corpus held (round sixty;
 });
 
 describe('the near pass is charged as the exact one is (round sixty; A26; the corpus review, 6)', () => {
-  const big = Array.from({ length: WHOLE_LIKE + 100 }, (_, i) => ({ key: i + 1, slug: `g${i}-s`, name: `G${i} s`, family: 'Cactaceae', open: 0, photos: 0, climate: 'ok' }));
+  const big = Array.from({ length: WHOLE_LIKE + 100 }, (_, i) => ({ key: `g${i + 1}`, gbif: i + 1, slug: `g${i}-s`, name: `G${i} s`, family: 'Cactaceae', open: 0, photos: 0, climate: 'ok' }));
   it('a typo whose near keys reach a family of more than WHOLE_LIKE species is charged, once', async () => {
     const p = productsOf(big);
     // Round seventy-seven: the postings path's charge, on a corpus built before the key files (which say `narrow` here:
@@ -220,7 +222,7 @@ const UX: E[] = [
   ['Echeveria elegans', { family: 'Crassulaceae', common: 'Mexican snowball' }],
   ['Curio rowleyanus', { family: 'Asteraceae', common: 'string-of-beads', commons: ['string of pearls'] }],
   ['Haworthiopsis attenuata', { family: 'Asphodelaceae', common: 'zebra haworthia', syn: ['Haworthia attenuata'] }]
-].map(([name, extra, key], i) => ({ key: (key as number | undefined) ?? 100 + i, slug: (name as string).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name: name as string, open: 0, photos: 0, climate: 'ok', ...(extra as object) }));
+].map(([name, extra, key], i) => ({ key: idOf((key as number | undefined) ?? 100 + i), gbif: (key as number | undefined) ?? 100 + i, slug: (name as string).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name: name as string, open: 0, photos: 0, climate: 'ok', ...(extra as object) }));
 
 describe('the names growers write (round sixty; the corpus review, 3; the self-review, 15)', () => {
   const cases: Array<[string, string, string?]> = [
@@ -249,7 +251,7 @@ describe('the names growers write (round sixty; the corpus review, 3; the self-r
   it('each is found, through the postings and through the whole index alike; a retry says what it searched for', async () => {
     const p = productsOf(UX);
     const withManifest = platformOf(bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)]]));
-    const plain = platformOf(bucket([['s/v2/index.json', JSON.stringify(UX)]]));
+    const plain = platformOf(bucket([['s/v3/index.json', JSON.stringify(UX)]]));
     for (const [q, first, retried] of cases) {
       const outs = [];
       for (const plat of [withManifest, plain]) {
@@ -263,7 +265,7 @@ describe('the names growers write (round sixty; the corpus review, 3; the self-r
     }
   });
   it('nothing to retry: the answer is empty and says no retry', async () => {
-    const plain = platformOf(bucket([['s/v2/index.json', JSON.stringify(UX)]]));
+    const plain = platformOf(bucket([['s/v3/index.json', JSON.stringify(UX)]]));
     const a = await searchAnswer(plain, noStatic, 'zzzz qqqq', 5, async () => null);
     expect(a).toMatchObject({ hits: [] });
     expect('relaxed' in a && a.relaxed).toBeFalsy();
@@ -280,7 +282,7 @@ describe('the names growers write (round sixty; the corpus review, 3; the self-r
   });
   it('/api/search answers a list, with the retry named in a header; `shape=2` answers { hits, relaxed }', async () => {
     const { GET } = await import('../../src/routes/api/search/+server');
-    const plat = platformOf(bucket([['s/v2/index.json', JSON.stringify(UX)]]));
+    const plat = platformOf(bucket([['s/v3/index.json', JSON.stringify(UX)]]));
     const call = (qs: string) => GET({ url: new URL(`https://x/api/search?${qs}`), platform: plat, fetch: noStatic, getClientAddress: () => '1.2.3.4' } as never);
     const a = await call(`q=${encodeURIComponent('Copiapoa cinerea var. columna-alba')}`);
     expect(((await a.json()) as Array<{ name: string }>)[0].name).toBe('Copiapoa cinerea');
@@ -303,7 +305,7 @@ describe('every English common name (round sixty; the product review, 6)', () =>
   });
   it('an index from before (no `commons`) is still read and searched', async () => {
     const old = UX.map(({ commons: _c, ...e }) => e);
-    const plat = platformOf(bucket([['s/v2/index.json', JSON.stringify(old)]]));
+    const plat = platformOf(bucket([['s/v3/index.json', JSON.stringify(old)]]));
     const a = await searchAnswer(plat, noStatic, 'string of beads', 5, async () => null);
     expect('hits' in a && a.hits[0]?.name).toBe('Curio rowleyanus');
     const b = await searchAnswer(plat, noStatic, 'tree tumbo', 5, async () => null);
@@ -314,7 +316,7 @@ describe('every English common name (round sixty; the product review, 6)', () =>
 /** A bucket corpus holding Copiapoa cinerea, its dossier as given (or none). */
 function speciesBucket(dossier: string | null) {
   const p = productsOf(X);
-  const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)], ...(dossier ? [[dossierPath(5384013), dossier] as [string, string]] : [])]);
+  const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)], ...(dossier ? [[dossierPath('k2735933'), dossier] as [string, string]] : [])]);
   return { b, plat: platformOf(b), p };
 }
 const speciesEvent = (slug: string, plat: App.Platform | undefined, headers: Record<string, string> = {}, fetch = noStatic) => {
@@ -335,7 +337,7 @@ describe('a species the index lists whose page cannot be read (round sixty; A6)'
     const { b, plat } = speciesBucket(FIXTURE_DOSSIER);
     await corpusNow(plat, noStatic);
     const get = b.get;
-    b.get = async (k: string) => { if (k === dossierPath(5384013)) throw new Error('R2 internal error'); return get(k); };
+    b.get = async (k: string) => { if (k === dossierPath('k2735933')) throw new Error('R2 internal error'); return get(k); };
     const { load } = await import('../../src/routes/species/[slug]/+page.server');
     await expect(load(speciesEvent('copiapoa-cinerea', plat) as never)).rejects.toMatchObject({ status: 503 });
   });
@@ -359,13 +361,13 @@ describe('a species the index lists whose page cannot be read (round sixty; A6)'
         return e as { status: number; headers?: Headers };
       }
     };
-    const a = await ask('5384013');
+    const a = await ask('k2735933');
     expect([a.status, a.headers?.get('cache-control')]).toEqual([503, 'no-store']);
     expect(await ask('424242')).toMatchObject({ status: 404 });
   });
   it('round seventy-two (E): a dossier the bucket still holds under a key the index no longer lists is not served, nor read', async () => {
     const p = productsOf(X);
-    const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)], [dossierPath(5384013), FIXTURE_DOSSIER], [dossierPath(424242), FIXTURE_DOSSIER]]);
+    const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)], [dossierPath('k2735933'), FIXTURE_DOSSIER], [dossierPath('g424242'), FIXTURE_DOSSIER]]);
     const plat = platformOf(b);
     const read: string[] = [];
     const get = b.get;
@@ -378,9 +380,9 @@ describe('a species the index lists whose page cannot be read (round sixty; A6)'
         return e as { status: number };
       }
     };
-    expect((await ask('5384013')).status).toBe(200); // guard: a listed key is served
+    expect((await ask('k2735933')).status).toBe(200); // guard: a listed key is served
     expect(await ask('424242')).toMatchObject({ status: 404 }); // r72base: 200, the dropped species' old page
-    expect(read).not.toContain(dossierPath(424242));
+    expect(read).not.toContain(dossierPath('g424242'));
   });
 });
 
@@ -388,11 +390,11 @@ describe('/api/dossier (round sixty; B11, the harness review, 10)', () => {
   it('a cold isolate\'s first request is answered, not a 404, and every answer is no-store', async () => {
     _forgetIndex(); // nothing loaded: the fixture's stand-in used to be decided before the load that set it
     const { GET } = await import('../../src/routes/api/dossier/[key]/+server');
-    const ask = async (q: string) => GET({ params: { key: '5384013' }, platform: undefined, fetch: noStatic, getClientAddress: () => '1.2.3.6', url: new URL(`https://x/api/dossier/5384013${q}`) } as never);
+    const ask = async (q: string) => GET({ params: { key: 'k2735933' }, platform: undefined, fetch: noStatic, getClientAddress: () => '1.2.3.6', url: new URL(`https://x/api/dossier/k2735933${q}`) } as never);
     const first = await ask('?c=fixture');
     expect(first.status).toBe(200);
     for (const q of ['', '?c=someoldcorpus', '?c=fixture']) expect((await ask(q)).headers.get('cache-control')).toBe('no-store');
-    expect(await getDossier(undefined, noStatic, 5384013)).not.toBeNull();
+    expect(await getDossier(undefined, noStatic, 'k2735933')).not.toBeNull();
   });
 });
 
@@ -421,8 +423,8 @@ describe('odd species addresses (round sixty; the corpus review, 9)', () => {
 
 describe('one corpus per request, for the older names too (round sixty; A27)', () => {
   it('synonymInIndex reads the corpus the request holds', async () => {
-    const held = { idx: [{ key: 77, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', open: 0, photos: 0, climate: 'ok', syn: ['Cotyledon paniculata'] }] } as unknown as Loaded;
-    expect(await synonymInIndex(undefined, noStatic, 'cotyledon-paniculata', held)).toMatchObject({ acceptedKey: 77, slug: 'tylecodon-paniculatus' });
+    const held = { idx: [{ key: 'g77', gbif: 77, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', open: 0, photos: 0, climate: 'ok', syn: ['Cotyledon paniculata'] }] } as unknown as Loaded;
+    expect(await synonymInIndex(undefined, noStatic, 'cotyledon-paniculata', held)).toMatchObject({ acceptedKey: 'g77', slug: 'tylecodon-paniculatus' });
     expect(await synonymInIndex(undefined, noStatic, 'cotyledon-paniculata')).toBeNull(); // the fixture corpus has no such name
   });
 });

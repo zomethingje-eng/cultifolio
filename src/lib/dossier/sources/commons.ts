@@ -69,7 +69,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, 
     if (who.held && p.imageinfo?.[0]) {
       for (const name of slipsToAsk(p.title, who)) {
         if (!asked.has(name)) {
-          const a = await askSlip(f, name, { scientific: who.scientific, authorship: who.authorship, key: who.key, synonyms: who.synonyms });
+          const a = await askSlip(f, name, { scientific: who.scientific, authorship: who.authorship, key: who.gbif, synonyms: who.synonyms });
           asked.set(name, a.status === 'ok' && a.data.own);
         }
         if (asked.get(name)) slips.push(name);

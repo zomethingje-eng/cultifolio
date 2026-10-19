@@ -17,7 +17,7 @@ describe('svelte.config.js (round sixty)', () => {
     const files = kit.serviceWorker.files as (f: string) => boolean;
     expect(files('.assetsignore')).toBe(false);
     expect(files('maps/.hidden')).toBe(false);
-    expect(files('s/v2/index.json')).toBe(false);
+    expect(files('s/v3/index.json')).toBe(false);
     expect(files('favicon.svg')).toBe(true);
     expect(files('maps/world.svg')).toBe(true);
     // and the worker filters its own list the same way, whatever the config passes

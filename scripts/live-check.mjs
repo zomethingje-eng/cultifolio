@@ -179,12 +179,20 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   }
   const s = await get(`/species/${species}`, { headers: { accept: 'text/html' } });
   if (s.h('x-robots-tag')) fail(`/species/${species}: carries X-Robots-Tag "${s.h('x-robots-tag')}"; a species page is for search engines`, s);
-  const key = /"key":(\d+)/.exec((await get(`/api/search?q=${encodeURIComponent(species.replace(/-/g, ' '))}&n=1`)).text)?.[1];
-  if (key) {
-    const d = await get(`/api/dossier/${key}`);
-    if (d.status !== 200 || !/no-store/.test(d.h('cache-control') ?? '')) fail(`/api/dossier/${key}: status ${d.status}, cache-control "${d.h('cache-control')}"; a dossier is answered no-store (round sixty)`, d);
+  // A hit's key is the page's id since round seventy-eight (`k<plant_name_id>` or `g<GBIF key>`), and `gbif` its GBIF key.
+  // A Worker of round seventy-seven or before answers a bare GBIF key here: the check then says so, rather than passing by.
+  const hit = (await get(`/api/search?q=${encodeURIComponent(species.replace(/-/g, ' '))}&n=1`)).text;
+  const key = /"key":"([kg][1-9]\d*)"/.exec(hit)?.[1];
+  if (!key) fail(`/api/search for ${species}: the first hit carries no page id ("key":"k…" or "key":"g…"); a Worker of round seventy-seven or before is still deployed, or the search found nothing`, { status: 0, text: hit.slice(0, 300), h: () => '' });
+  const d = await get(`/api/dossier/${key}`);
+  if (d.status !== 200 || !/no-store/.test(d.h('cache-control') ?? '')) fail(`/api/dossier/${key}: status ${d.status}, cache-control "${d.h('cache-control')}"; a dossier is answered no-store (round sixty)`, d);
+  // The page's GBIF key moves to its id, kept by no cache (round seventy-eight).
+  const gbif = /"gbif":(\d+)/.exec(hit)?.[1];
+  if (gbif) {
+    const m = await get(`/api/dossier/${gbif}`, { redirect: 'manual' });
+    if (m.status !== 302 || m.h('location') !== `/api/dossier/${key}` || !/no-store/.test(m.h('cache-control') ?? '')) fail(`/api/dossier/${gbif}: status ${m.status}, location "${m.h('location')}", cache-control "${m.h('cache-control')}"; a page's GBIF key moves to its id, /api/dossier/${key}, no-store (round seventy-eight)`, m);
   }
-  ok('private pages noindex, species page indexable, dossier no-store');
+  ok(`private pages noindex, species page indexable, dossier no-store under its id (${key})${gbif ? ', its GBIF key moved to it' : ''}`);
 }
 
 // No analytics beacon injected at the edge (round eight, 1): checked with an HTML Accept, which is what gets the injection.

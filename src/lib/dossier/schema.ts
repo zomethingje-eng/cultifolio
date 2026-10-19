@@ -1,6 +1,6 @@
 /**
  * The species dossier: everything a species page needs, built once, served as
- * one immutable JSON. The version lives in the path (s/v2/<key>.json) and in
+ * one immutable JSON. The version lives in the path (s/v3/<id>.json) and in
  * the document, and a shape change is a version bump — the schema is what
  * makes forgetting impossible: a dossier that does not parse is not served.
  */
@@ -8,9 +8,17 @@ import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { dedupePhotos } from './dedupe';
 import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
 import * as v from 'valibot';
+import { isPageId, type PageId } from '$core/page-id';
 
-/** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
-export const DOSSIER_V = 2 as const;
+/**
+ * v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point.
+ * v3 (round seventy-eight): a page's `key` is its id (`$core/page-id`: `k<Kew plant_name_id>`, else `g<GBIF key>`), not
+ * GBIF's backbone key, which stays in `ids.gbif`; the other pages a photograph is shared with are named by id.
+ */
+export const DOSSIER_V = 3 as const;
+
+/** A page's id in a stored document: the one pattern of `$core/page-id`. */
+export const PageIdSchema = v.custom<PageId>(isPageId, 'a page id (k<plant_name_id> or g<GBIF key>)');
 
 /** `ambiguous`: two records answered where one is required, so none was taken (round sixty-nine; triage-68 M8). */
 export const UpstreamStatus = v.picklist(['ok', 'none', 'refused', 'error', 'skipped', 'ambiguous']);
@@ -276,8 +284,8 @@ export const Photo = v.object({
    * purpurascens)"), read by the build and `--fill commons-kind`. True keeps the file; absent until read, false after.
    */
   described: v.optional(v.boolean()),
-  /** The keys of the other species' pages that hold this same photograph, written by `--index` (round seventy-two, C5): no page shows it. */
-  shared: v.optional(v.array(v.number())),
+  /** The ids of the other species' pages that hold this same photograph, written by `--index` (round seventy-two, C5): no page shows it. */
+  shared: v.optional(v.array(PageIdSchema)),
   /**
    * For a Commons file: what the photograph rules made of it with every name the reference holds, written by `--index`
    * (round seventy-six), so the Worker reads a page without the reference's names: `not`, why it is not a photograph of
@@ -299,7 +307,8 @@ export const Paper = v.object({
 
 export const Dossier = v.object({
   v: v.literal(DOSSIER_V),
-  key: v.number(),
+  /** The page's id (round seventy-eight; `$core/page-id`): `k<Kew plant_name_id>`, or `g<GBIF key>` where Kew's file gives no one taxon that is this page's alone. Its GBIF key is `ids.gbif`. */
+  key: PageIdSchema,
   slug: v.string(),
   built: v.string(),
   builtBy: v.picklist(['node', 'worker']),
@@ -376,6 +385,6 @@ export function parseDossier(json: unknown, held?: HeldNames | null): Dossier {
   return safeUrls(v.parse(Dossier, json), held);
 }
 
-export function dossierPath(key: number): string {
-  return `s/v${DOSSIER_V}/${key}.json`;
+export function dossierPath(id: PageId): string {
+  return `s/v${DOSSIER_V}/${id}.json`;
 }

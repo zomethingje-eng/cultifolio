@@ -41,7 +41,8 @@ export async function listExtraKeys(o: { bulk: string; backbone: string; pages: 
   const holders = new Map<number, number[]>();
   for (const k of reference) for (const a of bb.lineage(k).slice(1)) holders.set(a, [...(holders.get(a) ?? []), k]);
   const merged = new Map(o.merges.map((m) => [m.from, slugify(m.name)]));
-  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '' }, idx, bb, reference, holders, merged));
+  const into = new Map(o.merges.map((m) => [m.from, m.into]));
+  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '' }, idx, bb, reference, holders, merged, into));
   // First without what GBIF files under each candidate; then that is read, with Kew's rows of its words, and the rule run again.
   const candidates = new Set(run().flatMap((r) => r.keys.map((k) => k.key)));
   console.log(`  ${candidates.size} candidate keys; reading what GBIF files under them…`);

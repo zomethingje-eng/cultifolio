@@ -16,6 +16,7 @@ import { buildProducts, aliasesOf } from '$dossier/products';
 import { fixtureFetcher, type JsonFetcher } from '$dossier/fetch';
 import { copiapoa } from '../../fixtures/upstream';
 import type { IndexEntry } from '$dossier/index-entry';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const K = (id: string, name: string, authors: string, status: string, accepted: string, rank = 'Species', parent = '', homotypic = false): KewRow => ({ id, name, authors, status, rank, accepted, parent, powo: '', ...(homotypic ? { homotypic } : {}) });
 /** A synonym Kew marks homotypic (`homotypic_synonym` T in Kew's file). */
@@ -268,15 +269,15 @@ describe('the build reads the other keys\' records and photographs, and says so 
 });
 
 describe('a page merged away keeps its old address for the device (rule 6: nothing a grower recorded is lost)', () => {
-  const e = (key: number, name: string, slug: string): IndexEntry => ({ key, slug, name, photos: 0, open: 0, climate: 'ok' });
+  const e = (key: number, name: string, slug: string): IndexEntry => ({ key: gbifPage(key), gbif: key, slug, name, photos: 0, open: 0, climate: 'ok' });
   const index = [e(11798439, 'Pelecyphora macromeris', 'pelecyphora-macromeris'), e(7281301, 'Weingartia fidaiana', 'weingartia-fidaiana')];
   it('the old slug answers in the entries\' buckets with the kept page, under the old slug; the index does not list it', () => {
-    const p = buildProducts(index, JSON.stringify(index), () => new Map(), '2026-10-16T00:00:00Z', [{ slug: 'coryphantha-macromeris', key: 11798439 }]);
+    const p = buildProducts(index, JSON.stringify(index), () => new Map(), '2026-10-16T00:00:00Z', [{ slug: 'coryphantha-macromeris', key: gbifPage(11798439) }]);
     const all = [...p.files.entries()].filter(([n]) => n.startsWith('entries/')).flatMap(([, b]) => JSON.parse(b) as IndexEntry[]);
-    expect(all.filter((x) => x.key === 11798439).map((x) => x.slug).sort()).toEqual(['coryphantha-macromeris', 'pelecyphora-macromeris']);
+    expect(all.filter((x) => x.gbif === 11798439).map((x) => x.slug).sort()).toEqual(['coryphantha-macromeris', 'pelecyphora-macromeris']);
     expect(JSON.parse(p.files.get('index.json')!).map((x: IndexEntry) => x.slug)).toEqual(['pelecyphora-macromeris', 'weingartia-fidaiana']);
   });
   it('an old slug a page of the index holds, or whose kept page is gone, answers nothing new (guard)', () => {
-    expect(aliasesOf(index, [{ slug: 'weingartia-fidaiana', key: 11798439 }, { slug: 'x', key: 1 }])).toEqual([]);
+    expect(aliasesOf(index, [{ slug: 'weingartia-fidaiana', key: gbifPage(11798439) }, { slug: 'x', key: gbifPage(1) }])).toEqual([]);
   });
 });

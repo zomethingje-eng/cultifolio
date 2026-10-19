@@ -54,7 +54,7 @@ describe('the climate build keeps the median of the cells\' own years', () => {
     expect(yearRain(c.months, c.annualRain)).toEqual({ mm: c.annualRain!.p50, cells: true });
     // and the dossier schema keeps it
     const ok = { status: 'ok', cells: 3, records: 3, cell: 'x', at: { lat, lon }, months: c.months, p10: c.p10, p90: c.p90, annualRain: c.annualRain, src: c.src };
-    const parsed = parseDossier({ ...JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')), climate: ok });
+    const parsed = parseDossier({ ...JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')), climate: ok });
     expect(parsed.climate.status === 'ok' && parsed.climate.annualRain?.p50).toBeCloseTo(60, 0);
   });
   it('a dossier built before has no median: the twelve monthly medians are added, and said to be', () => {
@@ -91,9 +91,9 @@ describe('each place the year\'s rain is shown names which figure it is', () => 
   });
   it('the export carries the cells\' percentiles and median after the columns it had', () => {
     const index = JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8'));
-    const dossiers = new Map<number, Record<string, unknown>>();
-    for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v2/${r.key}.json`, 'utf8')));
-    const cin = dossiers.get(5384013) as { climate: Record<string, unknown> };
+    const dossiers = new Map<string, Record<string, unknown>>();
+    for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v3/${r.key}.json`, 'utf8')));
+    const cin = dossiers.get('k2735933') as { climate: Record<string, unknown> };
     cin.climate = { ...cin.climate, annualRain: { p10: 50, p90: 90, p50: 70 } };
     const b = buildBundle({ index, dossiers } as Corpus, { version: 't', homepage: 'https://x.test', repo: 'https://x.test/r', today: '2026-10-09' });
     const lines = b.files['species.csv'].replace(/^﻿/, '').trim().split('\n');

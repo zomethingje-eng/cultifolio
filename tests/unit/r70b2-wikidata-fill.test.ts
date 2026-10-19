@@ -16,7 +16,7 @@ const LAG = { error: { code: 'maxlag', info: 'Waiting for wdqs1016: 7.6 seconds 
 /** Dossiers whose items carry their own GBIF key: the fill reads them, fifty a request, and changes nothing. */
 function corpus(n: number) {
   const docs: Record<string, unknown> = {};
-  for (let i = 1; i <= n; i++) docs[`${i}.json`] = { key: i, name: { scientific: `Aus s${i}` }, ids: { wikidata: `Q${i}` }, links: {}, upstream: { wikidata: { status: 'ok', at: 'x', detail: 'found by its GBIF key' } } };
+  for (let i = 1; i <= n; i++) docs[`g${i}.json`] = { key: `g${i}`, name: { scientific: `Aus s${i}` }, ids: { gbif: i, wikidata: `Q${i}` }, links: {}, upstream: { wikidata: { status: 'ok', at: 'x', detail: 'found by its GBIF key' } } };
   return docs;
 }
 const store = (docs: Record<string, unknown>) => ({ files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { docs[k] = d; } });

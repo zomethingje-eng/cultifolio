@@ -9,9 +9,10 @@ import { describe, it, expect } from 'vitest';
 import * as fill from '$dossier/commons-fill';
 import type { FetchResult } from '$dossier/fetch';
 import { safeUrls } from '$dossier/schema';
+import { gbifPage } from '../../src/lib/core/page-id';
 
 const photo = (title: string, extra: Record<string, unknown> = {}) => ({ src: 'commons', id: title, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(title)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: 3000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', ...extra });
-const dossier = (key: number, scientific: string, photos: unknown[], synonyms: string[] = []) => ({ v: 2, key, slug: scientific.toLowerCase().replace(/ /g, '-'), name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
+const dossier = (key: number, scientific: string, photos: unknown[], synonyms: string[] = []) => ({ v: 3, key: gbifPage(key), ids: { gbif: key }, slug: scientific.toLowerCase().replace(/ /g, '-'), name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos });
 const memory = (ds: Array<ReturnType<typeof dossier>>) => {
   const files = new Map(ds.map((d) => [`${d.key}.json`, JSON.parse(JSON.stringify(d))]));
   const writes: string[] = [];
@@ -55,10 +56,10 @@ describe('--fill commons-kind', () => {
       '4053092\tCyphostemma adenopodum\tfiled under "Curtis\'s Botanical Magazine, Volume 135"\tFile:Cissus adenopodus 135-8278.jpg',
       '2739906\tColchicum raddeanum\tfiled under "Unidentified Liliales in Armenia"\tFile:Plants of Artavaz 016.jpg'
     ]);
-    const cy = store.get('4053092.json');
+    const cy = store.get('g4053092.json');
     expect(cy.photos.map((p: { categories?: string[] }) => p.categories)).toEqual([["Curtis's Botanical Magazine, Volume 135", 'Cyphostemma adenopodum'], ['Cyphostemma adenopodum', 'Pages with maps']]);
     expect(safeUrls(cy as never).photos.map((p) => p.id)).toEqual(['File:Cyphostemma adenopodum kz1.jpg']);
-    expect(safeUrls(store.get('2740003.json') as never).photos).toEqual([]);
+    expect(safeUrls(store.get('g2740003.json') as never).photos).toEqual([]);
   });
 
   it('asks a file on two pages once, fifty files a request, and keeps a struck description', async () => {
@@ -75,9 +76,9 @@ describe('--fill commons-kind', () => {
     const c = await fill.fillCommonsKindAll(store, commons(table, calls));
     expect(calls).toHaveLength(2);
     expect(c).toMatchObject({ files: 55, asked: 54, read: 54, requests: 2, dossiers: 3 });
-    expect(store.get('3128990.json').photos[0].struck).toBe(true);
-    expect(safeUrls(store.get('3128990.json') as never).photos).toEqual([]);
-    expect(safeUrls(store.get('7281971.json') as never).photos).toEqual([]);
+    expect(store.get('g3128990.json').photos[0].struck).toBe(true);
+    expect(safeUrls(store.get('g3128990.json') as never).photos).toEqual([]);
+    expect(safeUrls(store.get('g7281971.json') as never).photos).toEqual([]);
     expect(c.lines.filter((l) => l.includes('Liberec'))).toHaveLength(2);
   });
 
@@ -87,7 +88,7 @@ describe('--fill commons-kind', () => {
     const calls: string[] = [];
     const first = await fill.fillCommonsKindAll(store, commons(Object.fromEntries(many.map((t) => [t, 'Aloe vera'])), calls, 1));
     expect(first).toMatchObject({ requests: 2, read: 50, unchecked: 10, refused: 'HTTP 429', dossiers: 1 });
-    const kept = store.get('1.json').photos as Array<{ categories?: string[] }>;
+    const kept = store.get('g1.json').photos as Array<{ categories?: string[] }>;
     expect(kept.filter((p) => Array.isArray(p.categories))).toHaveLength(50);
     const again: string[] = [];
     const second = await fill.fillCommonsKindAll(store, commons(Object.fromEntries(many.map((t) => [t, 'Aloe vera'])), again));
@@ -101,7 +102,7 @@ describe('--fill commons-kind', () => {
     expect(c).toMatchObject({ files: 2, before: 1, read: 1, missing: 1, dossiers: 0 });
     expect(c.lines).toEqual(['2\tAloe ferox\tno longer on Commons (left as it is)\tFile:Aloe ferox gone.jpg']);
     expect(store.writes).toEqual([]);
-    expect(store.get('2.json').photos[0].categories).toBeUndefined();
+    expect(store.get('g2.json').photos[0].categories).toBeUndefined();
   });
 
   it('reads a title Commons normalised back to the title asked', () => {

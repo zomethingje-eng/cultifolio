@@ -11,12 +11,13 @@ import * as fill from '$dossier/commons-fill';
 import * as infra from '$dossier/kew-infra';
 import { inatKewFill } from '$dossier/inat-kew-fill';
 import type { FetchResult } from '$dossier/fetch';
+import { gbifPage, type PageId } from '../../src/lib/core/page-id';
 
 const C = 'https://upload.wikimedia.org/wikipedia/commons';
 type P = Record<string, unknown>;
 const commonsFile = (title: string, extra: P = {}) => ({ src: 'commons', id: title, url: `${C}/thumb/a/ab/x.jpg/960px-x.jpg`, thumb: `${C}/thumb/a/ab/x.jpg/500px-x.jpg`, width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', categories: [], sourceRead: true, ...extra });
 const inatPhoto = (id: string, extra: P = {}) => ({ src: 'inat', id, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/large.jpg`, thumb: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/medium.jpg`, licence: 'by', attribution: '(c) A. Grower, some rights reserved (CC BY)', page: 'https://www.inaturalist.org/observations/1', ...extra });
-const dossier = (key: number, scientific: string, photos: unknown[], name: P = {}) => ({ v: 2, key, slug: scientific.toLowerCase().replace(/ /g, '-'), built: '2026-10-15', builtBy: 'node', name: { scientific, synonyms: [], vernacular: [], status: 'accepted', ...name }, ids: { gbif: key }, distribution: { native: [], introduced: [] }, occurrences: {}, climate: { status: 'none' }, photos, literature: [], links: {}, upstream: {} });
+const dossier = (key: number, scientific: string, photos: unknown[], name: P = {}) => ({ v: 3, key: gbifPage(key), slug: scientific.toLowerCase().replace(/ /g, '-'), built: '2026-10-15', builtBy: 'node', name: { scientific, synonyms: [], vernacular: [], status: 'accepted', ...name }, ids: { gbif: key }, distribution: { native: [], introduced: [] }, occurrences: {}, climate: { status: 'none' }, photos, literature: [], links: {}, upstream: {} });
 const page = (d: ReturnType<typeof dossier>, held: kind.HeldNames | null = null) => safeUrls(d as never, held).photos;
 
 /** Kew's rows for the cases: id, name, status, accepted id, IPNI. */
@@ -73,14 +74,14 @@ describe('C1: an iNaturalist taxon below the species that Kew places under anoth
     const k = kewInfra();
     const obs = (id: number, taxon: string) => ({ id, taxon: { name: taxon }, photos: [{ id, license_code: 'cc-by', url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/square.jpg`, attribution: '(c) A. Grower, some rights reserved (CC BY)' }] });
     const f = async <T,>(url: string): Promise<FetchResult<T>> => ({ status: 'ok', data: { results: [obs(1, 'Eriosyce crispa huascensis'), obs(2, 'Eriosyce crispa'), obs(3, 'Eriosyce crispa crispa')] } as T });
-    const r = await inat.photos(f, 438687, true, 24, { key: 7280292, kew: (t) => k.placedElsewhere(t, crispa) });
+    const r = await inat.photos(f, 438687, true, 24, { key: gbifPage(7280292), kew: (t) => k.placedElsewhere(t, crispa) });
     expect(r.status === 'ok' ? r.data.map((p) => p.id) : r).toEqual(['2', '3']);
   });
 });
 
 describe('C1: --fill inat --bulk asks again only the pages Kew\'s file names, and only the sets they hold', () => {
   const k = kewInfra();
-  const page2 = (photos: unknown[]) => ({ key: 7280292, name: { scientific: 'Eriosyce crispa', synonyms: crispa.synonyms }, ids: { inat: 438687, ipni: '976310-1' }, photos, upstream: { 'inat.photos.wild': { status: 'ok', at: '2026-09-19', detail: 'filled 2026-09-20' } } } as never);
+  const page2 = (photos: unknown[]) => ({ key: gbifPage(7280292), name: { scientific: 'Eriosyce crispa', synonyms: crispa.synonyms }, ids: { inat: 438687, ipni: '976310-1' }, photos, upstream: { 'inat.photos.wild': { status: 'ok', at: '2026-09-19', detail: 'filled 2026-09-20' } } } as never);
   const obs = (id: number, taxon: string) => ({ id, taxon: { name: taxon }, photos: [{ id, license_code: 'cc-by', url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/square.jpg`, attribution: '(c) A. Grower, some rights reserved (CC BY)' }] });
   const asked: string[] = [];
   const f = async <T,>(url: string): Promise<FetchResult<T>> => {
@@ -102,14 +103,14 @@ describe('C1: --fill inat --bulk asks again only the pages Kew\'s file names, an
   });
   it('guard: a page Kew\'s file names nothing under is not asked; one with no iNaturalist photograph is only marked', async () => {
     const before = asked.length;
-    expect(await inatKewFill({ key: 1, name: { scientific: 'Rhipsalis baccifera' }, ids: { inat: 5 }, photos: [inatPhoto('1')], upstream: {} } as never, f, k, '2026-06-04')).toEqual({ done: 'not a candidate' });
+    expect(await inatKewFill({ key: gbifPage(1), name: { scientific: 'Rhipsalis baccifera' }, ids: { inat: 5 }, photos: [inatPhoto('1')], upstream: {} } as never, f, k, '2026-06-04')).toEqual({ done: 'not a candidate' });
     expect(await inatKewFill(page2([]), f, k, '2026-06-04')).toEqual({ done: 'marked', asked: false });
     expect(asked.length).toBe(before);
   });
 });
 
 describe('C4: Kew\'s synonyms of the page\'s entry are its own names; an older name Kew accepts apart is not', () => {
-  const held = kind.heldNamesOf([{ key: 11426715, name: 'Pelecyphora missouriensis' }, { key: 2, name: 'Coryphantha macromeris' }]);
+  const held = kind.heldNamesOf([{ key: gbifPage(11426715), name: 'Pelecyphora missouriensis' }, { key: gbifPage(2), name: 'Coryphantha macromeris' }]);
   const file = commonsFile('File:Coryphantha missouriensis - Missouri foxtail cactus - 53062305761.jpg');
   it('Pelecyphora missouriensis shows its seven "Coryphantha missouriensis" files once the Kew fill has read the page', () => {
     expect(page(dossier(11426715, 'Pelecyphora missouriensis', [file], { synonyms: ['? missouriensis Sw.'], kew: { entry: '3294950', synonyms: ['Coryphantha missouriensis', 'Cactus missouriensis'], acceptedElsewhere: [], file: '2026-06-04' } }), held)).toHaveLength(1);
@@ -127,17 +128,17 @@ describe('C4: Kew\'s synonyms of the page\'s entry are its own names; an older n
 describe('C5: a photograph two species\' pages hold is shown on neither', () => {
   const twig = inatPhoto('475391379');
   it('Sassafras albidum\'s lead, cut twigs of several species, is also Cornus amomum\'s: --index marks both, and neither page shows it', () => {
-    const marks = kind.sharedPhotos([{ key: 3034002, photos: [twig, inatPhoto('9')] }, { key: 3082227, photos: [{ ...twig, src: 'gbif', id: '1:0', url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/475391379/original.jpg' }] }]);
-    const sassafras: Array<ReturnType<typeof inatPhoto> & { shared?: number[] }> = [{ ...twig }, inatPhoto('9')];
-    expect(kind.markShared(sassafras, marks.get(3034002))).toBe(true);
-    expect(sassafras[0].shared).toEqual([3082227]);
+    const marks = kind.sharedPhotos([{ key: gbifPage(3034002), photos: [twig, inatPhoto('9')] }, { key: gbifPage(3082227), photos: [{ ...twig, src: 'gbif', id: '1:0', url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/475391379/original.jpg' }] }]);
+    const sassafras: Array<ReturnType<typeof inatPhoto> & { shared?: PageId[] }> = [{ ...twig }, inatPhoto('9')];
+    expect(kind.markShared(sassafras, marks.get(gbifPage(3034002)))).toBe(true);
+    expect(sassafras[0].shared).toEqual([gbifPage(3082227)]);
     expect(page(dossier(3034002, 'Sassafras albidum', sassafras)).map((p) => p.id)).toEqual(['9']);
-    expect(kind.markShared(sassafras, marks.get(3034002))).toBe(false); // a second --index changes nothing
+    expect(kind.markShared(sassafras, marks.get(gbifPage(3034002)))).toBe(false); // a second --index changes nothing
     expect(kind.markShared(sassafras, undefined)).toBe(true); // a mark no longer true is taken off
     expect(sassafras[0].shared).toBeUndefined();
   });
   it('one page\'s two copies of a photograph are one photograph, not shared', () => {
-    expect(kind.sharedPhotos([{ key: 1, photos: [twig, { ...twig, src: 'gbif', id: '1:0' }] }]).size).toBe(0);
+    expect(kind.sharedPhotos([{ key: gbifPage(1), photos: [twig, { ...twig, src: 'gbif', id: '1:0' }] }]).size).toBe(0);
   });
 });
 
@@ -159,7 +160,7 @@ describe('C8: a specimen "in the … Museum" is a sheet only with a pressed word
       return { status: 'ok', data: { query: { pages: Object.fromEntries(titles.map((t, i) => [String(i + 1), { title: t, imageinfo: [{ extmetadata: { Categories: { value: 'Agave titanota|Plants in the Food and Agriculture Museum' }, ImageDescription: { value: 'Agave titanota specimen in the Food and Agriculture Museum, Tokyo University of Agriculture, Setagaya, Tokyo, Japan.' }, Artist: { value: 'Daderot' } } }] }])) } } as T };
     };
     expect(page(d as never)).toHaveLength(0);
-    const c = await fill.fillCommonsKindAll(store as never, f, kind.heldNamesOf([{ key: 2767118, name: 'Agave titanota' }]));
+    const c = await fill.fillCommonsKindAll(store as never, f, kind.heldNamesOf([{ key: gbifPage(2767118), name: 'Agave titanota' }]));
     expect(c.shownAgain).toBe(1);
     expect(files.get('2767118.json').photos[0].kind).toBeUndefined();
     expect(page(files.get('2767118.json'))).toHaveLength(1);

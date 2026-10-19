@@ -29,8 +29,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const EXIT = { done: 0, failed: 1, review: 2, blocked: 2, unfinished: 3, interrupted: 130 };
-const CORPUS = 'static/s/v2';
-const BUCKET = 'r2:cultifolio/s/v2';
+/** The dossier version (src/lib/dossier/schema.ts): the corpus is `static/s/v<N>` and the bucket's `s/v<N>`, as the Worker reads it. */
+export const VERSION = Number(/export const DOSSIER_V = (\d+) as const/.exec(readFileSync(new URL('../src/lib/dossier/schema.ts', import.meta.url), 'utf8'))?.[1] ?? NaN);
+const CORPUS = `static/s/v${VERSION}`;
+const BUCKET = `r2:cultifolio/s/v${VERSION}`;
+/** The corpus of the version before, which this version's is written from once (`--rekey`, round seventy-eight) and never changed. */
+const BEFORE = `static/s/v${VERSION - 1}`;
+/** A dossier's file: its page's id (round seventy-eight), or, in a corpus of version 2, its GBIF key. */
+export const DOSSIER_FILE = /^[kg][1-9][0-9]*\.json$/;
+const V2_FILE = /^[1-9][0-9]*\.json$/;
 
 /** The plan: one step a line, `#` starts a comment. Throws on a line it does not know, so a typo stops before anything runs. */
 export function parsePlan(text) {
@@ -171,15 +178,27 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       rec.status = 'running'; rec.at = now().toISOString(); save();
       let result;
       if (step.kind === 'review') {
-        result = { status: 'review', why: step.args[0] + facts(root, state.corpusBefore) };
+        result = { status: 'review', why: step.args[0] + facts(root, state.corpusBefore, state.backupDir) };
       } else if (step.kind === 'backup') {
+        if (!existsSync(at(CORPUS)) && existsSync(at(BEFORE))) {
+          // Round seventy-eight: this version's corpus is written from the version before's (`--rekey`), which is read and
+          // never changed, so it is its own backup, and the bucket's copy of it stays where the Worker before reads it.
+          const id = readJson(at(`${BEFORE}/manifest.json`))?.id ?? 'no-manifest';
+          say(`  ${CORPUS} is not there yet: it is written from ${BEFORE} (corpus ${id}), which is left as it is and is the backup.\n`);
+          state.speciesBefore = readJson(at(`${BEFORE}/index.json`))?.length ?? state.speciesBefore;
+          state.corpusBefore = id;
+          state.backupDir = BEFORE;
+          result = { status: 'done' };
+        } else {
         const id = readJson(at(`${CORPUS}/manifest.json`))?.id ?? 'no-manifest';
-        const to = at(`backups/v2-${id}`);
-        if (existsSync(to)) say(`  backups/v2-${id} is there already: the corpus as it was is kept.\n`);
-        else { say(`  copying ${CORPUS} to backups/v2-${id} (a minute or two)…\n`); cpSync(at(CORPUS), to, { recursive: true }); say(`  done: to go back, delete ${CORPUS} and copy backups/v2-${id} in its place.\n`); }
+        const to = at(`backups/v${VERSION}-${id}`);
+        if (existsSync(to)) say(`  backups/v${VERSION}-${id} is there already: the corpus as it was is kept.\n`);
+        else { say(`  copying ${CORPUS} to backups/v${VERSION}-${id} (a minute or two)…\n`); cpSync(at(CORPUS), to, { recursive: true }); say(`  done: to go back, delete ${CORPUS} and copy backups/v${VERSION}-${id} in its place.\n`); }
         state.speciesBefore = readJson(at(`${CORPUS}/index.json`))?.length ?? state.speciesBefore;
         state.corpusBefore = id;
+        state.backupDir = `backups/v${VERSION}-${id}`;
         result = { status: 'done' };
+        }
       } else if (step.kind === 'dossier') {
         if (!(await syncOnce(root, exec, say, once))) { rec.status = 'failed'; save(); return EXIT.failed; }
         const t0 = Date.now();
@@ -237,22 +256,43 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   }
 }
 
+/**
+ * A dossier with its id fields set aside (round seventy-eight): the version, the id, the other pages a photograph or the
+ * range names, and the stamp's fingerprint (the day is kept). Two dossiers equal under it show the same page.
+ */
+export function withoutIds(d) {
+  const o = structuredClone(d);
+  delete o.v; delete o.key;
+  if (o.changed) delete o.changed.h;
+  if (o.distribution?.via) delete o.distribution.via.page;
+  for (const p of o.photos ?? []) delete p.shared;
+  return o;
+}
+/** Whether two dossiers' texts are one page: byte for byte, or, across the change of ids, equal but for the id fields. */
+const samePage = (a, b, acrossIds) => a.equals(b) || (acrossIds && JSON.stringify(withoutIds(JSON.parse(a.toString('utf8')))) === JSON.stringify(withoutIds(JSON.parse(b.toString('utf8')))));
+
 /** What the review before the upload states: the corpus on disk against the backup, and drops.txt. */
-function facts(root, before) {
+export function facts(root, before, backupDir) {
   const m = readJson(join(root, CORPUS, 'manifest.json'));
   const idx = readJson(join(root, CORPUS, 'index.json'));
   const drops = existsSync(join(root, 'drops.txt')) ? readFileSync(join(root, 'drops.txt'), 'utf8').split(/\r?\n/).filter(Boolean).length : 0;
-  // The dossiers this step changed: each one's bytes against the backup's (a few seconds for nine thousand).
-  const back = before ? join(root, 'backups', `v2-${before}`) : null;
+  // The dossiers this step changed: each one's bytes against the backup's (a few seconds for nine thousand). A backup of
+  // version 2 (round seventy-eight's step, whose backup is static/s/v2) names its dossiers by GBIF key, so each is found by
+  // the dossier's `ids.gbif` and compared without the id fields.
+  const back = backupDir ? join(root, backupDir) : before ? join(root, 'backups', `v${VERSION}-${before}`) : null;
   let changed = null;
-  if (back && existsSync(back)) {
+  let acrossIds = false;
+  if (back && existsSync(back) && existsSync(join(root, CORPUS))) {
     changed = [];
-    for (const f of readdirSync(join(root, CORPUS)).filter((x) => /^\d+\.json$/.test(x))) {
-      const was = join(back, f);
-      if (!existsSync(was) || !readFileSync(was).equals(readFileSync(join(root, CORPUS, f)))) changed.push(f.slice(0, -5));
+    acrossIds = !readdirSync(back).some((x) => DOSSIER_FILE.test(x)) && readdirSync(back).some((x) => V2_FILE.test(x));
+    for (const f of readdirSync(join(root, CORPUS)).filter((x) => DOSSIER_FILE.test(x))) {
+      const now = readFileSync(join(root, CORPUS, f));
+      const gbif = acrossIds ? readJson(join(root, CORPUS, f))?.ids?.gbif : null;
+      const was = join(back, acrossIds ? `${gbif}.json` : f);
+      if (!existsSync(was) || !samePage(readFileSync(was), now, acrossIds)) changed.push(f.slice(0, -5));
     }
   }
-  const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
+  const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${acrossIds ? ' apart from their ids' : ''}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
   return ` (corpus on disk ${m?.id ?? 'none'}, was ${before ?? 'not recorded'}; ${idx?.length ?? '?'} species${ch}; drops.txt ${drops ? `${drops} lines` : 'not there'}).`;
 }
 
@@ -279,7 +319,7 @@ export async function unlistedReport(root, exec, say) {
   const code = await exec('rclone', ['lsf', BUCKET, '--files-only'], (s) => { listing += s; }, { cwd: root, env: process.env });
   if (code !== 0) { say(`  the bucket's dossiers could not be listed (rclone exit ${code}): not checked against the index; nothing is changed.\n`); return null; }
   const listed = new Set((readJson(join(root, CORPUS, 'index.json')) ?? []).map((e) => `${e.key}.json`));
-  const extra = listing.split(/\r?\n/).map((l) => l.trim()).filter((f) => /^\d+\.json$/.test(f) && !listed.has(f)).sort();
+  const extra = listing.split(/\r?\n/).map((l) => l.trim()).filter((f) => DOSSIER_FILE.test(f) && !listed.has(f)).sort();
   writeFileSync(join(root, 'bucket-unlisted.txt'), extra.map((f) => f.slice(0, -5)).join('\n') + (extra.length ? '\n' : ''));
   say(extra.length
     ? `  ${extra.length} dossier${extra.length === 1 ? '' : 's'} in the bucket ${extra.length === 1 ? 'is' : 'are'} not in the index (keys in bucket-unlisted.txt: ${extra.slice(0, 8).map((f) => f.slice(0, -5)).join(', ')}${extra.length > 8 ? ', …' : ''}). ${extra.length === 1 ? 'It is' : 'They are'} left as ${extra.length === 1 ? 'it is' : 'they are'}: a report only, nothing deleted.\n`

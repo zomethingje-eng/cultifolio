@@ -1,0 +1,50 @@
+# Round seventy-eight (M): the real corpus step (scripts/corpus-step.mjs, scripts/corpus-plan.txt) of the merged code, dry run on the copy (rclone and the live check said, not run), then a second --index; 2026-10-19.
+
+=== 2026-10-19 17:18:24  step 1 of 6: backup
+  static/s/v3 is not there yet: it is written from static/s/v2 (corpus a98be27f26a097fe), which is left as it is and is the backup.
+
+=== 2026-10-19 17:18:24  step 2 of 6: dossier --rekey
+Writing the version 2 corpus in static/s/v2 as version 3 in static/s/v3, each dossier under its page's id…
+  page ids: 8916 by Kew's plant_name_id, 31 by GBIF's key (ids-gbif.txt says why); 8947 dossiers written under a new id
+  1321 genus records copied to static/s/v3/g
+  page ids: 8916 by Kew's plant_name_id, 31 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  99 photographs on 35 pages are held by another species' page too: shown on none (shared-photos.txt)
+  nearest habitat climates for 5567 species (13.9 s)
+  index: 8947 species
+  photograph judgement: 4391 Commons files on 8947 pages read with the reference's names; 0 dossiers written anew
+  corpus bfb1edeee7862289: 8947 species in 32 buckets, 64 posting files, 13210 search key files (278.2 MB) → static/s/v3/p/ (13899 files written, 1 already on disk under their hash, 0 of older corpora deleted); manifest.json names it
+  9 dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: Agave wendtii, Brachystelma bilobatum, Cissus wilmsii, Drimia obstii, Manfreda arceliensis, Othonna divaricata, Trimelopter crispolanatum, Urginea grandiflora, Vera-duthiea zebrina
+
+=== 2026-10-19 17:19:43  step 3 of 6: review In corpus-step.log, the --rekey step must say "page ids: 8916 by Kew's plant_name_id, 29 by GBIF's key" and "8945 dossiers written under a new id" (then the same line again, from the index, with "0 dossiers written under a new id"), "index: 8945 species", and on its corpus line about 13,900 files written and "manifest.json names it". ids-gbif.txt lists the 29: 15 whose Kew rows do not decide, and 7 pairs that hold one Kew entry each, which a merge would settle. The review line below must say 0 dossiers differ from the backup apart from their ids, and drops.txt should not be there. On the dry run of round seventy-seven's copy here (8,947 species, the two merged pages not yet pruned, so 31 by GBIF's key), it said 8947 dossiers written under a new id, 1321 genus records copied, 13899 product files written (365 MB; with the dossiers, 289 MB, and the genus records, 5 MB, about 660 MB for the upload), and 0 dossiers differing apart from their ids. A second --index on the dry run wrote 0 files and said "unchanged", and every file under s/v3 was the same by md5.
+
+Review before going on: In corpus-step.log, the --rekey step must say "page ids: 8916 by Kew's plant_name_id, 29 by GBIF's key" and "8945 dossiers written under a new id" (then the same line again, from the index, with "0 dossiers written under a new id"), "index: 8945 species", and on its corpus line about 13,900 files written and "manifest.json names it". ids-gbif.txt lists the 29: 15 whose Kew rows do not decide, and 7 pairs that hold one Kew entry each, which a merge would settle. The review line below must say 0 dossiers differ from the backup apart from their ids, and drops.txt should not be there. On the dry run of round seventy-seven's copy here (8,947 species, the two merged pages not yet pruned, so 31 by GBIF's key), it said 8947 dossiers written under a new id, 1321 genus records copied, 13899 product files written (365 MB; with the dossiers, 289 MB, and the genus records, 5 MB, about 660 MB for the upload), and 0 dossiers differing apart from their ids. A second --index on the dry run wrote 0 files and said "unchanged", and every file under s/v3 was the same by md5. (corpus on disk bfb1edeee7862289, was a98be27f26a097fe; 8947 species; 0 dossiers differ from the backup of corpus a98be27f26a097fe apart from their ids; drops.txt not there). When it is as expected, carry on with: node scripts/corpus-step.mjs --go-on
+
+=== 2026-10-19 17:20:18  step 4 of 6: upload
+  rclone copy static/s/v3 r2:cultifolio/s/v3 --transfers 32 --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --exclude *.tmp --s3-no-check-bucket --stats-one-line --stats 30s
+  [dry run: not run] rclone copy static/s/v3 r2:cultifolio/s/v3 --transfers 32 --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --exclude *.tmp --s3-no-check-bucket --stats-one-line --stats 30s
+  rclone check static/s/v3 r2:cultifolio/s/v3 --one-way --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --exclude *.tmp
+  [dry run: not run] rclone check static/s/v3 r2:cultifolio/s/v3 --one-way --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --exclude *.tmp
+  rclone copy static/s/v3/manifest.json r2:cultifolio/s/v3 --s3-no-check-bucket
+  [dry run: not run] rclone copy static/s/v3/manifest.json r2:cultifolio/s/v3 --s3-no-check-bucket
+  every dossier in the bucket is in the index.
+
+=== 2026-10-19 17:20:18  step 5 of 6: review The corpus is in the bucket under s/v3/, which the site does not read yet: it still serves round seventy-seven's s/v2/. Deploy now, as docs/DEPLOY.md section 3 says (the test run, then npm run deploy, whose first line now says "corpus-ready: the bucket holds corpus … under s/v3/"). Then carry on, and the live check reads the new corpus.
+
+Review before going on: The corpus is in the bucket under s/v3/, which the site does not read yet: it still serves round seventy-seven's s/v2/. Deploy now, as docs/DEPLOY.md section 3 says (the test run, then npm run deploy, whose first line now says "corpus-ready: the bucket holds corpus … under s/v3/"). Then carry on, and the live check reads the new corpus. (corpus on disk bfb1edeee7862289, was a98be27f26a097fe; 8947 species; 0 dossiers differ from the backup of corpus a98be27f26a097fe apart from their ids; drops.txt not there). When it is as expected, carry on with: node scripts/corpus-step.mjs --go-on
+
+=== 2026-10-19 17:20:31  step 6 of 6: live-check
+  [dry run: not run] /opt/node22/bin/node scripts/live-check.mjs
+  the site serves corpus bfb1edeee7862289, the one on disk.
+
+=== 2026-10-19 17:20:31  every step is done. The record is corpus-step.json; the log is corpus-step.log.
+
+== a second --index
+  page ids: 8916 by Kew's plant_name_id, 31 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  99 photographs on 35 pages are held by another species' page too: shown on none (shared-photos.txt)
+  nearest habitat climates for 5567 species (13.2 s)
+  index: 8947 species
+  photograph judgement: 4391 Commons files on 8947 pages read with the reference's names; 0 dossiers written anew
+  corpus bfb1edeee7862289: 8947 species in 32 buckets, 64 posting files, 13210 search key files (278.2 MB) → static/s/v3/p/ (0 files written, 13900 already on disk under their hash, 0 of older corpora deleted); unchanged
+  9 dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: Agave wendtii, Brachystelma bilobatum, Cissus wilmsii, Drimia obstii, Manfreda arceliensis, Othonna divaricata, Trimelopter crispolanatum, Urginea grandiflora, Vera-duthiea zebrina
+
+== md5 of every file under static/s/v3 before and after the second --index: 24169 files, the same

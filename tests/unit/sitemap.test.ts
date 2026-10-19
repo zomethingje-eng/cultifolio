@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { sitemapUrls, sitemapIndex, sitemapChunk, SITEMAP_CHUNK } from '$lib/server/sitemap';
 import type { IndexEntry } from '$lib/server/dossiers';
+import { gbifPage } from '../../src/lib/core/page-id';
 
-const entry = (i: number): IndexEntry => ({ key: i, slug: `genus${i % 7}-species${i}`, name: `Genus${i % 7} species${i}`, photos: 0, open: 0, climate: 'ok' });
+const entry = (i: number): IndexEntry => ({ key: gbifPage(i + 1), slug: `genus${i % 7}-species${i}`, name: `Genus${i % 7} species${i}`, photos: 0, open: 0, climate: 'ok' });
 
 describe('the sitemap is an index of files under the protocol cap (round forty, own)', () => {
   it('one file for the present corpus, with the species first; a corpus past the chunk gets a second file', () => {

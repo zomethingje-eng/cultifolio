@@ -24,7 +24,7 @@ describe("GBIF's image cache by occurrence and hash (round thirty-two, 1)", () =
     expect(mendGbifThumb(old, '5110124591:0', URL_)).toBe(gbifThumb(5110124591, URL_));
     expect(mendGbifThumb(old, 'inat-1', URL_)).toBe(old); // no occurrence key to go by
     expect(mendGbifThumb('https://inaturalist-open-data.s3.amazonaws.com/photos/12/medium.jpeg', '7:0', URL_)).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/12/medium.jpeg');
-    const fixture = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v2/5384013.json')).default)) as { photos: Array<Record<string, unknown>> };
+    const fixture = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v3/k2735933.json')).default)) as { photos: Array<Record<string, unknown>> };
     fixture.photos = [{ src: 'gbif', id: '5110124591:0', url: URL_, thumb: old, licence: 'by-sa', attribution: 'jeanne de klerk, CC BY-SA, via GBIF' }];
     const d = parseDossier(fixture);
     expect(d?.photos[0].thumb).toBe(gbifThumb(5110124591, URL_));
@@ -37,7 +37,7 @@ describe("GBIF's image cache by occurrence and hash (round thirty-two, 1)", () =
     expect(out[0].captive).toBe(true);
   });
   it('extremes read at a POWER cell that is mostly sea are set aside as the dossier is read, so the cold floor is the range\'s coldest night and the page says what the sea cell gave (round thirty-five, R1-11)', async () => {
-    const fixture = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v2/5384013.json')).default)) as { climate: Record<string, unknown> };
+    const fixture = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v3/k2735933.json')).default)) as { climate: Record<string, unknown> };
     expect(fixture.climate.status).toBe('ok');
     const ex = { years: 44, minAbs: 22.3, minP01: 23.7, maxP99: 31.2, frostDaysPerYear: 0, frostNights: 0, lapseAppliedM: 0 };
     fixture.climate = { ...fixture.climate, extremes: ex, extremesStatus: 'ok', landFraction: 0.12 };
