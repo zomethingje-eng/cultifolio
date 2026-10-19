@@ -14,13 +14,19 @@ import { it, expect } from 'vitest';
 import { searchAnswer, _forgetIndex, WHOLE_LIKE } from '$lib/server/dossiers';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
+import { before77 } from './helpers/before-r77';
 import { queryPlan, buildPostings, postingFilesFor, candidates } from '$core/postings';
 import { synthIndex, reseed } from './helpers/corpus-synth';
 
 function platformFor(idx: object[]) {
-  const { manifest, files } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
+  // Round seventy-seven: the postings path's charge, on a corpus built before the search's key files (whose own passes
+  // are bounded by `NEAR_CAP` and `RANK_CAP`, and charged by what they rank: tests/unit/r77k-search-files.test.ts).
+  const built = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
+  const manifest = before77(built.manifest), { files, stored } = built;
   const blobs = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)]]);
-  for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  for (const [name, body] of files) if (manifest.files[name]) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   const obj = (body: string, etag: string) => ({ text: async () => body, json: async () => JSON.parse(body), etag });
   const store = { get: async (k: string) => (blobs.has(k) ? obj(blobs.get(k)!, `"${k}"`) : null), head: async (k: string) => (blobs.has(k) ? { etag: `"${k}"` } : null) };
   return { env: { STORE: store } } as unknown as App.Platform;

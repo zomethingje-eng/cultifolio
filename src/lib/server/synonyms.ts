@@ -51,7 +51,7 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
   // The address's slug first, as it is: the maps hold every older name under its slug too, so `arbutus-uva-ursi` is
   // Arbutus uva-ursi, where `nameFromSlug` reads "Arbutus uva ursi", which no species holds (round seventy; triage-69 N3,
   // S-F3). Then the name read from it, as before. A name held by one species only: one held by two or more answers neither.
-  // Read by key from the build's name files, or from the maps over the index (round seventy-six).
+  // Read by key from the build's files of names (round seventy-six; `older/` since round seventy-seven), or from the maps over the index.
   const one = async (k: string) => { const o = await look.older(k); return o && 'one' in o ? o : null; };
   const hit = (await one(slug.trim().toLowerCase())) ?? (await one(want));
   if (!hit) return null;

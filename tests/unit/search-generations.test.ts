@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { searchAnswer, _forgetIndex, corpusNow, product } from '$lib/server/dossiers';
 import { isManifest } from '$dossier/manifest';
+import { before77 } from './helpers/before-r77';
 import { homeWindow, catalogueOf, HOME_WINDOW, HOME_ITEMS } from '$lib/server/catalogue';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
@@ -35,12 +36,17 @@ function storeFor(files: Map<string, string>) {
     head: async (k: string) => (m.has(k) ? { etag: `"${k}:${m.get(k)!.length}:${m.get(k)!.slice(0, 40)}"` } : null)
   };
 }
-function platformFor(idx: object[]) {
+function platformFor(idx: object[], old = false) {
   const text = JSON.stringify(idx);
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
+  const built = buildProducts(idx as never, text, () => new Map());
+  // Round seventy-seven: `old`, a manifest built before the search's key files, which the postings path answers.
+  const { files, stored } = built;
+  const manifest = old ? before77(built.manifest) : built.manifest;
   const blobs = new Map<string, string>();
   blobs.set(manifestPath(), JSON.stringify(manifest));
-  for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  for (const [name, body] of files) if (manifest.files[name]) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   const store = storeFor(blobs);
   return { platform: { env: { STORE: store } } as unknown as App.Platform, manifest, store };
 }
@@ -182,7 +188,7 @@ describe('one corpus through a request (round fifty-eight; all three reviews)', 
   });
   it('a posting file that does not parse is a miss, and the whole index answers under the rate', async () => {
     _forgetIndex();
-    const x = platformFor(X);
+    const x = platformFor(X, true); // round seventy-seven: the postings path, as a corpus built before the key files has it
     for (const [k, v] of x.store.m) if (k.includes('/p/') && v.startsWith('{') && v.includes('"cop"')) x.store.m.set(k, '{"cop": [1,');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let asked = 0;

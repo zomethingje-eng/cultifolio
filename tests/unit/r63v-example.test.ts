@@ -58,10 +58,13 @@ describe('a tab that left the example is not marked, since no page opens it by i
     expect(loc.href).toBe('http://x/today');
   });
   it('enterDemo opens on the page it is given, Today by default', async () => {
-    const { enterDemo } = await import('$lib/db/demo');
+    const { enterDemo, ENTERING } = await import('$lib/db/demo');
     expect(enterDemo()).toBe(true);
-    expect(loc.href).toBe('/today');
-    expect(session.m.get('cultifolio.demo')).toBe('1');
+    // Round seventy-seven (F): the address carries the entry's one-use token, and the page it opens sets the flag
+    // (app.html's first script; tests/unit/r77f-enter.test.ts). On r77base: '/today', and the flag '1' set here.
+    const token = session.m.get(ENTERING);
+    expect(loc.href).toBe(`/today?enter=${token}`);
+    expect(session.m.get('cultifolio.demo')).toBeUndefined();
   });
 });
 

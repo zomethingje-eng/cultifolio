@@ -52,7 +52,7 @@
   // self-review's corpus 10g, triage N2; rule 2).
   // Round sixty-nine (triage-68 W6, R46-7): a search the server answered it could not run just now (`unread`), or refused
   // (`refused`), is said as that; only no answer at all is "did not answer".
-  let refDown = $state<null | 'unreached' | 'limited' | 'unread' | 'refused'>(null);
+  let refDown = $state<null | 'unreached' | 'limited' | 'unread' | 'refused' | 'narrow'>(null);
   /** The last check read a genus followed by capitalised words as the genus and a cultivar, since no species of that name was found: said once, before Add files it. */
   let readAsCultivar = $state<string | null>(null);
   $effect(() => { if (!value) received = null; });
@@ -173,6 +173,8 @@
       if (!live()) return;
       // Said, never silence: the reference's search did not answer, or this site asked this device to wait (rule 2).
       refDown = answer === null ? 'unreached' : !Array.isArray(answer) ? (answer.kind ?? 'limited') : null;
+      // Too many of the reference's species match every word to list them (round seventy-seven): said, not "none".
+      if (!refDown && Array.isArray(answer) && 'narrow' in answer && answer.narrow === true) refDown = 'narrow';
       // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
       // An answer for other words than the name typed is offered only when they are its genus and epithet, the rest left
       // out or retried ("Copiapoa cinerea var. columna-alba", "Copiapoa cinerea Phil."): its rows then file no key for
@@ -341,6 +343,7 @@
     if (d === 'limited') return "The reference's own search was not asked: this site asked this device to wait";
     if (d === 'unread') return "The reference's own search could not be read just now";
     if (d === 'refused') return "The server refused the reference's own search just now";
+    if (d === 'narrow') return "Too many of the reference's species match what is typed to list them; type another letter or word";
     return "The reference's own search did not answer";
   }
   const refSaid = $derived(refDown ? `${refWords(refDown)}. ` : '');

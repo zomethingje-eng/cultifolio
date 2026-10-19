@@ -66,7 +66,7 @@ describe('the photograph judgement, stored by --index (round seventy-six)', () =
     const old = new Set(lookupFileNames(IDX.length));
     for (const [which, manifest, body] of [['files', p.manifest, judged], ['index', { ...p.manifest, files: Object.fromEntries(Object.entries(p.manifest.files).filter(([n]) => !old.has(n))) }, dossier()]] as const) {
       _forgetIndex();
-      const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, b]) => [productPath(p.manifest.files[n]), b] as [string, string]), [dossierPath(7981215), JSON.stringify(body)]]);
+      const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, b]) => [productPath(p.manifest.files[n]), b] as [string, string]), ...[...p.stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath(7981215), JSON.stringify(body)]]);
       const store = { get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${k}"` } : null), head: async (k: string) => (m.has(k) ? { etag: `"${k}"` } : null) };
       const platform = { env: { STORE: store } } as unknown as App.Platform;
       const c = await corpusNow(platform, noStatic);

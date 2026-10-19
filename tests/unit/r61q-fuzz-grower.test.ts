@@ -18,10 +18,12 @@ type E = ReturnType<typeof synthIndex>['idx'][number] & { commons?: string[] };
 
 function platformFor(idx: object[]) {
   const text = JSON.stringify(idx);
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
+  const { manifest, files, stored } = buildProducts(idx as never, text, () => new Map());
   const blobs = new Map<string, string>();
   blobs.set(manifestPath(), JSON.stringify(manifest));
   for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   const obj = (body: string, etag: string) => ({ text: async () => body, json: async () => JSON.parse(body), etag });
   const store = { get: async (k: string) => (blobs.has(k) ? obj(blobs.get(k)!, `"${k}"`) : null), head: async (k: string) => (blobs.has(k) ? { etag: `"${k}"` } : null) };
   return { platform: { env: { STORE: store } } as unknown as App.Platform };

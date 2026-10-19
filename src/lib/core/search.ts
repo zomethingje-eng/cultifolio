@@ -356,6 +356,36 @@ export function leftOut(q: string): string | null {
   return left.join(' ').trim() || null;
 }
 
+/**
+ * The first reading of `search` alone (round seventy-seven): the whole query against each common name, when the
+ * botanical reading would drop words (`wholeReading`); null when the query has no such reading. The key files answer it
+ * from a light word's candidates when the query's botanical words are all too common to list ($core/search-files).
+ */
+export function wholeHits<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] | null {
+  const whole = wholeReading(q);
+  if (!whole) return null;
+  return collect(prepared.filter((p) => inCommon(p, whole)), whole, (x, w) => w.startsWith(x), false, typedText(q)).slice(0, limit).map((h) => h.p.item);
+}
+/**
+ * The hits of `search`'s first two readings alone (round seventy-seven): the whole query as one common name, then the
+ * query's own words as typed, a trailing rank marker kept as a word; never the readings after (the marker dropped, a
+ * similar spelling). The key files answer "cape var" from the light word "var" when it finds anything this way.
+ */
+export function readingHits<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
+  const qs = rankedWords(q);
+  if (!qs.length) return [];
+  const exact = (x: string, w: string) => w.startsWith(x);
+  const typed = typedText(q);
+  const whole = wholeReading(q);
+  if (whole) {
+    const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact, false, typed);
+    if (common.length) return common.slice(0, limit).map((h) => h.p.item);
+  }
+  return collect(prepared, qs, exact, false, typed).slice(0, limit).map((h) => h.p.item);
+}
+/** The text a query is compared with in the tie-break of a common name written as typed (`commonTie`). */
+export const typedOf = (q: string) => typedText(q);
+
 /** Whether an answer's hits came by a similar spelling: the exact pass found none of them (the near pass runs only then). */
 export function nearAnswer(q: string, hits: Searchable[]): boolean {
   return hits.length > 0 && !hasExact(prepare(hits), q);
@@ -650,8 +680,12 @@ export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: strin
   return false;
 }
 
-/** The matches for `q`, best first. Empty query: nothing (the caller shows its own default). */
-export function search<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
+/**
+ * The matches for `q`, best first. Empty query: nothing (the caller shows its own default). `typed` stands in for the
+ * text as typed in the tie-break of a common name written as typed (`commonTie`); the build passes it for the answers it
+ * keeps for a word too common to list (round seventy-seven, `$core/search-files`), and nothing else does.
+ */
+export function search<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity, typedAs?: string): T[] {
   // "var." on a label is not a search word either (round thirty-five, R2-3), but only once another word follows it: "f"
   // on its own is Ferocactus being typed, and "aloe var" is a variegata on its way (round thirty-seven, R1-7).
   // A trailing marker is tried as a word first, and dropped when nothing starts with it ("haworthia pumila var" still
@@ -663,11 +697,11 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // entry it finds has every typed word in one of its common names (round sixty-seven; triage-66 N2). Otherwise the
   // common names are read whole within the one reading, after a name typed as a name (`group`).
   const whole = wholeReading(q);
+  const typed = typedAs ?? typedText(q);
   if (whole) {
-    const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact, false, typedText(q));
+    const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact, false, typed);
     if (common.length) return common.slice(0, limit).map((h) => h.p.item);
   }
-  const typed = typedText(q);
   let hits = collect(prepared, qs, exact, false, typed);
   const trailingMarker = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
   if (!hits.length && trailingMarker) hits = collect(prepared, qs.slice(0, -1), exact, false, typed);

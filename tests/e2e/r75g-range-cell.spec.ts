@@ -23,7 +23,8 @@ const INTRODUCED = ('Albania, Bulgaria, Greece, Italy, Spain, Portugal, France, 
 async function okraRange(page: Page) {
   await page.route(/\/species\/copiapoa-cinerea\/__data\.json/, async (route: Route) => {
     const res = await route.fetch();
-    const j = JSON.parse((await res.text()).split('\n')[0]) as { nodes: Array<{ type: string; data?: unknown[] }> };
+    const [first, ...rest] = (await res.text()).split('\n');
+    const j = JSON.parse(first) as { nodes: Array<{ type: string; data?: unknown[] }> };
     for (const n of j.nodes) {
       if (n.type !== 'data' || !n.data) continue;
       const d = devalue.unflatten(n.data as never) as { d?: { distribution: Record<string, unknown> } };
@@ -32,7 +33,11 @@ async function okraRange(page: Page) {
       d.d.distribution.introduced = INTRODUCED;
       n.data = JSON.parse(devalue.stringify(d));
     }
-    await route.fulfill({ response: res, body: JSON.stringify(j) });
+    // Every line kept: data the server streams after the first line (a promise it had not yet settled) is the rest of the
+    // answer, and a page given the first line alone waits for it; and the length and transfer headers described the old
+    // body (round seventy-seven: in WebKit the visit sometimes never landed).
+    const headers = Object.fromEntries(Object.entries(res.headers()).filter(([k]) => !/^(content-length|transfer-encoding|content-encoding)$/i.test(k)));
+    await route.fulfill({ status: res.status(), headers, body: [JSON.stringify(j), ...rest].join('\n') });
   });
   await page.goto('/?by=genus&open=copiapoa'); await ready(page);
   await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).click();

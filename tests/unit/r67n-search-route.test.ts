@@ -26,6 +26,7 @@ let index: IndexEntry[] = [];
 let text = '';
 let manifest: Manifest;
 let files: Map<string, string>;
+let stored: Map<string, string>;
 const byPath = new Map<string, string>();
 
 beforeAll(() => {
@@ -40,10 +41,12 @@ beforeAll(() => {
     return { ...rest, ...indexNames(d.name.vernacular ?? [], { genus: e.name, genera }), ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) } as IndexEntry;
   });
   text = JSON.stringify(index);
-  ({ manifest, files } = buildProducts(index, text, () => new Map()));
+  ({ manifest, files, stored } = buildProducts(index, text, () => new Map()));
   byPath.set(`s/v2/index.json`, text);
   byPath.set(manifestPath(), JSON.stringify(manifest));
   for (const [name, body] of files) byPath.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) byPath.set(productPath(h), body);
 }, 600_000);
 
 const staticFetch = (async (u: string | URL) => {

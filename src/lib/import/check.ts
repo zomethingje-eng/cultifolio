@@ -74,6 +74,8 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
       try { r = await look.search(speciesOf(x.scientific)); } catch { r = null; }
       if (r === null) { out.set(k, { s: 'unchecked' }); continue; }
       if (!Array.isArray(r)) { stopped = true; out.set(k, { s: 'unchecked' }); continue; }
+      // Too common for the server to list (round seventy-seven): not checked, never "not in the reference" (rule 2).
+      if ((r as { narrow?: unknown }).narrow === true) { out.set(k, { s: 'unchecked' }); continue; }
       out.set(k, readSearch(x.scientific, x.rankSpecies, r));
     }
   };

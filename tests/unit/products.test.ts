@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildProducts } from '$dossier/products';
 import { isManifest, contentHash, manifestPath, productPath, type Manifest } from '$dossier/manifest';
+import { before77 } from './helpers/before-r77';
 import { entryWords, wordKeys, postingFileOf } from '$core/postings';
 import { bucketsFor, bucketOf, isBucket, bucketWidth, bucketNames, BUCKETS } from '$core/bucket';
 import { prepare, search } from '$core/search';
@@ -36,13 +37,18 @@ function r2(files: Record<string, unknown>) {
 }
 const platformWith = (store: ReturnType<typeof r2>) => ({ env: { STORE: store, QUEUE: kv() }, context: { waitUntil: (p: Promise<unknown>) => void p } }) as unknown as App.Platform;
 /** The bucket as the build writes it: index.json at the top, each product under its hash, the manifest naming them. */
-function bucketFor(idx: IndexEntry[], opts: { manifest?: boolean; drop?: string[]; tamper?: Record<string, unknown> } = {}) {
+function bucketFor(idx: IndexEntry[], opts: { manifest?: boolean; drop?: string[]; tamper?: Record<string, unknown>; before77?: boolean } = {}) {
   const text = JSON.stringify(idx, null, 1);
-  const { manifest, files } = buildProducts(idx, text, () => new Map());
+  const built = buildProducts(idx, text, () => new Map());
+  // Round seventy-seven: `before77`, a manifest built before the search's key files, which the postings path answers.
+  const { files, stored } = built;
+  const manifest = opts.before77 ? before77(built.manifest) : built.manifest;
   const objects: Record<string, unknown> = { 's/v2/index.json': idx };
   if (opts.manifest !== false) {
     objects[manifestPath()] = manifest;
-    for (const [name, body] of files) if (!opts.drop?.includes(name)) objects[productPath(manifest.files[name])] = JSON.parse(body);
+    for (const [name, body] of files) if (!opts.drop?.includes(name) && manifest.files[name]) objects[productPath(manifest.files[name])] = JSON.parse(body);
+    // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+    for (const [h, body] of stored) objects[productPath(h)] = JSON.parse(body);
     for (const [name, v] of Object.entries(opts.tamper ?? {})) objects[productPath(manifest.files[name])] = v;
   }
   return { manifest, store: r2(objects) };
@@ -150,7 +156,10 @@ describe('the Worker and the manifest', () => {
     const tamperedPostings = { ...(JSON.parse(built.files.get(pf)!) as Record<string, number[]>), cop: [0] };
     const { manifest, store } = bucketFor(idx, {
       tamper: { [`entries/${b}.json`]: [spy], [pf]: tamperedPostings, 'catalogue/genus-all.json': { rows: [{ id: 'spy', label: 'Spy', sub: '', count: 1, withClimate: 0, letter: 'S' }], letters: ['S'], letterAt: { S: 0 }, total: 1, withClimate: 0 }, 'sheets/00.json': [{ slug: 'spy-species', key: 999_999 }] },
-      drop: ['entries/01.json']
+      drop: ['entries/01.json'],
+      // Round seventy-seven: the postings and the index's fallback are the path of a corpus built before the key files;
+      // under them a missing entries file is a 503 (tests/unit/r77k-search-files.test.ts).
+      before77: true
     });
     const platform = platformWith(store);
     expect((await getCorpus(platform, noStatic)).id).toBe(manifest.id);
@@ -278,7 +287,7 @@ describe('the Worker and the manifest', () => {
   });
   it('round fifty-six: a posting file the bucket lacks leaves the whole index prepared, under its own rate, and past the rate the answer is a refusal, not "nothing matches"', async () => {
     const idx = index(60);
-    const { manifest, store } = bucketFor(idx, { drop: [`postings/${postingFileOf('cop', 64)}.json`] });
+    const { manifest, store } = bucketFor(idx, { drop: [`postings/${postingFileOf('cop', 64)}.json`], before77: true }); // round seventy-seven: the postings path, as a corpus built before the key files has it
     const platform = platformWith(store);
     const r = await call(searchGET as never, `/api/search?q=cop&c=${manifest.id}`, platform);
     expect(((await r.json()) as IndexEntry[]).length).toBe(6);

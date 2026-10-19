@@ -197,7 +197,7 @@ export type Found = IndexEntry;
  * search 503 "did not answer").
  */
 export type SearchStop = { limited: number; kind?: 'refused' | 'unread' };
-export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean }) | SearchStop | null> {
+export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean; narrow?: boolean }) | SearchStop | null> {
   // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
   // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
   const text = [...q.trim()].slice(0, 80).join('');
@@ -225,7 +225,10 @@ export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { r
     if (l) { try { left = decodeURIComponent(l).trim() || null; } catch { left = null; } }
     // The hits came by a similar spelling: the picker says so on each (round sixty-two; A7, B2).
     const near = r.headers.get('x-search-near') === '1';
-    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {});
+    // Every word is too common for the server to list what matches them all (round seventy-seven; `narrow`): no hits,
+    // and the page asks for another letter or word rather than saying nothing matches.
+    const narrow = r.headers.get('x-search-narrow') === '1';
+    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {}, narrow ? { narrow } : {});
   } catch {
     return null;
   }

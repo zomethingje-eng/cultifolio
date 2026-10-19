@@ -40,10 +40,15 @@
   import { site } from '$lib/ui/site.svelte';
   import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
   import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
+  import { worldSvg, regionSvg } from '$lib/map/still';
   let { data } = $props();
   let allPapers = $state(false);
   const u = $derived(units.current);
   const d = $derived(data.d);
+  // The two maps, drawn here from the page's own data (round seventy-seven): the load carried them drawn, beside the
+  // range and the points they are drawn from, so each was in the page twice, once in the markup and once in its data.
+  const worldMap = $derived(worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`));
+  const regionMap = $derived(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`));
   // The index's own rule, so the page and the catalogue show one name first: the chosen English name, then its alternatives, up to four (round sixty-one; decision 7).
   const common = $derived(data.commonNames); // chosen on the server with the corpus's genera, as the index chooses (round sixty-one; decision 7)
   // A Commons photograph with no thumbnail is not shown: its original would load (round sixty-two; outside review A35).
@@ -631,8 +636,8 @@
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
-    <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker{/if}{/if}.</div></div>
-    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `Records not checked: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html worldMap}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker{/if}{/if}.</div></div>
+    <div class="mapbox">{@html regionMap}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `Records not checked: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
@@ -745,7 +750,7 @@
     <div class="fact"><div class="lab">{d.occurrences.rangeTested === false || !d.distribution.native.length ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range{d.occurrences.nOutsideRange ? ` · ${d.occurrences.nOutsideRange} outside it` : ''}</span>{/if}</div></div>
   </div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing about this species is written for its page by a person or by AI, apart from the marked, credited quotations. <a href="/about/how#written">How&nbsp;→</a></p>
-  <Provenance dossier={d} />
+  <Provenance dossier={d} datasets={data.datasets} />
 </article>
 
 <style>

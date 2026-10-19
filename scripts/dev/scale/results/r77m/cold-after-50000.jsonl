@@ -1,0 +1,6 @@
+{"label":"after-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":80,"heapMB":3.7,"readMB":0.5,"reads":13,"indexHeld":false}
+{"label":"after-50000","what":"home","arg":"","ok":true,"ms":76,"heapMB":3.3,"readMB":0.5,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"dossier","arg":"7284333","ok":true,"ms":81,"heapMB":3.1,"readMB":0.3,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe","ok":true,"ms":144,"heapMB":4.4,"readMB":0.9,"reads":36,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe verra","ok":true,"ms":382,"heapMB":5.4,"readMB":1.5,"reads":71,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"cape provinces","ok":true,"ms":71,"heapMB":3.3,"readMB":0.3,"reads":6,"indexHeld":false}

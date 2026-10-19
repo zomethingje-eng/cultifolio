@@ -130,6 +130,9 @@ describe('a tab that was away when another tab left (X2; R46-19)', () => {
     local.m.set('cultifolio.sampleGen', 'g7');
     const demo = await import('$lib/db/demo');
     expect(demo.enterDemo('/today')).toBe(true);
+    // Round seventy-seven (F): noted by the page the entry's address opens, with the flag (app.html's first script); on
+    // r77base it was noted here, before the page went.
+    firstScript(`?enter=${session.m.get(demo.ENTERING)}`);
     expect(session.m.get(demo.TAB_GEN)).toBe('g7'); // base: not noted
   });
   it('a page brought back from the back-forward cache into a stale example reloads, so its first script sends it home', async () => {

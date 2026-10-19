@@ -1,0 +1,54 @@
+corpus 33b065a464f76cf1 on disk: 8947 species, read through its lookup files: true
+  (251023 keys; of them 84306 older names held by one species and 1224 held by two or more)
+  (283 such names on the pages)
+  (85360 addresses: 1320 genus, 23612 ask, 8949 move, 8947 page, 41950 older, 582 shared)
+  (the index product was never read by the lookups: true; 120526 bucket reads in all)
+
+== the corpus on disk (s/v2/manifest.json 33b065a464f76cf1)
+  slug → key (the slug map): 251023 compared, 251023 the same, 0 different
+  accepted name in lower case → species (`byName`): 251023 compared, 251023 the same, 0 different
+  older name → its holder or holders (`bySynonym`, `ambiguous`, `sharedName`): 251023 compared, 251023 the same, 0 different
+  older name, through round seventy-five's own functions (`ambiguousSynonym`, `sharedOlderName`, `bySynonym`), against the files: 251023 compared, 251023 the same, 0 different
+  slug and accepted name, through round seventy-five's maps (the slug map, `byName`), against the files: 251023 compared, 251023 the same, 0 different
+  key → species (`byKey`: card, older names, nearest climates, place): 8951 compared, 8951 the same, 0 different
+  genera and their counts: 1 compared, 1 the same, 0 different
+  a record's older names that are another species' accepted name (`namedElsewhere`): 8947 compared, 8947 the same, 0 different
+  catalogue row → its species (`row`): 1564 compared, 1564 the same, 0 different
+  species address → what it names (`addressOf`: page, move, genus row, shared-name 404, older-name redirect, asked of GBIF): 85360 compared, 85360 the same, 0 different
+  the home page's opened row under each chip (`rowItemsOf`): 6244 compared, 6244 the same, 0 different
+  the catalogue under each grouping and chip (`catalogueRows`; "Most grown" from the row files): 12 compared, 12 the same, 0 different
+  the front page strip's pool (`featured.json`): 1 compared, 1 the same, 0 different
+  the sitemap files: 1 compared, 1 the same, 0 different
+  (8947 dossiers; 252337 photographs stored, 4391 of them from Commons, 4391 carrying a judgement; 228213 shown in all; without the judgement and without the names, 47 pages would show other photographs, which is what the judgement is for)
+
+== the stored photograph judgement
+  dossier → the photographs its page shows (stored judgement, no names; against every name of the index): 8947 compared, 8947 the same, 0 different
+
+with round seventy-three's merges (coryphantha-macromeris → 11798439, rebutia-fidana → 7281301): 8945 species, corpus f2ffd910e65c9ad7 built in memory
+  (251023 keys; of them 84310 older names held by one species and 1224 held by two or more)
+  (283 such names on the pages)
+  (85358 addresses: 1320 genus, 23612 ask, 8947 move, 8945 page, 41952 older, 582 shared)
+  /species/coryphantha-macromeris: {"kind":"older","slug":"pelecyphora-macromeris","matched":"Coryphantha macromeris","name":"Pelecyphora macromeris","key":11798439}
+  /species/rebutia-fidana: {"kind":"older","slug":"weingartia-fidaiana","matched":"Rebutia fidana","name":"Weingartia fidaiana","key":7281301}
+
+== the corpus with round seventy-three's merges
+  slug → key (the slug map): 251023 compared, 251023 the same, 0 different
+  accepted name in lower case → species (`byName`): 251023 compared, 251023 the same, 0 different
+  older name → its holder or holders (`bySynonym`, `ambiguous`, `sharedName`): 251023 compared, 251023 the same, 0 different
+  older name, through round seventy-five's own functions (`ambiguousSynonym`, `sharedOlderName`, `bySynonym`), against the files: 251023 compared, 251023 the same, 0 different
+  slug and accepted name, through round seventy-five's maps (the slug map, `byName`), against the files: 251023 compared, 251023 the same, 0 different
+  key → species (`byKey`: card, older names, nearest climates, place): 8949 compared, 8949 the same, 0 different
+  genera and their counts: 1 compared, 1 the same, 0 different
+  a record's older names that are another species' accepted name (`namedElsewhere`): 8945 compared, 8945 the same, 0 different
+  catalogue row → its species (`row`): 1564 compared, 1564 the same, 0 different
+  species address → what it names (`addressOf`: page, move, genus row, shared-name 404, older-name redirect, asked of GBIF): 85358 compared, 85358 the same, 0 different
+  the home page's opened row under each chip (`rowItemsOf`): 6244 compared, 6244 the same, 0 different
+  the catalogue under each grouping and chip (`catalogueRows`; "Most grown" from the row files): 12 compared, 12 the same, 0 different
+  the front page strip's pool (`featured.json`): 1 compared, 1 the same, 0 different
+  the sitemap files: 1 compared, 1 the same, 0 different
+
+244 s
+
+real	4m4.572s
+user	2m29.792s
+sys	0m4.101s

@@ -20,7 +20,7 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -760,6 +760,9 @@
       <p class="seccount" style="margin-top: 14px" role="status">{searchFailed.kind === 'offline' ? 'Offline: the catalogue search needs a connection; your own plants are under “Your species”.' : searchFailed.kind === 'limited' ? `Too many searches from this network; try again in ${Math.max(1, Math.ceil((searchFailed.wait ?? 60) / 60))} minute${(searchFailed.wait ?? 60) > 60 ? 's' : ''}.` : searchFailed.kind === 'unread' ? 'The catalogue search could not be read just now.' : searchFailed.kind === 'refused' ? 'The server refused this search just now.' : 'The catalogue could not be reached.'} <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
     {:else if searching && !found.length}
       <p class="seccount" style="margin-top: 14px">Searching…</p>
+    {:else if !found.length && relaxedFor?.narrow === true}
+      <!-- Too common to list (round seventy-seven): the server answers no hits and says why, so the page never says "nothing matches". -->
+      <p class="seccount" style="margin-top: 14px" role="status">{narrowSentence(q)}</p>
     {:else if !shownFound.length}
       <!-- A way forward, not a dead end: what the reference is, and the record that works without it (round fifty-eight). -->
       <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(q.trim())}`)}>add it as a plant</a>; its record works without a species page.</p></div>

@@ -17,6 +17,16 @@ import { droppedLabel, type Searchable } from '$core/search';
 export interface SearchedAnswer {
   relaxed?: { query?: unknown; left?: unknown; retry?: unknown } | null;
   near?: unknown;
+  /** Every word is too common to list what matches them all (round seventy-seven): `narrowSentence` says so. */
+  narrow?: unknown;
+}
+
+/**
+ * What the front page says when the server could not list a query's matches because every word of it is too common
+ * ("cape provinces", "a e"; round seventy-seven, `$core/search-files`): never "nothing matches", which would be untrue.
+ */
+export function narrowSentence(typed: string): string {
+  return `Too many species match “${typed.trim()}” to list them all. Type another letter or another word to narrow it.`;
 }
 
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean);
@@ -33,7 +43,7 @@ export function searchedSentence(typed: string, a: SearchedAnswer | null | undef
   const t = typed.trim();
   const q = typeof a?.relaxed?.query === 'string' ? a.relaxed.query.trim() : '';
   const near = a?.near === true;
-  if (!t || (!q && !near)) return null;
+  if (!t || (!q && !near) || a?.narrow === true) return null; // too common to list: `narrowSentence` says it
   if (!q) return `No name in the reference is spelt “${t}”; these are similar spellings.`;
   const named = typeof a?.relaxed?.left === 'string' && a.relaxed.left.trim() ? a.relaxed.left.trim() : null;
   const left = named ?? leftOut(t, q);

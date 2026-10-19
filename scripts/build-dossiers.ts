@@ -114,7 +114,7 @@ import * as vb from 'valibot';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
 import { bucketOf } from '../src/lib/core/bucket';
 import { buildProducts } from '../src/lib/dossier/products';
-import { productPath, isFileHash, isManifest, type Manifest } from '../src/lib/dossier/manifest';
+import { productPath, isFileHash, isManifest, corpusHashes, type Manifest } from '../src/lib/dossier/manifest';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
 import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provider';
 import { fileGridSource } from './file-grid';
@@ -1049,28 +1049,32 @@ function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, s
   let prev: Manifest | null = null;
   try { prev = JSON.parse(readFileSync(`${idxDir}/manifest.json`, 'utf8')) as Manifest; } catch { /* the first build with a manifest */ }
   if (prev && (typeof prev.files !== 'object' || !Object.values(prev.files).every(isFileHash))) prev = null; // a manifest of round fifty-three's layout names directories, not files
-  const { manifest, files } = buildProducts(index, indexText, sheetsOf, undefined, aliases, synonymsOf);
   const dir = `${idxDir}/p`;
   mkdirSync(dir, { recursive: true });
-  let written = 0, kept = 0;
-  for (const [name, body] of files) {
-    const path = `${idxDir}/${productPath(manifest.files[name]).slice(`s/v${DOSSIER_V}/`.length)}`;
-    if (existsSync(path)) { kept++; continue; }
+  let written = 0, kept = 0, keyBytes = 0;
+  const write = (hash: string, body: string) => {
+    const path = `${idxDir}/${productPath(hash).slice(`s/v${DOSSIER_V}/`.length)}`;
+    if (existsSync(path)) { kept++; return; }
     writeFileSync(path, body);
     written++;
-  }
+  };
+  // The search's key files are written as they are made (round seventy-seven): at fifty thousand species they are
+  // gigabytes, and holding them all before writing would not fit.
+  const { manifest, files, storedHashes } = buildProducts(index, indexText, sheetsOf, undefined, aliases, synonymsOf, (hash, body) => { keyBytes += body.length; write(hash, body); });
+  for (const [name, body] of files) write(manifest.files[name], body);
   const changed = prev?.id !== manifest.id || prev.buckets !== manifest.buckets || prev.postings !== manifest.postings;
   if (changed) {
     if (prev) writeAtomic(`${idxDir}/manifest.prev.json`, JSON.stringify(prev, null, 1));
     writeAtomic(`${idxDir}/manifest.json`, JSON.stringify(manifest, null, 1));
   }
-  // what neither the manifest nor the one before it names
+  // what neither the manifest nor the one before it names, nor the search's directories of either (round seventy-seven)
   let before: string[] = [];
-  try { before = Object.values((JSON.parse(readFileSync(`${idxDir}/manifest.prev.json`, 'utf8')) as Manifest).files ?? {}); } catch { /* no corpus before this one */ }
-  const keep = new Set([...Object.values(manifest.files), ...before].map((h) => `${h}.json`));
+  const onDisk = (h: string) => { try { return readFileSync(`${dir}/${h}.json`, 'utf8'); } catch { return null; } };
+  try { before = [...corpusHashes(JSON.parse(readFileSync(`${idxDir}/manifest.prev.json`, 'utf8')) as Manifest, onDisk).hashes]; } catch { /* no corpus before this one */ }
+  const keep = new Set([...Object.values(manifest.files), ...storedHashes, ...before].map((h) => `${h}.json`));
   let gone = 0;
   for (const f of readdirSync(dir)) if (/^[0-9a-f]{16,64}\.json$/.test(f) && !keep.has(f)) { unlinkSync(`${dir}/${f}`); gone++; }
-  console.log(`  corpus ${manifest.id}: ${index.length} species in ${manifest.buckets} buckets, ${manifest.postings} posting files → ${dir}/ (${written} files written, ${kept} already on disk under their hash, ${gone} of older corpora deleted)${changed ? '; manifest.json names it' : '; unchanged'}`);
+  console.log(`  corpus ${manifest.id}: ${index.length} species in ${manifest.buckets} buckets, ${manifest.postings} posting files, ${storedHashes.size} search key files (${(keyBytes / 1048576).toFixed(1)} MB) → ${dir}/ (${written} files written, ${kept} already on disk under their hash, ${gone} of older corpora deleted)${changed ? '; manifest.json names it' : '; unchanged'}`);
   return manifest;
 }
 
@@ -1097,14 +1101,24 @@ function keepList(): void {
   // And whatever this checkout's own two manifests name: a corpus built here and uploaded, or about to be, whose files the
   // live manifest does not name yet (an upload between the copy of the live manifest and the delete), is kept too (round
   // fifty-nine; three reviews).
-  const named = new Set(Object.values(live.files));
+  // The search's key files are named by the manifest's search directories, not by the manifest (round seventy-seven):
+  // read from this folder's corpus, or from the copies of the live ones the prune fetched (live-search/). A directory
+  // found in neither stops the list: nothing it names could be kept, so nothing should be deleted.
+  const local = `${outDir}/s/v${DOSSIER_V}/p`;
+  const read = (h: string) => { for (const d of [local, 'live-search']) { try { return readFileSync(`${d}/${h}.json`, 'utf8'); } catch { /* the next */ } } return null; };
+  const liveAll = corpusHashes(live, read);
+  if (liveAll.missing.length) {
+    console.error(`the live manifest's search directories ${liveAll.missing.slice(0, 3).join(', ')}${liveAll.missing.length > 3 ? ', …' : ''} are neither in ${local} nor in live-search/: nothing is listed, and nothing should be deleted`);
+    process.exit(2);
+  }
+  const named = new Set(liveAll.hashes);
   const also: string[] = [];
-  for (const local of [`${outDir}/s/v${DOSSIER_V}/manifest.json`, `${outDir}/s/v${DOSSIER_V}/manifest.prev.json`]) {
-    if (!existsSync(local)) continue;
+  for (const localManifest of [`${outDir}/s/v${DOSSIER_V}/manifest.json`, `${outDir}/s/v${DOSSIER_V}/manifest.prev.json`]) {
+    if (!existsSync(localManifest)) continue;
     let m: unknown;
-    try { m = JSON.parse(readFileSync(local, 'utf8').replace(/^\uFEFF/, '')); } catch { m = null; }
+    try { m = JSON.parse(readFileSync(localManifest, 'utf8').replace(/^\uFEFF/, '')); } catch { m = null; }
     if (!isManifest(m)) continue;
-    for (const h of Object.values(m.files)) named.add(h);
+    for (const h of corpusHashes(m, read).hashes) named.add(h);
     also.push(m.id);
   }
   const keep = [...named].sort().map((h) => `/${h}.json`);

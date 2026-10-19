@@ -1,20 +1,28 @@
 /**
- * The Worker's name lookups without the whole index (round seventy-six; docs/SCALE-STUDY.md section 2.4). Until this
+ * The Worker's name lookups without the whole index (round seventy-six; docs/SCALE-STUDY.md section 2.4). Until that
  * round a cold isolate parsed the index whole and built maps over it (`indexMaps`): by key, by accepted name, by genus,
- * and the older names behind the redirects and the shared-name 404. The build now writes those maps as small products,
- * read by key, so a species page reads one name shard and the files it shows, and nothing of the whole:
+ * and the older names behind the redirects and the shared-name 404. The build writes those maps as small products,
+ * read by key, so a species page reads its own few small files and the files it shows, and nothing of the whole:
  *
- *   names/<h>.json            every key a request resolves: a slug, an accepted name in lower case, each older name in
- *                             lower case and as a slug (as `indexMaps` keys them), and `#<key>` for the species itself;
- *                             split by an FNV hash of the key, about 100 species a file (`namesFilesFor`)
+ *   cards/<h>.json            what a species page reads (round seventy-seven): each page's address to its key, and
+ *                             `#<key>` to the species' card; split by an FNV hash of the key, about 35 species a file
+ *                             (`cardFilesFor`)
+ *   older/<h>.json            the names that are not a page's address (round seventy-seven): each accepted name in
+ *                             lower case, and each older name in lower case and as a slug (as `indexMaps` keys them);
+ *                             read only for an address that is no page's, and for `?was=`; about 70 species a file
  *   rows/<by>/<h>.json        each catalogue row's species, sorted, by row id (the opened row, a page's genus siblings)
  *   genera.json               every genus with its count of species, in the index's order
  *   featured.json             the front page strip's species (`featuredPoolOf`)
  *   sitemap/<n>.json          the sitemap's addresses and days, forty thousand a file
  *
+ * Round seventy-six wrote the first two as one product, `names/<h>.json`, every key's answers in one record: a page
+ * read its own name files and one per near species, 113 KB each, of which the older names were two thirds; split, a page
+ * reads files of about 14 KB, and a crawl that holds them all holds 3.5 MB of cards, not 14.4 MB of names.
+ *
  * Pure: the build writes these with the same maps the Worker read before (`indexMaps` is here, and the Worker still
- * reads it for a corpus whose manifest names none of these files), so the two answer alike by construction, and the
- * proof (tests/unit/r76w-lookups.test.ts; scripts/dev/scale/r76-proof.ts on the real corpus) checks every key.
+ * reads it for a corpus whose manifest lacks any of these files, round seventy-six's own among them), so the two answer
+ * alike by construction, and the proof (tests/unit/r76w-lookups.test.ts; scripts/dev/scale/r76-proof.ts on the real
+ * corpus) checks every key.
  */
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { prepare, search } from '$core/search';
@@ -95,9 +103,12 @@ export const plainName = (x: string) => x.toLowerCase().replace(/\b(var|subsp|ss
 /** FNV-1a, 32 bits: the file a key is in (docs/SCALE-STUDY.md, `design-products.ts`). */
 export const fnv32 = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0; return h; };
 const pow2 = (x: number) => 2 ** Math.ceil(Math.log2(Math.max(1, x)));
-/** How many name files a corpus of `species` is split into: about a hundred species a file, at least 64 (128 at today's 8,945). */
-export const namesFilesFor = (species: number) => Math.max(64, pow2(species / 100));
-export const namesFileOf = (k: string, files: number) => String(fnv32(k) % files);
+/** How many card files a corpus of `species` is split into: about 35 species a file, at least 64 (256 at today's 8,947). */
+export const cardFilesFor = (species: number) => Math.max(64, pow2(species / 64));
+/** How many files of accepted and older names: about 70 species' names a file, at least 64 (128 at today's 8,947). */
+export const olderFilesFor = (species: number) => Math.max(64, pow2(species / 100));
+/** The file a key is in, of `files`: a slug and `#<key>` in the card files, a name in the files of names. */
+export const keyFileOf = (k: string, files: number) => String(fnv32(k) % files);
 /** How many row files a grouping is split into: a genus row is a few species, a family or a region many. */
 export const rowFilesFor = (by: By, species: number) => Math.max(16, pow2(species / (by === 'genus' ? 150 : 600)));
 export const rowFileOf = (id: string, files: number) => String(fnv32(id) % files);
@@ -125,30 +136,32 @@ export type Card = {
   x?: Record<string, Ref>;
 };
 /**
- * One key's answers. A slug and a name can be the same string as an older name's slug or name, so each kind has its own
- * field, as each had its own map: `s` the species whose slug it is; `n` the species whose accepted name it is in lower
- * case (the last in the index's order, as the map kept); `o` an older name's holders, in the order the 404 names them
- * when there are two or more, and `m` the name as the first holder in the index writes it; `k` the species under `#<key>`.
+ * A card file's records (`cards/<h>.json`): a page's address (its slug) to its key, the last species in the index's order
+ * under that slug, as the slug map kept; and `#<key>` to the species' card. A slug never begins with `#`.
  */
-export type NameRecord = { s?: number; n?: Ref; o?: { m: string; h: Ref[] }; k?: Card };
+export type CardFile = Record<string, number | Card>;
+/**
+ * A file of names (`older/<h>.json`): a name in lower case or as a slug to its answers. A name can be both, so each kind
+ * has its own field, as each had its own map: `n` the species whose accepted name it is in lower case (the last in the
+ * index's order, as the map kept); `o` an older name's holders, in the order the 404 names them when there are two or
+ * more, and `m` the name as the first holder in the index writes it.
+ */
+export type NameRecord = { n?: Ref; o?: { m: string; h: Ref[] } };
 export const keyName = (key: number) => `#${key}`;
 const ref = (e: IndexEntry): Ref => [e.key, e.slug, e.name];
 
 /**
- * The name files of an index: `synonymsOf` gives each species' dossier synonyms (the build passes them; without it no
+ * The card files of an index: `synonymsOf` gives each species' dossier synonyms (the build passes them; without it no
  * species records the older names that are another's accepted name, `Card.x`).
  */
-export function buildNameFiles(index: readonly IndexEntry[], synonymsOf?: (key: number) => readonly string[] | undefined): Map<string, Record<string, NameRecord>> {
-  const files = namesFilesFor(index.length);
+export function buildCardFiles(index: readonly IndexEntry[], synonymsOf?: (key: number) => readonly string[] | undefined): Map<string, CardFile> {
+  const files = cardFilesFor(index.length);
   const m = indexMaps(index);
-  const out = new Map<string, Record<string, NameRecord>>();
+  const out = new Map<string, CardFile>();
   for (let i = 0; i < files; i++) out.set(String(i), {});
-  const at = (k: string): NameRecord => { const f = out.get(namesFileOf(k, files))!; return Object.hasOwn(f, k) ? f[k] : (f[k] = {}); };
+  const put = (k: string, v: number | Card) => { out.get(keyFileOf(k, files))![k] = v; };
   // The slug map was `new Map(idx.map((e) => [e.slug, e.key]))`: the last entry under a slug wins.
-  for (const e of index) at(e.slug).s = e.key;
-  for (const [k, e] of m.byName) at(k).n = ref(e);
-  for (const [k, x] of m.bySynonym) at(k).o = { m: x.matched, h: [ref(x.entry)] };
-  for (const [k, holders] of m.ambiguous) at(k).o = { m: m.sharedName.get(k)!, h: sharedOrder(holders, m.sharedName.get(k)!).map(ref) };
+  for (const e of index) put(e.slug, e.key);
   index.forEach((e, i) => {
     if (m.byKey.get(e.key) !== e) return; // a key twice: the map kept the last
     const x: Record<string, Ref> = {};
@@ -156,8 +169,20 @@ export function buildNameFiles(index: readonly IndexEntry[], synonymsOf?: (key: 
       const o = m.byName.get(plainName(n));
       if (o && o.key !== e.key) x[plainName(n)] = ref(o);
     }
-    at(keyName(e.key)).k = { key: e.key, slug: e.slug, name: e.name, at: i, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate, ...(e.syn ? { syn: e.syn } : {}), ...(e.near ? { near: e.near } : {}), ...(Object.keys(x).length ? { x } : {}) };
+    put(keyName(e.key), { key: e.key, slug: e.slug, name: e.name, at: i, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate, ...(e.syn ? { syn: e.syn } : {}), ...(e.near ? { near: e.near } : {}), ...(Object.keys(x).length ? { x } : {}) });
   });
+  return out;
+}
+/** The files of accepted and older names of an index. */
+export function buildOlderFiles(index: readonly IndexEntry[]): Map<string, Record<string, NameRecord>> {
+  const files = olderFilesFor(index.length);
+  const m = indexMaps(index);
+  const out = new Map<string, Record<string, NameRecord>>();
+  for (let i = 0; i < files; i++) out.set(String(i), {});
+  const at = (k: string): NameRecord => { const f = out.get(keyFileOf(k, files))!; return Object.hasOwn(f, k) ? f[k] : (f[k] = {}); };
+  for (const [k, e] of m.byName) at(k).n = ref(e);
+  for (const [k, x] of m.bySynonym) at(k).o = { m: x.matched, h: [ref(x.entry)] };
+  for (const [k, holders] of m.ambiguous) at(k).o = { m: m.sharedName.get(k)!, h: sharedOrder(holders, m.sharedName.get(k)!).map(ref) };
   return out;
 }
 
@@ -181,10 +206,11 @@ export function generaOfIndex(index: readonly IndexEntry[]): Array<[string, numb
 /** The strip's species, as `featured.json` holds them. */
 export const featuredFile = (index: IndexEntry[]): Featured[] => featuredPoolOf(catalogueItems(index)).map(featuredOf);
 
-/** The name files, the row files, the genera, the strip and the sitemap a manifest must name for the Worker to read names from them. */
+/** The card files, the files of names, the row files, the genera, the strip and the sitemap a manifest must name for the Worker to read names from them. */
 export function lookupFileNames(species: number, sitemaps = 1): string[] {
   return [
-    ...Array.from({ length: namesFilesFor(species) }, (_, i) => `names/${i}.json`),
+    ...Array.from({ length: cardFilesFor(species) }, (_, i) => `cards/${i}.json`),
+    ...Array.from({ length: olderFilesFor(species) }, (_, i) => `older/${i}.json`),
     ...BYS.flatMap((by) => Array.from({ length: rowFilesFor(by, species) }, (_, i) => `rows/${by}/${i}.json`)),
     'genera.json',
     'featured.json',

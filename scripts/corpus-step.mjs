@@ -24,7 +24,7 @@
 //   - you pressed Ctrl-C: run the same command to carry on (exit 130).
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, cpSync, existsSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -293,9 +293,18 @@ async function prune({ root, argv, exec, say, fetchCorpus }) {
   if (!(await syncOnce(root, exec, say, {}))) return EXIT.failed;
   const live = at('live-manifest.json');
   if (existsSync(live)) unlinkSync(live); // never a live manifest from an earlier prune
-  for (const [cmd, args] of [['rclone', ['copyto', `${BUCKET}/manifest.json`, 'live-manifest.json']], [process.execPath, ['--import', 'tsx', 'scripts/build-dossiers.ts', '--keep-list', 'live-manifest.json']]]) {
+  // The search's key files are named by the live manifest's search directories (round seventy-seven), which are fetched
+  // beside it into live-search/ so the keep list can read them; a manifest built before them names none.
+  const searchDirs = () => Object.entries(readJson(live)?.files ?? {}).filter(([n]) => /^search\/(?:top|blocks|\d+)\.json$/.test(n)).map(([, h]) => `${h}.json`);
+  for (const [cmd, args] of [['rclone', ['copyto', `${BUCKET}/manifest.json`, 'live-manifest.json']], ['rclone', ['copy', `${BUCKET}/p`, 'live-search', '--files-from-raw', 'live-search.txt']], [process.execPath, ['--import', 'tsx', 'scripts/build-dossiers.ts', '--keep-list', 'live-manifest.json']]]) {
+    if (args[0] === 'copy') {
+      const dirs = searchDirs();
+      if (!dirs.length) continue;
+      rmSync(at('live-search'), { recursive: true, force: true });
+      writeFileSync(at('live-search.txt'), dirs.join('\n') + '\n');
+    }
     const code = await exec(cmd, args, say, { cwd: root, env: process.env });
-    if (code !== 0 || (cmd === 'rclone' && !existsSync(live))) { say(`\nThe prune stopped: ${cmd === 'rclone' ? 'the live manifest could not be read from the bucket' : 'keep.txt could not be made'}. Nothing was deleted.\n`); return EXIT.failed; }
+    if (code !== 0 || (cmd === 'rclone' && args[0] === 'copyto' && !existsSync(live))) { say(`\nThe prune stopped: ${args[0] === 'copyto' ? 'the live manifest could not be read from the bucket' : args[0] === 'copy' ? "the live manifest's search directories could not be read from the bucket" : 'keep.txt could not be made'}. Nothing was deleted.\n`); return EXIT.failed; }
   }
   const keep = new Set(readFileSync(at('keep.txt'), 'utf8').split(/\r?\n/).filter(Boolean).map((l) => l.replace(/^\//, '')));
   let listing = '';
@@ -317,7 +326,7 @@ async function prune({ root, argv, exec, say, fetchCorpus }) {
     const dc = await exec('rclone', [...args, '--dry-run'], (s) => { dry += s; }, { cwd: root, env: process.env });
     if (dc !== 0) { say(`\nThe prune's dry run failed (rclone exit ${dc}):\n${dry.split('\n').slice(-5).join('\n')}\nNothing was deleted.\n`); return EXIT.failed; }
     const n = (dry.match(/Skipped delete as --dry-run is set/g) ?? []).length;
-    say(`\nThe prune's dry run: the bucket's p/ holds ${inBucket.size} files; keep.txt keeps ${keep.size} (every file the live manifest ${readJson(live)?.id} and this folder's two manifests name${missing.length ? `, of which ${missing.length} are not in the bucket` : ''}); named by none: ${goes.length}, of which ${n} more than a day old would be deleted now. Every file the live manifest names is in the bucket.\nIf that is as expected, delete them with: node scripts/corpus-step.mjs --prune --go-on\n`);
+    say(`\nThe prune's dry run: the bucket's p/ holds ${inBucket.size} files; keep.txt keeps ${keep.size} (every file the live manifest ${readJson(live)?.id} and this folder's two manifests name${searchDirs().length ? ", with the search's key files their search directories name" : ''}${missing.length ? `, of which ${missing.length} are not in the bucket` : ''}); named by none: ${goes.length}, of which ${n} more than a day old would be deleted now. Every file the live manifest names is in the bucket.\nIf that is as expected, delete them with: node scripts/corpus-step.mjs --prune --go-on\n`);
     return EXIT.review;
   }
   const c = await exec('rclone', [...args, '--stats-one-line'], say, { cwd: root, env: process.env });

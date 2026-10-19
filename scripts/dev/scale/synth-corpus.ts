@@ -16,9 +16,10 @@ const text = readFileSync(file, 'utf8');
 const idx = JSON.parse(text) as IndexEntry[];
 mkdirSync(`${out}/s/v2/p`, { recursive: true });
 const t = Date.now();
-const { manifest, files } = buildProducts(idx, text, () => new Map(), '2026-10-17T00:00:00.000Z');
+// Round seventy-seven: the search's key files, written as they are made.
+const { manifest, files, storedHashes } = buildProducts(idx, text, () => new Map(), '2026-10-17T00:00:00.000Z', [], undefined, (h, body) => writeFileSync(`${out}/${productPath(h)}`, body));
 for (const [name, body] of files) writeFileSync(`${out}/${productPath(manifest.files[name])}`, body);
 writeFileSync(`${out}/s/v2/manifest.json`, JSON.stringify(manifest, null, 1));
 writeFileSync(`${out}/s/v2/index.json`, text);
 for (const k of keys) if (existsSync(`${real}/${k}.json`)) copyFileSync(`${real}/${k}.json`, `${out}/s/v2/${k}.json`);
-console.log(`${idx.length} species → ${out}/s/v2: corpus ${manifest.id}, ${files.size} products, ${((Date.now() - t) / 1000).toFixed(0)} s`);
+console.log(`${idx.length} species → ${out}/s/v2: corpus ${manifest.id}, ${files.size} products and ${storedHashes.size} search key files, ${((Date.now() - t) / 1000).toFixed(0)} s`);

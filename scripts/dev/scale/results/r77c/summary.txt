@@ -1,0 +1,256 @@
+node-after.jsonl n 50 statuses {200: 50}
+  cpuMs        med     165.4  p90     226.4  max     239.9  mean    176.1
+  htmlBytes    med  116338.0  p90  183881.0  max  237559.0  mean 121764.3
+  dataBytes    med   19390.0  p90   55429.0  max   79540.0  mean  27054.2
+  allocMB      med       9.7  p90      12.0  max      14.6  mean     10.0
+  heldMB       med       6.5  p90       7.0  max       7.4  mean      6.5
+   parse/req {'cards': 1.02, 'rows': 0.7, 'genera': 0.38, 'dossier': 0.32, 'other': 0.22, 'genus': 0.0}
+node-before.jsonl n 50 statuses {200: 50}
+  cpuMs        med     185.1  p90     233.2  max     268.8  mean    188.1
+  htmlBytes    med  120227.0  p90  252594.0  max  359013.0  mean 143049.1
+  dataBytes    med   23492.0  p90  122766.0  max  200995.0  mean  48340.1
+  allocMB      med      14.2  p90      17.2  max      19.2  mean     13.3
+  heldMB       med      10.1  p90      10.8  max      11.1  mean      9.3
+   parse/req {'names': 8.82, 'rows': 1.9, 'genera': 0.37, 'dossier': 0.37, 'other': 0.15, 'genus': 0.0}
+node-home-after.jsonl n 20 statuses {200: 20}
+  cpuMs        med     137.1  p90     146.0  max     155.2  mean    137.9
+  htmlBytes    med  123277.0  p90  139706.0  max  139706.0  mean 123277.0
+  dataBytes    med   21431.0  p90   25980.0  max   25980.0  mean  21431.0
+  allocMB      med       8.1  p90       9.0  max       9.0  mean      8.1
+  heldMB       med       5.7  p90       5.8  max       5.8  mean      5.7
+   parse/req {'catalogue': 1.44, 'genera': 0.37, 'other': 0.23, 'rows': 0.11, 'featured': 0.1}
+node-home-before.jsonl n 20 statuses {200: 20}
+  cpuMs        med     136.5  p90     172.9  max     180.4  mean    144.4
+  htmlBytes    med  123276.0  p90  139705.0  max  139705.0  mean 123276.0
+  dataBytes    med   21431.0  p90   25980.0  max   25980.0  mean  21431.0
+  allocMB      med       8.2  p90       9.1  max       9.1  mean      8.2
+  heldMB       med       5.7  p90       5.8  max       5.8  mean      5.7
+   parse/req {'catalogue': 1.5, 'genera': 0.38, 'other': 0.18, 'rows': 0.11, 'featured': 0.11}
+wd-after.jsonl n 20 statuses {200: 20}
+  cpuMs        med     127.4  p90     173.3  max     200.3  mean    131.2
+  wallMs       med     171.0  p90     226.0  max     261.0  mean    175.8
+  heapMB       med       9.1  p90      10.7  max      11.2  mean      9.5
+  allocatedMB  med      13.0  p90      14.5  max      16.4  mean     13.3
+  htmlBytes    med  113173.0  p90  160700.0  max  237559.0  mean 116612.6
+      21.15 ms  16.1% app lib dossiers
+      13.67 ms  10.4% kit runtime
+      11.53 ms   8.8% app components (render)
+      10.99 ms   8.4% svelte runtime (render)
+       8.37 ms   6.4% devalue (page data)
+       8.34 ms   6.3% worker shell (adapter, dev middleware)
+       7.40 ms   5.6% kit runtime (CSP sha256)
+       7.18 ms   5.5% app route load
+       6.85 ms   5.2% (garbage collector)
+       6.25 ms   4.8% (program)
+       5.54 ms   4.2% valibot (dossier schema)
+       5.52 ms   4.2% kit runtime (etag djb2)
+       5.03 ms   3.8% JSON.parse (products)
+       2.17 ms   1.7% app lib arch
+       2.00 ms   1.5% runtime get
+       1.74 ms   1.3% app lib head
+wd-before.jsonl n 20 statuses {200: 20}
+  cpuMs        med     151.0  p90     188.2  max     201.9  mean    148.3
+  wallMs       med     197.0  p90     255.0  max     260.0  mean    195.7
+  heapMB       med      10.3  p90      11.9  max      14.9  mean     10.5
+  allocatedMB  med      15.9  p90      17.7  max      21.9  mean     15.6
+  htmlBytes    med  114631.5  p90  192836.0  max  359013.0  mean 132415.5
+      21.40 ms  14.4% app lib dossiers
+      14.10 ms   9.5% kit runtime
+      13.29 ms   9.0% (program)
+      12.16 ms   8.2% app components (render)
+      11.19 ms   7.5% JSON.parse (products)
+      11.14 ms   7.5% svelte runtime (render)
+      10.54 ms   7.1% devalue (page data)
+       9.11 ms   6.1% (garbage collector)
+       8.72 ms   5.9% worker shell (adapter, dev middleware)
+       8.55 ms   5.8% kit runtime (CSP sha256)
+       7.04 ms   4.7% app route load
+       5.74 ms   3.9% kit runtime (etag djb2)
+       2.00 ms   1.4% valibot (dossier schema)
+       1.76 ms   1.2% app lib head
+       1.73 ms   1.2% app lib sheet
+       1.66 ms   1.1% runtime get
+node-cold.jsonl n 30 statuses {200: 30}
+  cpuMs        med     193.4  p90     218.4  max     259.3  mean    191.8
+  htmlBytes    med  117156.5  p90  171112.0  max  237559.0  mean 121384.9
+  dataBytes    med   20697.5  p90   47288.0  max   79540.0  mean  27018.4
+  allocMB      med       9.4  p90      11.6  max      14.5  mean      9.7
+  heldMB       med       6.4  p90       6.9  max       7.3  mean      6.4
+   parse/req {'cards': 1.45, 'rows': 1.07, 'genera': 0.66, 'dossier': 0.46, 'other': 0.25, 'genus': 0.0}
+node-crawl-heap.jsonl n 250 statuses {200: 250}
+  cpuMs        med      26.4  p90      58.0  max     206.5  mean     30.3
+  htmlBytes    med  116819.0  p90  187913.0  max  296174.0  mean 121070.5
+  dataBytes    med   20142.5  p90   58862.0  max   87295.0  mean  28457.5
+  allocMB      med       2.8  p90       6.3  max       9.3  mean      3.4
+  heldMB       med      21.5  p90      23.0  max      23.5  mean     20.1
+   parse/req {'dossier': 0.27, 'cards': 0.16, 'rows': 0.08, 'genera': 0.0, 'genus': 0.0, 'other': 0.0}
+node-crawl.jsonl n 250 statuses {200: 250}
+  cpuMs        med       7.8  p90      19.3  max     194.5  mean     11.0
+  htmlBytes    med  116819.0  p90  187913.0  max  296174.0  mean 121070.5
+  dataBytes    med   20142.5  p90   58862.0  max   87295.0  mean  28457.5
+   parse/req {'dossier': 0.24, 'cards': 0.18, 'rows': 0.12, 'genera': 0.0, 'other': 0.0, 'genus': 0.0}
+node-home.jsonl n 64 statuses {200: 64}
+  cpuMs        med      19.0  p90      31.0  max     147.5  mean     22.6
+  htmlBytes    med  109024.0  p90  126471.0  max  421222.0  mean 117976.0
+  dataBytes    med   17962.0  p90   24591.0  max  202174.0  mean  22358.1
+  allocMB      med       1.9  p90       2.6  max       9.0  mean      2.2
+  heldMB       med       9.6  p90      11.2  max      12.5  mean      9.4
+   parse/req {'rows': 0.25, 'catalogue': 0.04, 'genera': 0.01, 'other': 0.0, 'featured': 0.0}
+wd-cold.jsonl n 15 statuses {200: 15}
+  cpuMs        med     127.7  p90     166.4  max     198.5  mean    128.1
+  wallMs       med     154.0  p90     194.0  max     220.0  mean    155.7
+  heapMB       med       9.4  p90      11.3  max      11.3  mean      9.6
+  allocatedMB  med      13.6  p90      15.0  max      15.5  mean     13.6
+  htmlBytes    med  114130.0  p90  163832.0  max  237559.0  mean 118754.9
+      14.55 ms  11.4% app lib dossiers
+      13.42 ms  10.5% (program)
+      11.92 ms   9.3% app components (render)
+      11.21 ms   8.8% kit runtime
+      10.10 ms   7.9% svelte runtime (render)
+       9.29 ms   7.3% worker shell (adapter, dev middleware)
+       8.17 ms   6.4% devalue (page data)
+       7.44 ms   5.8% kit runtime (CSP sha256)
+       7.25 ms   5.7% app route load
+       5.90 ms   4.6% kit runtime (etag djb2)
+       5.88 ms   4.6% valibot (dossier schema)
+       5.83 ms   4.6% JSON.parse (products)
+       3.93 ms   3.1% (garbage collector)
+       2.23 ms   1.7% runtime get
+       1.82 ms   1.4% app lib head
+       1.15 ms   0.9% app lib sheet
+wd-crawl.jsonl n 250 statuses {200: 250}
+  cpuMs        med      17.1  p90      31.3  max     102.7  mean     19.6
+  wallMs       med      34.0  p90      52.0  max     122.0  mean     36.9
+  heapMB       med      46.6  p90      64.7  max      79.5  mean     46.1
+  allocatedMB  med      93.8  p90     109.0  max     115.3  mean     82.6
+  htmlBytes    med  116819.0  p90  187913.0  max  296174.0  mean 121070.5
+       2.72 ms  13.8% (program)
+       2.57 ms  13.0% kit runtime
+       1.70 ms   8.6% devalue (page data)
+       1.41 ms   7.2% app lib dossiers
+       1.10 ms   5.6% worker shell (adapter, dev middleware)
+       0.96 ms   4.9% valibot (dossier schema)
+       0.93 ms   4.7% (garbage collector)
+       0.86 ms   4.4% runtime get
+       0.85 ms   4.3% JSON.parse (products)
+       0.65 ms   3.3% app components (render)
+       0.63 ms   3.2% svelte runtime (render)
+       0.62 ms   3.1% kit runtime (etag djb2)
+       0.60 ms   3.0% kit runtime (CSP sha256)
+       0.46 ms   2.4% app route load
+       0.39 ms   2.0% runtime URL
+       0.33 ms   1.7% app lib units
+wd-home.jsonl n 64 statuses {200: 64}
+  cpuMs        med      15.7  p90      25.8  max     114.9  mean     17.7
+  wallMs       med      28.5  p90      42.0  max     142.0  mean     32.0
+  heapMB       med      18.2  p90      28.7  max      31.8  mean     19.0
+  allocatedMB  med      29.9  p90      42.1  max      51.9  mean     29.9
+  htmlBytes    med  109024.0  p90  126471.0  max  421222.0  mean 117976.0
+       3.76 ms  21.2% app components (render)
+       2.85 ms  16.1% kit runtime
+       1.56 ms   8.8% devalue (page data)
+       1.30 ms   7.3% worker shell (adapter, dev middleware)
+       1.19 ms   6.7% svelte runtime (render)
+       0.88 ms   5.0% (garbage collector)
+       0.79 ms   4.5% (program)
+       0.58 ms   3.3% kit runtime (etag djb2)
+       0.58 ms   3.2% JSON.parse (products)
+       0.56 ms   3.1% app lib dossiers
+       0.53 ms   3.0% app route load
+       0.51 ms   2.9% runtime set tracing
+       0.44 ms   2.5% runtime run
+       0.43 ms   2.4% kit runtime (CSP sha256)
+       0.38 ms   2.1% runtime get
+       0.37 ms   2.1% app lib catalogue
+node-cold.jsonl n 30 statuses {200: 30}
+  cpuMs        med     175.9  p90     240.2  max     294.7  mean    187.5
+  htmlBytes    med  120511.5  p90  219837.0  max  359013.0  mean 141086.6
+  dataBytes    med   23512.0  p90   96014.0  max  200995.0  mean  46721.1
+  allocMB      med      14.2  p90      17.2  max      19.2  mean     13.6
+  heldMB       med      10.1  p90      10.7  max      11.1  mean      9.3
+   parse/req {'names': 8.67, 'rows': 1.97, 'genera': 0.37, 'dossier': 0.28, 'other': 0.13, 'genus': 0.0}
+node-crawl-heap.jsonl n 250 statuses {200: 250}
+  cpuMs        med      29.1  p90      61.3  max     286.9  mean     32.9
+  htmlBytes    med  119917.5  p90  256790.0  max  490541.0  mean 141338.7
+  dataBytes    med   24370.5  p90  128534.0  max  278716.0  mean  48726.6
+  allocMB      med       3.8  p90       9.3  max      21.4  mean      5.0
+  heldMB       med      57.8  p90      58.8  max      59.3  mean     53.3
+   parse/req {'names': 0.81, 'dossier': 0.37, 'rows': 0.1, 'genera': 0.0, 'genus': 0.0, 'other': 0.0}
+node-crawl.jsonl n 250 statuses {200: 250}
+  cpuMs        med      11.0  p90      28.4  max     237.7  mean     16.0
+  htmlBytes    med  119917.5  p90  256790.0  max  490541.0  mean 141338.7
+  dataBytes    med   24370.5  p90  128534.0  max  278716.0  mean  48726.6
+   parse/req {'names': 1.25, 'dossier': 0.4, 'rows': 0.15, 'genera': 0.01, 'other': 0.0, 'genus': 0.0}
+node-home.jsonl n 64 statuses {200: 64}
+  cpuMs        med      20.8  p90      29.5  max     129.8  mean     23.6
+  htmlBytes    med  109023.0  p90  126470.0  max  421221.0  mean 117975.0
+  dataBytes    med   17962.0  p90   24591.0  max  202174.0  mean  22358.1
+  allocMB      med       2.2  p90       2.8  max       9.1  mean      2.4
+  heldMB       med       9.6  p90      11.2  max      12.5  mean      9.4
+   parse/req {'rows': 0.2, 'catalogue': 0.03, 'genera': 0.0, 'other': 0.0, 'featured': 0.0}
+wd-cold.jsonl n 15 statuses {200: 15}
+  cpuMs        med     132.8  p90     209.8  max     219.6  mean    142.0
+  wallMs       med     162.0  p90     243.0  max     248.0  mean    171.3
+  heapMB       med      10.1  p90      12.7  max      14.6  mean     10.6
+  allocatedMB  med      16.1  p90      17.8  max      21.7  mean     15.5
+  htmlBytes    med  115658.0  p90  207352.0  max  359013.0  mean 138615.2
+      24.17 ms  17.0% app lib dossiers
+      13.36 ms   9.4% worker shell (adapter, dev middleware)
+      12.11 ms   8.5% kit runtime
+      11.17 ms   7.9% app components (render)
+      10.67 ms   7.5% svelte runtime (render)
+      10.39 ms   7.3% devalue (page data)
+       9.52 ms   6.7% (program)
+       8.22 ms   5.8% JSON.parse (products)
+       7.77 ms   5.5% (garbage collector)
+       7.53 ms   5.3% kit runtime (CSP sha256)
+       6.63 ms   4.7% app route load
+       5.14 ms   3.6% kit runtime (etag djb2)
+       2.59 ms   1.8% valibot (dossier schema)
+       2.26 ms   1.6% runtime get
+       2.03 ms   1.4% app lib head
+       1.26 ms   0.9% runtime set tracing
+wd-crawl.jsonl n 250 statuses {200: 250}
+  cpuMs        med      22.9  p90      42.1  max     176.4  mean     27.0
+  wallMs       med      43.0  p90      77.0  max     239.0  mean     50.5
+  heapMB       med      78.8  p90     106.5  max     126.5  mean     77.6
+  allocatedMB  med     124.2  p90     157.3  max     165.6  mean    120.6
+  htmlBytes    med  119917.5  p90  256790.0  max  490541.0  mean 141338.7
+       3.57 ms  13.2% kit runtime
+       2.91 ms  10.8% devalue (page data)
+       2.73 ms  10.1% (program)
+       2.21 ms   8.2% worker shell (adapter, dev middleware)
+       2.00 ms   7.4% app route load
+       1.97 ms   7.3% (garbage collector)
+       1.93 ms   7.1% app lib dossiers
+       1.29 ms   4.8% kit runtime (CSP sha256)
+       1.17 ms   4.3% JSON.parse (products)
+       1.05 ms   3.9% app components (render)
+       0.92 ms   3.4% kit runtime (etag djb2)
+       0.70 ms   2.6% svelte runtime (render)
+       0.60 ms   2.2% valibot (dossier schema)
+       0.50 ms   1.8% runtime get
+       0.39 ms   1.4% runtime set supportedEntryTypes
+       0.32 ms   1.2% runtime (anon)
+wd-home.jsonl n 64 statuses {200: 64}
+  cpuMs        med      20.6  p90      50.6  max     177.9  mean     27.7
+  wallMs       med      40.5  p90      73.0  max     275.0  mean     50.0
+  heapMB       med      18.4  p90      26.8  max      33.1  mean     18.9
+  allocatedMB  med      30.2  p90      46.7  max      51.6  mean     30.8
+  htmlBytes    med  109023.0  p90  126470.0  max  421221.0  mean 117975.0
+       7.02 ms  25.3% app components (render)
+       3.55 ms  12.8% kit runtime
+       2.48 ms   9.0% app lib dossiers
+       2.38 ms   8.6% worker shell (adapter, dev middleware)
+       2.25 ms   8.1% devalue (page data)
+       1.60 ms   5.8% svelte runtime (render)
+       1.26 ms   4.5% (program)
+       1.07 ms   3.9% (garbage collector)
+       1.04 ms   3.7% kit runtime (etag djb2)
+       0.77 ms   2.8% app lib hooks.server
+       0.68 ms   2.4% JSON.parse (products)
+       0.55 ms   2.0% runtime URL
+       0.46 ms   1.7% app lib catalogue
+       0.45 ms   1.6% kit runtime (CSP sha256)
+       0.39 ms   1.4% runtime get
+       0.30 ms   1.1% app route load

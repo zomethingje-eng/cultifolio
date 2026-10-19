@@ -215,6 +215,7 @@ The build already makes hashed products (`products.ts`). The proposal makes ever
    - **How they are split.** By an FNV hash, about 100 species a shard.
    - **At 100,000:** 1,153,924 keys in 1,024 shards, 34.4 MB in all. The largest shard is 37 KB, parses in 0.7 ms and holds 0.2 MB.
    - A species page reads one shard, then the dossier.
+   - **Round 77 split them in two** (`docs/review-77/C.md`): `cards/` for a species page (each address to its key, and each species' card; 256 files of about 13 KB at 8,947 species), and `older/` for the rest (accepted and older names, 128 files of about 85 KB), read only for an address that is no page's and for `?was=`.
 2. **The photograph judgement at build time.**
    - `heldNamesOf` exists so that a Commons title naming another species of the reference is read as that species.
    - The build already has every name. It writes the judgement into the dossier, so the Worker's `parseDossier` needs no names.
@@ -488,6 +489,8 @@ Each round ships on its own, keeps the six rules, and is proved by a test that f
 - **Then measure on Cloudflare** with `wrangler tail` (DEPLOY.md, "A cold start's CPU"), and add a first measure of memory: deploy a build with a 50,000 synthetic corpus to a preview bucket and read the outcome ("exceededMemory" or "ok").
 
 **Round 77: the search from key files.**
+
+- **Done in round 77** (`docs/REVIEW-ROUND-77.md`, `docs/review-77/K.md`), with two changes to the plan: a key is a word's beginning one character a level, with a file at 2,000 species or fewer and children past 200; and a key file holds only the fields the ranking reads, the entries and photograph counts being in blocks by position, so a photograph fill rewrites no key file. The proof: 69,021 queries, 68,921 the same and 100 `narrow`.
 
 - **The build:** 5-character keys, the key files with inline search fields, and the heavy keys' best answers.
 - **The Worker** drops the index.

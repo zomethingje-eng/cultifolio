@@ -854,6 +854,12 @@ export function sourceKind(credit?: string | null, description?: string | null):
   if (SPECIMEN_WORDS.test(text) || (MUSEUM_SPECIMEN.test(text) && MUSEUM_SHEET.test(text))) return 'a herbarium sheet (by its description)';
   return null;
 }
+/**
+ * The version of `sourceKind`'s reading of a description, kept with a photograph `--fill commons-kind` has read
+ * (`Photo.kindRule`; round seventy-seven). Raise it with any change to the description rules above: a file left out by
+ * its description under an older version is then asked again, once.
+ */
+export const SOURCE_KIND_RULE = 72;
 
 /* ---------- The slip guard, shared with iNaturalist (self-review 70, S-B7, S-C9, S-F13) ---------- */
 

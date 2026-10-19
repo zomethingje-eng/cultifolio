@@ -1,0 +1,55 @@
+# Round seventy-seven, the merge (M), 2026-10-19, node 22, the machine otherwise idle. before = r77base (round seventy-six) over round seventy-six's products; after = the merged code over the same corpus after the merged corpus step's --index. 8,947: /tmp/claude-0/rev77/real-s and its re-index; 50,000: scripts/dev/scale/synth-corpus.ts on K's 50,000-species index, by each code, with the crawl's 250 dossiers copied.
+# Cold: scripts/dev/scale/cold-routes.mjs, a fresh process a request, median of three (ms, heap held MB, MB read from the bucket, reads).
+{"label":"before-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":86,"heapMB":5.5,"readMB":1,"reads":13,"indexHeld":false}
+{"label":"before-8947","what":"home","arg":"","ok":true,"ms":65,"heapMB":2.9,"readMB":0.4,"reads":4,"indexHeld":false}
+{"label":"before-8947","what":"dossier","arg":"7284333","ok":true,"ms":79,"heapMB":3,"readMB":0.2,"reads":4,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"aloe","ok":true,"ms":240,"heapMB":12.1,"readMB":5.6,"reads":4,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"aloe verra","ok":true,"ms":270,"heapMB":12.7,"readMB":6,"reads":10,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"cape provinces","ok":true,"ms":339,"heapMB":12.2,"readMB":5.7,"reads":5,"indexHeld":false}
+{"label":"after-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":67,"heapMB":3.2,"readMB":0.2,"reads":13,"indexHeld":false}
+{"label":"after-8947","what":"home","arg":"","ok":true,"ms":61,"heapMB":2.9,"readMB":0.4,"reads":4,"indexHeld":false}
+{"label":"after-8947","what":"dossier","arg":"7284333","ok":true,"ms":60,"heapMB":2.7,"readMB":0.1,"reads":4,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"aloe","ok":true,"ms":132,"heapMB":3.6,"readMB":0.4,"reads":34,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"aloe verra","ok":true,"ms":179,"heapMB":3.8,"readMB":0.6,"reads":33,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"cape provinces","ok":true,"ms":70,"heapMB":2.9,"readMB":0.1,"reads":6,"indexHeld":false}
+{"label":"before-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":99,"heapMB":6.7,"readMB":1.5,"reads":13,"indexHeld":false}
+{"label":"before-50000","what":"home","arg":"","ok":true,"ms":73,"heapMB":3.1,"readMB":0.5,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"dossier","arg":"7284333","ok":true,"ms":75,"heapMB":3.3,"readMB":0.3,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"aloe","ok":true,"ms":959,"heapMB":53.7,"readMB":31.3,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"aloe verra","ok":true,"ms":1151,"heapMB":54.6,"readMB":31.8,"reads":10,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"cape provinces","ok":true,"ms":1430,"heapMB":54.1,"readMB":31.5,"reads":5,"indexHeld":false}
+{"label":"after-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":80,"heapMB":3.7,"readMB":0.5,"reads":13,"indexHeld":false}
+{"label":"after-50000","what":"home","arg":"","ok":true,"ms":76,"heapMB":3.3,"readMB":0.5,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"dossier","arg":"7284333","ok":true,"ms":81,"heapMB":3.1,"readMB":0.3,"reads":4,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe","ok":true,"ms":144,"heapMB":4.4,"readMB":0.9,"reads":36,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe verra","ok":true,"ms":382,"heapMB":5.4,"readMB":1.5,"reads":71,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"cape provinces","ok":true,"ms":71,"heapMB":3.3,"readMB":0.3,"reads":6,"indexHeld":false}
+# Crawl: scripts/dev/scale/page-cpu.mjs, 250 different real species pages in one process (results/r77c's list), through each build's own server. CPU without forced collection (crawlcpu-*), heap with --expose-gc (crawl-*): median / 90th percentile / most.
+## before-8947
+  cpuMs        med      10.9  p90      26.0  max     220.4  mean     14.6
+  htmlBytes    med  119918.5  p90  256791.0  max  490542.0  mean 141339.7
+  dataBytes    med   24370.5  p90  128534.0  max  278716.0  mean  48726.6
+  allocMB      med       3.8  p90       9.3  max      21.4  mean      5.0
+  heldMB       med      57.8  p90      58.8  max      59.3  mean     53.3
+   parse/req {'names': 0.61, 'dossier': 0.29, 'rows': 0.08, 'genera': 0.0, 'other': 0.0, 'genus': 0.0}
+## after-8947
+  cpuMs        med       8.0  p90      18.2  max     208.8  mean     11.3
+  htmlBytes    med  117598.0  p90  188692.0  max  296953.0  mean 121849.5
+  dataBytes    med   20142.5  p90   58862.0  max   87295.0  mean  28457.5
+  allocMB      med       2.9  p90       6.3  max       9.4  mean      3.4
+  heldMB       med      21.6  p90      23.1  max      23.6  mean     20.2
+   parse/req {'dossier': 0.26, 'cards': 0.16, 'rows': 0.08, 'genera': 0.0, 'other': 0.0, 'genus': 0.0}
+## before-50000
+  cpuMs        med      26.1  p90      46.6  max     223.9  mean     29.7
+  htmlBytes    med  119050.0  p90  260765.0  max  488429.0  mean 141598.8
+  dataBytes    med   23920.0  p90  130131.0  max  277900.0  mean  48580.7
+  allocMB      med       9.4  p90      14.7  max      20.8  mean      9.1
+  heldMB       med      75.1  p90      77.0  max      79.0  mean     72.9
+   parse/req {'names': 7.32, 'rows': 0.64, 'dossier': 0.31, 'genera': 0.0, 'other': 0.0}
+## after-50000
+  cpuMs        med      10.4  p90      23.3  max     208.2  mean     13.4
+  htmlBytes    med  116757.0  p90  192655.0  max  294840.0  mean 122108.7
+  dataBytes    med   19625.0  p90   59273.0  max   86717.0  mean  28311.6
+  allocMB      med       4.0  p90       7.3  max      11.4  mean      4.2
+  heldMB       med      33.0  p90      33.6  max      34.5  mean     31.2
+   parse/req {'cards': 0.97, 'rows': 0.46, 'dossier': 0.29, 'other': 0.01, 'genera': 0.0}

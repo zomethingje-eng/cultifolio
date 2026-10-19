@@ -11,17 +11,25 @@ import type { Sheet } from './sheet';
 import { DOSSIER_V } from './schema';
 import { bucketOf, bucketsFor, bucketNames } from '$core/bucket';
 import { buildPostings, postingFilesFor } from '$core/postings';
+import { buildSearchFiles } from '$core/search-files';
 import { prepare, search } from '$core/search';
 import { contentHash, SHORT_HITS, type Manifest } from './manifest';
 import { md5 } from './md5';
 import { catalogueOf, rowsOnly, catalogueFile, BYS, CHIPS } from './catalogue';
-import { buildNameFiles, buildRowFiles, generaOfIndex, featuredFile, SITEMAP_CHUNK } from './lookups';
+import { buildCardFiles, buildOlderFiles, buildRowFiles, generaOfIndex, featuredFile, SITEMAP_CHUNK } from './lookups';
 import { sitemapUrls, sitemapDays } from '$lib/server/sitemap';
 
 export interface Products {
   manifest: Manifest;
   /** Each product's body by its name (stored under its hash, `manifest.files[name]`). */
   files: Map<string, string>;
+  /**
+   * The search's key and answer files (round seventy-seven; $core/search-files), by hash: stored under it as every product
+   * is, and named not by the manifest but by the search's directories, which the manifest names. Empty when the caller
+   * gave a `sink`, which took each body as it was made; `storedHashes` names them either way.
+   */
+  stored: Map<string, string>;
+  storedHashes: Set<string>;
 }
 
 /** A page merged into another by the owner's decision (round seventy-three): its old address, and the key of the page it joined. */
@@ -46,7 +54,7 @@ export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[
   return out;
 }
 
-export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: number) => readonly string[] | undefined): Products {
+export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: number) => readonly string[] | undefined, sink?: (hash: string, body: string) => void): Products {
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = md5(body); };
@@ -69,10 +77,16 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   const short: Record<string, number[]> = {};
   for (const body of posted.values()) for (const k of Object.keys(body)) if (k.length <= 2 && !Object.hasOwn(short, k)) short[k] = search(whole, k, SHORT_HITS).map((e) => place.get(e)!).filter((i) => i !== undefined);
   put('short.json', JSON.stringify(Object.fromEntries(Object.entries(short).sort(([a], [b]) => (a < b ? -1 : 1)))));
+  // The search from key files (round seventy-seven): the Worker that reads them holds no index. The postings and
+  // `short.json` above stay for a Worker deployed before them, which needs them to accept this manifest.
+  const keyed = buildSearchFiles(index, whole, md5, sink);
+  for (const [name, body] of keyed.named) put(name, body);
   for (const by of BYS) for (const chip of CHIPS) put(catalogueFile(by, chip), JSON.stringify(rowsOnly(catalogueOf(index, by, chip))));
   // What the Worker read from the index for everything but the search, written as files read by key (round seventy-six;
-  // ./lookups.ts): the name files, each grouping's row files, the genera, the strip and the sitemap.
-  for (const [f, body] of buildNameFiles(index, synonymsOf)) put(`names/${f}.json`, JSON.stringify(body));
+  // ./lookups.ts): the card files and the files of names (one product, `names/`, until round seventy-seven), each
+  // grouping's row files, the genera, the strip and the sitemap.
+  for (const [f, body] of buildCardFiles(index, synonymsOf)) put(`cards/${f}.json`, JSON.stringify(body));
+  for (const [f, body] of buildOlderFiles(index)) put(`older/${f}.json`, JSON.stringify(body));
   for (const by of BYS) for (const [f, body] of buildRowFiles(index, by)) put(`rows/${by}/${f}.json`, JSON.stringify(body));
   put('genera.json', JSON.stringify(generaOfIndex(index)));
   put('featured.json', JSON.stringify(featuredFile(index)));
@@ -82,5 +96,5 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   // still changes its sheet, and a sheet rewritten under an unchanged id sat in every cache for a day (round fifty-four, 3; both reviewers).
   const id = contentHash([...files.keys()].sort().map((n) => `${n}=${hashes[n]}`).join('\n')).slice(0, 16);
   const manifest: Manifest = { v: DOSSIER_V, id, built, species: index.length, buckets, postings, files: hashes };
-  return { manifest, files };
+  return { manifest, files, stored: keyed.stored, storedHashes: keyed.hashes };
 }

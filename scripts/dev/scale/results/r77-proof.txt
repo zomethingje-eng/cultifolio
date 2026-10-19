@@ -1,0 +1,138 @@
+# Round seventy-seven: scripts/dev/scale/r77-proof.ts on round seventy-two's corpus as round seventy-six's corpus step left it (/tmp/claude-0/rev77/real-s/v2), after this round's final --index (8,947 species, corpus d8cc8e29840651e4), 2026-10-19. The key files hold the ranked fields only; entries and photograph counts in blocks by position.
+# whole: the route over the whole index (no manifest), as today; files: the route over the key files, a cold copy a query, the index refused.
+whole: 69021 queries in 773 s
+files: 69021 queries in 754 s; the index read 0 times, the postings and short.json 0 times
+
+69021 queries: 68921 the same, 100 "type another letter", 0 other differences
+  common                14017 asked,  14017 the same, 0 narrow, 0 other
+  common-lower           1480 asked,   1480 the same, 0 narrow, 0 other
+  family                  209 asked,    209 the same, 0 narrow, 0 other
+  genus                  2485 asked,   2485 the same, 0 narrow, 0 other
+  grower                 4766 asked,   4766 the same, 0 narrow, 0 other
+  heavy                     8 asked,      8 the same, 0 narrow, 0 other
+  heavy-multi             138 asked,     71 the same, 67 narrow, 0 other
+  multi-common            393 asked,    392 the same, 1 narrow, 0 other
+  multi-genus-place       300 asked,    300 the same, 0 narrow, 0 other
+  multi-genus-word        200 asked,    200 the same, 0 narrow, 0 other
+  multi-random           1431 asked,   1426 the same, 5 narrow, 0 other
+  multi-reversed         1000 asked,   1000 the same, 0 narrow, 0 other
+  name                   8947 asked,   8947 the same, 0 narrow, 0 other
+  name-lower             8947 asked,   8947 the same, 0 narrow, 0 other
+  older                  5965 asked,   5965 the same, 0 narrow, 0 other
+  place                   348 asked,    348 the same, 0 narrow, 0 other
+  prefix                 4031 asked,   4028 the same, 3 narrow, 0 other
+  prefix-epithet         6565 asked,   6565 the same, 0 narrow, 0 other
+  punctuation            1444 asked,   1444 the same, 0 narrow, 0 other
+  punctuation-genus      1000 asked,   1000 the same, 0 narrow, 0 other
+  punctuation-short       142 asked,    131 the same, 11 narrow, 0 other
+  short                   375 asked,    375 the same, 0 narrow, 0 other
+  tests                   845 asked,    832 the same, 13 narrow, 0 other
+  typo                   2393 asked,   2393 the same, 0 narrow, 0 other
+  typo-common             799 asked,    799 the same, 0 narrow, 0 other
+  typo-genus              793 asked,    793 the same, 0 narrow, 0 other
+files read per query, cold (directories, key files, answers): median 11, 90% 28, 99% 76, most 122; bytes median 146188, 90% 372233, 99% 1006684, most 2076426
+
+Every "type another letter" (narrow):
+  "Cape D" (prefix): the whole index answers 100 hits
+  "Cape S" (prefix): the whole index answers 100 hits
+  "Cape L" (prefix): the whole index answers 100 hits
+  "Provinces Cape" (multi-random): the whole index answers 100 hits
+  "Cape Cape" (multi-random): the whole index answers 100 hits
+  "Provinces Provinces" (multi-random): the whole index answers 100 hits
+  "Cape Provinces" (multi-random): the whole index answers 100 hits
+  "Cape South" (multi-random): the whole index answers 53 hits
+  "north south" (multi-common): the whole index answers 100 hits
+  "a L." (punctuation-short): the whole index answers 100 hits
+  "c L." (punctuation-short): the whole index answers 100 hits
+  "e L." (punctuation-short): the whole index answers 100 hits
+  "co L." (punctuation-short): the whole index answers 100 hits
+  "ca L." (punctuation-short): the whole index answers 100 hits
+  "cape L." (punctuation-short): the whole index answers 100 hits
+  "south L." (punctuation-short): the whole index answers 100 hits
+  "south's" (punctuation-short): the whole index answers 53 hits
+  "north L." (punctuation-short): the whole index answers 100 hits
+  "pro L." (punctuation-short): the whole index answers 100 hits
+  "var's" (punctuation-short): the whole index answers 100 hits
+  "a e" (tests): the whole index answers 100 hits
+  "a e i" (tests): the whole index answers 100 hits
+  "a o" (tests): the whole index answers 100 hits
+  "c a" (tests): the whole index answers 100 hits
+  "a f" (tests): the whole index answers 100 hits
+  "a var" (tests): the whole index answers 80 hits
+  "xcap" (tests): the whole index answers 100 hits
+  "xpro" (tests): the whole index answers 100 hits
+  "zprov" (tests): the whole index answers 4 hits
+  "s.l." (tests): the whole index answers 100 hits
+  "a x b" (tests): the whole index answers 100 hits
+  "a 'b c'" (tests): the whole index answers 100 hits
+  "a b (C.) D." (tests): the whole index answers 100 hits, {"query":"a b","left":"(C.) D."}
+  "cap var" (heavy-multi): the whole index answers 28 hits
+  "cap cape" (heavy-multi): the whole index answers 100 hits
+  "cap south" (heavy-multi): the whole index answers 95 hits
+  "cap north" (heavy-multi): the whole index answers 100 hits
+  "cap provinces" (heavy-multi): the whole index answers 100 hits
+  "cap a" (heavy-multi): the whole index answers 100 hits
+  "cap c" (heavy-multi): the whole index answers 100 hits
+  "cap n" (heavy-multi): the whole index answers 100 hits
+  "cape var" (heavy-multi): the whole index answers 26 hits
+  "cape south" (heavy-multi): the whole index answers 53 hits
+  "cape north" (heavy-multi): the whole index answers 100 hits
+  "cape provinces" (heavy-multi): the whole index answers 100 hits
+  "cape a" (heavy-multi): the whole index answers 100 hits
+  "cape c" (heavy-multi): the whole index answers 100 hits
+  "cape n" (heavy-multi): the whole index answers 100 hits
+  "sou var" (heavy-multi): the whole index answers 63 hits
+  "sou cape" (heavy-multi): the whole index answers 56 hits
+  "sou south" (heavy-multi): the whole index answers 100 hits
+  "sou north" (heavy-multi): the whole index answers 100 hits
+  "sou provinces" (heavy-multi): the whole index answers 45 hits
+  "sou a" (heavy-multi): the whole index answers 100 hits
+  "sou c" (heavy-multi): the whole index answers 100 hits
+  "sou n" (heavy-multi): the whole index answers 100 hits
+  "south var" (heavy-multi): the whole index answers 63 hits
+  "south cape" (heavy-multi): the whole index answers 53 hits
+  "south north" (heavy-multi): the whole index answers 100 hits
+  "south provinces" (heavy-multi): the whole index answers 41 hits
+  "south a" (heavy-multi): the whole index answers 100 hits
+  "south c" (heavy-multi): the whole index answers 100 hits
+  "south n" (heavy-multi): the whole index answers 100 hits
+  "nor var" (heavy-multi): the whole index answers 68 hits
+  "nor cape" (heavy-multi): the whole index answers 100 hits
+  "nor south" (heavy-multi): the whole index answers 100 hits
+  "nor north" (heavy-multi): the whole index answers 100 hits
+  "nor provinces" (heavy-multi): the whole index answers 100 hits
+  "nor a" (heavy-multi): the whole index answers 100 hits
+  "nor c" (heavy-multi): the whole index answers 100 hits
+  "nor n" (heavy-multi): the whole index answers 100 hits
+  "north var" (heavy-multi): the whole index answers 67 hits
+  "north cape" (heavy-multi): the whole index answers 100 hits
+  "north provinces" (heavy-multi): the whole index answers 100 hits
+  "north a" (heavy-multi): the whole index answers 100 hits
+  "north c" (heavy-multi): the whole index answers 100 hits
+  "north n" (heavy-multi): the whole index answers 100 hits
+  "pro var" (heavy-multi): the whole index answers 26 hits
+  "pro cape" (heavy-multi): the whole index answers 100 hits
+  "pro south" (heavy-multi): the whole index answers 100 hits
+  "pro north" (heavy-multi): the whole index answers 100 hits
+  "pro provinces" (heavy-multi): the whole index answers 100 hits
+  "pro a" (heavy-multi): the whole index answers 100 hits
+  "pro c" (heavy-multi): the whole index answers 100 hits
+  "pro n" (heavy-multi): the whole index answers 100 hits
+  "prov var" (heavy-multi): the whole index answers 25 hits
+  "prov cape" (heavy-multi): the whole index answers 100 hits
+  "prov south" (heavy-multi): the whole index answers 43 hits
+  "prov north" (heavy-multi): the whole index answers 100 hits
+  "prov provinces" (heavy-multi): the whole index answers 100 hits
+  "prov a" (heavy-multi): the whole index answers 100 hits
+  "prov c" (heavy-multi): the whole index answers 100 hits
+  "prov n" (heavy-multi): the whole index answers 100 hits
+  "provinces var" (heavy-multi): the whole index answers 25 hits
+  "provinces cape" (heavy-multi): the whole index answers 100 hits
+  "provinces south" (heavy-multi): the whole index answers 41 hits
+  "provinces north" (heavy-multi): the whole index answers 100 hits
+  "provinces a" (heavy-multi): the whole index answers 100 hits
+  "provinces c" (heavy-multi): the whole index answers 100 hits
+  "provinces n" (heavy-multi): the whole index answers 100 hits
+
+Every other difference:
+  none

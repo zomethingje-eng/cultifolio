@@ -1,0 +1,2 @@
+# Round seventy-seven, the merge (M): scripts/dev/scale/r77c-page-proof.mjs, F's branch built alone (r77base and F, whose first script in app.html every page carries) over round seventy-six's products (/tmp/claude-0/rev77/real-s), against the merged build over the same corpus after the merged corpus step's --index (corpus c65047a5525f314c); 9,011 paths: every species page, the front page twice, /?by=family, /?by=origin and 60 opened genus rows. 2026-10-19.
+{"pages":9011,"html":9011,"data":9011,"maps":9011,"statuses":{"200":9011}}

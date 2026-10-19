@@ -99,7 +99,7 @@ describe('a collection still opening is not known to be empty (X5; IND-7)', () =
     expect(session.m.get(ex.OWN_NOTE)).not.toBe('0');
     Object.assign(col, { ready: true, recordCount: 2, locations: [{}, {}] }); // the collection opens: two places
     ex.example.settled = true;
-    await vi.waitFor(() => expect(asked).toEqual(['/today']));
+    await vi.waitFor(() => expect(asked).toEqual([`/today?enter=${session.m.get('cultifolio.sampleEntering')}`])); // r77base: '/today' (round seventy-seven: the entry's token in the address)
     expect(session.m.get(ex.OWN_NOTE)).toBe('1'); // base: '0', and the bar said "Add your first plant"
   });
   it('inside the example, no note and no hint is "not known", never "none"', async () => {

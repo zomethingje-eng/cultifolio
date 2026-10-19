@@ -7,11 +7,14 @@ import { plainName, synonymKey, type Card } from '$dossier/lookups';
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
-import { worldSvg, regionSvg } from '$lib/map/still';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
 import type { PageServerLoad } from './$types';
+
+/** The genera's words for `englishNames`, once for each genera read (round seventy-seven: every page folded all 1,300). */
+const generaWords = new WeakMap<ReadonlyMap<string, number>, Set<string>>();
+const generaHeld = (g: ReadonlyMap<string, number>) => { let w = generaWords.get(g); if (!w) generaWords.set(g, (w = generaOf(g.keys()))); return w; };
 
 /** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
 const SPECIES_UNREADABLE = 'This species page could not be read just now';
@@ -123,7 +126,13 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
   // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
   const d = params.slug !== loaded.slug ? { ...loaded, slug: params.slug } : loaded;
-  const pts = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
+  // The open records are shown only as the regional map's points, which the page draws from their places, and the datasets
+  // they came from only as a count (round seventy-seven): each record's year, country, kind and licence, and each
+  // dataset's key, title, licence and count, are read by nothing the page shows, and were a fifth of what it carried to
+  // the browser (the type below lets no part of the page read them).
+  const points = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
+  const { open: _open, datasets: _datasets, ...occurrences } = d.occurrences;
+  const shown: Omit<typeof d, 'occurrences'> & { occurrences: typeof occurrences } = { ...d, occurrences };
   // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
   // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
@@ -132,7 +141,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
-  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaOf(genera.keys()) });
+  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera) });
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
   const allSiblings = (await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus))).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
@@ -207,12 +216,14 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     units: unitsFor(cookies, request),
     // The grower's hemisphere, when their site has been saved on this device: seeds the months before the site store loads.
     hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null,
-    d,
+    d: shown,
     genusRecord,
     siblings,
     siblingCount,
     near,
-    worldSvg: worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`),
-    regionSvg: regionSvg(d.distribution.boxes, pts, d.centroid, `Openly licensed records of ${d.name.scientific}`)
+    /** The open records' places (latitude, longitude), which the page draws its regional map from: the two maps are drawn by the page, on the server and again in the browser, from what it carries, rather than carried as drawn (round seventy-seven). */
+    points,
+    /** How many datasets the open records came from (the provenance line). */
+    datasets: d.occurrences.datasets.length
   };
 };

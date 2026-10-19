@@ -13,11 +13,13 @@ import { writeFileSync } from 'node:fs';
 function platformFor(idx: object[]) {
   const text = JSON.stringify(idx);
   const t0 = performance.now();
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
+  const { manifest, files, stored } = buildProducts(idx as never, text, () => new Map());
   const buildMs = performance.now() - t0;
   const blobs = new Map<string, string>();
   blobs.set(manifestPath(), JSON.stringify(manifest));
   for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   const obj = (body: string, etag: string) => ({ text: async () => body, json: async () => JSON.parse(body), etag });
   const reads: string[] = [];
   const store = { get: async (k: string) => { reads.push(k); return blobs.has(k) ? obj(blobs.get(k)!, `"${k}"`) : null; }, head: async (k: string) => (blobs.has(k) ? { etag: `"${k}"` } : null) };
@@ -61,6 +63,7 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
     }
     const rows: Array<{ q: string; ms: number; path: string; cands: number; charged: number; ok: boolean }> = [];
     const mism: string[] = [];
+    const narrowed: string[] = [];
     const twoSpell: string[] = [];
     for (const raw of qs) {
       const q = _clean(raw);
@@ -80,6 +83,10 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
       const shortRead = reads.includes(productPath(manifest.files['short.json']!));
       const postRead = reads.filter((k) => k.includes('/p/') && !k.endsWith(manifest.files['short.json'] + '.json')).length;
       const ok = JSON.stringify(want) === JSON.stringify(got);
+      // Round seventy-seven: the key files answer a query of several words every one of them too common to list ("a e",
+      // "c a" here, over 2,000 species each) with `narrow` and no hits, by design (docs/SCALE-STUDY.md, the owner's
+      // decision 6); the page asks for another letter. Counted, and only ever a query of two words or more.
+      if (!ok && a.narrow && rankedWords(q).length > 1) { narrowed.push(q); continue; }
       if (!ok) mism.push(`${JSON.stringify(q)} want ${want.length} got ${got.length}`);
       rows.push({ q, ms, path: shortRead ? 'short' : postRead ? `postings(${postRead})` : 'none', cands: 0, charged, ok });
     }
@@ -100,6 +107,8 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
     const uncharged = rows.filter((r) => r.charged === 0 && !r.path.startsWith('short'));
     if (process.env.FUZZ_OUT) writeFileSync(`${process.env.FUZZ_OUT}/fuzz-${process.env.SEED ?? 4242}.json`, JSON.stringify({ buildMs, n: rows.length, mism, twoSpell, slowest: rows.slice(0, 25), slowestUncharged: uncharged.slice(0, 25), shape: { infra: shape.infra.length, hybrid: shape.hybrid.length, cultivar: shape.cultivar.length } }, null, 1));
     expect(mism).toEqual([]);
+    console.log(`narrow (several words, every one too common to list): ${narrowed.length} of ${rows.length}: ${narrowed.join('; ')}`);
+    expect(narrowed.length).toBeLessThan(rows.length / 20);
   }, 1_800_000);
 
   // Was "the near pass is never charged", asserting only WHOLE_LIKE: the title said the opposite of the rule and nothing

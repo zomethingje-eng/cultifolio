@@ -26,6 +26,8 @@ corpus.zip
 .pc.md5
 keep.txt
 live-manifest.json
+live-search/
+live-search.txt
 /backups/
 /corpus-step.json
 /corpus-step.*.json

@@ -6,10 +6,11 @@
  */
 import { prepare, search, hasExact, rankedWords, relaxedQuery, searchGenera, type Prepared } from '$core/search';
 import { queryPlan, candidates, postingFileOf } from '$core/postings';
+import { searchFromFiles, searchDirsFor, type SearchReader, type Dir, type Answers, type Tables, type Blocks } from '$core/search-files';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { heldNamesOf } from '$dossier/photo-kind';
-import { manifestPath, productPath, isManifest, hasLookups, SHORT_HITS, type Manifest } from '$dossier/manifest';
+import { manifestPath, productPath, isManifest, isFileHash, hasLookups, hasSearchFiles, SHORT_HITS, type Manifest } from '$dossier/manifest';
 import { indexMaps, synonymKey, sharedOrder } from '$dossier/lookups';
 import { lookupOf } from './lookup';
 export { indexMaps };
@@ -24,14 +25,23 @@ export type Fetch = typeof fetch;
 const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v2/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 const fixtureIndex = (import.meta.glob('/fixtures/dossiers/index.json', { eager: true, import: 'default' }) as Record<string, IndexEntry[]>)['/fixtures/dossiers/index.json'] ?? [];
 
-const fixturesByKey = new Map<number, Dossier>();
-for (const [path, json] of Object.entries(fixtureFiles)) {
-  try {
-    const d = parseDossier(json);
-    fixturesByKey.set(d.key, d);
-  } catch (e) {
-    console.warn(`fixture ${path} does not parse as a v${DOSSIER_V} dossier and is ignored`, e);
+/**
+ * The fixture's dossiers, parsed when the fixture corpus is first read (round seventy-seven): parsed as the module
+ * loaded, every new isolate of the live site checked four test dossiers against the schema before its first page.
+ */
+let fixturesParsed: Map<number, Dossier> | null = null;
+function fixturesByKey(): Map<number, Dossier> {
+  if (fixturesParsed) return fixturesParsed;
+  fixturesParsed = new Map();
+  for (const [path, json] of Object.entries(fixtureFiles)) {
+    try {
+      const d = parseDossier(json);
+      fixturesParsed.set(d.key, d);
+    } catch (e) {
+      console.warn(`fixture ${path} does not parse as a v${DOSSIER_V} dossier and is ignored`, e);
+    }
   }
+  return fixturesParsed;
 }
 
 export type Platform = App.Platform | undefined;
@@ -59,6 +69,11 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
 export type Loaded = { at: number; idx: IndexEntry[] | null; bySlug: Map<string, number> | null; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
 /** Whether a corpus is read through the build's lookup files rather than its index (round seventy-six). */
 export const fromFiles = (c: Pick<Loaded, 'manifest'>): boolean => !!c.manifest && hasLookups(c.manifest);
+/**
+ * Whether a corpus is searched from the build's key files (round seventy-seven; $core/search-files): under a manifest
+ * that names them and the lookup files, nothing on the Worker reads or holds the index.
+ */
+export const searchedFromFiles = (c: Pick<Loaded, 'manifest'>): boolean => fromFiles(c) && hasSearchFiles(c.manifest!);
 let cached: Loaded | null = null;
 /** One load at a time: after an upload, concurrent requests each parsed their own copy of the index (round fifty-one, 6). */
 let loading: Promise<Loaded> | null = null;
@@ -95,6 +110,12 @@ export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexE
 const lazyIndex = new WeakMap<Loaded, Promise<IndexEntry[]>>();
 export function indexOf(c: Loaded, platform: Platform, fetch: Fetch): Promise<IndexEntry[]> {
   if (c.idx) return Promise.resolve(c.idx);
+  // Under the key files nothing reads the index (round seventy-seven): a path that would is a fault, said as one, never a
+  // read of the whole into the isolate.
+  if (searchedFromFiles(c)) {
+    console.error(`corpus ${c.corpus} is read through its files; something asked for its whole index`);
+    return (async () => error(503, { message: UNREADABLE }))();
+  }
   let p = lazyIndex.get(c);
   if (!p) {
     p = (async () => {
@@ -191,11 +212,13 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
  * through the lookup files is checked by when it is adopted, as the index's length was. Read through `product`, so the
  * pages that read it next find it held.
  */
-async function generaHold(m: Manifest, read: (path: string) => Promise<unknown>): Promise<boolean> {
+async function generaHold(m: Manifest, read: (path: string) => Promise<unknown>, size?: number): Promise<boolean> {
   const hash = m.files['genera.json'];
   const g = await read(productPath(hash));
   const ok = Array.isArray(g) && g.every((x) => Array.isArray(x) && typeof x[0] === 'string' && Number.isInteger(x[1]) && x[1] > 0) && g.reduce((n: number, x: [string, number]) => n + x[1], 0) === m.species;
-  if (ok) hold(hash, g, JSON.stringify(g).length);
+  // Weighed by the text it was read from, where the caller has it: writing the file out again to weigh it was most of a
+  // cold load's own time (round seventy-seven).
+  if (ok) hold(hash, g, size ?? JSON.stringify(g).length);
   return ok;
 }
 function adopt(idx: IndexEntry[] | null, corpus: string, etag: string | null, fromStore: boolean, manifest: Manifest | null): Loaded {
@@ -269,7 +292,7 @@ async function fromStore(store: R2Bucket, previous: Loaded | null): Promise<Load
       if (k) return k;
     } else {
       const text = await g.text();
-      if (await generaHold(manifest, async () => { try { return JSON.parse(text); } catch { return null; } })) return adopt(null, manifest.id, mEtag, true, manifest);
+      if (await generaHold(manifest, async () => { try { return JSON.parse(text); } catch { return null; } }, text.length)) return adopt(null, manifest.id, mEtag, true, manifest);
       console.warn(`the genera file named by manifest ${manifest.id} does not count the manifest's species; the corpus held before stands`);
       refuse(mEtag);
       refused = true;
@@ -337,9 +360,19 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
  */
 type Held = { p: Promise<unknown>; size: number; retryAt?: number };
 const products = new Map<string, Held>();
-/** Every posting file, the catalogues, a working set of buckets and the name and row files fit: 480 files, under the 24 MB that bounds them (round fifty-eight; the server review's finding 8; round seventy-six). */
-const PRODUCTS_HELD = 480; // and since round seventy-six the name and row files: 128 and 96 more at today's corpus
-const PRODUCTS_BYTES = 24 * 1024 * 1024;
+/**
+ * Bounded by count and by the characters read (round fifty-eight; the server review's finding 8). Parsed, a product
+ * holds two to three times its text in V8's heap (in node: the name files 3.2, the row files 2.0, the sheets 2.3), so
+ * the 24 MB of text round seventy-six allowed was up to 75 MB held: a crawl of 250 species pages held 58 MB after
+ * collection in node, and up to 127 MB in use in workerd, the 128 MB Cloudflare allows an isolate (round seventy-seven). Twelve
+ * MB of text holds what a crawl reads (the card files, 3.5 MB; the genus rows, 3.6 MB; the genera, the catalogues and
+ * the strip), and the count leaves room for the small card files (256 at today's size). The same bound holds the search's
+ * parsed files (its directories, tables, blocks and kept answers): one search holds at most 98 files and 1.2 MB of text at
+ * 8,947 species, and 127 files and 1.7 MB at 50,000 (round seventy-seven's proof, 69,021 queries); its key files are read as
+ * text by `storedText`, parsed as they come and never held.
+ */
+const PRODUCTS_HELD = 1024;
+const PRODUCTS_BYTES = 12 * 1024 * 1024;
 const MISS_MS = 60_000;
 /**
  * A product of the corpus `c` the request holds, by name (round fifty-eight: never of whichever corpus is current when
@@ -354,6 +387,14 @@ export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, na
   if (!m) return null;
   const hash = m.files[name];
   if (!hash) return null;
+  return stored<T>(c, platform, fetch, hash, name, missMs);
+}
+/**
+ * A stored product file by its hash, kept as `product` keeps it: the search's key files, which the manifest does not
+ * name but the search's directories do (round seventy-seven).
+ */
+export async function stored<T>(c: Loaded, platform: Platform, fetch: Fetch, hash: string, name = hash, missMs = MISS_MS): Promise<T | null> {
+  if (!isFileHash(hash)) return null;
   const k = hash;
   let h = products.get(k);
   if (h?.retryAt !== undefined && Date.now() >= h.retryAt) { products.delete(k); h = undefined; }
@@ -393,6 +434,21 @@ export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, na
     return null;
   }
 }
+/**
+ * A stored file's text by hash, kept by no cache (round seventy-seven): the search's key files, which a query parses as it
+ * uses them and lets go, so a typing error that reaches many of them never holds them all.
+ */
+export async function storedText(c: Loaded, platform: Platform, fetch: Fetch, hash: string): Promise<string | null> {
+  if (!isFileHash(hash)) return null;
+  const path = productPath(hash);
+  const store = platform?.env?.STORE;
+  if (store) { const obj = await store.get(path); if (obj) return obj.text(); }
+  if (!c.fromStore) { try { const r = await fetch(`/${path}`); if (r.ok) return await r.text(); } catch { /* no static file */ } }
+  return null;
+}
+/** For tests: how many products are held, and the characters they were read from. */
+export const _productsHeld = () => ({ count: products.size, chars: [...products.values()].reduce((n, h) => n + h.size, 0) });
+export const _PRODUCTS_BYTES = PRODUCTS_BYTES;
 /** A product already read and parsed (the genera file a load checks), kept as `product` would keep it. */
 function hold(hash: string, parsed: unknown, size: number): void {
   products.set(hash, { p: Promise.resolve(parsed), size });
@@ -445,7 +501,7 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number, 
   }
   // The fixtures stand in only while the fixture corpus is the corpus: under a real one, a record the bucket lacks is
   // absent, never a synthetic species with made-up figures and a quotation (round fifty-two, 5; the second reviewer's finding 10).
-  return c.corpus === 'fixture' ? (fixturesByKey.get(key) ?? null) : null;
+  return c.corpus === 'fixture' ? (fixturesByKey().get(key) ?? null) : null;
 }
 
 export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<number | null> {
@@ -453,7 +509,7 @@ export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string
   const hit = await lookupOf(c, platform, fetch).slug(slug);
   if (hit != null) return hit;
   // Synthetic species are reachable only while no real corpus exists.
-  if (c.idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
+  if (c.idx === fixtureIndex) for (const d of fixturesByKey().values()) if (d.slug === slug) return d.key;
   return null;
 }
 
@@ -515,6 +571,8 @@ export function entriesByBucket(index: IndexEntry[], buckets = cached?.buckets ?
 export async function entriesIn(c: Loaded, platform: Platform, fetch: Fetch, bucket: string): Promise<IndexEntry[]> {
   const file = await product<IndexEntry[]>(c, platform, fetch, `entries/${bucket}.json`);
   if (file) return file;
+  // Under the key files a bucket's file not read is a refusal, never the index read whole for it (round seventy-seven).
+  if (searchedFromFiles(c)) error(503, { message: UNREADABLE });
   return entriesByBucket(await indexOf(c, platform, fetch), c.buckets).get(bucket) ?? [];
 }
 /**
@@ -530,7 +588,8 @@ export async function entriesIn(c: Loaded, platform: Platform, fetch: Fetch, buc
  */
 /** Past this many exact candidates a search is charged as a whole-index one (round fifty-nine). */
 export const WHOLE_LIKE = 2000;
-export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>, held?: Loaded): Promise<{ hits: IndexEntry[]; corpus: string; relaxed?: { query: string } } | { stop: Response }> {
+export type SearchAnswer = { hits: IndexEntry[]; corpus: string; relaxed?: { query: string }; narrow?: true } | { stop: Response };
+export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>, held?: Loaded): Promise<SearchAnswer> {
   const c = held ?? (await loadIndex(platform, fetch));
   // Charged once a request, however many passes cost what the whole index costs (round sixty; the corpus review, 6).
   let charged: Promise<Response | null> | null = null;
@@ -539,18 +598,28 @@ export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, 
   let ranked = 0;
   const heavy = (k: number) => (ranked += k) > WHOLE_LIKE;
   const first = await searchOnce(c, platform, fetch, q, n, charge, heavy);
-  if ('stop' in first || first.hits.length) return first;
+  // Too common to list (the key files' `narrow`): said as it is, never retried on fewer words.
+  if ('stop' in first || first.hits.length || first.narrow) return first;
   // Nothing matches the query as written: once more on its first two words before any rank marker, and the answer says
   // so, so the page can say "Showing results for …" (round sixty; the corpus review, 3; the self-review, 15).
   const relaxed = relaxedQuery(q);
   if (!relaxed) return first;
   const again = await searchOnce(c, platform, fetch, relaxed, n, charge, heavy);
-  if ('stop' in again || !again.hits.length) return 'stop' in again ? again : first;
+  if ('stop' in again) return again;
+  if (again.narrow) return { ...again, relaxed: { query: relaxed } };
+  if (!again.hits.length) return first;
   return { ...again, relaxed: { query: relaxed } };
 }
-async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
+async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE): Promise<{ hits: IndexEntry[]; corpus: string; narrow?: true } | { stop: Response }> {
   const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
   const m = c.manifest;
+  // From the key files (round seventy-seven): a few small files a query, and never the index.
+  if (searchedFromFiles(c)) {
+    let stop: Response | null = null;
+    const a = await searchFromFiles(keyReader(c, platform, fetch), q, n, async (k) => (heavy(k) ? !!(stop = await charge()) : false));
+    if ('stop' in a) return { stop: stop! };
+    return 'narrow' in a ? { hits: [], corpus, narrow: true } : { hits: a.hits, corpus };
+  }
   // The search is what still reads the index whole (round seventy-six): held from the load, or read on the first query.
   const idx = await indexOf(c, platform, fetch);
   if (!m) return { hits: search(searchIndex(idx), q, n), corpus };
@@ -597,6 +666,45 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
   return { hits: search(prepare(entries(near), generaOfIndex(idx)), q, n), corpus };
 }
+/**
+ * The search's key files of the corpus a request holds (round seventy-seven), read as products are and kept with them. A
+ * file a directory names that the bucket cannot give is a 503 (`UNREADABLE`), never "nothing matches" (rule 2).
+ */
+const keyGenera = new WeakMap<object, ReadonlySet<string>>();
+function keyReader(c: Loaded, platform: Platform, fetch: Fetch): SearchReader<IndexEntry> {
+  const need = async <T,>(read: Promise<T | null>, what: string, ok: (x: unknown) => boolean): Promise<T> => {
+    const x = await read;
+    if (!ok(x)) {
+      console.error(`search file ${what} of corpus ${c.corpus} could not be read`);
+      error(503, { message: UNREADABLE });
+    }
+    return x as T;
+  };
+  const isObject = (x: unknown) => !!x && typeof x === 'object' && !Array.isArray(x);
+  const blocks = () => need<Blocks>(product<Blocks>(c, platform, fetch, 'search/blocks.json'), 'search/blocks.json', (x) => isObject(x) && Array.isArray((x as Blocks).photos) && Array.isArray((x as Blocks).show));
+  return {
+    dirs: searchDirsFor(c.manifest!.species),
+    dir: (name) => need<Dir>(product<Dir>(c, platform, fetch, `search/${name}.json`), `search/${name}.json`, isObject),
+    node: (hash) => need<string>(storedText(c, platform, fetch, hash), hash, (x) => typeof x === 'string'),
+    answers: (hash) => need<Answers>(stored<Answers>(c, platform, fetch, hash), hash, (x) => isObject(x) && Array.isArray((x as Answers).a)),
+    tables: () => need<Tables>(product<Tables>(c, platform, fetch, 'search/tables.json'), 'search/tables.json', (x) => isObject(x) && Array.isArray((x as Tables).families) && Array.isArray((x as Tables).regions)),
+    photos: async (b) => {
+      const bl = await blocks();
+      return need<number[]>(stored<number[]>(c, platform, fetch, bl.photos[b] ?? ''), `photo block ${b}`, Array.isArray);
+    },
+    show: async (b) => {
+      const bl = await blocks();
+      return need<IndexEntry[]>(stored<IndexEntry[]>(c, platform, fetch, bl.show[b] ?? ''), `show block ${b}`, Array.isArray);
+    },
+    genera: async () => {
+      const g = await need<string[]>(product<string[]>(c, platform, fetch, 'search/genera.json'), 'search/genera.json', Array.isArray);
+      let set = keyGenera.get(g);
+      if (!set) keyGenera.set(g, (set = new Set(g)));
+      return set;
+    }
+  };
+}
+
 /**
  * The genera of the whole index, once per index: the candidates of a request are prepared with them, so a typed genus
  * is never the start of a family however few of its species the postings drew (round seventy; triage-69 N2, S-F6).

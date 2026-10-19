@@ -14,7 +14,9 @@ import { genusOf } from '$core/names';
  * the one thing the site's size would grow (round thirty-nine, the index). What is sent is the text typed into a
  * public catalogue's search box, never a plant's record; /about/how lists it.
  *
- * Under a manifest the build's postings name the few entries a query can match, prepared for the request; without one
+ * Under a manifest that names the search's key files (round seventy-seven; $core/search-files) the query is answered
+ * from a few of them and the index is never read; under one built before, the build's postings name the few entries a
+ * query can match, prepared for the request; without one
  * the prepared index is built once per index load (a `WeakMap` on the loaded array, so a corpus refresh prepares the
  * new one and lets the old go). The browser may keep an answer for a day under the corpus id, and `no-store` when asked
  * under another id (round thirteen, 4; round sixteen, 12).
@@ -63,15 +65,17 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // `near`: the hits came by a similar spelling, so the picker can say "similar spelling" (round sixty-two; A7, B2).
   // `relaxed.left`: the reading matched and left these typed words out (an author, a cultivar, "sp."), where a relaxed
   // answer without it is a retry, after nothing matched as written (round sixty-two; the verification review's search 3).
+  // `narrow`: every word the answer must hold is too common to list from the key files, and the query is more than one
+  // word (round seventy-seven; $core/search-files): no hits, and the page asks for another letter or word.
   type Relaxed = { query: string; left?: string };
-  const answer = (corpus: string, hits: unknown[], relaxed: Relaxed | undefined, near: boolean) =>
-    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}) } });
+  const answer = (corpus: string, hits: unknown[], relaxed: Relaxed | undefined, near: boolean, narrow = false) =>
+    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}), ...(narrow ? { 'x-search-narrow': '1' } : {}) } });
   // A cache that fails to answer is a search, not a 500.
   const hit = edge ? await edge.match(key).catch(() => undefined) : undefined;
   if (hit) {
     // Kept as `{ hits, relaxed? }` whichever shape was asked, and answered in the shape this request asks for.
-    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown } | null;
-    if (kept && Array.isArray(kept.hits)) return answer(c.corpus, kept.hits, typeof kept.relaxed?.query === 'string' ? { query: kept.relaxed.query, ...(typeof kept.relaxed.left === 'string' ? { left: kept.relaxed.left } : {}) } : undefined, kept.near === true);
+    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown; narrow?: unknown } | null;
+    if (kept && Array.isArray(kept.hits)) return answer(c.corpus, kept.hits, typeof kept.relaxed?.query === 'string' ? { query: kept.relaxed.query, ...(typeof kept.relaxed.left === 'string' ? { left: kept.relaxed.left } : {}) } : undefined, kept.near === true, kept.narrow === true);
   }
   // The limit answers with a Retry-After the page turns into "try again in N minutes", not "could not be reached" (round forty, R1-3).
   const stop = await limited(platform, getClientAddress, 'search');
@@ -86,25 +90,27 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // by its first two words, is a cultivar of the genus ("Echeveria Lola", "Haworthia Big Band"): answered by the genus,
   // and only when the first word is a genus of the reference, by the answer's own names, so a common name in title case
   // never shrinks to its first word (round sixty-two; the verification review's search 1 and 2; A7, B2).
-  const genus = !a.hits.length ? genusReading(q) : null;
+  const genus = !a.hits.length && !a.narrow ? genusReading(q) : null;
   if (genus) {
     const g = await searchAnswer(platform, fetch, genus, n, miss, c);
     if ('stop' in g) return g.stop;
     const own = g.hits.filter((h) => genusOfReading(genus, genusOf(h.name)));
     if (own.length) a = { hits: own, corpus: g.corpus, relaxed: { query: genus } };
+    else if (g.narrow) a = { hits: [], corpus: g.corpus, relaxed: { query: genus }, narrow: true };
   }
   const { hits, corpus } = a;
+  const narrow = a.narrow === true;
   // The words used, when the reading that answered dropped some of the query (an author, a quoted cultivar, "sp."):
   // named in the answer as a retry's are (round sixty-two; B2), with what it left out (search 3).
-  const dropped = a.relaxed ? null : droppedLabel(q, hits);
+  const dropped = a.relaxed || narrow ? null : droppedLabel(q, hits);
   const left = dropped ? leftOut(q) : null;
   const relaxed: Relaxed | undefined = a.relaxed ?? (dropped ? { query: dropped, ...(left ? { left } : {}) } : undefined);
   const near = nearAnswer(a.relaxed?.query ?? q, hits);
   // Kept only under the corpus the answer is from (the key names the corpus loaded above, which is the one searched).
   if (edge && corpus === c.corpus) {
-    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}) }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => {});
+    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}) }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => {});
     if (platform?.context?.waitUntil) platform.context.waitUntil(put);
     else await put;
   }
-  return answer(corpus, hits, relaxed, near);
+  return answer(corpus, hits, relaxed, near, narrow);
 };

@@ -87,15 +87,15 @@ describe('a corpus that cannot be read is a 503 on every route (rule 2), never t
 describe('a dossier the index lists but cannot be read', () => {
   const W = { key: 5411106, slug: 'welwitschia-mirabilis', name: 'Welwitschia mirabilis', family: 'Welwitschiaceae', open: 900, photos: 20, climate: 'ok', thumb: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpg' };
   const idx = [W];
-  const { manifest, files } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
-  const withManifest = () => bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string])]);
+  const { manifest, files, stored } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
+  const withManifest = () => bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string])]);
 
   // Round seventy-four (the owner's decision 3): the front page's "This is what a species page with a habitat climate
   // shows" is gone, and with it the one dossier read the front page made. On r74base the load read the first strip
   // species' dossier and sent `feature`.
   it('the front page reads no species dossier and sends no feature, its strip whole either way', async () => {
     const { load } = await import('../../src/routes/+page.server');
-    const b = bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), [dossierPath(5411106), readFileSync('fixtures/dossiers/s/v2/5411106.json', 'utf8')]]);
+    const b = bucket([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, body]) => [productPath(manifest.files[n]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), [dossierPath(5411106), readFileSync('fixtures/dossiers/s/v2/5411106.json', 'utf8')]]);
     const asked: string[] = [];
     const get = b.get;
     b.get = async (k: string) => { asked.push(k); if (k === dossierPath(5411106)) throw new Error('R2 internal error'); return get(k); };

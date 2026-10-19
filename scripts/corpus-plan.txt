@@ -1,4 +1,4 @@
-# Round seventy-six's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
+# Round seventy-seven's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
 # One step a line:
 #   backup                       static/s/v2 copied to backups/v2-<corpus id> (once a corpus)
 #   dossier <arguments>          the builder: npm run dossier -- <arguments>
@@ -11,13 +11,15 @@
 # picks up where it stopped. The day's answers are kept in cache/upstream/, so a rerun the same day asks again only
 # what did not answer.
 #
-# Round seventy-six asks nothing of any source: one offline re-index, then the upload. Deploy and upload may come in
-# either order (DEPLOY.md, "Round seventy-six: the Worker without the whole index"): a Worker deployed before this
-# upload reads the live corpus as before, and the Worker live now passes by what this upload adds.
+# Round seventy-seven asks nothing of any source: one offline re-index, then the upload. Deploy first, then this step
+# (DEPLOY.md, "Round seventy-seven's corpus step"), though either order is safe: a Worker of this round meeting round
+# seventy-six's corpus, or round seventy-six's Worker meeting this round's, finds no lookup files of its own layout and
+# reads the corpus through its index, as before round seventy-six, until the other half lands.
 backup
-# W: the Worker's lookups as files (names/, rows/, genera.json, featured.json, sitemap/), and the photograph judgement
-# with every name of the reference stored in each dossier that holds a Commons file. Offline, a few minutes.
+# K: the search's files (search/top.json, search/<n>.json, search/genera.json, search/tables.json, search/blocks.json, and
+# the key, answer, photograph-count and entry files they name by hash under p/). C: round seventy-six's names/ split in
+# two, cards/ (what a species page reads) and older/ (the accepted and older names). Offline, a minute or two.
 dossier --index
-review In corpus-step.log, the --index step must say "photograph judgement: … Commons files on 8945 pages read with the reference's names" and how many dossiers it wrote anew (889 of 8,947 on the dry run of round seventy-two's copy, every one only gaining the judgement; none on a second run), and "index: 8945 species". The manifest names 227 files more than before (139 then 366 on the dry run): 128 name files, 96 row files, the genera, the strip and one sitemap file. The index and some entries files change too: a tile's credit now always follows its thumbnail. drops.txt should not be there.
+review In corpus-step.log, the --index step must say "index: 8945 species", "0 dossiers written anew" for the photograph judgement (nothing in any dossier changes), and on its corpus line "… search key files (… MB)" and "… files written": about 13,200 search key files of about 280 MB, most of them a few kilobytes. On the dry run of round seventy-six's copy here (8,947 species), it said 13210 search key files (278.0 MB), and 13662 files written (307 MB, what the upload sends), 238 already on disk under their hash, 16 of older corpora deleted. The manifest names 690 files where it named 366: 452 added (256 cards/ files, 128 older/ files, and the search's 68: search/top.json, sixty-four search/<n>.json, search/genera.json, search/tables.json and search/blocks.json) and the 128 names/ files gone; every other product is the same by hash, so the review line should say 0 dossiers differ from the backup. drops.txt should not be there. (A second --index on the dry run wrote 0 files and said "unchanged", and every file under s/v2 was the same by md5.)
 upload
 live-check

@@ -21,7 +21,8 @@ async function withKeys(page: Page, keys: unknown) {
   await page.route(/\/species\/copiapoa-cinerea\/__data\.json/, async (route: Route) => {
     const res = await route.fetch();
     const body = await res.text();
-    const j = JSON.parse(body.split('\n')[0]) as { nodes: Array<{ type: string; data?: unknown[] }> };
+    const [first, ...rest] = body.split('\n');
+    const j = JSON.parse(first) as { nodes: Array<{ type: string; data?: unknown[] }> };
     for (const n of j.nodes) {
       if (n.type !== 'data' || !n.data) continue;
       const d = devalue.unflatten(n.data as never) as { d?: { occurrences: Record<string, unknown> } };
@@ -29,7 +30,11 @@ async function withKeys(page: Page, keys: unknown) {
       if (keys) d.d.occurrences.keys = keys;
       n.data = JSON.parse(devalue.stringify(d));
     }
-    await route.fulfill({ response: res, body: JSON.stringify(j) });
+    // Every line kept: data the server streams after the first line (a promise it had not yet settled) is the rest of the
+    // answer, and a page given the first line alone waits for it; and the length and transfer headers described the old
+    // body (round seventy-seven: in WebKit the visit sometimes never landed).
+    const headers = Object.fromEntries(Object.entries(res.headers()).filter(([k]) => !/^(content-length|transfer-encoding|content-encoding)$/i.test(k)));
+    await route.fulfill({ status: res.status(), headers, body: [JSON.stringify(j), ...rest].join('\n') });
   });
 }
 /** The species page by a client-side visit from its genus row, so its data comes through `__data.json`. */

@@ -265,6 +265,12 @@ export const Photo = v.object({
   /** For a Commons file: true once `--fill commons-kind` has read its source and slips (round seventy-one), so a rerun passes it by. */
   sourceRead: v.optional(v.boolean()),
   /**
+   * For a Commons file `--fill commons-kind` has read: the version of the description rules (`SOURCE_KIND_RULE`) that
+   * read `kind` (round seventy-seven). A file left out by its description is asked again only under an older version, so
+   * a sheet stays a sheet without a request on every fill (Boswellia papyrifera's, round seventy-three's review).
+   */
+  kindRule: v.optional(v.number()),
+  /**
    * For a Commons file whose title names only a sister species' epithet (round seventy-three): whether its description
    * names the species under one of its own names ("Heliamphora heterodoxa 'Ptari Tepui' (now known as Heliamphora
    * purpurascens)"), read by the build and `--fill commons-kind`. True keeps the file; absent until read, false after.

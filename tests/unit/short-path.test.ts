@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { searchAnswer, _forgetIndex, WHOLE_LIKE } from '$lib/server/dossiers';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
+import { before77 } from './helpers/before-r77';
 import { prepare, search } from '$core/search';
 import { buildPostings, postingFilesFor, postingFileOf, candidates, queryPlan } from '$core/postings';
 
@@ -34,10 +35,12 @@ function corpus(n: number) {
 }
 function platformFor(idx: object[]) {
   const text = JSON.stringify(idx);
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
+  // Round seventy-seven: the short path is the postings path's, which a corpus built before the key files is searched by.
+  const built = buildProducts(idx as never, text, () => new Map());
+  const manifest = before77(built.manifest), files = built.files;
   const blobs = new Map<string, string>();
   blobs.set(manifestPath(), JSON.stringify(manifest));
-  for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  for (const [name, body] of files) if (manifest.files[name]) blobs.set(productPath(manifest.files[name]), body);
   const obj = (body: string, etag: string) => ({ text: async () => body, json: async () => JSON.parse(body), etag });
   const reads: string[] = [];
   const store = { get: async (k: string) => { reads.push(k); return blobs.has(k) ? obj(blobs.get(k)!, `"${k}"`) : null; }, head: async (k: string) => (blobs.has(k) ? { etag: `"${k}"` } : null) };

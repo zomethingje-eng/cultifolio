@@ -36,9 +36,11 @@ const obj = (body: string, etag: string) => ({ text: async () => body, json: asy
 const store = (blobs: Map<string, string>) => ({ get: async (x: string) => (blobs.has(x) ? obj(blobs.get(x)!, `"${x}"`) : null), head: async (x: string) => (blobs.has(x) ? { etag: `"${x}"` } : null) });
 beforeAll(() => {
   _forgetIndex();
-  const { manifest, files } = buildProducts(IDX as never, JSON.stringify(IDX), () => new Map());
+  const { manifest, files, stored } = buildProducts(IDX as never, JSON.stringify(IDX), () => new Map());
   const blobs = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)]]);
   for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   platform = { env: { QUEUE: kv(), STORE: store(blobs) } } as unknown as App.Platform;
   plain = { env: { QUEUE: kv(), STORE: store(new Map([['s/v2/index.json', JSON.stringify(IDX)]])) } } as unknown as App.Platform;
 }, 60_000);

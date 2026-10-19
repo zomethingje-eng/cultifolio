@@ -72,7 +72,9 @@ describe('a load into the example that is called off leaves the tab as it was (R
     const { inDemo } = await import('$lib/db/demo');
     onNavigate = 'cancel';
     expect(enterExample('/today')).toBe(true);
-    expect(asked).toEqual(['/today']);
+    // Round seventy-seven (F): the address carries the entry's one-use token, and only the page it opens sets the flag
+    // (app.html's first script); r77base asked for '/today' with the flag already set.
+    expect(asked).toEqual([`/today?enter=${ss.get('cultifolio.sampleEntering')}`]);
     expect(inDemo()).toBe(false); // the reviewer's reproduction failed here: '1' stayed in session storage
     expect(example.entering).toBe(false);
   });
@@ -86,12 +88,15 @@ describe('a load into the example that is called off leaves the tab as it was (R
     win.addEventListener('beforeunload', (e) => e.preventDefault());
     onNavigate = 'prompt';
     expect(enterExample('/today')).toBe(true);
-    expect(inDemo()).toBe(true); // not yet known to stay
+    // Round seventy-seven (F): nothing but the token is written, so there is nothing to take back; r77base: true here,
+    // the flag set and taken off only by the 3 s guess below. The guess now decides only the page's words.
+    expect(inDemo()).toBe(false);
+    expect(example.entering).toBe(true); // not yet known to stay: "Opening the example collection"
     vi.advanceTimersByTime(3100);
     expect(inDemo()).toBe(false);
     expect(example.entering).toBe(false);
   });
-  it('a load that goes ahead keeps the flag for the next page, even when it is slow', async () => {
+  it('a load that goes ahead keeps the entry\'s token for the next page, even when it is slow', async () => {
     vi.useFakeTimers();
     def('navigation', undefined);
     nav = undefined;
@@ -100,7 +105,10 @@ describe('a load into the example that is called off leaves the tab as it was (R
     onNavigate = 'go';
     expect(enterExample('/today')).toBe(true);
     vi.advanceTimersByTime(60_000);
-    expect(inDemo()).toBe(true);
+    // Round seventy-seven (F): the next page enters by its address and the token (r77base kept the flag itself: true).
+    expect(inDemo()).toBe(false);
+    expect(asked).toEqual([`/today?enter=${ss.get('cultifolio.sampleEntering')}`]);
+    expect(ss.get('cultifolio.sampleEntering')).toMatch(/^[a-z0-9]{6,}$/);
   });
 });
 
@@ -177,8 +185,9 @@ describe('the menu\'s way in moves inside the app first (R1, 1)', () => {
     const { openExample } = await import('$lib/ui/grow/example.svelte');
     const { inDemo } = await import('$lib/db/demo');
     expect(await openExample('/today')).toBe(true);
-    expect(asked).toEqual(['/today']);
-    expect(inDemo()).toBe(true);
+    // Round seventy-seven (F): at the entry's address, whose page sets the flag; r77base: ['/today'] and the flag set here.
+    expect(asked).toEqual([`/today?enter=${ss.get('cultifolio.sampleEntering')}`]);
+    expect(inDemo()).toBe(false);
   });
   it('not while a restore runs: no move, and why', async () => {
     const { openExample, example } = await import('$lib/ui/grow/example.svelte');

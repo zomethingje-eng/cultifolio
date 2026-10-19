@@ -12,6 +12,7 @@ import { corpusNow, _forgetIndex, searchAnswer, getDossier, REFUSAL_MS, UNREADAB
 import { synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
+import { before77 } from './helpers/before-r77';
 import { dossierPath } from '$dossier/schema';
 import { md5 } from '$dossier/md5';
 import { englishNames } from '$dossier/index-entry';
@@ -34,8 +35,8 @@ const FIXTURE_DOSSIER = readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf
 
 function productsOf(idx: object[]) {
   const text = JSON.stringify(idx);
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
-  return { manifest, text, blobs: new Map([...files].map(([name, body]) => [productPath(manifest.files[name]), body] as [string, string])) };
+  const { manifest, files, stored } = buildProducts(idx as never, text, () => new Map());
+  return { manifest, text, blobs: new Map<string, string>([...[...files].map(([name, body]) => [productPath(manifest.files[name]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string])]) };
 }
 /** A bucket whose etags are the content's own MD5, as R2's are; it can be made to fail, and it says what it read. */
 function bucket(init: Iterable<[string, string]> = []) {
@@ -157,7 +158,9 @@ describe('the near pass is charged as the exact one is (round sixty; A26; the co
   const big = Array.from({ length: WHOLE_LIKE + 100 }, (_, i) => ({ key: i + 1, slug: `g${i}-s`, name: `G${i} s`, family: 'Cactaceae', open: 0, photos: 0, climate: 'ok' }));
   it('a typo whose near keys reach a family of more than WHOLE_LIKE species is charged, once', async () => {
     const p = productsOf(big);
-    const plat = platformOf(bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)]]));
+    // Round seventy-seven: the postings path's charge, on a corpus built before the key files (which say `narrow` here:
+    // "act", the start of "actaceae", has more than 2,000 species).
+    const plat = platformOf(bucket([...p.blobs, [manifestPath(), JSON.stringify(before77(p.manifest))]]));
     let charged = 0;
     const r = await searchAnswer(plat, noStatic, 'xact', 60, async () => { charged++; return null; });
     expect('hits' in r).toBe(true);

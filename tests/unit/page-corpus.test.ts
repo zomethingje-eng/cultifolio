@@ -20,8 +20,8 @@ const B = mk(['Adenia globosa', 'Aloe vera', 'Lithops lesliei', 'Welwitschia mir
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 
 function products(idx: object[]) {
-  const { manifest, files } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
-  return { manifest, blobs: new Map([...files].map(([name, body]) => [productPath(manifest.files[name]), body])) };
+  const { manifest, files, stored } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
+  return { manifest, blobs: new Map<string, string>([...[...files].map(([name, body]) => [productPath(manifest.files[name]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string])]) };
 }
 
 afterEach(() => vi.restoreAllMocks());

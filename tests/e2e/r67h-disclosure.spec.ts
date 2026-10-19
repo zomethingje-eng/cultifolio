@@ -43,6 +43,10 @@ test('r67h disclosure 2: the add form\'s "Use my own number" opens on one press 
 
 test('r67h disclosure 3: the add form\'s "More details" opens on one press (r60-grow\'s price) @phone', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
+  // The link's key is checked against the reference after the page is drawn, and its answer redraws the name's line: in
+  // WebKit on the owner's PC the summary moved between the press and the release (round seventy-seven). The answer is
+  // waited for first; a late answer is disclosure 4's subject.
+  await expect(page.locator('.picker .pill.ok')).toContainText('GBIF', { timeout: 15_000 });
   oneTap(await pressOnce(page, 'details.moredetails'));
   await expect(page.locator('#f-price')).toBeVisible();
 });

@@ -14,8 +14,17 @@
  *   sheets/<bucket>.json               the sheets of a bucket (/api/sheets)
  *   postings/<file>.json               the search's postings: which entries each short key can match (/api/search; $core/postings)
  *   catalogue/<by>-<chip>.json         a catalogue's rows (/, /api/rows)
- *   names/<n>.json, rows/<by>/<n>.json, genera.json, featured.json, sitemap/<n>.json
- *                                      the Worker's lookups without the index (round seventy-six; ./lookups.ts)
+ *   cards/<n>.json, older/<n>.json, rows/<by>/<n>.json, genera.json, featured.json, sitemap/<n>.json
+ *                                      the Worker's lookups without the index (round seventy-six; ./lookups.ts): the
+ *                                      card files a species page reads and the files of the other names (round
+ *                                      seventy-seven; one product, names/<n>.json, before), the rows, the genera, the
+ *                                      strip and the sitemap
+ *   search/top.json, search/<n>.json, search/genera.json, search/tables.json, search/blocks.json
+ *                                      the search from key files (round seventy-seven; $core/search-files): the
+ *                                      directories of the search's keys, each naming its key's file by hash (those
+ *                                      files are stored under p/ like the rest, and named only here), the genera, the
+ *                                      families and regions a key file numbers, and the photograph-count and entry
+ *                                      blocks by position (named by blocks.json)
  *
  * A Worker that finds no manifest (a corpus uploaded before the manifest, the fixture corpus) derives as it did.
  */
@@ -24,6 +33,7 @@ import { bucketsFor, bucketNames } from '$core/bucket';
 import { postingFilesFor, postingFileNames } from '$core/postings';
 import { BYS, CHIPS, catalogueFile } from './catalogue';
 import { lookupFileNames } from './lookups';
+import { searchFileNames } from '$core/search-files';
 
 export interface Manifest {
   v: number;
@@ -78,12 +88,59 @@ export const SHORT_HITS = 100;
 
 /**
  * Whether a manifest names the files the Worker reads names from instead of the index (round seventy-six; ./lookups.ts):
- * every name file and row file the species count asks for, the genera, the strip, and the sitemap's files from the first
- * on. A manifest without them (a corpus built before round seventy-six) is read as before: the index whole, and the
- * maps built from it, so a Worker deployed before the corpus that carries them keeps serving the corpus live then.
+ * every card file, file of names and row file the species count asks for, the genera, the strip, and the sitemap's files
+ * from the first on. A manifest without them (a corpus built before round seventy-six, or round seventy-six's own, whose
+ * names were one product, `names/`) is read as before: the index whole, and the maps built from it, so a Worker deployed
+ * before the corpus that carries them keeps serving the corpus live then, and a Worker deployed before them never reads
+ * this round's (its own `names/` files are not there).
+ * Kept per manifest (round seventy-seven): every page asks it several times, and each asking listed the manifest's
+ * every file.
  */
+const lookupsHeld = new WeakMap<Manifest, boolean>();
 export function hasLookups(m: Manifest): boolean {
-  const sitemaps = Object.keys(m.files).filter((n) => /^sitemap\/\d+\.json$/.test(n)).length;
-  return sitemaps >= 1 && lookupFileNames(m.species, sitemaps).every((name) => Object.hasOwn(m.files, name));
+  let has = lookupsHeld.get(m);
+  if (has === undefined) {
+    const sitemaps = Object.keys(m.files).filter((n) => /^sitemap\/\d+\.json$/.test(n)).length;
+    has = sitemaps >= 1 && lookupFileNames(m.species, sitemaps).every((name) => Object.hasOwn(m.files, name));
+    lookupsHeld.set(m, has);
+  }
+  return has;
 }
 
+/**
+ * Whether a manifest names the search's key files (round seventy-seven; $core/search-files): the search then reads them
+ * and never the index. A manifest without them (a corpus built before) is searched through the postings and the index,
+ * as before, so either order of deploy and upload is safe. Kept per manifest, as `hasLookups` is (the merge of round
+ * seventy-seven): the search, `indexOf` and `entriesIn` each ask it.
+ */
+const searchHeld = new WeakMap<Manifest, boolean>();
+export function hasSearchFiles(m: Manifest): boolean {
+  let has = searchHeld.get(m);
+  if (has === undefined) {
+    has = searchFileNames(m.species).every((name) => Object.hasOwn(m.files, name));
+    searchHeld.set(m, has);
+  }
+  return has;
+}
+
+/**
+ * Every product file a corpus needs, by hash: those its manifest names, and the search's key files its directories name
+ * (round seventy-seven). `read` gives a stored file's text by hash, or null when it is not to hand; a directory not to
+ * hand is said in `missing`, so a caller that deletes by this list can stop rather than delete what it names.
+ */
+export function corpusHashes(m: Manifest, read: (hash: string) => string | null): { hashes: Set<string>; missing: string[] } {
+  const hashes = new Set(Object.values(m.files));
+  const missing: string[] = [];
+  for (const [name, h] of Object.entries(m.files)) {
+    const blocks = name === 'search/blocks.json';
+    if (!blocks && !/^search\/(?:top|\d+)\.json$/.test(name)) continue;
+    const text = read(h);
+    let dir: unknown = null;
+    try { dir = text === null ? null : JSON.parse(text); } catch { dir = null; }
+    if (!dir || typeof dir !== 'object') { missing.push(name); continue; }
+    // The directories name each key's file and answers; `blocks.json` the photograph-count and show blocks.
+    if (blocks) { for (const xs of Object.values(dir as Record<string, unknown>)) if (Array.isArray(xs)) for (const x of xs) if (isFileHash(x)) hashes.add(x); continue; }
+    for (const e of Object.values(dir as Record<string, unknown>)) if (Array.isArray(e) && typeof e[1] === 'string' && isFileHash(e[1])) hashes.add(e[1]);
+  }
+  return { hashes, missing };
+}

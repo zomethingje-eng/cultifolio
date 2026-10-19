@@ -12,8 +12,8 @@ it('decided: a species page held under corpus A renders the dossier the bucket h
   _forgetIndex();
   const fx = JSON.parse(readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8'));
   const A = [{ key: 5384013, slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', family: 'Cactaceae', open: 1, photos: 1, climate: 'ok' }];
-  const { manifest, files } = buildProducts(A as never, JSON.stringify(A), () => new Map());
-  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, b]) => [productPath(manifest.files[n]), b] as [string, string]), ['s/v2/5384013.json', JSON.stringify(fx)]]);
+  const { manifest, files, stored } = buildProducts(A as never, JSON.stringify(A), () => new Map());
+  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...files].map(([n, b]) => [productPath(manifest.files[n]), b] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string]), ['s/v2/5384013.json', JSON.stringify(fx)]]);
   const store = { get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${m.get(k)!.length}"` } : null), head: async (k: string) => (m.has(k) ? { etag: `"${m.get(k)!.length}"` } : null) };
   const platform = { env: { STORE: store } } as unknown as App.Platform;
   const c = await corpusNow(platform, noStatic);

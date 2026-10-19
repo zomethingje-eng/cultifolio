@@ -35,7 +35,7 @@
 {:else}
   {@render children()}
   {#if !demo && example.entering}
-    <!-- the button was pressed and the page is on its way into the example (the tab's flag is set, so it is no longer offered) -->
+    <!-- the button was pressed and the page is on its way into the example (at an address with the entry's token, whose page sets the tab's flag; round seventy-seven) -->
     <p class="small muted exampleopening exampleoffer" role="status" id="example-opening">Opening the example collection…</p>
   {:else if offer}
     <div class="exampleoffer" id="example-offer">

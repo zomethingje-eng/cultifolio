@@ -177,6 +177,10 @@ test('r76p strip 3: a credit long enough to wrap is whole inside its card at 320
 });
 
 test('r76p strip 4: every other credit under a photograph is whole: the catalogue\'s tiles, the species page\'s hero and related strip, and Compare', async ({ browser, baseURL }) => {
+  // Sixteen page loads in four contexts: 10 to 11 s alone, on r77base and on round seventy-seven's merge alike, and past
+  // the default 30 s beside three other workers on two cores, on both (round seventy-seven, the merge: 2 of 3 on r77base,
+  // 3 of 3 merged, and twice in the merged code's whole strict run). The time is the test's, not the pages'.
+  test.setTimeout(90_000);
   for (const [w, h, text] of [[320, 568, 100], [390, 664, 100], [1280, 800, 100], [390, 664, 200]] as const) {
     const at = `${w} px, ${text}% text`;
     const ctx = await context(browser, baseURL, w, h, text);

@@ -1,13 +1,15 @@
 /**
  * Round seventy-six (W; docs/SCALE-STUDY.md section 6): the Worker reads every name a page asks for from the build's
- * lookup files (names/, rows/, genera.json, featured.json, sitemap/), and the index only for the search. Proved here on
+ * lookup files (cards/ and older/, names/ until round seventy-seven; rows/, genera.json, featured.json, sitemap/), and
+ * the index only for the search. Proved here on
  * a small corpus built to hold every case (homonyms by slug, an older name two species hold, a hyphenated one, an
  * older name that is another's accepted name, a merged page's old address, a genus address, misses):
  *
  * 1. every key, through the files and through the maps over the index, answers the same;
  * 2. the routes answer the same, page for page, under a manifest naming the files and under one that does not (a corpus
  *    built before this round, which the Worker reads through its index as before: the fallback);
- * 3. under the files, a species page, the home page, the dossier API and the sitemaps never read the index; the search does.
+ * 3. under the files, a species page, the home page, the dossier API and the sitemaps never read the index; since round
+ *    seventy-seven, nor does the search (it did in round seventy-six).
  *
  * The real corpus is proved by scripts/dev/scale/r76-proof.ts (its output: scripts/dev/scale/results/r76-proof.txt).
  * FAILS on r76base: neither lookup module exists there, and the Worker read the index on every cold page.
@@ -18,7 +20,7 @@ import { corpusNow, _forgetIndex, fromFiles, type IndexEntry, type Loaded } from
 import { indexLookup, filesLookup, addressOf } from '$lib/server/lookup';
 import { buildProducts, type Alias } from '$dossier/products';
 import { manifestPath, productPath, hasLookups, type Manifest } from '$dossier/manifest';
-import { lookupFileNames, plainName, synonymKey, namesFilesFor } from '$dossier/lookups';
+import { lookupFileNames, plainName, synonymKey, cardFilesFor, olderFilesFor } from '$dossier/lookups';
 import { dossierPath } from '$dossier/schema';
 import { slugify, genusOf } from '$core/names';
 import { nameFromSlug } from '$lib/server/synonyms';
@@ -68,7 +70,7 @@ function corpus(before = false) {
     const old = new Set(lookupFileNames(IDX.length, 1));
     manifest = { ...manifest, files: Object.fromEntries(Object.entries(manifest.files).filter(([n]) => !old.has(n))) };
   }
-  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, body]) => [productPath(p.manifest.files[n]), body] as [string, string]), ...IDX.map((x) => [dossierPath(x.key), dossierOf(x)] as [string, string])]);
+  const m = new Map<string, string>([[manifestPath(), JSON.stringify(manifest)], ...[...p.files].map(([n, body]) => [productPath(p.manifest.files[n]), body] as [string, string]), ...[...p.stored].map(([h, b]) => [productPath(h), b] as [string, string]), ...IDX.map((x) => [dossierPath(x.key), dossierOf(x)] as [string, string])]);
   return { manifest, store: bucket(m), indexPath: productPath(p.manifest.files['index.json']) };
 }
 const noStatic = (async () => new Response('', { status: 404 })) as unknown as typeof fetch;
@@ -100,7 +102,10 @@ describe('the lookup files answer as the maps over the index (round seventy-six)
   it('every slug, name and older name; every key; every row; the genera; the older names named elsewhere; every address', async () => {
     const { store, manifest } = corpus();
     expect(hasLookups(manifest)).toBe(true);
-    expect(Object.keys(manifest.files).filter((n) => n.startsWith('names/')).length).toBe(namesFilesFor(IDX.length));
+    // Round seventy-seven: the card files and the files of names, where round seventy-six wrote one product (`names/`).
+    expect(Object.keys(manifest.files).filter((n) => n.startsWith('cards/')).length).toBe(cardFilesFor(IDX.length));
+    expect(Object.keys(manifest.files).filter((n) => n.startsWith('older/')).length).toBe(olderFilesFor(IDX.length));
+    expect(Object.keys(manifest.files).filter((n) => n.startsWith('names/')).length).toBe(0);
     const platform = platformOf(store);
     const c = await corpusNow(platform, noStatic);
     expect({ files: fromFiles(c), idx: c.idx }).toEqual({ files: true, idx: null });
@@ -163,7 +168,9 @@ describe('the lookup files answer as the maps over the index (round seventy-six)
     expect(find('?chip=grown')[1].ok!.grown).toBeTruthy();
   });
 
-  it('under the files, a species page, the home page, the dossier API and the sitemaps never read the index; the search reads it once', async () => {
+  // Round seventy-seven: and the search neither, from the key files (it read the index once in round seventy-six);
+  // tests/unit/r77k-search-files.test.ts proves every caller of the search.
+  it('under the files, a species page, the home page, the dossier API, the sitemaps and the search never read the index', async () => {
     const { store, indexPath } = corpus();
     const platform = platformOf(store);
     const c = await corpusNow(platform, noStatic);
@@ -178,19 +185,19 @@ describe('the lookup files answer as the maps over the index (round seventy-six)
     // /api/index passes the stored file on without reading it whole into the isolate
     const listed = await indexGet(routeEvent(platform, '/api/index'));
     expect(JSON.parse(await listed.text()).length).toBe(IDX.length);
-    // the search still reads it: once, then held with the corpus
+    // nor does the search, from the key files (round seventy-seven)
     store.reads.length = 0;
     const s1 = await searchGet(routeEvent(platform, '/api/search?q=aloe'));
     const s2 = await searchGet(routeEvent(platform, '/api/search?q=rosa'));
     expect([s1.status, s2.status]).toEqual([200, 200]);
-    expect(store.reads.filter((k) => k === indexPath).length).toBe(1);
+    expect(store.reads.filter((k) => k === indexPath).length).toBe(0);
   });
 
   it('a lookup file the bucket cannot give is a 503 that says so, never "no species page"', async () => {
     const { store, manifest } = corpus();
     const platform = platformOf(store);
     const c = await corpusNow(platform, noStatic);
-    for (let i = 0; i < namesFilesFor(IDX.length); i++) store.m.delete(productPath(manifest.files[`names/${i}.json`]));
+    for (let i = 0; i < cardFilesFor(IDX.length); i++) store.m.delete(productPath(manifest.files[`cards/${i}.json`])); // a page's own card (round seventy-seven; `names/` until then)
     expect(await settle(speciesLoad(speciesEvent(c, platform, 'aloe-ferox')))).toMatchObject({ status: 503 });
   });
 });

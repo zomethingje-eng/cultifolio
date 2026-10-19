@@ -155,7 +155,7 @@ describe('guards for the mutations S-D found surviving (MX6, MX23, MX25)', () =>
     const { enterExample, hadOwn, OWN_NOTE } = await import('$lib/ui/grow/example.svelte');
     expect(enterExample('/today')).toBe(true);
     await vi.advanceTimersByTimeAsync(10_100); // `whenSettled` gives up
-    expect(asked).toEqual(['/today']); // into the example all the same
+    expect(asked).toEqual([`/today?enter=${session.m.get('cultifolio.sampleEntering')}`]); // into the example all the same (r77base: '/today'; round seventy-seven, the entry's token)
     expect(session.m.get(OWN_NOTE)).toBe('?'); // under the mutation: '0', and the bar offered "Add your first plant"
     expect(hadOwn()).toBeNull();
   });

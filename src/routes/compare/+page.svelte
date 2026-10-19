@@ -108,12 +108,14 @@
   /* ---- a picker on the page itself: the tray was the only way to choose ---- */
   let pq = $state('');
   let found = $state<Array<{ slug: string; name: string }>>([]);
+  /** Every word typed is too common for the server to list what matches (round seventy-seven): said under the field. */
+  let tooMany = $state(false);
   let seq = 0;
   $effect(() => {
     const text = pq.trim();
     const n = ++seq;
-    if (text.length < 2) { found = []; return; }
-    const t = setTimeout(() => { void searchCatalogue(text, 6).then((r) => { if (n === seq && Array.isArray(r)) found = r.map((e) => ({ slug: e.slug, name: e.name })); }); }, 200);
+    if (text.length < 2) { found = []; tooMany = false; return; }
+    const t = setTimeout(() => { void searchCatalogue(text, 6).then((r) => { if (n === seq && Array.isArray(r)) { found = r.map((e) => ({ slug: e.slug, name: e.name })); tooMany = r.narrow === true; } }); }, 200);
     return () => clearTimeout(t);
   });
   /** The header photograph's credit, its licence named once, as the species page's gallery words it: one helper (round sixty-two; outside review A35). */
@@ -164,7 +166,8 @@
   <label for="cmp-q">{cols.length >= 3 ? 'Swap in a species' : 'Add a species'}</label>
   <input id="cmp-q" class="searchbar" type="search" bind:value={pq} placeholder="A name or a genus" autocomplete="off" />
   <!-- Announced as the answers change, and mounted from the start so a screen reader hears the first one (round sixty; a11y 11). -->
-  <p class="visually-hidden" role="status">{pq.trim().length >= 2 ? `${found.length} match${found.length === 1 ? '' : 'es'}` : ''}</p>
+  {#if tooMany && pq.trim().length >= 2}<p class="muted small" role="status">Too many species match “{pq.trim()}” to list them. Type another letter or word.</p>
+  {:else}<p class="visually-hidden" role="status">{pq.trim().length >= 2 ? `${found.length} match${found.length === 1 ? '' : 'es'}` : ''}</p>{/if}
   {#if found.length}
     <ul class="found">{#each found as f (f.slug)}<li><a href={withSlug(f.slug)} data-sveltekit-noscroll onclick={() => { pq = ''; }}><i>{f.name}</i></a>{#if cols.length >= 3}<span class="muted small"> replaces <i>{cols[0].d.name.scientific}</i></span>{/if}</li>{/each}</ul>
   {/if}

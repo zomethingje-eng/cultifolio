@@ -16,9 +16,11 @@ const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch
 
 function blobsFor(idx: object[]) {
   const text = JSON.stringify(idx);
-  const { manifest, files } = buildProducts(idx as never, text, () => new Map());
+  const { manifest, files, stored } = buildProducts(idx as never, text, () => new Map());
   const blobs = new Map<string, string>();
   for (const [name, body] of files) blobs.set(productPath(manifest.files[name]), body);
+  // Round seventy-seven: the build's search key files are stored under their hash and named by the search's directories, not the manifest; the bucket holds them as it holds every file the build writes.
+  for (const [h, body] of stored) blobs.set(productPath(h), body);
   return { manifest, blobs, text };
 }
 

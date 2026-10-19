@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Dossier } from '$dossier/schema';
   import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail } from '$lib/ui/ref/upstream';
-  let { dossier }: { dossier: Dossier } = $props();
+  // What it reads of the record, and the count of the datasets its open records came from: the species page carries the count, not the list (round seventy-seven).
+  let { dossier, datasets }: { dossier: Pick<Dossier, 'upstream' | 'built'>; datasets: number } = $props();
   const rows = $derived(Object.entries(dossier.upstream));
   // "refused" for a refusal, as the photographs' line and the footer say it, never "did not answer"; each row named in
   // plain words with its id beside it, and the climate's reason read as its source did (round sixty-two; the grower
@@ -19,7 +20,7 @@
     {/each}
   </div>
   <!-- Not "this build", which reads as the app's version: the build of this page (round fifty-eight; the accessibility review). -->
-  <p class="faint small">Every source is recorded as having answered, reported nothing, refused, failed, not been asked, or answered twice where one answer is taken (“not taken: two items answered”), and, for a source asked when this page was built, when: the figures are as the source held them that day; a source read from a file (Kew's World Checklist, a GBIF download) says "as of" the file's day instead; a row carried from an earlier build of the page names that build instead. Only “nothing to report” is ever shown as an absence. {#if dossier.occurrences.datasets.length}Records came from {dossier.occurrences.datasets.length} datasets via GBIF.org; each carries its own licence.{/if}</p>
+  <p class="faint small">Every source is recorded as having answered, reported nothing, refused, failed, not been asked, or answered twice where one answer is taken (“not taken: two items answered”), and, for a source asked when this page was built, when: the figures are as the source held them that day; a source read from a file (Kew's World Checklist, a GBIF download) says "as of" the file's day instead; a row carried from an earlier build of the page names that build instead. Only “nothing to report” is ever shown as an absence. {#if datasets}Records came from {datasets} datasets via GBIF.org; each carries its own licence.{/if}</p>
 </details>
 
 <style>

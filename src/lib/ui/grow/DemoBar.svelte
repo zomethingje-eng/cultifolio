@@ -13,7 +13,7 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, LEFTOVER_DAYS, leftoverLater, onExampleClosed } from '$lib/db/demo';
+  import { CLOSED_NOTE, ENTER_PARAM, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, LEFTOVER_DAYS, leftoverLater, onExampleClosed } from '$lib/db/demo';
   import { example, enterExample, hadOwn, leaveExample, notEnteredWords } from './example.svelte';
   import { replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
@@ -31,15 +31,17 @@
   /** The example was not set out, because it already held records of the visitor's (round seventy; triage-69 X3). */
   let unseeded = $state(false);
   onMount(() => {
+    // The address a Leave or an entry opened this page at says so (`?left=` or `?enter=` with its one-use token, read by
+    // app.html's first script); taken off it here, so a reload or a link copied from it is an ordinary visit (round
+    // sixty-two, the first deploy; the entry's, round seventy-seven).
+    const said = [LEFT_PARAM, ENTER_PARAM].filter((p) => page.url.searchParams.has(p));
+    if (said.length) { setTimeout(() => { try { const u = new URL(location.href); for (const p of said) u.searchParams.delete(p); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
     if (!on) {
       delete document.documentElement.dataset.demo;
       clearExampleCopies();
       // Sent home because the sample was closed in another tab: said here, plainly (round sixty-one; the records review, 13).
       try { if (sessionStorage.getItem(CLOSED_NOTE) === '1') { sessionStorage.removeItem(CLOSED_NOTE); toast.show('The example collection was closed in another tab. This is your own collection.', 8000); } } catch { /* nothing to say */ }
       // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
-      // The address a Leave opened this page at says so (`?left=` and Leave's token, read by app.html's first script); taken off it here,
-      // so a reload or a link copied from it is an ordinary visit (round sixty-two, the first deploy).
-      if (page.url.searchParams.has(LEFT_PARAM)) { setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
       void finishLeaving().then((left) => {
         if (left === 'blocked') toast.show('The example collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
         else if (left === 'failed') toast.show('The example collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);

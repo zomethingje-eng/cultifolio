@@ -1,0 +1,20 @@
+# node 22, round seventy-seven: scripts/dev/scale/cold-routes.mjs (a fresh process, one request through the Worker's own route code, a bucket over the corpus on disk; median of three). before = r77base (round seventy-six: the search reads the index), after = this round's final code (the key files hold the ranked fields only; entries and photograph counts in blocks), measured again 2026-10-19; the same corpus, built by this round's --index (8,947: round seventy-two's copy; 50,000: synth-index.ts and synth-corpus.ts from it). heapMB: held after a full GC beyond what the modules hold; readMB and reads: what the request read from the bucket, the load's included.
+{"label":"before-8947","what":"search","arg":"aloe","ok":true,"ms":218,"heapMB":12.1,"readMB":5.6,"reads":4,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"cape","ok":true,"ms":351,"heapMB":12.1,"readMB":5.7,"reads":4,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"aloe verra","ok":true,"ms":266,"heapMB":12.7,"readMB":6,"reads":10,"indexHeld":false}
+{"label":"before-8947","what":"search","arg":"cape provinces","ok":true,"ms":307,"heapMB":12.2,"readMB":5.7,"reads":5,"indexHeld":false}
+{"label":"before-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":76,"heapMB":5.5,"readMB":1,"reads":13,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"aloe","ok":true,"ms":87,"heapMB":3.6,"readMB":0.4,"reads":34,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"cape","ok":true,"ms":72,"heapMB":3.8,"readMB":0.5,"reads":48,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"aloe verra","ok":true,"ms":140,"heapMB":3.8,"readMB":0.6,"reads":33,"indexHeld":false}
+{"label":"after-8947","what":"search","arg":"cape provinces","ok":true,"ms":60,"heapMB":2.8,"readMB":0.1,"reads":6,"indexHeld":false}
+{"label":"after-8947","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":77,"heapMB":5.5,"readMB":1,"reads":13,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"aloe","ok":true,"ms":929,"heapMB":53.8,"readMB":31.3,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"cape","ok":true,"ms":1281,"heapMB":53.9,"readMB":31.4,"reads":4,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"aloe verra","ok":true,"ms":1020,"heapMB":54.6,"readMB":31.8,"reads":10,"indexHeld":false}
+{"label":"before-50000","what":"search","arg":"cape provinces","ok":true,"ms":1190,"heapMB":54.1,"readMB":31.5,"reads":5,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe","ok":true,"ms":134,"heapMB":4.3,"readMB":0.8,"reads":36,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"cape","ok":true,"ms":94,"heapMB":4.8,"readMB":1,"reads":66,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"aloe verra","ok":true,"ms":322,"heapMB":5.3,"readMB":1.4,"reads":71,"indexHeld":false}
+{"label":"after-50000","what":"search","arg":"cape provinces","ok":true,"ms":76,"heapMB":3.2,"readMB":0.2,"reads":6,"indexHeld":false}
+{"label":"after-50000","what":"species","arg":"copiapoa-cinerea","ok":true,"ms":92,"heapMB":6.9,"readMB":1.5,"reads":13,"indexHeld":false}

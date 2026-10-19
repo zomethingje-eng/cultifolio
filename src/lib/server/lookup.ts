@@ -11,7 +11,7 @@ import { error } from '@sveltejs/kit';
 import { product, fromFiles, UNREADABLE, type Loaded, type Platform, type Fetch, type IndexEntry } from './dossiers';
 import { slugify } from '$core/names';
 import { nameFromSlug } from './synonyms';
-import { indexMaps, sharedOrder, synonymKey, keyName, namesFileOf, namesFilesFor, rowFileOf, rowFilesFor, generaOfIndex, type Ref, type Card, type NameRecord, type RowRecord } from '$dossier/lookups';
+import { indexMaps, sharedOrder, synonymKey, keyName, keyFileOf, cardFilesFor, olderFilesFor, rowFileOf, rowFilesFor, generaOfIndex, type Ref, type Card, type CardFile, type NameRecord, type RowRecord } from '$dossier/lookups';
 import { catalogueItems, rowGroupsOf, type By } from '$dossier/catalogue';
 
 /** An older name's answer: the one species that holds it, or the two or more that do, in the order the 404 names them. */
@@ -102,14 +102,20 @@ const generaRead = new WeakMap<object, ReadonlyMap<string, number>>();
 /** The lookups through the files a manifest names (round seventy-six). */
 export function filesLookup(c: Loaded, platform: Platform, fetch: Fetch): Lookup {
   const m = c.manifest!;
-  const files = namesFilesFor(m.species);
+  const cards = cardFilesFor(m.species), older = olderFilesFor(m.species);
+  // A page's address and a species' card from the small card files; a name that is no page's address from the files of names (round seventy-seven).
+  const card = async (k: string): Promise<number | Card | undefined> => {
+    const f = await file<CardFile>(c, platform, fetch, `cards/${keyFileOf(k, cards)}.json`);
+    return Object.hasOwn(f, k) ? f[k] : undefined;
+  };
   const record = async (k: string): Promise<NameRecord | undefined> => {
-    const f = await file<Record<string, NameRecord>>(c, platform, fetch, `names/${namesFileOf(k, files)}.json`);
+    const f = await file<Record<string, NameRecord>>(c, platform, fetch, `older/${keyFileOf(k, older)}.json`);
     return Object.hasOwn(f, k) && f[k] && typeof f[k] === 'object' ? f[k] : undefined;
   };
+  const cardOf = async (key: number): Promise<Card | null> => { const k = await card(keyName(key)); return k && typeof k === 'object' && k.key === key && typeof k.slug === 'string' ? k : null; };
   return {
-    slug: async (s) => { const r = await record(s); return Number.isInteger(r?.s) ? r!.s! : null; },
-    species: async (key) => { const k = (await record(keyName(key)))?.k; return k && k.key === key && typeof k.slug === 'string' ? k : null; },
+    slug: async (s) => { if (s.startsWith('#')) return null; const r = await card(s); return Number.isInteger(r) ? (r as number) : null; },
+    species: cardOf,
     accepted: async (k) => { const n = (await record(k))?.n; return isRef(n) ? n : null; },
     older: async (k) => {
       const o = (await record(k))?.o;
@@ -128,7 +134,7 @@ export function filesLookup(c: Loaded, platform: Platform, fetch: Fetch): Lookup
       return r && Array.isArray(r.items) && Array.isArray(r.at) ? r : undefined;
     },
     elsewhere: async (key, names) => {
-      const x = (await record(keyName(key)))?.k?.x ?? {};
+      const x = (await cardOf(key))?.x ?? {};
       const out = new Map<string, Ref>();
       for (const n of names) if (Object.hasOwn(x, n) && isRef(x[n]) && x[n][0] !== key) out.set(n, x[n]);
       return out;

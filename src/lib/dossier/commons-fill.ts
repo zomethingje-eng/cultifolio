@@ -10,7 +10,7 @@ import type { Dossier, Photo } from './schema';
 import type { DossierStore } from './corpus-run';
 import { commonsPhotos, commonsCategories, strikesOut, inatSource } from './sources/commons';
 import { mwGet, mwError } from './sources/wikimedia';
-import { commonsKind, slipsToAsk, askSlip, sourceKind, kindNamesOf, sisterEpithetTitle, describesSpecies, type HeldNames, type KindNames } from './photo-kind';
+import { commonsKind, slipsToAsk, askSlip, sourceKind, kindNamesOf, sisterEpithetTitle, describesSpecies, SOURCE_KIND_RULE, type HeldNames, type KindNames } from './photo-kind';
 import { commonsAuthor, commonsCredit, splitCommonsCredit } from './photo-credit';
 
 export type CommonsFill = { added: number } | { none: true } | { failed: string };
@@ -120,10 +120,12 @@ const descriptionToRead = (p: Photo, names: KindNames) => p.src === 'commons' &&
 /**
  * Round seventy-two (C8): a file left out only by what its description said is read again, so the narrower museum rule
  * (`sourceKind`) reaches the files read before it: Agave titanota's "specimen in the Food and Agriculture Museum". A file
- * its title or categories leave out anyway is not asked. A file still read as a sheet is asked again by every fill: a
- * handful, one request.
+ * its title or categories leave out anyway is not asked. Round seventy-seven: only a file read under an older version of
+ * the rule (`kindRule` below `SOURCE_KIND_RULE`, or none) is asked. A file the rule still read as a sheet was asked again
+ * by every fill (Boswellia papyrifera's, one request a run; round seventy-three's review, section 5), although its answer
+ * could not change until the rule did.
  */
-const kindToReadAgain = (p: Photo, names: KindNames) => p.src === 'commons' && /by its description/.test(p.kind ?? '') && !commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips });
+const kindToReadAgain = (p: Photo, names: KindNames) => p.src === 'commons' && /by its description/.test(p.kind ?? '') && (p.kindRule ?? 0) < SOURCE_KIND_RULE && !commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips });
 const namesOf = (d: Stored, held?: HeldNames | null): KindNames => kindNamesOf(d, held)!;
 
 export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, held?: HeldNames | null, progress?: (c: KindCounts) => void): Promise<KindCounts> {
@@ -184,6 +186,7 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       if (a.inat) { if (p.inat !== a.inat) c.copies++; p.inat = a.inat; }
       if (a.kind) p.kind = a.kind;
       else delete p.kind;
+      p.kindRule = SOURCE_KIND_RULE;
       if (descriptionToRead(p, names)) p.described = describesSpecies(a.description, names);
       // The credit read again by today's rule (a derivative work's two authors; S-C11), only where it names someone.
       const parts = splitCommonsCredit(p.attribution);

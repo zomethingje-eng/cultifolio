@@ -17,8 +17,8 @@ const mk = (names: string[], keys: Record<string, number> = {}) => names.map((na
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 const hash = (s: string) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return `"${h.toString(16)}"`; };
 function products(idx: object[]) {
-  const { manifest, files } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
-  return { manifest, blobs: new Map([...files].map(([name, body]) => [productPath(manifest.files[name]), body])) };
+  const { manifest, files, stored } = buildProducts(idx as never, JSON.stringify(idx), () => new Map());
+  return { manifest, blobs: new Map<string, string>([...[...files].map(([name, body]) => [productPath(manifest.files[name]), body] as [string, string]), ...[...stored].map(([h, b]) => [productPath(h), b] as [string, string])]) };
 }
 /** A bucket whose etag is the content's own hash, as R2's is: the manifest-refused test's etag (path and length) let two different manifests of one length look the same. */
 function bucket(m: Map<string, string>) {
