@@ -51,6 +51,25 @@ function fail(what, r) {
   if (r) console.error(`  status ${r.status}; cache-control "${r.h('cache-control')}"; cf-cache-status "${r.h('cf-cache-status')}"; ${r.text.slice(0, 200).replace(/\s+/g, ' ')}`);
   process.exit(1);
 }
+// The data centre that answered: the three letters at the end of Cloudflare's ray id ('' from a local `wrangler dev`).
+const colo = (r) => /-([A-Z]{3})$/.exec(r.h('cf-ray'))?.[1] ?? '';
+/**
+ * A page asked twice, the second held: the Worker's cache is each data centre's own, and two requests a moment apart can
+ * be answered by two (the owner's PC, 2026-10-19: Ashburn, then Newark, by turns), so a second request answered by
+ * another centre than the first, or before the first one's copy was stored, is asked again, up to five pairs a second
+ * apart. A pair whose second is held is returned at once; otherwise the last pair, which fails the check (round 78).
+ */
+async function heldPair(path, init) {
+  let a, b;
+  for (let t = 0; t < 5; t++) {
+    if (t) await new Promise((r) => setTimeout(r, 1000));
+    a = await get(path, init);
+    b = await get(path, init);
+    if (b.h('x-cultifolio-page') === 'held') return { a, b, tries: t + 1 };
+  }
+  return { a, b, tries: 5 };
+}
+const centres = (a, b) => (colo(a) || colo(b) ? ` (answered by ${colo(a) || '?'}, then ${colo(b) || '?'}, after five pairs)` : ' (after five pairs)');
 function ok(what) {
   n++;
   console.log(`  ok  ${what}`);
@@ -160,7 +179,8 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   }
   if (expectedBuild && buildOf(b) !== expectedBuild) fail(`${path}: the page names build ${buildOf(b) || '?'}, not the build just deployed (${expectedBuild}); the deploy did not take, or ninety seconds were not enough for the rollover`, b);
   if (!['rendered', 'held'].includes(a.h('x-cultifolio-page'))) fail(`${path}: the first request says neither rendered nor held (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
-  if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
+  if (b.h('x-cultifolio-page') !== 'held') ({ a, b } = await heldPair(path, { headers: { accept: 'text/html' } }));
+  if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")${centres(a, b)}`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
   if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one (builds ${buildOf(a) || '?'} and ${buildOf(b) || '?'})`, b);
   // a client-side navigation's data request under the same URL must get JSON, never the held HTML (round forty-six, 3)
@@ -202,8 +222,10 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   if (/cloudflareinsights/.test(r.text)) fail('the front page carries the Cloudflare Web Analytics beacon; turn off automatic setup in the dashboard (docs/DEPLOY.md, section 2)', r);
   if (!/<meta name="referrer" content="no-referrer"/.test(r.text)) fail('the front page has no referrer meta', r);
   // and it is held by the Worker like a species page (round forty-six, 2): the second request within a second says so
-  const r2 = await get('/', { headers: { accept: 'text/html' } });
-  if (r2.h('x-cultifolio-page') !== 'held') fail(`/: the second request was not answered from the Worker's cache (x-cultifolio-page "${r2.h('x-cultifolio-page')}")`, r2);
+  let r2 = await get('/', { headers: { accept: 'text/html' } });
+  let first = r;
+  if (r2.h('x-cultifolio-page') !== 'held') ({ a: first, b: r2 } = await heldPair('/', { headers: { accept: 'text/html' } }));
+  if (r2.h('x-cultifolio-page') !== 'held') fail(`/: the second request was not answered from the Worker's cache (x-cultifolio-page "${r2.h('x-cultifolio-page')}")${centres(first, r2)}`, r2);
   ok('/: no beacon, referrer meta present, held for the next request');
 }
 
