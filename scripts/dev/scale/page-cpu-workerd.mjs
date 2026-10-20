@@ -6,8 +6,9 @@
 // page-cpu-agg.mjs sorts it). `heapMB` is V8's heap in use just after the answer (workerd's inspector does not collect
 // garbage on request). COLD=n starts a fresh copy for each of the first n pages instead, to measure a first request.
 //
-//   node scripts/dev/scale/page-cpu-workerd.mjs <built project> <dir holding s/v2> <paths file> [out.jsonl]
+//   node scripts/dev/scale/page-cpu-workerd.mjs <built project> <dir holding s/v3> <paths file> [out.jsonl]
 // Env: PORT (default 4712), STATE (the local R2's folder; filled once, kept), PROF_US (sampling interval, default 200).
+// V (the corpus version, default 3), ONLY (a file of bucket keys to put instead, from r79-reads.mjs; round seventy-nine).
 import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -18,6 +19,10 @@ const PORT = Number(process.env.PORT ?? 4712), INSPECT = PORT + 5000;
 const state = resolve(process.env.STATE ?? `${corpus}/.wrangler-state`);
 const paths = readFileSync(list, 'utf8').split('\n').filter(Boolean);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Round seventy-nine: the corpus's version folder (`s/v3` since round seventy-eight; V=2 for an older corpus), and ONLY, a
+// file of bucket keys (r79-reads.mjs writes one) to put instead of the whole corpus, so a 2 GB corpus is not copied whole.
+const V = `s/v${process.env.V ?? 3}`;
+const only = process.env.ONLY ? readFileSync(process.env.ONLY, 'utf8').split('\n').filter(Boolean) : null;
 const out = (x) => { const s = JSON.stringify(x); if (outFile) appendFileSync(outFile, s + '\n'); else console.log(s); };
 
 async function seed() {
@@ -26,13 +31,22 @@ async function seed() {
   const { Miniflare, convertV4MiniflareOptions } = m.Miniflare ? m : m.default;
   const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default { fetch() { return new Response(null) } }', resourcePersistencePath: join(state, 'v3'), r2Buckets: { BUCKET: 'cultifolio' } }));
   const bucket = await mf.getR2Bucket('BUCKET');
-  const dir = join(corpus, 's/v2');
+  const dir = join(corpus, V);
+  if (only) {
+    for (const k of only) { await bucket.put(k, readFileSync(join(corpus, k))); }
+    if (!only.includes(`${V}/manifest.json`)) await bucket.put(`${V}/manifest.json`, readFileSync(join(dir, 'manifest.json')));
+    await mf.dispose();
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'seeded'), `${only.length} objects (ONLY)\n`);
+    console.error(`seeded ${only.length} objects into ${state}`);
+    return;
+  }
   let n = 0;
-  for (const f of readdirSync(join(dir, 'p'))) { await bucket.put(`s/v2/p/${f}`, readFileSync(join(dir, 'p', f))); n++; }
-  for (const f of readdirSync(join(dir, 'g'))) { await bucket.put(`s/v2/g/${f}`, readFileSync(join(dir, 'g', f))); n++; }
+  for (const f of readdirSync(join(dir, 'p'))) { await bucket.put(`${V}/p/${f}`, readFileSync(join(dir, 'p', f))); n++; }
+  for (const f of readdirSync(join(dir, 'g'))) { await bucket.put(`${V}/g/${f}`, readFileSync(join(dir, 'g', f))); n++; }
   // Every dossier: a page's own, and any the shared-name 404 reads.
-  for (const f of readdirSync(dir)) if (/^\d+\.json$/.test(f)) { await bucket.put(`s/v2/${f}`, readFileSync(join(dir, f))); n++; }
-  await bucket.put('s/v2/manifest.json', readFileSync(join(dir, 'manifest.json')));
+  for (const f of readdirSync(dir)) if (/^(?:[kg])?\d+\.json$/.test(f)) { await bucket.put(`${V}/${f}`, readFileSync(join(dir, f))); n++; }
+  await bucket.put(`${V}/manifest.json`, readFileSync(join(dir, 'manifest.json')));
   await mf.dispose();
   mkdirSync(state, { recursive: true });
   writeFileSync(join(state, 'seeded'), `${n + 1} objects\n`);

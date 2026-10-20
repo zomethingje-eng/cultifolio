@@ -1,0 +1,9 @@
+Round seventy-nine, agent D: the reader's rate for each shape, through occHeader, parseOccRow and OccIndex.add (a cap of
+2,000), 300,000 rows each, on this shared two-core machine (2026-10-20):
+
+  dwca: 230 columns (GBIF's interpreted occurrence.txt), 300000 rows in 34.88 s, 8600 rows a second, a line of 567 bytes
+  sql: 15 columns (SQL_SELECT), 300000 rows in 6.15 s, 48816 rows a second, a line of 128 bytes
+
+The owner's PC read round seventy-two's DWCA (27.9 M rows) in about 11 minutes, about 42,000 rows a second. At the same
+ratio (5.7) the PC reads the SQL download's 142.3 M rows in about ten minutes and the DWCA's in about an hour (estimates;
+unzipping is not counted apart).

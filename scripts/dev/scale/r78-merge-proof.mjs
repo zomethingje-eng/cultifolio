@@ -19,7 +19,8 @@ import { pathToFileURL } from 'node:url';
 const ROOT = resolve(import.meta.dirname, '../../..');
 const [src, work] = process.argv.slice(2).map((p) => resolve(p));
 const parse = (t) => t.split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean).map((l) => l.split('\t')).map(([a, b, ...n]) => ({ from: Number(a), into: Number(b), name: n.join(' ') }));
-const merges = [...parse(readFileSync(join(ROOT, 'scripts/merged-pages.txt'), 'utf8')), ...parse(readFileSync(join(ROOT, 'scripts/merged-pages-79.txt'), 'utf8'))];
+// Round seventy-nine moved the seven into scripts/merged-pages.txt, which now holds all nine.
+const merges = parse(readFileSync(join(ROOT, 'scripts/merged-pages.txt'), 'utf8'));
 rmSync(work, { recursive: true, force: true });
 const v2 = join(work, 'static/s/v2'), v3 = join(work, 'static/s/v3');
 mkdirSync(join(v2, 'g'), { recursive: true });

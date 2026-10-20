@@ -1,0 +1,266 @@
+{
+ "asked": "2026-10-20, https://api.inaturalist.org/v1/observations?uuid=<the seven>&per_page=10",
+ "total_results": 7,
+ "results": [
+  {
+   "id": 1829613,
+   "uuid": "8882e7cc-9990-4924-8c37-09df81ed8f5c",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2015-08-01",
+   "place_guess": "Los Angeles County, US-CA, US",
+   "taxon": {
+    "id": 80715,
+    "name": "Ericameria palmeri pachylepis",
+    "rank": "variety"
+   },
+   "user": {
+    "id": 3494,
+    "login": "damontighe",
+    "name": "Damon Tighe"
+   },
+   "photos": [
+    {
+     "id": 2221115,
+     "license_code": "cc-by-nc",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/2221115/square.jpg",
+     "attribution": "(c) Damon Tighe, some rights reserved (CC BY-NC)",
+     "original_dimensions": {
+      "width": 852,
+      "height": 1136
+     }
+    },
+    {
+     "id": 2221114,
+     "license_code": "cc-by-nc",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/2221114/square.jpg",
+     "attribution": "(c) Damon Tighe, some rights reserved (CC BY-NC)",
+     "original_dimensions": {
+      "width": 787,
+      "height": 1136
+     }
+    },
+    {
+     "id": 2221116,
+     "license_code": "cc-by-nc",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/2221116/square.jpg",
+     "attribution": "(c) Damon Tighe, some rights reserved (CC BY-NC)",
+     "original_dimensions": {
+      "width": 852,
+      "height": 1136
+     }
+    }
+   ]
+  },
+  {
+   "id": 1625716,
+   "uuid": "253ea2cb-d1fb-4763-a0cb-d2cce7d5ced9",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2015-06-12",
+   "place_guess": "Orange, California, United States",
+   "taxon": {
+    "id": 76888,
+    "name": "Ericameria palmeri",
+    "rank": "species"
+   },
+   "user": {
+    "id": 52839,
+    "login": "glmory",
+    "name": "Jesse Rorabaugh"
+   },
+   "photos": [
+    {
+     "id": 1994685,
+     "license_code": "cc-by",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1994685/square.JPG",
+     "attribution": "(c) Jesse Rorabaugh, some rights reserved (CC BY)",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1536
+     }
+    }
+   ]
+  },
+  {
+   "id": 1625698,
+   "uuid": "677cac39-4c97-4d74-a99b-201f22455bde",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2015-06-12",
+   "place_guess": "Orange, California, United States",
+   "taxon": {
+    "id": 76888,
+    "name": "Ericameria palmeri",
+    "rank": "species"
+   },
+   "user": {
+    "id": 52839,
+    "login": "glmory",
+    "name": "Jesse Rorabaugh"
+   },
+   "photos": [
+    {
+     "id": 1994662,
+     "license_code": "cc-by",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1994662/square.JPG",
+     "attribution": "(c) Jesse Rorabaugh, some rights reserved (CC BY)",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1536
+     }
+    },
+    {
+     "id": 1994665,
+     "license_code": "cc-by",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1994665/square.JPG",
+     "attribution": "(c) Jesse Rorabaugh, some rights reserved (CC BY)",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1536
+     }
+    }
+   ]
+  },
+  {
+   "id": 717623,
+   "uuid": "db52b901-b472-46af-aa6a-003b5d7b8d2f",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2014-06-04",
+   "place_guess": "Thunder Bay, ON ",
+   "taxon": {
+    "id": 55826,
+    "name": "Myosotis sylvatica",
+    "rank": "species"
+   },
+   "user": {
+    "id": 40401,
+    "login": "mackplichta",
+    "name": "Mackenzie Plichta"
+   },
+   "photos": [
+    {
+     "id": 902131,
+     "license_code": "cc-by-sa",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/902131/square.jpg",
+     "attribution": "(c) Mackenzie Plichta, some rights reserved (CC BY-SA)",
+     "original_dimensions": {
+      "width": 1158,
+      "height": 2048
+     }
+    }
+   ]
+  },
+  {
+   "id": 637075,
+   "uuid": "b9d5e36d-49a5-4f63-9448-96219d9a2cb7",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2014-04-21",
+   "place_guess": "Ctl IV Rd, West Hills, California, US",
+   "taxon": {
+    "id": 80715,
+    "name": "Ericameria palmeri pachylepis",
+    "rank": "variety"
+   },
+   "user": {
+    "id": 3090,
+    "login": "zabbey",
+    "name": "Zack Abbey"
+   },
+   "photos": [
+    {
+     "id": 801115,
+     "license_code": "cc-by",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/801115/square.jpg",
+     "attribution": "(c) Zack Abbey, some rights reserved (CC BY)",
+     "original_dimensions": {
+      "width": 960,
+      "height": 720
+     }
+    },
+    {
+     "id": 801117,
+     "license_code": "cc-by",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/801117/square.jpg",
+     "attribution": "(c) Zack Abbey, some rights reserved (CC BY)",
+     "original_dimensions": {
+      "width": 960,
+      "height": 720
+     }
+    }
+   ]
+  },
+  {
+   "id": 411156,
+   "uuid": "d27fd2f3-60c5-4201-8640-2f87f649efe1",
+   "quality_grade": "casual",
+   "captive": true,
+   "observed_on": "2013-09-28",
+   "place_guess": "Christchurch, Canterbury, New Zealand",
+   "taxon": {
+    "id": 55826,
+    "name": "Myosotis sylvatica",
+    "rank": "species"
+   },
+   "user": {
+    "id": 15795,
+    "login": "scotty",
+    "name": "Scott Mills"
+   },
+   "photos": [
+    {
+     "id": 517458,
+     "license_code": "cc-by-sa",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/517458/square.jpg",
+     "attribution": "(c) dr.scott.mills, some rights reserved (CC BY-SA)",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1364
+     }
+    }
+   ]
+  },
+  {
+   "id": 98729,
+   "uuid": "f97daa92-a3c8-4233-b0b4-e046770f9e55",
+   "quality_grade": "research",
+   "captive": false,
+   "observed_on": "2012-07-04",
+   "place_guess": null,
+   "taxon": {
+    "id": 55826,
+    "name": "Myosotis sylvatica",
+    "rank": "species"
+   },
+   "user": {
+    "id": 477,
+    "login": "loarie",
+    "name": "Scott Loarie"
+   },
+   "photos": [
+    {
+     "id": 143167,
+     "license_code": "cc0",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/143167/square.jpg",
+     "attribution": "no rights reserved",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1365
+     }
+    },
+    {
+     "id": 143168,
+     "license_code": "cc0",
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/143168/square.jpg",
+     "attribution": "no rights reserved",
+     "original_dimensions": {
+      "width": 2048,
+      "height": 1365
+     }
+    }
+   ]
+  }
+ ]
+}

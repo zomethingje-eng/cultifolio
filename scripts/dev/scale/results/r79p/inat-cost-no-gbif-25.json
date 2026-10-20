@@ -1,0 +1,162 @@
+{
+ "asked": "2026-10-20T01:28:40.233Z",
+ "species": 25,
+ "requests": 45,
+ "perSpecies": 1.8,
+ "byPath": {
+  "/v1/taxa": 25,
+  "/v1/observations": 20
+ },
+ "rows": [
+  {
+   "name": "Adenium boehmianum",
+   "taxon": "338691 Adenium boehmianum",
+   "cultivated": "ok 2",
+   "requests": 2
+  },
+  {
+   "name": "Drosera ascendens",
+   "taxon": "148375 Drosera ascendens",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Trollius albiflorus",
+   "taxon": "1563130 Trollius albiflorus",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Adonis apennina",
+   "taxon": "1291358 Adonis apennina",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Argythamnia mercurialina",
+   "taxon": "158645 Argythamnia mercurialina",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Crassula turpiniae",
+   "taxon": "1647920 Crassula turpiniae",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Drosera actinioides",
+   "taxon": "1650068 Drosera actinioides",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Cylindropuntia bigelovii",
+   "taxon": "49351 Cylindropuntia bigelovii",
+   "cultivated": "ok 21",
+   "requests": 2
+  },
+  {
+   "name": "Aeschynanthus moningerae",
+   "taxon": "1015552 Aeschynanthus moningerae",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Aristolochia faviogonzalezii",
+   "taxon": "994037 Aristolochia faviogonzalezii",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Daphne gemmata",
+   "taxon": "841364 Daphne gemmata",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Blechnum keysseri",
+   "taxon": "1045191 Austroblechnum keysseri",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Cyphostemma degraeri",
+   "taxon": "none",
+   "cultivated": null,
+   "requests": 1
+  },
+  {
+   "name": "Cyphostemma villosum",
+   "taxon": "1508235 Cyphostemma villosum",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Agave gypsicola",
+   "taxon": "867263 Agave gypsicola",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Crateva kirkii",
+   "taxon": "none",
+   "cultivated": null,
+   "requests": 1
+  },
+  {
+   "name": "Dorstenia tessmannii",
+   "taxon": "934906 Dorstenia tessmannii",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Agrimonia agrimonoides",
+   "taxon": "1578025 Agrimonia agrimonoides",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Drimia minor",
+   "taxon": "1641951 Drimia minor",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Daphne modesta",
+   "taxon": "841394 Daphne modesta",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Dracocephalum peltatum",
+   "taxon": "none",
+   "cultivated": null,
+   "requests": 1
+  },
+  {
+   "name": "Achyranthes sandwicensis",
+   "taxon": "none",
+   "cultivated": null,
+   "requests": 1
+  },
+  {
+   "name": "Dorstenia paucibracteata",
+   "taxon": "934929 Dorstenia paucibracteata",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Agave servandoana",
+   "taxon": "1432326 Agave servandoana",
+   "cultivated": "none",
+   "requests": 2
+  },
+  {
+   "name": "Hemionitis standleyi",
+   "taxon": "none",
+   "cultivated": null,
+   "requests": 1
+  }
+ ]
+}

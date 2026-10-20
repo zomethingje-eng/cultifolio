@@ -35,6 +35,8 @@ export function vernacularMark(u: { status: string; at: string; detail?: string 
 export interface NamesRun {
   /** Dossiers whose names were fetched and written this run. */
   done: number;
+  /** Pages without a GBIF key (round seventy-nine), passed by: GBIF's common names are not asked for them, and their record says why. Absent when none. */
+  noGbif?: number;
   /** Of those, the ones whose list was longer than the pages asked (recorded "truncated" in the dossier). */
   truncated: number;
   /** Dossiers this step had already done (skipped). */
@@ -48,7 +50,7 @@ export interface NamesRun {
 }
 
 /** `ids.gbif` is the GBIF key the names are asked by (round seventy-eight: `key` is the page's id, `k…` or `g…`). */
-type Stored = { key: string; ids: { gbif: number }; name: { vernacular: unknown[] }; upstream?: Record<string, { status: string; at: string; detail?: string }> };
+type Stored = { key: string; ids: { gbif?: number }; name: { vernacular: unknown[] }; upstream?: Record<string, { status: string; at: string; detail?: string }> };
 
 export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: () => Date; progress?: (done: number, of: number) => void } = {}): Promise<NamesRun> {
   const now = opts.now ?? (() => new Date());
@@ -63,6 +65,7 @@ export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: ()
       continue; // a half-written file from a killed build: rebuilt when its name comes round
     }
     if (d.upstream?.['gbif.vernacular']?.detail?.startsWith(NAMES_MARK)) { run.kept++; continue; }
+    if (d.ids?.gbif == null) { run.noGbif = (run.noGbif ?? 0) + 1; continue; }
     const r = await vernacular(f, d.ids.gbif);
     if (r.status === 'refused') {
       run.refused = r.detail;

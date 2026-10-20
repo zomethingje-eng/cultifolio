@@ -1,34 +1,74 @@
-# A full build from the species list (round seventy-eight, agents B, S and I, put together by the merge: ready for round
-# seventy-nine; not run in round seventy-eight). Run with: node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt
-# docs/DEPLOY.md section 5, "A full build from the species list", says what each step asks of whom, how long it takes, and
-# what runs over several days. The list is scripts/species-list.txt (agent S: 48,368 species); each species is built by
-# the GBIF key the list gives it, and `--index` names each page by Kew's plant_name_id (agent I). A species the list gives
-# no GBIF key (2,327, the lines whose last column is "-") is built only where a page on disk has its id, never by its name.
-# Before the first run, round seventy-nine moves the seven lines of scripts/merged-pages-79.txt into
-# scripts/merged-pages.txt (the owner's seven merges), which the first and the last dossier steps below then apply.
+# The full build from the species list (round seventy-nine): 48,368 species, 46,041 with a GBIF key. Run with:
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt
+# and at each review stop the same with --go-on (each stop prints it; given no --plan, a run carries on with this plan while
+# it is unfinished).
+# docs/DEPLOY.md, "Round seventy-nine: the full build of the species list", walks every step in order, with its commands,
+# what good output looks like, its time and its disk. Every time below is an estimate from a measured rate (each says
+# whose), not a measure at this size: the owner's PC measures each. Each species is built by the GBIF key the list gives
+# it, and `--index` names each page by Kew's plant_name_id. A species the list gives no GBIF key (2,327) is built in the
+# same build step from Kew's files and, at the API fill, iNaturalist (agent K's route), never matched by its name: its GBIF
+# records only under the keys Kew's synonymy gives it (below), else "not checked".
 #
-# What the build asks, a species at a time, at about 1.4 s a species (about 19 hours at 48,368): GBIF's species record,
-# synonyms and common names (three requests at 0.25 s); Commons for a page with fewer than twelve photographs. In
-# batches, ahead of each 500 species: Wikidata's items by GBIF key (one query a 200 species, one read a 50 items) and
-# Wikipedia's leads (one read a 20 titles). From files: Kew's range and Kew's names (bulk/wcvp_*.csv), the occurrences
-# and GBIF's photographs (bulk/occurrence.zip), the climate (climate/). Nothing of OpenAlex (literature is off) and
-# nothing of iNaturalist (--skip inat: its photographs are the fill below, over several days).
+# BEFORE THIS PLAN (DEPLOY.md gives each; none is a builder step):
+#   0. This round's Worker deployed, on the corpus live now (round seventy-eight's, which it serves as round seventy-eight's
+#      Worker does): node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs && npm run deploy. Any day
+#      before the upload; the upload below refuses to run until the live Worker says it reads a page without a GBIF key.
+#   1. npm run bulk -- gbif-count scripts/species-list.txt      GBIF's counts, no account needed: about 45 minutes
+#   2. GBIF's records, by either route, into bulk\ (each waits for GBIF, then fetches):
+#        SQL:  npm run bulk -- gbif-sql scripts/species-list.txt --wait      about 4.8 GB (an estimate)
+#              npm run bulk -- gbif-media scripts/species-list.txt --wait    the other datasets' photographed records, about 1.5 GB
+#        DWCA: npm run bulk -- gbif scripts/species-list.txt --wait          about 65 GB (142 M records at 456 bytes)
+#      Either way the build reads bulk\occurrence.zip (and media.zip beside an SQL download), and refuses a download
+#      asked for other species, round seventy-two's 12.7 GB one among them.
+#   3. iNaturalist's open data (agent P): its four files into bulk\inat-open (34.1 GB, about 45 minutes at 100 Mbit/s), then
+#        npx tsx scripts/inat-open-load.ts bulk\inat-open          one pass, no daily limit, under an hour: bulk\inat-wild.jsonl
+#   4. GBIF's backbone export bulk\backbone\simple.txt.gz (466 MB), if it is not there from round seventy-three.
+#
+# Every GBIF request above asks too for the 1,956 keys of scripts/extra-keys-kew.txt (the owner's decision on K's offer,
+# 2026-10-20): the keys of the names Kew's file holds as 1,415 of the 2,327 species without a GBIF key, by round
+# seventy-three's rule, never a name matched. The build reads their records into those pages, which keep no GBIF key.
+#
+# The seven merges of scripts/merged-pages.txt (the owner's of 2026-10-19, moved there in round seventy-nine) are read
+# by the extra keys' step and the build, and their pages leave at --prune-followed.
 backup
-# The other GBIF keys each page reads, the seven merged pages' among them (round seventy-three's rule; an owner's merge is
-# read whatever its type, round seventy-eight): offline, about five minutes; writes scripts/extra-keys.txt.
+# The other GBIF keys each page reads, the seven merged pages' among them (an owner's merge is read whatever its type):
+# offline, about five minutes (round seventy-three's measure at 8,945 pages; more at 48,368, not measured), writes
+# scripts/extra-keys.txt.
 dossier --list-extra-keys --bulk bulk --backbone bulk/backbone/simple.txt.gz
+# The build. From files: the occurrences and GBIF's photographs (bulk\occurrence.zip, and media.zip beside an SQL
+# download), Kew's range and names (bulk\wcvp_*.csv), the climate (climate\), the institutions (scripts/institutions.txt,
+# agent Q's rule). Asked a species at a time: GBIF's species record, synonyms and common names (0.25 s each); Commons for
+# a page with fewer than twelve photographs; NASA POWER for a new climate cell (cached for ever). In batches: Wikidata and
+# Wikipedia. Nothing of OpenAlex, nothing of iNaturalist (--skip inat: the two fills below). About 1.4 s a species (agent
+# B's measure, round seventy-eight): about 19 hours; plus reading the download first (the DWCA about an hour, at round
+# seventy-two's 12.7 GB in 11 minutes; the SQL download about ten minutes); plus up to about 12 hours of POWER's new
+# cells (at most 0.47 a species at 2.1 s a cell, the scaling study's bound). Keep the PC awake; if it stops, the same
+# command goes on, and every species built is kept.
 dossier scripts/species-list.txt --grid climate --bulk bulk --skip inat
-review corpus-step.log: the build's last lines say "<n> built, … kept"; "Kew's names: … questions answered from Kew's file"; "batched: … Wikidata queries, … item reads and … Wikipedia reads held … answers, of which the build read …" (about one held answer read for each built species and question, a few more where a species asks twice); drops.txt, if there, lists what pages built before lost.
-# The merged pages' dossiers, once the pages they joined record their keys (round seventy-three): it says "7 dossiers of
-# pages merged into another deleted".
+review corpus-step.log, the build's lines: "GBIF occurrences from bulk/occurrence.zip …" naming the download (an SQL download's <key>.csv, or occurrence.txt) and "… rows → … taxa"; the photographs' line ("GBIF photographs from multimedia.txt", or the images' download media.zip beside an SQL download; if it says GBIF's photographs are not asked, run npm run dossier -- --fill gbif --bulk bulk before going on); "a species list of 48368 species: 46041 built by their GBIF key, 2327 with no GBIF key in the list … built from Kew's file" and "2327 species without a GBIF key read from Kew's file", then "1415 of them read GBIF's records under 1956 keys Kew's synonymy gives them (scripts/extra-keys-kew.txt); the other 912 say GBIF's records not checked"; "Kew's names: … answered from Kew's file"; "<n> built, … kept", n about 48,360; the paragraph "Institution rule (Wikidata's 6656 botanic gardens, herbaria and zoos, 1 km): …", records left out on about a third of the species with records (2,651 of 7,776 on round seventy-seven's corpus), its list of species that lost their habitat climate read whole if it names more than a few dozen; drops.txt, if there, lists what pages built before lost.
+# The merged pages' dossiers, once the pages they joined record their keys: "7 dossiers of pages merged into another
+# deleted", in seconds.
 dossier --prune-followed
-# iNaturalist's photographs, over several days: every run of a UTC day together asks iNaturalist at most 9,000 times
-# (cache/day-budget/), then stops (exit 3); `node scripts/corpus-step.mjs` the next day goes on from where it stopped.
-# About 2 requests a species (the wild set where GBIF's download gave fewer than six, and the cultivated set): at
-# 48,368 species about 97,000 requests, 11 days, about 3 hours a day. The cultivated set alone (`--fill inat
-# --cultivated`) is about 1.01 a species, 49,000 requests, 6 days: on 100 real species a third gained photographs (DEPLOY.md).
-dossier --fill inat
+# iNaturalist's wild photographs from its open data, every page, asking iNaturalist nothing (agent P's step): about 20
+# minutes (3.6 minutes for 8,947 pages here). A page without a GBIF key takes them once the API fill has checked its taxon.
+dossier --fill inat --wild --bulk bulk
+# The index, the products and the manifest, from every dossier on disk: 10 to 30 minutes (agent Z's measure at 48,368
+# dossiers, 17 minutes and 1.8 GB of heap on a shared two-core machine).
 dossier --index
-review corpus-step.log: the --index step's "index: <n> species" (about 48,400), its corpus line, and the review line's count of dossiers that differ from the backup.
+review corpus-step.log: the --index step's "index: <n> species" (about 48,360: the list's 48,368 less the seven merged pages and any the build could not build, each named in the build's lines), its "page ids: … by Kew's plant_name_id" line and its corpus line (about 64,000 search key files, about 2,100 MB); the review line's count of dossiers that differ from the backup (nearly every one: every page is built anew). Then node scripts/about-how-r79.mjs, and when it says the reference holds the list's species, node scripts/about-how-r79.mjs --write (deployed after the live check below). The upload that follows goes only once the live Worker is this round's (step 0 before this plan); it stops and says so otherwise.
+# The first upload: about 117,000 objects and 4.4 GB (agent Z's measure: 48,368 dossiers and about 67,500 product files):
+# half an hour to an hour (an estimate: 10 minutes of transfers at 32 at a time, 12 minutes of bytes at 50 Mbit/s, 30 at
+# 20). The manifest goes last, and the site serves the new corpus within a minute of it.
+upload
+live-check
+# iNaturalist's cultivated photographs, and a taxon for a page without one, from the API under the day's budget of 9,000
+# requests: about 49,000 to 54,000 requests (round seventy-eight's measure, 1.01 a species, and agent P's 1.8 for a page
+# without a GBIF key), about six days, about three hours a day. Each day's run stops at the budget (exit 3), and the same
+# command after midnight UTC goes on from where it stopped, unattended. The site serves the corpus uploaded above
+# meanwhile, each page's cultivated set "not checked" until its turn.
+dossier --fill inat --bulk bulk
+dossier --index
+review corpus-step.log: the fill's last line ("… filled. Every dossier has been asked for its photographs."), the --index step's "index: <n> species" (the same n as at the first upload), and the review line's count of dossiers that differ from the backup.
+# Only what changed since the first upload: a few minutes.
 upload
 live-check

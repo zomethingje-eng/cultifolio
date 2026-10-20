@@ -13,7 +13,7 @@ import { ownNames } from '$dossier/own-names';
 import { referenceOf } from '$dossier/reference';
 import type { JsonFetcher } from '$dossier/fetch';
 
-type D = { key: number; name: { scientific: string; family?: string }; ids: { inat?: number }; links: Record<string, string>; photos: unknown[]; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+type D = { key: number; name: { scientific: string; family?: string }; ids: { gbif?: number; inat?: number }; links: Record<string, string>; photos: unknown[]; upstream: Record<string, { status: string; at?: string; detail?: string }> };
 
 describe("F's need: a carried id checked and kept is recorded", () => {
   const f = (async (url: string) => {
@@ -21,7 +21,7 @@ describe("F's need: a carried id checked and kept is recorded", () => {
     return { status: 'refused', detail: `no fixture: ${url}` };
   }) as unknown as JsonFetcher;
   const run = async (row: D['upstream'][string]) => {
-    const docs: Record<string, D> = { '1.json': { key: 1, name: { scientific: 'Copiapoa cinerea', family: 'Cactaceae' }, ids: { inat: 135254 }, links: {}, photos: [], upstream: { 'inat.taxon': row } } };
+    const docs: Record<string, D> = { '1.json': { key: 1, name: { scientific: 'Copiapoa cinerea', family: 'Cactaceae' }, ids: { gbif: 1, inat: 135254 }, links: {}, photos: [], upstream: { 'inat.taxon': row } } }; // its GBIF key, as every keyed dossier holds it: since round seventy-nine a page without one is passed by (K)
     let writes = 0;
     const store = { files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { writes++; docs[k] = d as D; } };
     const c = await fillInatIds(store, f, () => '2026-10-15T00:00:00Z');

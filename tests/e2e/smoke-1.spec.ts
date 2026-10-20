@@ -14,7 +14,7 @@ test('front page renders server-side with the fixture corpus: closed genus rows,
   const res = await page.goto('/');
   expect(res?.status()).toBe(200);
   await expect(page.locator('h1')).toContainText('Cultifolio'); // a visitor's head names the site and says what it is (round fifty-eight)
-  await expect(page.locator('.grow')).toHaveCount(3); // Copiapoa, Refusia, Welwitschia: rows, not tiles
+  await expect(page.locator('.grow')).toHaveCount(4); // Copiapoa, Hesperocyparis (K's page without a GBIF key, round seventy-nine), Refusia, Welwitschia: rows, not tiles
   await expect(page.locator('a.tile')).toHaveCount(0);
   await expect(page.locator('.seg[aria-label="Group by"] .on')).toHaveText('Genus');
   await page.locator('.grow', { hasText: 'Copiapoa' }).click();
@@ -965,7 +965,7 @@ test('the front page carries closed rows, never fetches the whole index, and a s
   const index: string[] = [];
   const searches: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/index')) index.push(r.url()); if (r.url().includes('/api/search')) searches.push(r.url()); });
-  await expect(page.locator('.grow')).toHaveCount(3);
+  await expect(page.locator('.grow')).toHaveCount(4); // with K's Hesperocyparis (round seventy-nine)
   // opening a row is a navigation, not an index fetch
   await page.locator('.grow', { hasText: 'Welwitschia' }).click();
   await expect(page.locator('a.tile')).toHaveCount(1);
@@ -977,21 +977,21 @@ test('the front page carries closed rows, never fetches the whole index, and a s
   expect(index).toHaveLength(0);
   expect(searches.length).toBeGreaterThan(0);
   expect(searches.every((u) => /[?&]c=fixture(&|$)/.test(u))).toBe(true); // under the corpus id, like every reference request
-  await expect(page.locator('.seccount').last()).toContainText('1 match of 4');
+  await expect(page.locator('.seccount').last()).toContainText('1 match of 5');
   // a chip filters the grouped catalogue on the server, and "You grow" is not offered to someone who grows nothing
   await page.fill('.searchbar', '');
-  await expect(page.locator('.grow')).toHaveCount(3);
+  await expect(page.locator('.grow')).toHaveCount(4);
   await expect(page.locator('.chipbtn', { hasText: 'You grow' })).toHaveCount(0);
   await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
   await expect(page).toHaveURL(/chip=noclimate/);
   await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
-  await expect(page.locator('.grow')).toHaveCount(2); // only the genera with a species without climate (Refusia refused, Welwitschia pending)
-  await expect(page.locator('.seccount').last()).toContainText('2 genera');
+  await expect(page.locator('.grow')).toHaveCount(3); // only the genera with a species without climate (Hesperocyparis not checked, without a GBIF key since round seventy-nine; Refusia refused; Welwitschia pending)
+  await expect(page.locator('.seccount').last()).toContainText('3 genera');
   await page.locator('.grow', { hasText: 'Welwitschia' }).click();
   await expect(page).toHaveURL(/chip=noclimate.*open=welwitschia|open=welwitschia.*chip=noclimate/);
   await expect(page.locator('a.tile')).toHaveCount(1);
   await page.locator('.chipbtn:visible', { hasText: 'All' }).click(); // the desktop's "All"; the phone's own is not drawn here (round seventy-three)
-  await expect(page.locator('.grow')).toHaveCount(3);
+  await expect(page.locator('.grow')).toHaveCount(4);
   expect(index).toHaveLength(0);
 });
 

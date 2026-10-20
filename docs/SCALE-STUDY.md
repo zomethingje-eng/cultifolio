@@ -406,9 +406,11 @@ These are measured where a synthetic index can show them (`products-size.ts`, `d
 | Postings (today's) | 64, 3.7 MB | 512, 26.5 MB | 1,024, 55.3 MB | measured |
 | Catalogue | 9, 1.2 MB | genus file about 1.6 MB | genus file about 2.1 MB | 238 bytes a genus row × 6,906 or 8,779 genera |
 | Name shards (proposed) | 128, 2.9 MB | 512, 16.9 MB | 1,024, 34.4 MB | measured |
-| Search key files (proposed) | | about 50,000, 1.47 GB | 65,684, 2.11 GB | measured |
+| Search key files (proposed) | | about 50,000, 1.47 GB; measured at 48,368 in round seventy-nine: 63,791, 2.19 GB | 65,684, 2.11 GB | measured |
 | Display blocks (proposed) | 35, 1.3 MB | 196, 7.5 MB | 391, 15 MB | measured |
-| **Total in R2 (proposed)** | about 0.3 GB | **about 3.2 GB** | **about 5.6 GB** | sum |
+| **Total in R2 (proposed)** | about 0.3 GB | **about 3.2 GB**; measured at 48,368 in round seventy-nine: 4.45 GB in 117,232 objects | **about 5.6 GB** | sum |
+
+**Round seventy-nine's measure** (agent Z, `scripts/dev/scale/results/r79-index.txt`), on a corpus made to the list's size (48,368 dossiers from real ones of the same genus): the search key files were the estimate's one large miss, 63,791 files and 2,191 MB where this table said about 50,000 and 1.47 GB; the 100,000 column's figure is the synthetic index's, as the 50,000 one was. The dossiers were 1.9 GB (a mean of 40 KB, high, since the copies took well-recorded pages as templates), and the first upload is 4.45 GB in 117,232 objects. R2's free 10 GB still holds two corpora around a refresh once `s/v2/` is purged.
 
 The catalogue estimate takes today's genus rows (238 bytes) times the genera of the selected species (section 3.4's table); the synthetic index keeps today's genera, so it cannot show this.
 

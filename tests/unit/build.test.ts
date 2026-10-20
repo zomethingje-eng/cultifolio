@@ -231,14 +231,14 @@ describe('round five: an offline re-derivation carries the name block', () => {
     // The backbone is gone: every /species request is refused. Only the range and the records are served.
     const table = copiapoa();
     for (const k of Object.keys(table)) if (/\/species\/\d+$|\/species\/\d+\/(synonyms|vernacularNames)|species\/match/.test(k)) table[k] = { __status: 'refused', status: 'refused', detail: 'offline' };
-    const again = await buildDossier(prev.ids.gbif, { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif, name: prev.name, accepted: prev.upstream['gbif.accepted'], builtOn: prev.built } });
+    const again = await buildDossier(prev.ids.gbif!, { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif!, name: prev.name, accepted: prev.upstream['gbif.accepted'], builtOn: prev.built } });
     if (!again.ok) throw new Error(again.reason);
     expect(again.dossier.name).toEqual(prev.name);
     expect(again.dossier.upstream['gbif.species'].detail).toMatch(/carried from build of \d{4}-\d{2}-\d{2} \(offline re-derivation/);
     expect(again.dossier.upstream['gbif.synonyms'].detail).toMatch(/carried/);
     expect(again.dossier.occurrences.nOpenInRange).toBe(prev.occurrences.nOpenInRange);
     // By name, the carried block is ignored and the backbone is asked (and here refused).
-    const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif, name: prev.name } });
+    const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.ids.gbif!, name: prev.name } });
     expect(byName.ok).toBe(false);
   });
 });

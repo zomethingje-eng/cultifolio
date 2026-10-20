@@ -387,7 +387,8 @@ export function collectorSpecies(kew: Kew, genera: Set<string>): string[] {
 
 /** A page of the reference as it is: its GBIF key (today's page key), its name, author and family, and Kew's entry it cites. */
 export interface ReferencePage {
-  key: number;
+  /** Its GBIF key; null for a page without one (round seventy-nine), which Kew's id alone names. */
+  key: number | null;
   name: string;
   author: string;
   family: string;
@@ -437,12 +438,15 @@ export function select(
     // A species held by one page of the reference keeps that page's GBIF key, the key it is built from today; any other
     // species has GBIF's key only where Kew's name reaches one unambiguously.
     const held = reference.byKew.get(id);
-    const gbifKey = held?.length === 1 ? String(held[0].key) : keyOf(r);
+    // A page without a GBIF key (round seventy-nine) holds none to keep: the backbone's rule is read again, as for any other.
+    const gbifKey = held?.length === 1 && held[0].key != null ? String(held[0].key) : keyOf(r);
     out.push({ id, name: r.name, author: r.authors, family: r.family, inat: i, gbif: g, byCounts: i + g >= k, byGenus: genus.has(id), byReference: !!held, gbifKey });
   }
   // A page Kew's checklist cannot place stays as it is: by its own GBIF key, under its own name.
+  // A page without a GBIF key that reaches no species Kew accepts has neither id to be listed by: left out (Kew's file has
+  // moved under it; the build's id rule refuses it too).
   for (const p of reference.unmatched)
-    out.push({ id: null, name: p.name, author: p.author, family: p.family, inat: 0, gbif: 0, byCounts: false, byGenus: false, byReference: true, gbifKey: String(p.key) });
+    if (p.key != null) out.push({ id: null, name: p.name, author: p.author, family: p.family, inat: 0, gbif: 0, byCounts: false, byGenus: false, byReference: true, gbifKey: String(p.key) });
   return out.sort((a, b) => a.name.localeCompare(b.name) || Number(a.id ?? 0) - Number(b.id ?? 0) || Number(a.gbifKey ?? 0) - Number(b.gbifKey ?? 0));
 }
 
@@ -514,10 +518,12 @@ export function parseSpeciesList(text: string): ListEntry[] {
 
 /**
  * The build's jobs from the list (scripts/build-dossiers.ts): one a species, its name, its page id and the GBIF key it is
- * built by. The build is by GBIF key, and `--index` names each page by the id rule (round seventy-eight, the merge of S and
- * I), so a species is built by its GBIF key; one with none here has no `key`, and the build takes the GBIF key of the page
- * on disk under its `pageId`, if there is one, or leaves it out. It is never matched by its name (rule 3: the backbone gave
- * no one key for it).
+ * built by. The build is by GBIF key and `--index` names each page by the id rule (round seventy-eight, the merge of S and
+ * I), so a species with a GBIF key is built by it. One with none here (round seventy-nine, the owner's decision 1) is
+ * built by the GBIF key of the page on disk under its `pageId`, if there is one, else from Kew's file by its `kewId`
+ * (`src/lib/dossier/build-kew.ts`), its GBIF records read only under the keys Kew's synonymy gives it (round seventy-nine,
+ * `scripts/extra-keys-kew.txt`), else not checked. It is never matched by its name (rule 3: the backbone
+ * gave no one key for it).
  */
 export function jobsFromList(list: ListEntry[]): Array<{ name: string; key?: number; pageId: PageId; kewId: string | null; gbifKey: number | null }> {
   return list.map((e) => ({ name: e.name, key: e.gbifKey ?? undefined, pageId: e.pageId, kewId: e.kewId, gbifKey: e.gbifKey }));
@@ -528,6 +534,18 @@ export function jobsFromList(list: ListEntry[]): Array<{ name: string; key?: num
  * species' GBIF key from the list's last column, by its name as `keys.json` holds it, with no name matched; the species
  * the list gives no GBIF key are named, and left out (rule 3).
  */
+/**
+ * The download's keys for the list's species without a GBIF key (round seventy-nine; the owner's decision on K's offer):
+ * the keys Kew's synonymy gives them (`scripts/extra-keys-kew.txt`, parsed), for the species the list still has without
+ * one. Each is written into bulk/keys.json under "<page id> by <GBIF's name>", so the build finds it in the download.
+ */
+export function kewDownloadKeysOf(list: ListEntry[], kewKeys: ReadonlyArray<{ pageId?: string; key: number; label: string }>): { byName: Record<string, number>; keys: number[]; pages: number } {
+  const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
+  const taken = kewKeys.filter((k) => k.pageId && keyless.has(k.pageId));
+  const byName: Record<string, number> = {};
+  for (const k of taken) byName[`${k.pageId} by ${k.label}`] = k.key;
+  return { byName, keys: [...new Set(taken.map((k) => k.key))], pages: new Set(taken.map((k) => k.pageId)).size };
+}
 export function downloadKeysOf(list: ListEntry[]): { byName: Record<string, number>; keys: number[]; none: string[] } {
   const byName: Record<string, number> = {};
   for (const e of list) if (e.gbifKey != null) byName[e.name] = e.gbifKey;

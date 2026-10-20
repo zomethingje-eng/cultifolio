@@ -23,10 +23,11 @@
   import { CLOSED_WORDS } from '$lib/db/demo';
   import { takeDraft, withoutKept, ownPlaceNamed, carriedPlace, startPlace as startFrom, str, num, bool, oneOf, type Draft, type StartPlace } from '$lib/ui/grow/keep-draft';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
-  async function checkedKey(sp: string | null, k: number): Promise<number> {
+  async function checkedKey(sp: string | null, k: number): Promise<number | null> {
     if (!sp || speciesOf(sp) !== sp) return k;
     const s = await sheetForName(sp, k);
-    return s && s !== 'none' ? s.gbif : k; // the reference's GBIF key, never its page id (round seventy-eight)
+    // The reference's GBIF key, never its page id (round seventy-eight); none for a page without one (round seventy-nine).
+    return s && s !== 'none' ? (s.gbif ?? null) : k;
   }
   onMount(async () => {
     await collection.load();

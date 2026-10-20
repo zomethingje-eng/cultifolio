@@ -1,7 +1,7 @@
 /**
  * Round seventy-eight (I): the owner merges the seven pairs of pages that held one Kew entry (ids-gbif.txt), the page under
- * Kew's accepted name kept. The merges are listed for round seventy-nine's full build (scripts/merged-pages-79.txt), which
- * derives every page again; no build reads them before then, so this round's corpus is the pages as they were. Six of the
+ * Kew's accepted name kept. Listed in round seventy-eight for round seventy-nine's full build, which derives every page
+ * again; round seventy-nine's first change moved them into scripts/merged-pages.txt, which the builder reads. Six of the
  * seven are Kew's heterotypic synonyms of the entry, which round seventy-three's rule refuses as another page's key: the
  * owner's merge is that claim made, so the key of a page merged into this one is now read whatever its type. Kew's rows
  * below are the real ones (wcvp_names.csv of 2026-06-04). Each case FAILED on the base unless marked a guard (no list, no
@@ -9,13 +9,15 @@
  * real dossiers.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { KewNamesIndex, type KewRow } from '$dossier/kew-names';
 import { extraKeysFor, parseMerges, mergedToPrune, type Usage, type Backbone } from '$dossier/extra-keys';
 import { pageIds } from '$dossier/page-ids';
 import { slugify } from '$core/names';
 
-const PENDING = parseMerges(readFileSync('scripts/merged-pages-79.txt', 'utf8'));
+// Round seventy-nine (D): its first change moved the seven lines into scripts/merged-pages.txt, after round seventy-three's two.
+const ALL = parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8'));
+const PENDING = ALL.slice(2);
 /** Each pair: the page that leaves, the page kept (Kew's accepted name), Kew's entry. */
 const PAIRS: Array<[number, string, number, string, string]> = [
   [7530398, 'Echeveria peacockii', 2985894, 'Dudleya pulverulenta', '2778991'],
@@ -27,12 +29,13 @@ const PAIRS: Array<[number, string, number, string, string]> = [
   [7334118, 'Echeveria sessiliflora', 4199517, 'Echeveria pinetorum', '2781299']
 ];
 
-describe('the seven merges, listed for round seventy-nine', () => {
-  it('scripts/merged-pages-79.txt names each pair, the page under Kew\'s accepted name kept', () => {
+describe('the seven merges, applied from round seventy-nine', () => {
+  it('scripts/merged-pages.txt names each pair after round seventy-three\'s two, the page under Kew\'s accepted name kept', () => {
+    expect(ALL.slice(0, 2).map((m) => m.from)).toEqual([3084426, 7906297]);
     expect(PENDING.map((m) => [m.from, m.name, m.into])).toEqual(PAIRS.map(([from, name, into]) => [from, name, into]));
   });
-  it('no build reads them this round: merged-pages.txt holds round seventy-three\'s two only, and the builder reads that file alone (guard)', () => {
-    expect(parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')).map((m) => m.from)).toEqual([3084426, 7906297]);
+  it('the builder reads that one file, and merged-pages-79.txt is gone (round seventy-nine D; failed on r79base, where the file held two)', () => {
+    expect(existsSync('scripts/merged-pages-79.txt')).toBe(false);
     const src = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(src).toContain("const MERGES = 'scripts/merged-pages.txt';");
     expect(src).not.toContain('merged-pages-79');

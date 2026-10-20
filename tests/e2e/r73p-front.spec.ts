@@ -27,10 +27,11 @@ test('r73p front 1 (round seventy-five): a phone draws the same catalogue as a d
   const [pp, dp] = [await p.newPage(), await d.newPage()];
   for (const page of [pp, dp]) { await page.goto('/'); await ready(page); }
   const [a, b] = [await shown(pp), await shown(dp)];
-  expect(a.rows).toEqual(['Copiapoa', 'Refusia', 'Welwitschia']);
+  // Round seventy-nine's page without a GBIF key, Hesperocyparis lusitanica, is a genus of its own in the fixture.
+  expect(a.rows).toEqual(['Copiapoa', 'Hesperocyparis', 'Refusia', 'Welwitschia']);
   expect(a).toEqual(b);
-  expect(a.on).toEqual(['All, 4']);
-  expect(a.count).toBe('3 genera · 4 species');
+  expect(a.on).toEqual(['All, 5']);
+  expect(a.count).toBe('4 genera · 5 species');
   // A row opened on a phone goes to the same address as on a desktop.
   await pp.locator('#g-copiapoa').click();
   await expect(pp).toHaveURL(/\?by=genus&open=copiapoa$/);
@@ -42,8 +43,8 @@ test('r73p front 2: without JavaScript a phone draws the same catalogue from the
   const ctx = await phone(browser, baseURL, false);
   const page = await ctx.newPage();
   await page.goto('/');
-  expect(await page.locator('.rows a.grow:visible .gname').allTextContents()).toEqual(['Copiapoa', 'Refusia', 'Welwitschia']);
-  await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 4');
+  expect(await page.locator('.rows a.grow:visible .gname').allTextContents()).toEqual(['Copiapoa', 'Hesperocyparis', 'Refusia', 'Welwitschia']);
+  await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 5');
   await ctx.close();
 });
 
@@ -53,7 +54,7 @@ test('r73p front 3: a desktop is drawn as before: every genus, its own "All", an
   await page.goto('/'); await ready(page);
   for (const g of ['copiapoa', 'refusia', 'welwitschia']) await expect(page.locator(`#g-${g}`)).toBeVisible();
   await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText(/^All/);
-  await expect(page.locator('.seccount:visible').last()).toContainText('3 genera · 4 species');
+  await expect(page.locator('.seccount:visible').last()).toContainText('4 genera · 5 species');
   await page.locator('#g-copiapoa').click();
   await expect(page).toHaveURL(/\?by=genus&open=copiapoa$/);
   await page.goto('/?open=refusia'); await ready(page);

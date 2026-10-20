@@ -25,7 +25,8 @@ export const OPEN_NONE_SHOWN = 'GBIF records under an open licence have photogra
 export const askedOpen = (d: Pick<Dossier, 'upstream'>) => d.upstream?.['gbif.media']?.detail === OPEN_NONE || d.upstream?.['gbif.media']?.detail === OPEN_NONE_SHOWN;
 
 export async function fillOpenGbif(d: Pick<Dossier, 'key' | 'ids' | 'photos' | 'upstream'>, f: JsonFetcher, now = () => new Date().toISOString()): Promise<OpenFill> {
-  // By the page's GBIF key (round seventy-eight: its `key` is its id).
+  // By the page's GBIF key (round seventy-eight: its `key` is its id). A page without one (round seventy-nine) is not asked.
+  if (d.ids.gbif == null) return { failed: 'not asked: the page has no GBIF key' };
   const m = await gbif.media(f, d.ids.gbif);
   if (m.status === 'ok') {
     const fresh = photosFromMedia(m.data);

@@ -198,7 +198,8 @@
       // and the line arriving moved Add under the press (round sixty-six; the all-engines run, r60 12 in Firefox; rule 2).
       if (!taxonKey && !keyless && (resolved === 'no' || resolved === 'unreached' || (resolved === 'unknown' && !root?.contains(document.activeElement)))) {
         const exact = local.find((s) => !s.similar && sameName(s.name, p.scientific));
-        if (exact) { taxonKey = exact.key; resolved = 'yes'; }
+        // A page without a GBIF key (round seventy-nine) resolves the name and files no key: there is none to file.
+        if (exact) { taxonKey = exact.key > 0 ? exact.key : null; keyless = exact.key <= 0; resolved = 'yes'; }
       }
     });
     // Rows the name service answered: the species part asked; for a genus followed by capitalised words with no species
@@ -273,7 +274,9 @@
     // greenhouse case (round twenty-three, 4).
     const local = suggestions.find((s) => s.local && !s.similar && sameName(s.name, p.scientific));
     if (local) {
-      taxonKey = local.key;
+      // A page without a GBIF key (round seventy-nine): the name stands, and no key is filed.
+      taxonKey = local.key > 0 ? local.key : null;
+      keyless = local.key <= 0;
       resolved = 'yes';
       return;
     }
@@ -334,6 +337,8 @@
     // (round sixty-two; the grower review, 9).
     const q = parseName(value).qualifier;
     const compared = q === 'cf.' || q === 'aff.' || q === 'nr.' || q === 'vel aff.';
+    // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that.
+    if (s.local && s.key <= 0 && !compared && sameName(s.name, parseName(value).scientific)) return s.far ? ' · has a species page, under another genus, with no GBIF key; no key filed' : ' · has a species page, with no GBIF key; no key filed';
     if (s.local) return keyed ? (s.far ? ' · has a species page, under another genus' : ' · has a species page') : compared ? ' · compared species is in the reference; no key filed' : ' · its species is in the reference; no key filed';
     return keyed ? '' : ' · no key filed';
   }
@@ -422,7 +427,7 @@
     onblur={onBlur}
   />
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
-    {#each suggestions as s, i (s.key)}
+    {#each suggestions as s, i (s.key > 0 ? s.key : `${s.local ? 'page' : 'row'}:${s.rank ?? ''}:${s.name}`)}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
       <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{rowNote(s)}</span></li>
     {/each}

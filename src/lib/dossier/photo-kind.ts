@@ -776,13 +776,14 @@ export function sharedPhotos(shown: ReadonlyArray<SharedPage>): Map<PageId, Map<
   }
   return out;
 }
-/** A dossier's photographs with `shared` written from `sharedPhotos` (set, changed or removed); whether anything changed. */
+/** A dossier's photographs with `shared` written from `sharedPhotos` (set, changed or removed, compared as sets); whether anything changed. */
 export function markShared(photos: Array<{ src?: string; id: string; url: string; shared?: PageId[] }>, marks: Map<string, PageId[]> | undefined): boolean {
   let changed = false;
   for (const p of photos) {
     const want = marks?.get(photoIdentity(p));
     const had = p.shared;
-    if (want?.length) { if (!had || had.join(',') !== want.join(',')) { p.shared = want; changed = true; } }
+    // The same pages in another order are the same mark (round seventy-nine): the order means nothing, so it is no rewrite.
+    if (want?.length) { if (!had || had.length !== want.length || !want.every((k) => had.includes(k))) { p.shared = want; changed = true; } }
     else if (had) { delete p.shared; changed = true; }
   }
   return changed;

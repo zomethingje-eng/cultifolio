@@ -45,7 +45,7 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const from: string[] = [];
   const items: Array<{ lead: string; rule: string }> = [];
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
-  const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
+  const why = input.climateStatus === 'unchecked' ? "the habitat climate was not checked (GBIF's records were not asked for this name)" : input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
   if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)}, ${arch.why}${year ? '.' : `; ${why}.`}`);
   if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: 'archetype table' });
   else if (!year) items.push({ lead: `${why[0].toUpperCase()}${why.slice(1)}.`, rule: 'the dossier' });
@@ -61,7 +61,7 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
 export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   // A climate that was not checked (the source refused when the page was built) is said so, never printed as the blank a
   // species with no climate gets: the label follows the same refusal rule as the pages (round fifteen, 5).
-  if (input.climateStatus === 'refused') return 'climate not checked';
+  if (input.climateStatus === 'refused' || input.climateStatus === 'unchecked') return 'climate not checked';
   if (input.climateStatus === 'pending') return 'climate pending'; // a build still to run is not a refusal (round fifty-two, 6)
   const { rows, year } = cultivationSheet(input);
   if (!rows.length) return '';

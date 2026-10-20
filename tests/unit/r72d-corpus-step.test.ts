@@ -229,7 +229,7 @@ describe('the prune (--prune)', () => {
     calls = [];
     expect(await go(['--prune', '--go-on'], exec as never, async () => 'live0001')).toBe(EXIT.done);
     expect(calls.map((c) => c.args[0])).toEqual(['node_modules/@sveltejs/kit/svelte-kit.js', 'copyto', '--import', 'lsf', 'delete']);
-    expect(calls[4].args).toEqual(['delete', 'r2:cultifolio/s/v3/p', '--exclude-from', 'keep.txt', '--min-age', '24h', '--use-server-modtime', '--stats-one-line']);
+    expect(calls[4].args).toEqual(['delete', 'r2:cultifolio/s/v3/p', '--files-from-raw', 'prune.txt', '--stats-one-line']); // round seventy-nine: the files to delete, not keep.txt (tests/unit/r79z-prune.test.ts)
   });
 
   it('a live manifest that cannot be read deletes nothing, and an earlier prune\'s copy is not used', async () => {

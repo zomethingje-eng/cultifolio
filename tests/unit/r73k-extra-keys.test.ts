@@ -214,7 +214,8 @@ describe('the build reads the other keys\' records and photographs, and says so 
     if (!base.ok || !r.ok) return;
     expect(r.dossier.occurrences.nOpenInRange).toBe(base.dossier.occurrences.nOpenInRange + 3);
     expect(r.dossier.occurrences.keys).toEqual([{ key: 777001, name: 'Copiapoa cinerea Kük.', kew: "Kew's file holds it as Copiapoa cinerea (Phil.) Britton & Rose (accepted)", n: 3, from: 'api' }]);
-    expect(r.dossier.upstream['gbif.occurrences'].detail).toBe("GBIF occurrence search API; 3 records of GBIF's key 777001, Copiapoa cinerea Kük. (Kew's file holds it as Copiapoa cinerea (Phil.) Britton & Rose (accepted)): GBIF occurrence search API");
+    // Round seventy-nine (Q): a build given no places says its records were not tested against them.
+    expect(r.dossier.upstream['gbif.occurrences'].detail).toBe("GBIF occurrence search API; 3 records of GBIF's key 777001, Copiapoa cinerea Kük. (Kew's file holds it as Copiapoa cinerea (Phil.) Britton & Rose (accepted)): GBIF occurrence search API; records not tested against botanic gardens, herbaria and zoos: no list of them was given to this build");
     expect(r.dossier.photos.some((p) => p.src === 'gbif' && p.url === 'https://example.org/a.jpg')).toBe(true);
     // Its own name is the page's words: no older name is added for it.
     expect(r.dossier.name.synonyms).toEqual(base.dossier.name.synonyms);

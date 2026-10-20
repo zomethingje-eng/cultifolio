@@ -1,0 +1,31 @@
+# Round seventy-nine (Z): --index of r79 (with agent K's branch merged) on the full-size corpus, --max-old-space-size=3072, memory sampled (peak.mjs: heap and rss after each line), 2026-10-20, two shared cores
+  page ids: 48354 by Kew's plant_name_id, 14 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+    [mem 20.2 s: heap 42 MB, rss 176 MB; peak heap 42 MB]
+  99 photographs on 35 pages are held by another species' page too: shown on none (shared-photos.txt)
+    [mem 86.0 s: heap 683 MB, rss 791 MB; peak heap 683 MB]
+  nearest habitat climates for 38601 species (41.2 s)
+    [mem 320.9 s: heap 509 MB, rss 1156 MB; peak heap 683 MB]
+  index: 48368 species
+    [mem 330.2 s: heap 622 MB, rss 1237 MB; peak heap 683 MB]
+  photograph judgement: 12571 Commons files on 48368 pages read with the reference's names; 0 dossiers written anew
+    [mem 393.9 s: heap 900 MB, rss 1738 MB; peak heap 900 MB]
+  corpus d8c473d10ee442d2: 48368 species in 256 buckets, 512 posting files, 63791 search key files (2167.7 MB) → static/s/v3/p/ (67541 files written, 109 already on disk under their hash, 0 of older corpora deleted); manifest.json names it
+    [mem 1045.6 s: heap 1758 MB, rss 2501 MB; peak heap 1758 MB]
+  9 dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: Agave wendtii, Brachystelma bilobatum, Cissus wilmsii, Drimia obstii, Manfreda arceliensis, Othonna divaricata, Trimelopter crispolanatum, Urginea grandiflora, Vera-duthiea zebrina
+    [mem 1045.6 s: heap 1758 MB, rss 2502 MB; peak heap 1758 MB]
+peak rss 2502 MB, heapUsed 1759 MB, external 24 MB, wall 1045.6 s
+cpu user 511.76 s, system 32.9 s
+exit 0
+# the corpus made (r79-full-corpus.ts)
+10 s  8947 real dossiers read; 365 areas, 54508 first words
+23 s  Kew names read
+28 s  Kew areas read
+66 s  5000 made
+102 s  10000 made
+141 s  15000 made
+188 s  20000 made
+212 s  25000 made
+236 s  30000 made
+254 s  35000 made
+280 s  48368 lines: 8932 real dossiers linked, 39436 made from a template (39363 with Kew's range, 2326 with a stand-in GBIF key); 1945 MB of dossiers
+peak rss 1997 MB, heapUsed 1684 MB, external 6 MB, wall 281.1 s

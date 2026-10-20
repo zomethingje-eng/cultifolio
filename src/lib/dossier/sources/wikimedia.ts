@@ -157,7 +157,8 @@ async function ipniNames(f: JsonFetcher, ids: readonly string[]): Promise<Array<
 export const ipniId = (v: string) => v.trim().replace(/^(?:https?:\/\/(?:www\.)?ipni\.org\/n\/|urn:lsid:ipni\.org:names:)/i, '');
 const ipnisOf = (ent: Entity) => strings(ent, P.ipni).map(ipniId);
 
-function crossOf(id: string, ent: Entity): CrossIds {
+/** An item's identifiers as the build reads them (exported for the route without a GBIF key, round seventy-nine). */
+export function crossOf(id: string, ent: Entity): CrossIds {
   const str = (p: string) => (p === P.ipni ? ipnisOf(ent)[0] : strings(ent, p)[0]);
   const inatS = str(P.inat);
   const gbifS = str(P.gbif);

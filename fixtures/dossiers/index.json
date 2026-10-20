@@ -34,6 +34,41 @@
   ]
  },
  {
+  "key": "k457911",
+  "slug": "hesperocyparis-lusitanica",
+  "name": "Hesperocyparis lusitanica",
+  "family": "Cupressaceae",
+  "origin": [
+   "Mexico Central",
+   "Mexico Northeast",
+   "Mexico Gulf",
+   "Mexico Northwest",
+   "Mexico Southwest",
+   "Mexico Southeast",
+   "Belize",
+   "El Salvador",
+   "Guatemala",
+   "Honduras",
+   "Nicaragua"
+  ],
+  "thumb": "https://inaturalist-open-data.s3.amazonaws.com/photos/800/medium.jpg",
+  "credit": "CC BY, grower80",
+  "photos": 3,
+  "open": 0,
+  "climate": "pending",
+  "syn": [
+   "Cupressus lusitanica",
+   "Cupressus lindleyi",
+   "Cupressus mexicana",
+   "Callitropsis lusitanica",
+   "Cupressus lusitanica var. lindleyi",
+   "Neocupressus lusitanica"
+  ],
+  "older": [
+   "Hesperocyparis lindleyi"
+  ]
+ },
+ {
   "key": "g999",
   "gbif": 999,
   "slug": "refusia-testii",

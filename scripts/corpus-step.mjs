@@ -20,6 +20,8 @@
 //     `--go-on` (exit 2);
 //   - a dossier on disk cannot be read, or the index holds fewer species than before: never passed by `--go-on`; put it
 //     right, and the next run runs that step again (exit 2);
+//   - the upload of a corpus holding a page without a GBIF key, while the live Worker does not say it reads one (round
+//     seventy-nine): deploy this round's Worker first, then the same command uploads (exit 2);
 //   - a step failed: paste the end of corpus-step.log back (exit 1);
 //   - you pressed Ctrl-C: run the same command to carry on (exit 130).
 import { spawn } from 'node:child_process';
@@ -87,11 +89,16 @@ export const mergedAway = (output) => [...output.matchAll(MERGED_AWAY)].reduce((
 /** The sentence a stop prints, and the command to type next. */
 export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs') {
   switch (result.status) {
-    case 'unfinished': return `Stopped at "${step.line}": a source did not answer (${result.why}). Nothing is lost and what was read stands. Run the same command again in an hour or so: ${cmd}`;
+    // The day's allowance of a source (iNaturalist's 9,000; round seventy-eight's budget) is spent until midnight UTC, so
+    // the same command an hour later would stop again at once (round seventy-nine: the six days of the cultivated fill).
+    case 'unfinished': return /allowance of \d+ requests is spent|allows about [\d,]+ calls a day/.test(result.why)
+      ? `Stopped at "${step.line}": the day's allowance is spent (${result.why}). Nothing is lost and what was read stands. Run the same command again tomorrow, after midnight UTC: ${cmd}`
+      : `Stopped at "${step.line}": a source did not answer (${result.why}). Nothing is lost and what was read stands. Run the same command again in an hour or so: ${cmd}`;
     case 'blocked':
     case 'review':
       if (result.why === 'drops') return `Stopped at "${step.line}": some species lost what the build before had; drops.txt in the project folder lists them. Read every line. When each one is expected, carry on with: ${cmd} --go-on`;
       if (result.why === 'unreadable') return `Stopped at "${step.line}": a dossier on disk could not be read (the line above names it), so the index left it out. Do not upload. Paste the end of corpus-step.log back.`;
+      if (result.why === 'deploy first') return `Stopped at "${step.line}": the corpus on disk holds ${result.keyless} page${result.keyless === 1 ? '' : 's'} without a GBIF key, and the live Worker ${result.live ? 'does not say it reads one (round seventy-eight\'s answers 503 for such a page)' : 'could not be asked whether it reads one'}. Nothing was uploaded. Deploy this round's Worker first, on the corpus live now (node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs && npm run deploy), then run: ${cmd}`;
       if (/^index/.test(result.why)) return `Stopped at "${step.line}": the index now holds fewer species than before (${result.why.replace('index ', '').replace(' < ', ', was ')}). Do not upload. Paste the end of corpus-step.log back.`;
       return `Review: ${result.why}. When it is as expected, carry on with: ${cmd} --go-on`;
     case 'failed': return `Stopped at "${step.line}": it failed (${result.why}). Paste the last forty lines of corpus-step.log back. To try that step again: ${cmd}`;
@@ -111,18 +118,27 @@ export function uploadCommands(corpus = CORPUS, bucket = BUCKET) {
 
 const sha1 = (s) => createHash('sha1').update(s).digest('hex');
 const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
+/**
+ * The pages of the corpus on disk without a GBIF key (round seventy-nine, agent K's): a `k…` page whose index entry has
+ * no `gbif`. A `g…` page is keyed by its GBIF key, so it always has one.
+ */
+export function keylessOnDisk(root) {
+  const idx = readJson(join(root, CORPUS, 'index.json'));
+  return Array.isArray(idx) ? idx.filter((e) => typeof e?.key === 'string' && e.key.startsWith('k') && e.gbif == null).length : 0;
+}
 /** Written whole or not at all: a Ctrl-C between the write and the rename leaves the last state, never half of one. */
 function writeAtomic(p, text) { writeFileSync(`${p}.tmp`, text); renameSync(`${p}.tmp`, p); }
 
 /**
  * The run. `exec(cmd, args, onOutput)` runs one command and resolves to its exit code (the real one spawns it, with no
- * shell, so a project folder with a space in its path needs no quoting); `fetchCorpus()` reads the live /api/corpus.
- * Both are given by a test.
+ * shell, so a project folder with a space in its path needs no quoting); `fetchCorpus()` reads the live /api/corpus's id,
+ * and `fetchLive()` the whole answer (round seventy-nine: whether the live Worker reads a page without a GBIF key). All
+ * are given by a test.
  */
 /**
- * @param {{ root?: string, argv?: string[], exec?: (cmd: string, args: string[], onOutput: (s: string) => void, opts: { cwd?: string, env?: Record<string, string | undefined> }) => Promise<number>, fetchCorpus?: () => Promise<string | null>, log?: (s: string) => void, now?: () => Date, waitMs?: number, heartbeatMs?: number }} [o]
+ * @param {{ root?: string, argv?: string[], exec?: (cmd: string, args: string[], onOutput: (s: string) => void, opts: { cwd?: string, env?: Record<string, string | undefined> }) => Promise<number>, fetchCorpus?: () => Promise<string | null>, fetchLive?: () => Promise<{ keyless?: boolean } | null>, log?: (s: string) => void, now?: () => Date, waitMs?: number, heartbeatMs?: number }} [o]
  */
-export async function run({ root = process.cwd(), argv = [], exec = spawnExec, fetchCorpus = liveCorpus, log = (s) => process.stdout.write(s), now = () => new Date(), waitMs = 15_000, heartbeatMs = 120_000 } = {}) {
+export async function run({ root = process.cwd(), argv = [], exec = spawnExec, fetchCorpus = liveCorpus, fetchLive = liveAnswer, log = (s) => process.stdout.write(s), now = () => new Date(), waitMs = 15_000, heartbeatMs = 120_000 } = {}) {
   const at = (p) => join(root, p);
   const logFile = at('corpus-step.log');
   // The log keeps whole lines, each progress line rewritten with \r in its last form only.
@@ -138,7 +154,16 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   const flush = () => { if (pending) appendFileSync(logFile, collapse(pending) + '\n'); pending = ''; };
   const stamp = () => now().toISOString().replace('T', ' ').slice(0, 19);
   if (argv.includes('--prune')) { try { return await prune({ root, argv, exec, say, fetchCorpus }); } finally { flush(); } }
-  const planFile = at(argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : 'scripts/corpus-plan.txt');
+  // Round seventy-nine (M): the plan a run carries on with. Given no --plan, a run carries on with the plan the last run
+  // left unfinished (corpus-step.json names it), and every stop names the command with its --plan, so a "--go-on" typed
+  // after a stop of the full build's plan never starts round seventy-eight's plan (its backup and --rekey) in its place.
+  const DEFAULT_PLAN = 'scripts/corpus-plan.txt';
+  const prior = readJson(at('corpus-step.json'));
+  const unfinished = (st) => Array.isArray(st?.steps) && st.steps.some((x) => x.status !== 'done' && x.status !== 'skipped');
+  const planRel = argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : typeof prior?.planFile === 'string' && prior.planFile !== DEFAULT_PLAN && unfinished(prior) ? prior.planFile : DEFAULT_PLAN;
+  const cmd = `node scripts/corpus-step.mjs${planRel !== DEFAULT_PLAN ? ` --plan ${planRel}` : ''}`;
+  if (!argv.includes('--plan') && planRel !== DEFAULT_PLAN) say(`  carrying on with ${planRel}, the plan the last run left unfinished (${cmd}).\n`);
+  const planFile = at(planRel);
   if (!existsSync(planFile)) { say(`No plan at ${planFile}: nothing to run.\n`); return EXIT.failed; }
   const planText = readFileSync(planFile, 'utf8');
   const plan = parsePlan(planText);
@@ -148,6 +173,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
     if (state) renameSync(stateFile, at(`corpus-step.${stamp().slice(0, 10)}.${Date.now()}.json`));
     state = { plan: sha1(planText), started: now().toISOString(), steps: plan.map((s) => ({ line: s.line, status: 'to do' })) };
   }
+  state.planFile = planRel;
   const save = () => writeAtomic(stateFile, JSON.stringify(state, null, 1));
   if (argv.includes('--status')) {
     for (const [i, s] of state.steps.entries()) log(`${String(i + 1).padStart(2)}. ${s.status.padEnd(11)} ${s.line}${s.note ? `  (${s.note})` : ''}\n`);
@@ -217,7 +243,17 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         result = classify({ code, output, dropsWritten, speciesBefore: state.speciesBefore });
       } else if (step.kind === 'upload') {
         result = { status: 'done' };
-        for (const [cmd, args] of uploadCommands()) {
+        // Round seventy-nine: round seventy-eight's Worker cannot read a page without a GBIF key (its schema required one,
+        // so it answered 503), and the manifest's upload is what switches the live site to this corpus. So a corpus holding
+        // such a page goes up only once the live Worker says it reads one: this round's Worker is deployed first, on the
+        // corpus live now, which it serves as round seventy-eight's did.
+        const keyless = keylessOnDisk(root);
+        if (keyless) {
+          const live = await fetchLive().catch(() => null);
+          if (live?.keyless !== true) result = { status: 'blocked', why: 'deploy first', keyless, live: !!live };
+          else say(`  the live Worker reads pages without a GBIF key (${keyless} in this corpus): uploading.\n`);
+        }
+        for (const [cmd, args] of result.status === 'done' ? uploadCommands() : []) {
           say(`  ${cmd} ${args.join(' ')}\n`);
           const code = await exec(cmd, args, say, { cwd: root, env: process.env });
           if (interrupted) break;
@@ -237,7 +273,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       if (result.status === 'done') { rec.status = 'done'; rec.note = undefined; save(); continue; }
       rec.status = result.status;
       rec.why = result.why;
-      rec.note = step.kind === 'review' ? `Review before going on: ${result.why} When it is as expected, carry on with: node scripts/corpus-step.mjs --go-on` : stopSentence(step, result);
+      rec.note = step.kind === 'review' ? `Review before going on: ${result.why} When it is as expected, carry on with: ${cmd} --go-on` : stopSentence(step, result, cmd);
       save();
       say(`\n${rec.note}\n`);
       return EXIT[result.status];
@@ -245,7 +281,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
     if (interrupted) {
       const i = state.steps.findIndex((s) => s.status === 'running');
       if (i >= 0) { state.steps[i].status = 'interrupted'; save(); }
-      say(`\nStopped by Ctrl-C${i >= 0 ? ` during "${state.steps[i].line}"` : ''}. Nothing is lost: run the same command to carry on: node scripts/corpus-step.mjs\n`);
+      say(`\nStopped by Ctrl-C${i >= 0 ? ` during "${state.steps[i].line}"` : ''}. Nothing is lost: run the same command to carry on: ${cmd}\n`);
       return EXIT.interrupted;
     }
     say(`\n=== ${stamp()}  every step is done. The record is corpus-step.json; the log is corpus-step.log.\n`);
@@ -257,19 +293,51 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
 }
 
 /**
- * A dossier with its id fields set aside (round seventy-eight): the version, the id, the other pages a photograph or the
- * range names, and the stamp's fingerprint (the day is kept). Two dossiers equal under it show the same page.
+ * A reference to another page as GBIF's key, whichever version wrote it (round seventy-nine): version 2's number (or the
+ * digits of a build's `via.page`), version 3's `g<GBIF key>`, or a `k…` id through `gbifOf` (the corpus's own ids). An id
+ * `gbifOf` does not know stays as it is, so it differs from any number and the page is said to differ.
  */
-export function withoutIds(d) {
+const asGbif = (x, gbifOf) => {
+  if (typeof x === 'number' || typeof x !== 'string') return x;
+  if (/^[1-9][0-9]*$/.test(x)) return Number(x);
+  if (/^g[1-9][0-9]*$/.test(x)) return Number(x.slice(1));
+  return gbifOf?.get(x) ?? x;
+};
+/** Numbers by value, anything else by its text: one order for a list whose order means nothing. */
+const setOrder = (a, b) => (typeof a === 'number' && typeof b === 'number' ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0);
+/**
+ * A dossier's lists whose order means nothing, each in one order (round seventy-nine): a photograph's `shared`, the other
+ * pages that hold it. The index writes them sorted by id, and ids sort otherwise than GBIF's keys, so the same pages can
+ * come in another order; the page shows nothing of the order.
+ */
+export function withSets(d) {
+  const o = structuredClone(d);
+  for (const p of o.photos ?? []) if (Array.isArray(p.shared)) p.shared = [...p.shared].sort(setOrder);
+  return o;
+}
+/**
+ * A dossier with its id fields set aside (round seventy-eight): the version, the id and the stamp's fingerprint (the day
+ * is kept). Since round seventy-nine the other pages a photograph or the range names are kept, read as GBIF's keys
+ * (`asGbif`), and `shared` as a set (`withSets`): two dossiers equal under it show the same page, and a photograph
+ * shared with one page more or fewer differs.
+ */
+export function withoutIds(d, gbifOf) {
   const o = structuredClone(d);
   delete o.v; delete o.key;
   if (o.changed) delete o.changed.h;
-  if (o.distribution?.via) delete o.distribution.via.page;
-  for (const p of o.photos ?? []) delete p.shared;
-  return o;
+  if (o.distribution?.via?.page != null) o.distribution.via.page = asGbif(o.distribution.via.page, gbifOf);
+  for (const p of o.photos ?? []) if (Array.isArray(p.shared)) p.shared = p.shared.map((x) => asGbif(x, gbifOf));
+  return withSets(o);
 }
-/** Whether two dossiers' texts are one page: byte for byte, or, across the change of ids, equal but for the id fields. */
-const samePage = (a, b, acrossIds) => a.equals(b) || (acrossIds && JSON.stringify(withoutIds(JSON.parse(a.toString('utf8')))) === JSON.stringify(withoutIds(JSON.parse(b.toString('utf8')))));
+/**
+ * Whether two dossiers' texts are one page: byte for byte, or equal with their unordered lists in one order (`withSets`),
+ * or, across the change of ids, equal but for the id fields (`withoutIds`).
+ */
+const samePage = (a, b, acrossIds, gbifOf) => {
+  if (a.equals(b)) return true;
+  const [x, y] = [a, b].map((t) => JSON.parse(t.toString('utf8')));
+  return acrossIds ? JSON.stringify(withoutIds(x, gbifOf)) === JSON.stringify(withoutIds(y, gbifOf)) : JSON.stringify(withSets(x)) === JSON.stringify(withSets(y));
+};
 
 /** What the review before the upload states: the corpus on disk against the backup, and drops.txt. */
 export function facts(root, before, backupDir) {
@@ -285,11 +353,14 @@ export function facts(root, before, backupDir) {
   if (back && existsSync(back) && existsSync(join(root, CORPUS))) {
     changed = [];
     acrossIds = !readdirSync(back).some((x) => DOSSIER_FILE.test(x)) && readdirSync(back).some((x) => V2_FILE.test(x));
-    for (const f of readdirSync(join(root, CORPUS)).filter((x) => DOSSIER_FILE.test(x))) {
+    const files = readdirSync(join(root, CORPUS)).filter((x) => DOSSIER_FILE.test(x));
+    // Each page's id and its GBIF key, read once: a reference to a page by id is compared as version 2's GBIF key.
+    const gbifOf = new Map();
+    if (acrossIds) for (const f of files) { const g = readJson(join(root, CORPUS, f))?.ids?.gbif; if (typeof g === 'number') gbifOf.set(f.slice(0, -5), g); }
+    for (const f of files) {
       const now = readFileSync(join(root, CORPUS, f));
-      const gbif = acrossIds ? readJson(join(root, CORPUS, f))?.ids?.gbif : null;
-      const was = join(back, acrossIds ? `${gbif}.json` : f);
-      if (!existsSync(was) || !samePage(readFileSync(was), now, acrossIds)) changed.push(f.slice(0, -5));
+      const was = join(back, acrossIds ? `${gbifOf.get(f.slice(0, -5))}.json` : f);
+      if (!existsSync(was) || !samePage(readFileSync(was), now, acrossIds, gbifOf)) changed.push(f.slice(0, -5));
     }
   }
   const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${acrossIds ? ' apart from their ids' : ''}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
@@ -348,8 +419,12 @@ async function prune({ root, argv, exec, say, fetchCorpus }) {
   }
   const keep = new Set(readFileSync(at('keep.txt'), 'utf8').split(/\r?\n/).filter(Boolean).map((l) => l.replace(/^\//, '')));
   let listing = '';
-  const code = await exec('rclone', ['lsf', `${BUCKET}/p`], (s) => { listing += s; }, { cwd: root, env: process.env });
-  const inBucket = new Set(listing.split(/\r?\n/).filter(Boolean));
+  // Each file with the time it was uploaded (round seventy-nine): `--use-server-modtime` makes it the upload's, not the
+  // PC's, as `--min-age 24h --use-server-modtime` read it before. A line without a time is a file whose age is not known,
+  // and is never deleted.
+  const code = await exec('rclone', ['lsf', `${BUCKET}/p`, '--files-only', '--format', 'tp', '--separator', ';', '--time-format', 'RFC3339', '--use-server-modtime'], (s) => { listing += s; }, { cwd: root, env: process.env });
+  const uploaded = new Map(listing.split(/\r?\n/).filter(Boolean).map((l) => { const i = l.indexOf(';'); return i < 0 ? [l, NaN] : [l.slice(i + 1), Date.parse(l.slice(0, i))]; }));
+  const inBucket = new Set(uploaded.keys());
   const missing = [...keep].filter((f) => !inBucket.has(f));
   const liveFiles = Object.values(readJson(live)?.files ?? {}).map((h) => `${h}.json`);
   const liveMissing = liveFiles.filter((f) => !inBucket.has(f));
@@ -360,7 +435,14 @@ async function prune({ root, argv, exec, say, fetchCorpus }) {
   if (served !== readJson(live)?.id) { say(`\nThe prune stopped: the site serves corpus ${served ?? '(no answer)'}, and the bucket's manifest names ${readJson(live)?.id}. Until the site serves the bucket's manifest, nothing is deleted. Run npm run live-check, and paste what it says back.\n`); return EXIT.failed; }
   if (liveMissing.length) { say(`\nThe prune stopped: the live manifest names ${liveMissing.length} files the bucket does not hold (${liveMissing.slice(0, 3).join(', ')}…). The site is already missing them: upload the corpus again before any prune. Nothing was deleted.\n`); return EXIT.failed; }
   const goes = [...inBucket].filter((f) => !keep.has(f));
-  const args = ['delete', `${BUCKET}/p`, '--exclude-from', 'keep.txt', '--min-age', '24h', '--use-server-modtime'];
+  // Round seventy-nine: rclone is given the files to delete (those named by none, uploaded more than a day ago), never
+  // keep.txt as --exclude-from: each of its lines is a rule rclone tries on every file. At the full list's 48,368 species
+  // (about 67,000 files a corpus, two in the bucket after a refresh) that is about half an hour to an hour a run, and the
+  // prune runs it twice (60,000 files against 30,000 lines took 284 s in the review; the same list of names, 0.8 s).
+  // rclone takes --files-from-raw with no other filter, so the day's age is read from the listing above.
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  writeFileSync(at('prune.txt'), goes.filter((f) => uploaded.get(f) <= dayAgo).sort().map((f) => `${f}\n`).join(''));
+  const args = ['delete', `${BUCKET}/p`, '--files-from-raw', 'prune.txt'];
   if (!argv.includes('--go-on')) {
     let dry = '';
     const dc = await exec('rclone', [...args, '--dry-run'], (s) => { dry += s; }, { cwd: root, env: process.env });
@@ -390,6 +472,11 @@ function spawnExec(cmd, args, onOutput, opts) {
   });
 }
 
+/** The live /api/corpus, whole (round seventy-nine). */
+async function liveAnswer() {
+  const r = await fetch(`${process.env.LIVE_CHECK_ORIGIN ?? 'https://cultifolio.com'}/api/corpus`, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'cultifolio-corpus-step' } });
+  return r.ok ? await r.json() : null;
+}
 async function liveCorpus() {
   const r = await fetch(`${process.env.LIVE_CHECK_ORIGIN ?? 'https://cultifolio.com'}/api/corpus`, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'cultifolio-corpus-step' } });
   return (await r.json()).id;

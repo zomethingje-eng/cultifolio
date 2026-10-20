@@ -1,0 +1,47 @@
+Round seventy-nine, agent D: what GBIF's documentation and GBIF's own services say of the two routes, read 2026-10-20.
+
+1. The predicate limit (DWCA route). The Occurrence API reference, "Occurrence Download Limits"
+   (https://techdocs.gbif.org/en/openapi/v1/occurrence#limits; the same text in https://techdocs.gbif.org/openapi/occurrence.json):
+   "A download predicate may contain a maximum of 101,000 items (taxon keys, kingdom keys, phylum keys, catalogue numbers,
+   occurrence ids and so on)." and "If the total number of incomplete downloads is fewer than 100, any single user can have
+   no more than 3 incomplete downloads. If the total number of downloads is fewer than 1000 any single user may only have 1
+   download." The list's request: 45,170 keys (46,041 less the 871 left to the API path) and 3 equals = 45,173 items.
+   One request; no split.
+
+2. The SQL route. https://techdocs.gbif.org/en/data-use/api-sql-downloads: "This is an experimental feature"; format
+   "must be SQL_TSV_ZIP"; "Only SELECT queries are supported, and only queries against a single table named occurrence.
+   JOIN queries and sub-queries are not allowed. Selecting * is also not allowed"; "The group and partition filters
+   (HAVING and QUALIFY) are not supported"; "SQL comments (lines beginning -- ) cannot be included"; "year" must be quoted;
+   HTTP 403 "means your username does not have permission to use this prototype feature — contact [GBIF's helpdesk address]".
+   No limit on the query's length or on an ARRAY's values is stated there.
+   "The occurrence table contains the interpreted taxonomy for each occurrence based on Catalogue of Life … support for the
+   GBIF backbone taxonomy is available through the gbif_classification prefixed columns": so the query reads
+   occurrence.gbif_classification.specieskey, .taxonkey and .acceptedtaxonkey. A public cube download of 2026-10-19
+   (0035697-260928105237408) shows the plain column holding Catalogue of Life's keys ("CVW5J", "4Z65V").
+
+3. GBIF's own conversion of the DWCA's predicate (POST https://api.gbif.org/v1/occurrence/download/request/sql with the
+   DWCA body for 5384013 and 3084426; HTTP 201): WHERE
+     ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY('5384013', '3084426'))
+     AND occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT'
+   which is sqlQuery's WHERE, clause for clause.
+
+4. GBIF's validation (POST https://api.gbif.org/v1/occurrence/download/request/validate, no account needed): sqlQuery for
+   2 keys, HTTP 201; sqlQuery for the list's 46,041 keys (508,427 characters), HTTP 201 in 2.5 s, the query given back
+   formatted (508,614 bytes). Validation is not a run: whether GBIF's workflow makes a download of that query is known only
+   when it does (bulk-fetch --parts 4 is the way if it fails).
+
+5. The SQL download's file, from a public SQL download of 2026-10-19 (0035024-260928105237408, its first 256 KB read by
+   range): one member, 0035024-260928105237408.csv; tab-separated; the header the query's aliases in lower case
+   ("datasetkey  year  month  day  decimallatitude …"); Unix line ends; null written empty (1,065 of 6,617 uncertainties);
+   doubles as Java writes them ("90.0", "47.563873"); licences as GBIF's codes ("CC_BY_NC_4_0", "CC_BY_4_0", "CC0_1_0").
+   The reader reads a header case-blind, so these rows read as a DWCA's.
+
+6. The DWCA's columns (GET https://api.gbif.org/v1/occurrence/download/describe/dwca): occurrence.txt's interpreted
+   fields, 230 of them, among them gbifID, license, establishmentMeans and degreeOfEstablishment (vocabulary structures),
+   decimalLatitude (DOUBLE), mediaType (ARRAY, ";"), taxonKey, acceptedTaxonKey, speciesKey (INT). A DWCA asked with no
+   checklistKey gives the GBIF Backbone's keys (https://techdocs.gbif.org/en/data-use/api-downloads: "If no checklistKey
+   is supplied the obsolete GBIF Backbone Taxonomy will be used").
+
+7. What the SQL table has for photographs (GET https://api.gbif.org/v1/occurrence/download/describe/sql, 432 fields):
+   mediatype (an array of types) and v_associatedmedia (the publisher's own text): no image address with its licence and
+   author, which the build needs for each photograph (rule 4). So the photographs come from the images' download.

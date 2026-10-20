@@ -15,8 +15,11 @@ export type SheetClimate =
 export type Sheet = {
   /** The page's id (round seventy-eight). */
   key: PageId;
-  /** The page's GBIF key (`ids.gbif`), which a plant's `taxonKey` is compared with: a homonym's sheet is under `<slug>-<gbif>`. */
-  gbif: number;
+  /**
+   * The page's GBIF key (`ids.gbif`), which a plant's `taxonKey` is compared with: a homonym's sheet is under `<slug>-<gbif>`.
+   * Absent for a page without one (round seventy-nine; `$core/no-gbif`): its climate is then not checked, for that reason.
+   */
+  gbif?: number;
   slug: string;
   name: { scientific: string; family?: string };
   thumb?: string;
@@ -36,7 +39,7 @@ export function sheetOf(d: Dossier, thumb?: string, credit?: string): Sheet {
   const c = d.climate;
   return {
     key: d.key,
-    gbif: d.ids.gbif,
+    ...(d.ids.gbif != null ? { gbif: d.ids.gbif } : {}),
     slug: d.slug,
     name: { scientific: d.name.scientific, family: d.name.family },
     thumb,

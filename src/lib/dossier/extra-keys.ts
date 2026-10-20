@@ -138,8 +138,14 @@ export function typeWhy(r: KewRow, entry: string, idx: Pick<KewNamesIndex, 'byId
 
 /** One extra key of a page, as `scripts/extra-keys.txt` holds it a line. */
 export interface ExtraKey {
-  /** The page's GBIF key. */
+  /** The page's GBIF key (0 for a page without one, which `pageId` names). */
   page: number;
+  /**
+   * A page without a GBIF key (round seventy-nine; the owner's decision on K's offer): its id, `k<plant_name_id>`. Such a
+   * page reads GBIF's records only under keys the rule gives it, the usages of the names Kew's file holds as this plant
+   * (`scripts/extra-keys-kew.txt`), never a key matched by its name.
+   */
+  pageId?: string;
   /** The other GBIF key whose records the page reads. */
   key: number;
   /** GBIF's scientific name for it. */
@@ -157,9 +163,10 @@ export interface ExtraKey {
   except?: number[];
 }
 /** A key that the rule did not take for a page, and why: listed for the report, never read. */
-export interface Refused { page: number; key: number; label: string; why: string }
+export interface Refused { page: number; pageId?: string; key: number; label: string; why: string }
 
-export interface PageIn { key: number; entry: string }
+/** A page the rule is run for: its GBIF key, or (round seventy-nine) none, with its id; and its Kew entry. */
+export interface PageIn { key: number | null; entry: string; id?: string }
 export interface Backbone {
   /** The usages of some words, as Kew writes them (`kewForm`). */
   usagesOf(kewWords: string): Usage[];
@@ -188,14 +195,15 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
   for (const id of plant) { const r = idx.byId.get(id); if (r) names.add(words(r.name)); for (const s of idx.under.get(id) ?? []) if (s.status !== 'Misapplied') names.add(words(s.name)); }
   // The autonyms of its species names ("ficaria verna subsp. verna"): Kew writes no row of them, GBIF may file records under one.
   for (const n of [...names]) { const w = n.split(' '); if (w.length === 2) for (const m of ['subsp.', 'var.', 'f.']) names.add(`${w[0]} ${w[1]} ${m} ${w[1]}`); }
-  const seen = new Set<number>([page.key]);
+  const seen = new Set<number>(page.key != null ? [page.key] : []);
+  const pageOf = { page: page.key ?? 0, ...(page.key == null && page.id ? { pageId: page.id } : {}) };
   const entry = idx.byId.get(page.entry);
   for (const n of [...names].sort()) {
     for (const u of bb.usagesOf(n)) {
       if (seen.has(u.key)) continue;
       seen.add(u.key);
       const take = judge(u);
-      if (take && 'why' in take) refused.push({ page: page.key, key: u.key, label: u.label, why: take.why });
+      if (take && 'why' in take) refused.push({ ...pageOf, key: u.key, label: u.label, why: take.why });
       else if (take) keys.push(take);
     }
   }
@@ -211,7 +219,7 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     if (!mine.length) return null; // another plant's name by the same words
     if (others.length) return { why: `its author reads to Kew's ${mine.map(label).join('; ')} and to ${others.map(label).join('; ')}, another plant's` };
     const up = bb.lineage(u.key);
-    if (up.includes(page.key)) return null; // GBIF already files its records under the page's key
+    if (page.key != null && up.includes(page.key)) return null; // GBIF already files its records under the page's key
     if (proParte(u)) return { why: `GBIF holds it as a pro parte synonym (of ${u.parent ?? 'another key'}): partly another taxon's name, so no one plant's` };
     const at = up.find((k) => k !== page.key && reference.has(k));
     if (at !== undefined) return { why: at === u.key ? 'it is another page of this reference' : `GBIF files it under key ${at}, another page of this reference` };
@@ -235,7 +243,7 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     const row = mine[0];
     const how = 'how' in read && read.how !== 'author' ? read.how : plant.has(row.id) ? (row.id === page.entry ? 'entry' : 'below') : 'filed';
     const filedUnder = plant.has(row.id) ? '' : ` under ${entry ? label(entry) : page.entry}`;
-    return { page: page.key, key: u.key, label: u.label, status: u.status, kew: row.id, kewLabel: `${label(row)} (${statusWord(row)}${filedUnder})`, how, ...(merged.has(u.key) ? { merged: merged.get(u.key) } : {}), ...(except.length ? { except } : {}) };
+    return { ...pageOf, key: u.key, label: u.label, status: u.status, kew: row.id, kewLabel: `${label(row)} (${statusWord(row)}${filedUnder})`, how, ...(merged.has(u.key) ? { merged: merged.get(u.key) } : {}), ...(except.length ? { except } : {}) };
   }
 }
 
@@ -249,19 +257,27 @@ export function extraWhy(x: Pick<ExtraKey, 'kewLabel' | 'how'>): string {
 
 /** `scripts/extra-keys.txt`: a line a key, tab-separated: page key, key, GBIF's name, GBIF's status, Kew's row, Kew's reading, how, the merged page's old slug or "-", the keys left out (comma-separated) or "-". */
 export function formatExtraKeys(keys: readonly ExtraKey[], head: string[] = []): string {
-  return [...head.map((h) => `# ${h}`), ...keys.map((k) => [k.page, k.key, k.label, k.status, k.kew, k.kewLabel, k.how, k.merged ?? '-', k.except?.length ? k.except.join(',') : '-'].join('\t'))].join('\n') + '\n';
+  return [...head.map((h) => `# ${h}`), ...keys.map((k) => [k.pageId ?? k.page, k.key, k.label, k.status, k.kew, k.kewLabel, k.how, k.merged ?? '-', k.except?.length ? k.except.join(',') : '-'].join('\t'))].join('\n') + '\n';
 }
 export function parseExtraKeys(text: string): ExtraKey[] {
   const out: ExtraKey[] = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim() || line.startsWith('#')) continue;
     const c = line.split('\t');
-    const page = Number(c[0]), key = Number(c[1]);
+    // A page without a GBIF key is named by its id (round seventy-nine, `scripts/extra-keys-kew.txt`).
+    const pageId = /^k[1-9]\d*$/.test(c[0] ?? '') ? c[0] : undefined;
+    const page = pageId ? 0 : Number(c[0]), key = Number(c[1]);
     if (!Number.isInteger(page) || !Number.isInteger(key) || c.length < 7) continue;
     const except = c[8] && c[8] !== '-' ? c[8].split(',').map(Number).filter((x) => Number.isInteger(x)) : [];
-    out.push({ page, key, label: c[2], status: c[3], kew: c[4], kewLabel: c[5], how: c[6], ...(c[7] && c[7] !== '-' ? { merged: c[7] } : {}), ...(except.length ? { except } : {}) });
+    out.push({ page, ...(pageId ? { pageId } : {}), key, label: c[2], status: c[3], kew: c[4], kewLabel: c[5], how: c[6], ...(c[7] && c[7] !== '-' ? { merged: c[7] } : {}), ...(except.length ? { except } : {}) });
   }
   return out;
+}
+/** The keys of the pages without a GBIF key (round seventy-nine), by page id. */
+export function byPageId(keys: readonly ExtraKey[]): Map<string, ExtraKey[]> {
+  const m = new Map<string, ExtraKey[]>();
+  for (const k of keys) if (k.pageId) m.set(k.pageId, [...(m.get(k.pageId) ?? []), k]);
+  return m;
 }
 /** The list by page key. */
 export function byPage(keys: readonly ExtraKey[]): Map<number, ExtraKey[]> {

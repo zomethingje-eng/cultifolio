@@ -135,7 +135,8 @@ interface ObsPhoto {
   original_dimensions?: { width: number; height: number };
 }
 interface Observation {
-  id: number;
+  /** The observation's number, or its uuid where it came from iNaturalist's open data (`inat-open.ts`): either is its page's address. */
+  id: number | string;
   observed_on?: string;
   place_guess?: string;
   captive?: boolean;
@@ -221,10 +222,15 @@ export function observedAsAnother(taxon: Observation['taxon'], key: PageId | und
 /** `key` is the page's id (round seventy-eight), which the reference's names (`held`) give their holders by. */
 export type PhotoOwner = { key?: PageId; held?: HeldNames | null; kew?: ((taxonName: string) => string | null) | null };
 
-export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, perPage = 30, own?: PhotoOwner): Promise<FetchResult<Photo[]>> {
+/** A photograph set's answer: as a fetch's, and a "none" that may say where it was read (round seventy-nine: the open data). */
+export type PhotosResult = FetchResult<Photo[]> | { status: 'none'; detail: string };
+
+export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, perPage = 30, own?: PhotoOwner): Promise<PhotosResult> {
   const url = wild ? wildUrl(taxonId, perPage) : cultivatedUrl(taxonId, perPage);
   const r = await f<{ results: Observation[] }>(url);
   if (r.status !== 'ok') return r;
+  // Where the answer was read, when not from the API itself (iNaturalist's open data; `heldWild`), for the record.
+  const said = r.detail;
   const out: Photo[] = [];
   for (const o of r.data.results) {
     // A cultivated photograph only of an observation whose identifications agree (round seventy-eight; `agreedCaptive`).
@@ -257,6 +263,7 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
       });
     }
   }
+  if (said) return out.length ? { status: 'ok', data: out, detail: said } : { status: 'none', detail: said };
   return out.length ? { status: 'ok', data: out } : { status: 'none' };
 }
 

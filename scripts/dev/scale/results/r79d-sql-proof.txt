@@ -1,0 +1,27 @@
+Round seventy-nine, agent D: the two routes of GBIF's records give the same dossiers (scripts/dev/scale/r79d-sql-proof.ts, run 2026-10-20T01:11:28.818Z).
+
+Real records of 7 species from GBIF's occurrence search, the build's filter (coordinates, no geospatial issue, present): 1108 records, 523 of them human observations with a still image (437 iNaturalist's).
+Written as a DWCA (occurrence.txt under GBIF's 230 interpreted columns in GBIF's order, multimedia.txt) and as an SQL download (<key>.csv of SQL_SELECT's 15 columns, rows in another order) beside the images' download (media.zip, records in a third order), with and without iNaturalist's dataset.
+Each read by loadOccurrences and each species built by buildDossier through bulkFetcher; GBIF's other answers asked once and shared; times set aside.
+
+2000 records a species at most (the build's cap is 2000): every species' sampled rows the same: True; its photographs' answer the same: True
+  species | top-level fields | open records on the page | DWCA = SQL with the images' download | GBIF photographs (DWCA, SQL) | DWCA = SQL without iNaturalist's dataset in the images' download, and how it differs | GBIF photographs then (DWCA, SQL), on iNaturalist's hosts
+  Cyphostemma serpens | 14 | 98 | equal | 24, 24 | differs in photos | 24, 24; 2, 0
+  Agave tequilana | 14 | 71 | equal | 4, 4 | differs in photos | 4, 2; 2, 0
+  Schlumbergera truncata | 14 | 49 | equal | 24, 24 | differs in photos | 24, 2; 22, 0
+  Clianthus puniceus | 14 | 28 | equal | 17, 17 | differs in photos | 17, 2; 15, 0
+  Talinum arnotii | 14 | 100 | equal | 18, 18 | differs in photos | 18, 7; 11, 0
+  Sedum potosinum | 14 | 18 | equal | 24, 24 | differs in photos, upstream.gbif.media | 24, 0; 24, 0
+  Drimia ciliata | 14 | 50 | equal | 24, 24 | differs in photos, upstream.gbif.media | 24, 0; 24, 0
+
+100 records a species at most (the build's cap is 2000): every species' sampled rows the same: True; its photographs' answer the same: True
+  species | top-level fields | open records on the page | DWCA = SQL with the images' download | GBIF photographs (DWCA, SQL) | DWCA = SQL without iNaturalist's dataset in the images' download, and how it differs | GBIF photographs then (DWCA, SQL), on iNaturalist's hosts
+  Cyphostemma serpens | 14 | 63 | equal | 24, 24 | differs in photos | 24, 24; 2, 0
+  Agave tequilana | 14 | 45 | equal | 4, 4 | differs in photos | 4, 2; 2, 0
+  Schlumbergera truncata | 14 | 34 | equal | 24, 24 | differs in photos | 24, 2; 22, 0
+  Clianthus puniceus | 14 | 17 | equal | 17, 17 | differs in photos | 17, 2; 15, 0
+  Talinum arnotii | 14 | 69 | equal | 18, 18 | differs in photos | 18, 7; 11, 0
+  Sedum potosinum | 14 | 16 | equal | 24, 24 | differs in photos, upstream.gbif.media | 24, 0; 24, 0
+  Drimia ciliata | 14 | 38 | equal | 24, 24 | differs in photos, upstream.gbif.media | 24, 0; 24, 0
+
+Size: the SQL shape 149730 bytes for 1108 rows, 28045 deflated at level 6 (25.3 bytes a row). A sample of seven species compresses better than 142 million rows of 45,000 species and 8,000 datasets would; GBIF's public SQL download 0035024-260928105237408 (ten columns, observers' names among them) is 50,476,442 bytes for 1,268,522 rows, 39.8 bytes a row. Estimate used: 34 bytes a row (between the two), so 142.3 M rows is about 4.8 GB, within 3.6 to 5.7 GB.

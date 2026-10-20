@@ -6,7 +6,10 @@
  *           wcvp_names.csv and wcvp_distribution.csv (pipe-delimited).
  *   GBIF  — one occurrence download (DWCA: occurrence.txt and multimedia.txt,
  *           tab-delimited) for every taxon key in the list, requested by
- *           scripts/bulk-fetch.ts. Records, and the photographs on them.
+ *           scripts/bulk-fetch.ts. Records, and the photographs on them. Or
+ *           (round seventy-nine) GBIF's SQL download of the same records in
+ *           the columns the build reads (`SQL_SELECT`), with the photographs
+ *           from a small DWCA of the records with images (bulk/media.zip).
  *
  * Nothing in buildDossier() changes: bulkFetcher() wraps the ordinary fetcher
  * and answers the distribution and occurrence URLs from the files, passing
@@ -426,9 +429,43 @@ export class WcvpIndex {
 
 /* ------------------------------------------------------------------ GBIF occurrence download */
 
-/** Read the SIMPLE_CSV header and give a row parser. Tab-delimited, no quoting. */
+/**
+ * The columns of occurrence.txt the reader reads, by their Darwin Core Archive names. GBIF's SQL download (round
+ * seventy-nine) names a column by the query's alias in lower case (`gbifid`, `decimallatitude`), so a header is read
+ * case-blind against these names and both downloads give the reader the same row.
+ */
+export const OCC_TERMS = ['gbifID', 'decimalLatitude', 'decimalLongitude', 'coordinateUncertaintyInMeters', 'coordinatePrecision', 'year', 'countryCode', 'basisOfRecord', 'license', 'datasetKey', 'establishmentMeans', 'degreeOfEstablishment', 'mediaType', 'speciesKey', 'taxonKey', 'acceptedTaxonKey'] as const;
+const TERM_OF = new Map<string, string>(OCC_TERMS.map((t) => [t.toLowerCase(), t]));
+
+/**
+ * The SQL download's columns (round seventy-nine): every term the reader reads but `mediaType`, which only marks a record
+ * for the photographs and the SQL download carries none (they come from bulk/media.zip). Each is GBIF's column, as
+ * https://techdocs.gbif.org/en/data-use/api-sql-downloads lists them, under the alias the reader reads. The three keys are
+ * the GBIF Backbone's (`occurrence.gbif_classification.*`): the table's own `specieskey`, `taxonkey` and
+ * `acceptedtaxonkey` are Catalogue of Life's, and the build asks and judges by backbone key, as the DWCA (asked with no
+ * checklistKey) gives them. A vocabulary column is a structure, read as its concept, which is what a DWCA writes.
+ */
+export const SQL_SELECT: ReadonlyArray<readonly [expression: string, alias: string]> = [
+  ['gbifid', 'gbifid'],
+  ['occurrence.gbif_classification.specieskey', 'specieskey'],
+  ['occurrence.gbif_classification.taxonkey', 'taxonkey'],
+  ['occurrence.gbif_classification.acceptedtaxonkey', 'acceptedtaxonkey'],
+  ['decimallatitude', 'decimallatitude'],
+  ['decimallongitude', 'decimallongitude'],
+  ['coordinateuncertaintyinmeters', 'coordinateuncertaintyinmeters'],
+  ['coordinateprecision', 'coordinateprecision'],
+  ['"year"', 'year'],
+  ['countrycode', 'countrycode'],
+  ['basisofrecord', 'basisofrecord'],
+  ['license', 'license'],
+  ['datasetkey', 'datasetkey'],
+  ['establishmentmeans.concept', 'establishmentmeans'],
+  ['degreeofestablishment.concept', 'degreeofestablishment']
+];
+
+/** Read a records header (a DWCA's occurrence.txt, an old SIMPLE_CSV, or an SQL download's <key>.csv), each name as the reader reads it. Tab-delimited, no quoting. */
 export function occHeader(line: string): string[] {
-  return line.replace(/\r$/, '').split('\t');
+  return line.replace(/^\uFEFF/, '').replace(/\r$/, '').split('\t').map((n) => TERM_OF.get(n.toLowerCase()) ?? n);
 }
 
 export function parseOccRow(h: string[], line: string): GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number } | null {
@@ -498,7 +535,7 @@ export function idHash(id: number): number {
  * only species in `wanted` (when given) are kept at all, and a kept row is a
  * flat array with its strings interned, about a tenth of an object per row.
  */
-type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number, taxon: number];
+type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number, taxon: number, part: number];
 
 export class OccIndex {
   private by = new Map<number, Row[]>();
@@ -509,12 +546,20 @@ export class OccIndex {
   /** The day GBIF made the download (`downloadDay`): the records are as GBIF held them then (round seventy-two, B1). */
   day?: string;
   /**
+   * A download asked in parts (round seventy-nine; `bulk-fetch.ts --parts`): each part's DOI and day, in the order read.
+   * A record carries its own part's, so a page cites the download that holds its records.
+   */
+  private parts: Array<{ doi?: string; day?: string }> = [];
+  private part = -1;
+  /**
    * gbifID → owner key for observation records that carry images, a few dozen per species, so multimedia.txt can be read
    * for them. Kept live: a record is added when it enters a species' media sample and removed when a better hash evicts it.
    */
   readonly withMedia = new Map<number, number>();
   /** Per owner, the media-bearing records inside the sample, sorted by hash ascending: the same rule as the record sample. */
   private mediaBy = new Map<number, Array<[h: number, key: number]>>();
+  /** gbifID → its rank in its owner's media sample (open records first, then by id-hash), for MediaIndex's order. */
+  readonly mediaRank = new Map<number, number>();
   static readonly MEDIA_PER_SPECIES = 40;
   constructor(private cap = 2000, private wanted?: Set<number>) {}
   private intern(s: string | undefined): string {
@@ -537,13 +582,37 @@ export class OccIndex {
     if (full && h >= arr[arr.length - 1][0]) return;
     let i = arr.length;
     while (i > 0 && arr[i - 1][0] > h) i--;
+    if (arr.some((x) => x[1] === key)) return; // a record seen twice (an archive read again) is one record
     arr.splice(i, 0, [h, key]);
     this.withMedia.set(key, owner);
-    if (full) this.withMedia.delete(arr.pop()![1]);
+    this.mediaRank.set(key, h);
+    if (full) { const out = arr.pop()![1]; this.withMedia.delete(out); this.mediaRank.delete(out); }
     this.mediaBy.set(owner, arr);
+  }
+  /** The download's parts (round seventy-nine): records added from here on are of a part with this DOI and day. */
+  startPart(doi?: string, day?: string): void {
+    this.parts.push({ doi, day });
+    this.part = this.parts.length - 1;
   }
   add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number }): void {
     const h = idHash(o.key);
+    this.addMedia(o);
+    for (const k of new Set([o.speciesKey, o.taxonKey, o.acceptedTaxonKey])) {
+      if (!k) continue;
+      if (!this.isWanted(k)) continue;
+      if (h >= (this.worst.get(k) ?? Infinity)) continue;
+      const arr = this.by.get(k) ?? [];
+      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0, o.taxonKey ?? 0, this.part]);
+      if (arr.length > this.cap * 1.25) this.trim(k, arr);
+      this.by.set(k, arr);
+    }
+  }
+  /**
+   * The photographs' half of `add` alone (round seventy-nine): a record of the images' download (bulk/media.zip) beside an
+   * SQL download, which holds the same record without its images. The same rule, so the same records are marked as a
+   * DWCA's own reading would mark them, and no record is kept twice.
+   */
+  addMedia(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number }): void {
     // A record identified to a subspecies belongs to its species' page, so the owner of its photographs is the species
     // key, unless that species is not wanted and the subspecies (taxonKey) is: then the subspecies' page gets them.
     const owner = o.speciesKey && this.isWanted(o.speciesKey) ? o.speciesKey : (o.taxonKey ?? o.speciesKey);
@@ -551,20 +620,17 @@ export class OccIndex {
     // others only where there are fewer than forty open ones (an NC record may carry an open photograph): forty drawn
     // whatever their licence left a few open photographs where the API gives twenty-four (round seventy, the owner's run:
     // Anisocampium niponicum 24 to 8; 177 of its 949 photographed records are open).
+    const h = idHash(o.key);
     const rank = !o.license || isOpen(licenceTag(o.license)) ? h : 1 + h;
     if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank);
-    for (const k of new Set([o.speciesKey, o.taxonKey, o.acceptedTaxonKey])) {
-      if (!k) continue;
-      if (!this.isWanted(k)) continue;
-      if (h >= (this.worst.get(k) ?? Infinity)) continue;
-      const arr = this.by.get(k) ?? [];
-      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0, o.taxonKey ?? 0]);
-      if (arr.length > this.cap * 1.25) this.trim(k, arr);
-      this.by.set(k, arr);
-    }
   }
   private trim(k: number, arr: Row[]): void {
-    arr.sort((a, b) => a[0] - b[0]);
+    arr.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    // A record two parts of a download both hold (round seventy-nine: one part asked for a synonym's key, another for its
+    // species') is one record: its copies sort together, and only the first is kept.
+    let w = 0;
+    for (let r = 0; r < arr.length; r++) if (!w || arr[r][1] !== arr[w - 1][1]) arr[w++] = arr[r];
+    arr.length = w;
     if (arr.length > this.cap) {
       arr.length = this.cap;
       this.worst.set(k, arr[this.cap - 1][0]);
@@ -594,8 +660,8 @@ export class OccIndex {
       coordinatePrecision: r[12] || undefined,
       // The name the record is identified as (round seventy-three): a page's other keys leave some out by it.
       ...(r[13] ? { taxonKey: r[13] } : {}),
-      downloadDoi: this.doi,
-      ...(this.day ? { downloadDay: this.day } : {})
+      downloadDoi: this.parts[r[14]]?.doi ?? this.doi,
+      ...((this.parts[r[14]]?.day ?? this.day) ? { downloadDay: this.parts[r[14]]?.day ?? this.day } : {})
     }));
   }
   get species(): number {
@@ -637,11 +703,17 @@ export function parseMediaRow(h: string[], line: string): MediaRow | null {
  * OccIndex marked as carrying images, the image rows with an open licence, up
  * to thirty a species. Served to the builder in the shape of GBIF's media
  * search, so the media adapter and the dossier cannot tell the paths apart.
+ *
+ * The thirty are the first by their record's rank in the sample (`rankOf`: open records first, then by id-hash; without
+ * it, by id-hash), and a record's own images in the order the file gives them, never the first thirty in file order
+ * (round seventy-nine): a DWCA and the images' download beside an SQL download hold the same records in different
+ * orders, and each must give a page the same photographs.
  */
 export class MediaIndex {
-  private by = new Map<number, Array<{ gbifID: number; m: MediaRow }>>();
+  private by = new Map<number, Array<{ gbifID: number; m: MediaRow; rank: number; seq: number }>>();
+  private seq = 0;
   static readonly CAP = 30;
-  constructor(private ownerOf: Map<number, number>) {}
+  constructor(private ownerOf: Map<number, number>, private rankOf?: Map<number, number>) {}
   add(m: MediaRow): void {
     const k = this.ownerOf.get(m.gbifID);
     if (!k) return;
@@ -649,8 +721,13 @@ export class MediaIndex {
     if (m.format && !/^image\//i.test(m.format)) return;
     if (!isOpen(licenceTag(m.license))) return; // the per-photo licence decides; a CC-BY-NC image is not served
     const arr = this.by.get(k) ?? [];
-    if (arr.length >= MediaIndex.CAP) return;
-    arr.push({ gbifID: m.gbifID, m });
+    const row = { gbifID: m.gbifID, m, rank: this.rankOf?.get(m.gbifID) ?? idHash(m.gbifID), seq: this.seq++ };
+    const before = (a: typeof row, b: typeof row) => a.rank < b.rank || (a.rank === b.rank && (a.gbifID < b.gbifID || (a.gbifID === b.gbifID && a.seq < b.seq)));
+    if (arr.length >= MediaIndex.CAP && !before(row, arr[arr.length - 1])) return;
+    let i = arr.length;
+    while (i > 0 && before(row, arr[i - 1])) i--;
+    arr.splice(i, 0, row);
+    if (arr.length > MediaIndex.CAP) arr.pop();
     this.by.set(k, arr);
   }
   /** As GBIF's occurrence search with mediaType=StillImage would answer: one occurrence per record, its media on it. */

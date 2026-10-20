@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Keep a species on your list without a plant of it. Toggles the taxon's `followed` field; nothing else. */
   import { collection } from '$lib/db/collection.svelte';
-  let { slug, name, gbifKey }: { slug: string; name: string; gbifKey: number } = $props();
+  let { slug, name, gbifKey }: { slug: string; name: string; gbifKey?: number | null } = $props();
   const on = $derived.by(() => {
     const t = collection.ready ? collection.taxon(slug) : undefined;
     return !!t?.followed;

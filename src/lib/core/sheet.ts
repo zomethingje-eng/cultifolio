@@ -13,6 +13,7 @@
  * shown apart from the habitat's figures and never changing the cold floor (round
  * sixty; self-review 3).
  */
+import { NO_GBIF_CLIMATE } from './no-gbif';
 import { frostWording } from './extremes';
 import { MON3 } from './months';
 import { archFor, conventionOf, type ArchGuess } from './arch';
@@ -37,8 +38,12 @@ export interface Extremes {
 }
 export interface SheetInput {
   scientific: string;
-  /** The dossier's climate status when it is not ok, so a note can say which kind of absence it is. */
-  climateStatus?: 'ok' | 'pending' | 'refused' | 'none';
+  /**
+   * The dossier's climate status when it is not ok, so a note can say which kind of absence it is. `unchecked`: a page
+   * without a GBIF key (round seventy-nine; `$core/no-gbif`), whose climate is stored as pending: GBIF's records were not
+   * asked, so it was not checked, and says why.
+   */
+  climateStatus?: 'ok' | 'pending' | 'refused' | 'none' | 'unchecked';
   /** 10th and 90th percentile of the per-cell annual rain totals, when the dossier carries them. */
   annualP10?: number | null;
   annualP90?: number | null;
@@ -274,7 +279,9 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
  * rule 2: an epiphyte whose climate source refused was told "No habitat figure is on file").
  */
 const noHabitat = (st?: SheetInput['climateStatus']) =>
-  st === 'refused'
+  st === 'unchecked'
+    ? { s: `The habitat climate was not checked: ${NO_GBIF_CLIMATE}, so no cold floor is read.`, short: 'Habitat climate not checked', lead: "Habitat climate not checked (GBIF's records were not asked), so no cold floor is read." }
+    : st === 'refused'
     ? { s: 'The habitat climate was not checked: a source refused or did not answer when this page was built, so no cold floor is read.', short: 'Habitat climate not checked', lead: 'Habitat climate not checked, so no cold floor is read.' }
     : st === 'pending'
       ? { s: 'The habitat climate is pending: it has not been derived yet, so no cold floor is read.', short: 'Habitat climate pending', lead: 'Habitat climate pending, so no cold floor is read.' }
@@ -444,7 +451,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     floorOut = coldFloor(null, ex, guess, U, undefined, input.climateStatus);
     const floor = floorOut;
     // Which kind of absence, said as the sentence says it: not checked, pending, or none on file (round sixty-one; visitor 4).
-    const absent = input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
+    const absent = input.climateStatus === 'unchecked' ? "the habitat climate was not checked (GBIF's records were not asked for this name)" : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
     if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; ${absent}, so no cold floor is read.`, false, floor.short, floor.plain);
   }
 

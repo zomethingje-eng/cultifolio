@@ -28,8 +28,8 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
     const jobs = jobsFromList(list);
     expect(jobs.every((j) => j.key === (j.gbifKey ?? undefined))).toBe(true);
   });
-  it('carries no GBIF key that leaves by a merge, this round or the next', () => {
-    const leaving = new Set([...parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')), ...parseMerges(readFileSync('scripts/merged-pages-79.txt', 'utf8'))].map((m) => m.from));
+  it('carries no GBIF key that leaves by a merge (the nine of scripts/merged-pages.txt since round seventy-nine)', () => {
+    const leaving = new Set(parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')).map((m) => m.from));
     expect(leaving.size).toBe(9);
     expect(list.filter((e) => e.gbifKey != null && leaving.has(e.gbifKey))).toEqual([]);
   });
@@ -42,7 +42,9 @@ describe('the build reads the list as the merged code builds', () => {
   });
   it('the bulk fetch takes the list\'s keys before any name match', () => {
     const bf = readFileSync('scripts/bulk-fetch.ts', 'utf8');
-    expect(bf.indexOf('downloadKeysOf(parseSpeciesList(text))')).toBeGreaterThan(0);
-    expect(bf.indexOf('downloadKeysOf(parseSpeciesList(text))')).toBeLessThan(bf.indexOf('await matchName(f, name)'));
+    // Since round seventy-nine (M) the list is parsed once and its keyless species' synonymy keys are added beside its keys.
+    expect(bf.indexOf('downloadKeysOf(listed)')).toBeGreaterThan(0);
+    expect(bf.indexOf('const listed = parseSpeciesList(text);')).toBeLessThan(bf.indexOf('downloadKeysOf(listed)'));
+    expect(bf.indexOf('downloadKeysOf(listed)')).toBeLessThan(bf.indexOf('await matchName(f, name)'));
   });
 });

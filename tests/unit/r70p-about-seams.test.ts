@@ -279,7 +279,9 @@ describe("the front page's photographs (H72)", () => {
 
 describe('the collector genera (H67)', () => {
   it('the count the sentence gives is the list file\'s', () => {
-    const s = said('how', 'The species list was derived, not chosen by hand');
+    // Round seventy-nine's paragraph (docs/PENDING-ABOUT-HOW-R79.md) says it in its second sentence.
+    const first = said('how', 'The species list was derived, not chosen by hand');
+    const s = /collector genera/.test(first.text) ? first : said('how', 'It is the file scripts/species-list.txt');
     const n = Number(claim(s, /of (\d+) collector genera/));
     const file = new Set(raw('scripts/specialist-genera.txt').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))).size;
     expect(file, s.where).toBe(n);

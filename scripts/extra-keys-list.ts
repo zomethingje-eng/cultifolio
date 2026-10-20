@@ -10,15 +10,16 @@ import { KewNamesIndex, words, type KewRow } from '../src/lib/dossier/kew-names'
 import { extraKeysFor, kewForm, type ExtraKey, type Refused, type Merge } from '../src/lib/dossier/extra-keys';
 import { slugify } from '../src/lib/core/names';
 
-type Page = { key: number; name: { scientific: string; kew?: { entry: string } } };
+/** A page: its GBIF key, or (round seventy-nine) none and its id `k<plant_name_id>`; its Kew entry. */
+type Page = { key: number | null; id?: string; name: { scientific: string; kew?: { entry: string } } };
 /** A row's text copied out of the line it was split from, so a kept row does not keep the whole line alive. */
 const own = (s: string) => Buffer.from(s, 'utf8').toString('utf8');
 const kept = (r: KewRow): KewRow => ({ id: own(r.id), name: own(r.name), authors: own(r.authors), status: own(r.status), rank: own(r.rank), accepted: own(r.accepted), parent: own(r.parent), powo: '', ...(r.homotypic ? { homotypic: true } : {}) });
 
-export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[] }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number } | null> {
+export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[]; reference?: ReadonlySet<number> }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number } | null> {
   const csv = `${o.bulk}/wcvp_names.csv`;
   const away = new Set(o.merges.map((m) => m.from));
-  const pages = o.pages.filter((p) => !away.has(p.key));
+  const pages = o.pages.filter((p) => p.key == null || !away.has(p.key));
   const entries = new Set(pages.map((p) => p.name.kew?.entry ?? '').filter(Boolean));
   console.log(`Reading Kew's rows for the ${entries.size} entries of ${pages.length} pages from ${csv}…`);
   // The plant: the entries, the species of an entry below species, the taxa Kew accepts under those, and every name filed under them.
@@ -37,12 +38,13 @@ export async function listExtraKeys(o: { bulk: string; backbone: string; pages: 
   console.log(`Reading GBIF's backbone from ${o.backbone}…`);
   const bb = await loadBackbone(o.backbone, wanted);
   if (!bb) return null;
-  const reference = new Set(pages.map((p) => p.key));
+  // The reference's page keys: the pages' own, or (round seventy-nine) those given, the keys of the whole species list.
+  const reference = new Set(o.reference ?? pages.flatMap((p) => (p.key != null ? [p.key] : [])));
   const holders = new Map<number, number[]>();
   for (const k of reference) for (const a of bb.lineage(k).slice(1)) holders.set(a, [...(holders.get(a) ?? []), k]);
   const merged = new Map(o.merges.map((m) => [m.from, slugify(m.name)]));
   const into = new Map(o.merges.map((m) => [m.from, m.into]));
-  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '' }, idx, bb, reference, holders, merged, into));
+  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '', ...(p.id ? { id: p.id } : {}) }, idx, bb, reference, holders, merged, into));
   // First without what GBIF files under each candidate; then that is read, with Kew's rows of its words, and the rule run again.
   const candidates = new Set(run().flatMap((r) => r.keys.map((k) => k.key)));
   console.log(`  ${candidates.size} candidate keys; reading what GBIF files under them…`);

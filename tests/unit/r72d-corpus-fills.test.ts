@@ -67,7 +67,7 @@ describe('--fill kew-links keeps what it read as it goes', () => {
 describe('--fill gbif-open settles a species whose open photographs name no author', () => {
   const media = { results: [{ key: 9, datasetKey: 'd', media: [{ type: 'StillImage', identifier: 'https://example.org/a.jpg', license: 'http://creativecommons.org/licenses/by/4.0/' }] }] };
   it('recorded as none, counted, and not asked again', async () => {
-    const docs: Record<string, Doc> = { 'a.json': { key: 5, name: { scientific: 'Aus bus' }, ids: {}, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, Doc> = { 'a.json': { key: 5, name: { scientific: 'Aus bus' }, ids: { gbif: 5 }, links: {}, photos: [], upstream: {} } }; // its GBIF key: since round seventy-nine a page without one is passed by (K)
     let asked = 0;
     const f = (async () => { asked++; return { status: 'ok', data: media }; }) as unknown as JsonFetcher;
     const c = await fillOpenGbifAll(store(docs), f);

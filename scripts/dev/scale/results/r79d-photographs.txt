@@ -1,0 +1,22 @@
+Round seventy-nine, agent D: the photographs today's pages take from GBIF's download, by host and dataset (round seventy-seven's corpus of 8,947 pages, /tmp/claude-0/rev78/real-s/v2; each host's dataset read from GBIF for one of its records, 2026-10-20).
+61190 GBIF photographs in all, on 5,158 pages.
+
+host | photographs | pages | dataset | GBIF dataset key | covered by iNaturalist's open data (agent P)
+inaturalist-open-data.s3.amazonaws.com | 54832 | 5021 | iNaturalist Research-grade Observations | 50c9509d-22c7-4a22-a47d-8c48425ef4a7 | yes
+bs.plantnet.org | 5669 | 1186 | Pl@ntNet observations | 7a3679ef-5582-4aaa-81f0-8c2545cafc81 | no: the images download (gbif-media)
+images.ala.org.au | 363 | 91 | ALA species sightings and OzAtlas | 84a649ce-ff81-420d-9c41-aa1de59e3766 | no: the images download (gbif-media)
+www.artsobservasjoner.no | 150 | 58 | Norwegian Species Observation Service | b124e1e0-4755-430f-9eab-894f25a9b59c | no: the images download (gbif-media)
+oxalis.br.fgov.be | 68 | 29 | Meise Botanic Garden Herbarium (BR) | b740eaa0-0679-41dc-acb7-990d562dfa37 | no: the images download (gbif-media)
+observation.org | 37 | 21 | Observation.org, Nature data from around the World | 8a863029-f435-446a-821e-275f4f641165 | no: the images download (gbif-media)
+minka-sdg.org | 21 | 9 | MINKA_Danube Delta Open Living Lab | 9105d363-8e5d-4d3f-9d74-a5e176f178fc | no: the images download (gbif-media)
+plantdata.bio.cmich.edu | 20 | 4 | Prairie Fen Biodiversity Project | 72c4d3c6-5b8d-49f5-bfbe-febd53849588 | no: the images download (gbif-media)
+s3.hpc.ut.ee | 8 | 6 | Estonian Naturalists’ Society | f1c4df18-12d6-40cb-ab51-5bb0d7f08d6e | no: the images download (gbif-media)
+image.laji.fi | 7 | 4 | Löydös Open Invasive Species Observations | baeca59f-e986-49fb-b322-1f940c446bc1 | no: the images download (gbif-media)
+arter.dk | 7 | 3 | Species recordings from the Danish National Portal Arter.dk | 963a6b96-4d22-4428-86e4-afee52cf4a8e | no: the images download (gbif-media)
+objects.oab.tw | 4 | 2 | Census and Classification of Plant Resources in the Solomon Islands — Specimens Dataset | 154947b6-0e29-40da-962f-a0d6e3f12a07 | no: the images download (gbif-media)
+storage.googleapis.com | 2 | 2 | ibbi observations | a3c6c702-6050-4e69-b358-8934bdc97994 | no: the images download (gbif-media)
+static.inaturalist.org | 1 | 1 | iNaturalist Research-grade Observations | 50c9509d-22c7-4a22-a47d-8c48425ef4a7 | yes
+lh3.googleusercontent.com | 1 | 1 | Species observations during citizen science expeditions | f861b96e-76f8-4a4d-b301-ebb82eed6011 | no: the images download (gbif-media)
+
+iNaturalist's: 54,833 photographs on 5,021 pages; 23,489 of them are on their page as iNaturalist's own photographs too; on 606 pages (8,891 photographs) GBIF is the only way iNaturalist's photographs reach the page.
+The others: 6,357 photographs on 1,316 pages (137 pages have GBIF photographs from no iNaturalist record).

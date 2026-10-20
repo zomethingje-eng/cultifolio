@@ -130,7 +130,7 @@ describe('the Worker and the manifest', () => {
     const platform = platformWith(store);
     expect(await getCorpus(platform, noStatic)).toEqual({ id: manifest.id, buckets: 32, products: true });
     const r = await call(corpusGET as never, '/api/corpus', platform);
-    expect(await r.json()).toEqual({ id: manifest.id, buckets: 32, manifest: true });
+    expect(await r.json()).toEqual({ id: manifest.id, buckets: 32, manifest: true, keyless: true });
     expect(r.headers.get('cache-control')).toBe('no-store');
   });
   it('without a manifest the index object\'s etag is the id, the count is thirty-two, and everything is derived from the index', async () => {
@@ -190,7 +190,7 @@ describe('the Worker and the manifest', () => {
     const { manifest, store } = bucketFor(idx);
     const platform = platformWith(store);
     expect(manifest.buckets).toBe(64);
-    expect(await (await call(corpusGET as never, '/api/corpus', platform)).json()).toEqual({ id: manifest.id, buckets: 64, manifest: true });
+    expect(await (await call(corpusGET as never, '/api/corpus', platform)).json()).toEqual({ id: manifest.id, buckets: 64, manifest: true, keyless: true });
     const ok = await call(entriesGET as never, `/api/entries?b=3f&n=64&c=${manifest.id}`, platform);
     expect(ok.status).toBe(200);
     for (const e of (await ok.json()) as IndexEntry[]) expect(bucketOf(e.slug, 64)).toBe('3f');

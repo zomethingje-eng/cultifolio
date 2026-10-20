@@ -4,9 +4,10 @@
 // two seconds after each answer; workerd's inspector does not collect garbage on request). workerd here does not enforce Cloudflare's 128 MB, so this measures what a copy
 // holds; the memory test in DEPLOY.md reads Cloudflare's own verdict.
 //
-//   node scripts/dev/scale/workerd-heap.mjs <built project dir> <dir holding s/v2> <label> [case ...]
+//   node scripts/dev/scale/workerd-heap.mjs <built project dir> <dir holding s/v3> <label> [case ...]
 //   a case is one or more paths joined by "+", answered in order by one fresh copy: /species/copiapoa-cinerea+/api/search?q=aloe
 // Env: PORT (default 4611), STATE (the local R2's folder; filled once, kept), KEYS (dossier keys to put, comma-separated).
+// V (the corpus version, default 3), ONLY (a file of bucket keys to put instead, from r79-reads.mjs; round seventy-nine).
 import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -14,8 +15,12 @@ import { resolve, join } from 'node:path';
 const [project, corpus, label, ...cases] = process.argv.slice(2);
 const PORT = Number(process.env.PORT ?? 4611), INSPECT = PORT + 5000;
 const state = resolve(process.env.STATE ?? `${corpus}/.wrangler-state`);
-const keys = (process.env.KEYS ?? '7284333,2777724').split(',');
+const keys = (process.env.KEYS ?? 'k2735933,k298116').split(',');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Round seventy-nine: the corpus's version folder (`s/v3` since round seventy-eight; V=2 for an older corpus), and ONLY, a
+// file of bucket keys (r79-reads.mjs writes one) to put instead of the whole corpus, so a 2 GB corpus is not copied whole.
+const V = `s/v${process.env.V ?? 3}`;
+const only = process.env.ONLY ? readFileSync(process.env.ONLY, 'utf8').split('\n').filter(Boolean) : null;
 
 async function seed() {
   if (existsSync(join(state, 'seeded'))) return;
@@ -24,11 +29,20 @@ async function seed() {
   // As `wrangler r2 object put --local` makes its bucket, so `wrangler dev --persist-to` finds the objects.
   const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: 'export default { fetch() { return new Response(null) } }', resourcePersistencePath: join(state, 'v3'), r2Buckets: { BUCKET: 'cultifolio' } }));
   const bucket = await mf.getR2Bucket('BUCKET');
-  const dir = join(corpus, 's/v2');
+  const dir = join(corpus, V);
+  if (only) {
+    for (const k of only) { await bucket.put(k, readFileSync(join(corpus, k))); }
+    if (!only.includes(`${V}/manifest.json`)) await bucket.put(`${V}/manifest.json`, readFileSync(join(dir, 'manifest.json')));
+    await mf.dispose();
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'seeded'), `${only.length} objects (ONLY)\n`);
+    console.error(`seeded ${only.length} objects into ${state}`);
+    return;
+  }
   let n = 0;
-  for (const f of readdirSync(join(dir, 'p'))) { await bucket.put(`s/v2/p/${f}`, readFileSync(join(dir, 'p', f))); n++; }
-  for (const k of keys) if (existsSync(join(dir, `${k}.json`))) { await bucket.put(`s/v2/${k}.json`, readFileSync(join(dir, `${k}.json`))); n++; }
-  await bucket.put('s/v2/manifest.json', readFileSync(join(dir, 'manifest.json')));
+  for (const f of readdirSync(join(dir, 'p'))) { await bucket.put(`${V}/p/${f}`, readFileSync(join(dir, 'p', f))); n++; }
+  for (const k of keys) if (existsSync(join(dir, `${k}.json`))) { await bucket.put(`${V}/${k}.json`, readFileSync(join(dir, `${k}.json`))); n++; }
+  await bucket.put(`${V}/manifest.json`, readFileSync(join(dir, 'manifest.json')));
   await mf.dispose();
   mkdirSync(state, { recursive: true });
   writeFileSync(join(state, 'seeded'), `${n + 1} objects\n`);

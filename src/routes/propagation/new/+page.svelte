@@ -101,10 +101,11 @@
     return () => setCrumb([]);
   });
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
-  async function checkedKey(sp: string | null, k: number): Promise<number> {
+  async function checkedKey(sp: string | null, k: number): Promise<number | null> {
     if (!sp || speciesOf(sp) !== sp) return k;
     const s = await sheetForName(sp, k);
-    return s && s !== 'none' ? s.gbif : k; // the reference's GBIF key, never its page id (round seventy-eight)
+    // The reference's GBIF key, never its page id (round seventy-eight); none for a page without one (round seventy-nine).
+    return s && s !== 'none' ? (s.gbif ?? null) : k;
   }
   const METHODS = PROP_METHODS.map((x) => x.k);
   const SEED_PROV = ['unknown', 'wild', 'f1', 'fn'] as const;

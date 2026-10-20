@@ -143,7 +143,7 @@ describe('gbif.vernacular keeps GBIF\'s preferred flag and counts its sources (e
 describe('the audit (scripts/audit-common-names.ts)', () => {
   it('on the fixture corpus: one species with a common name, unchanged', () => {
     const idx = JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8'));
-    expect(auditCommonNames(idx)).toMatchObject({ species: 4, withCommon: 1, changed: 0 });
+    expect(auditCommonNames(idx)).toMatchObject({ species: 5, withCommon: 1, changed: 0 }); // five since round seventy-nine's page without a GBIF key
   });
   it('counts and samples the changes, and says why', () => {
     const a = auditCommonNames([

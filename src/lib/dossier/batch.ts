@@ -33,6 +33,11 @@ import type { JsonFetcher, FetchOptions, FetchResult } from './fetch';
 export const BATCH_CHUNK = 500;
 /** Keys a SPARQL query asks for: its address stays near 3 kB, inside every server's limit for a GET. */
 export const SPARQL_KEYS = 200;
+/**
+ * Species a query by Kew's identifiers asks for (round seventy-nine): each is two quoted identifiers, so fifty keep the
+ * address near 5 kB; two hundred (about 20 kB) were answered 503 by Wikidata's front end, measured 2026-10-20.
+ */
+export const KEW_SPARQL_SPECIES = 50;
 /** Items a `wbgetentities` request reads: the API's limit for an anonymous client. */
 export const ENTITY_IDS = 50;
 /** Titles a TextExtracts request reads: the API's limit for a lead (`exintro`). */
@@ -54,6 +59,37 @@ export const matchUrl = (name: string) => `https://api.gbif.org/v1/species/match
 /** The SPARQL query for the items carrying each GBIF key, any rank. */
 export const p846Query = (keys: readonly number[]) => `SELECT ?k ?item WHERE { VALUES ?k { ${keys.map((k) => `"${k}"`).join(' ')} } ?item p:P846 ?st . ?st ps:P846 ?k . }`;
 export const sparqlUrl = (keys: readonly number[]) => `${WDQS}?format=json&query=${encodeURIComponent(p846Query(keys))}`;
+
+/**
+ * Kew's identifiers of a species without a GBIF key (round seventy-nine; `build-kew.ts`): its IPNI identifier (Kew's
+ * `ipni_id`, which Wikidata's P961 carries bare) and its POWO identifier (Kew's `powo_id`, which P5037 carries as
+ * `urn:lsid:ipni.org:names:<id>`). Either may be absent.
+ */
+export type KewIds = { ipni?: string; powo?: string };
+const powoUrn = (id: string) => `urn:lsid:ipni.org:names:${id}`;
+/** Kew's identifiers are digits, a hyphen and a digit; anything else is not asked. */
+const kewId = (s?: string) => !!s && /^[0-9]+-[0-9]+$/.test(s);
+/**
+ * The items carrying each species' IPNI identifier (P961) or POWO identifier (P5037), statements of any rank, by the
+ * species' pair. A side Kew does not give is "-", which no statement carries: an unbound value (UNDEF) would match every
+ * statement of the property.
+ */
+export const kewItemsQuery = (ids: readonly KewIds[]) => `SELECT ?v ?u ?item WHERE { VALUES (?v ?u) { ${ids.map((k) => `("${kewId(k.ipni) ? k.ipni : '-'}" "${kewId(k.powo) ? powoUrn(k.powo!) : '-'}")`).join(' ')} } { ?item p:P961 ?st . ?st ps:P961 ?v . } UNION { ?item p:P5037 ?st . ?st ps:P5037 ?u . } }`;
+/** The builder's question for one species' item by Kew's identifiers: the exact address, which a batch answers for many. */
+export const kewItemUrl = (k: KewIds) => `${WDQS}?format=json&query=${encodeURIComponent(kewItemsQuery([k]))}`;
+/** Whether a pair has an identifier a query can carry. */
+export const kewAskable = (k: KewIds) => kewId(k.ipni) || kewId(k.powo);
+type KewItemAnswer = { results?: { bindings?: Array<{ v?: { value?: string }; u?: { value?: string }; item?: { value?: string } }> } };
+/** The items one species' answer names, once each, in the order given. */
+export const kewItemsOf = (k: KewIds, r: KewItemAnswer): string[] => {
+  const out: string[] = [];
+  for (const b of r.results?.bindings ?? []) {
+    const q = /\/(Q\d+)$/.exec(b.item?.value ?? '')?.[1];
+    const mine = (b.v?.value != null && b.v.value === k.ipni) || (b.u?.value != null && !!k.powo && b.u.value === powoUrn(k.powo));
+    if (q && mine && !out.includes(q)) out.push(q);
+  }
+  return out;
+};
 export const entitiesUrl = (ids: readonly string[]) => `${WD_API}?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims|sitelinks&sitefilter=enwiki`;
 export const extractsUrl = (titles: readonly string[]) => `${WP_API}?action=query&format=json&formatversion=2&prop=extracts|pageprops&ppprop=disambiguation&exintro=1&explaintext=1&exlimit=${EXTRACT_TITLES}&redirects=1&titles=${titles.map((t) => encodeURIComponent(t)).join('|')}`;
 
@@ -111,10 +147,17 @@ export const articleUrl = (title: string) => `https://en.wikipedia.org/wiki/${en
 export interface BatchJob {
   key?: number;
   name: string;
+  /**
+   * A species without a GBIF key (round seventy-nine): Kew's identifiers, by which its item is asked (`kewItemUrl`). Its
+   * name is never sent to GBIF's name match: the list gives it no GBIF key, and none is guessed (rule 3).
+   */
+  kew?: KewIds;
 }
 
 export interface BatchStats {
   sparql: number;
+  /** Queries for the items of species without a GBIF key, by Kew's identifiers (round seventy-nine). */
+  kewSparql?: number;
   entities: number;
   extracts: number;
   /** Per-species answers held from the batches, and served to the builder. */
@@ -157,6 +200,32 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
         out.set(k, qs);
         // The search's answer: its hits, two at most (`srlimit=2`); the builder takes the item only when one answers.
         hold(p846SearchUrl(k), { status: 'ok', data: { batchcomplete: '', query: { search: qs.slice(0, 2).map((title) => ({ ns: 0, title })) } } });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The items of species without a GBIF key, by Kew's identifiers (round seventy-nine), `KEW_SPARQL_SPECIES` a query:
+   * each species' answer held under its own question's address (`kewItemUrl`), its bindings only, as that question
+   * would have been answered. A query that did not answer is held as that failure for each of its species (rule 2).
+   */
+  async function kewItems(asks: readonly KewIds[]): Promise<Map<KewIds, string[]>> {
+    const out = new Map<KewIds, string[]>();
+    for (let i = 0; i < asks.length; i += KEW_SPARQL_SPECIES) {
+      const part = asks.slice(i, i + KEW_SPARQL_SPECIES);
+      stats.kewSparql = (stats.kewSparql ?? 0) + 1;
+      const r = await net<KewItemAnswer>(`${WDQS}?format=json&query=${encodeURIComponent(kewItemsQuery(part))}`, { timeoutMs: 60_000, headers: { accept: 'application/sparql-results+json' } });
+      if (r.status !== 'ok' || !Array.isArray(r.data?.results?.bindings)) {
+        const no = failed(r.status === 'ok' ? { status: 'error', detail: 'no results in the answer' } : r, `Wikidata's query service, ${part.length} species by Kew's identifiers`);
+        for (const k of part) hold(kewItemUrl(k), no);
+        continue;
+      }
+      for (const k of part) {
+        const qs = kewItemsOf(k, r.data);
+        out.set(k, qs);
+        const mine = r.data.results!.bindings!.filter((b) => qs.includes(/\/(Q\d+)$/.exec(b.item?.value ?? '')?.[1] ?? '') && ((b.v?.value != null && b.v.value === k.ipni) || (b.u?.value != null && !!k.powo && b.u.value === powoUrn(k.powo))));
+        hold(kewItemUrl(k), { status: 'ok', data: { head: { vars: ['v', 'u', 'item'] }, results: { bindings: mine } } });
       }
     }
     return out;
@@ -240,7 +309,7 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
       const keyOf = new Map<BatchJob, number>();
       for (const j of jobs) {
         if (j.key) { keyOf.set(j, j.key); continue; }
-        if (opts.wikidata === false) continue;
+        if (opts.wikidata === false || j.kew) continue;
         const url = matchUrl(j.name);
         const r = await net<{ usageKey?: number; acceptedUsageKey?: number; matchType?: string; canonicalName?: string; synonym?: boolean; status?: string }>(url);
         if (r.status === 'ok' || r.status === 'none') hold(url, r);
@@ -259,6 +328,18 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
           const qs = k ? byKey.get(k) : undefined;
           const t = qs?.length === 1 ? links.get(qs[0]) : undefined;
           if (t) titles.set(j, t);
+        }
+        // The species without a GBIF key, by Kew's identifiers (round seventy-nine): the same entities and titles after.
+        const kewJobs = jobs.filter((j) => !j.key && j.kew && kewAskable(j.kew));
+        if (kewJobs.length) {
+          const byKew = await kewItems(kewJobs.map((j) => j.kew!));
+          const oneK = [...byKew.values()].filter((qs) => qs.length === 1).map((qs) => qs[0]);
+          const linksK = oneK.length ? await entities(oneK) : new Map<string, string | undefined>();
+          for (const j of kewJobs) {
+            const qs = byKew.get(j.kew!);
+            const t = qs?.length === 1 ? linksK.get(qs[0]) : undefined;
+            if (t) titles.set(j, t);
+          }
         }
       }
       if (opts.wikipedia !== false) await summaries([...titles.values()]);

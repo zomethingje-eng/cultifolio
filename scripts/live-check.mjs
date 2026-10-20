@@ -51,25 +51,9 @@ function fail(what, r) {
   if (r) console.error(`  status ${r.status}; cache-control "${r.h('cache-control')}"; cf-cache-status "${r.h('cf-cache-status')}"; ${r.text.slice(0, 200).replace(/\s+/g, ' ')}`);
   process.exit(1);
 }
-// The data centre that answered: the three letters at the end of Cloudflare's ray id ('' from a local `wrangler dev`).
-const colo = (r) => /-([A-Z]{3})$/.exec(r.h('cf-ray'))?.[1] ?? '';
-/**
- * A page asked twice, the second held: the Worker's cache is each data centre's own, and two requests a moment apart can
- * be answered by two (the owner's PC, 2026-10-19: Ashburn, then Newark, by turns), so a second request answered by
- * another centre than the first, or before the first one's copy was stored, is asked again, up to five pairs a second
- * apart. A pair whose second is held is returned at once; otherwise the last pair, which fails the check (round 78).
- */
-async function heldPair(path, init) {
-  let a, b;
-  for (let t = 0; t < 5; t++) {
-    if (t) await new Promise((r) => setTimeout(r, 1000));
-    a = await get(path, init);
-    b = await get(path, init);
-    if (b.h('x-cultifolio-page') === 'held') return { a, b, tries: t + 1 };
-  }
-  return { a, b, tries: 5 };
-}
-const centres = (a, b) => (colo(a) || colo(b) ? ` (answered by ${colo(a) || '?'}, then ${colo(b) || '?'}, after five pairs)` : ' (after five pairs)');
+// The held pair (round seventy-eight) is scripts/live-check-pair.mjs, tested without the network (round seventy-nine).
+import { heldPair as askHeld, centres } from './live-check-pair.mjs';
+const heldPair = (path, init) => askHeld(get, path, init);
 function ok(what) {
   n++;
   console.log(`  ok  ${what}`);

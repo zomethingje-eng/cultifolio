@@ -1,0 +1,13 @@
+Round seventy-nine, agent D: npm run bulk -- gbif-count scripts/species-list.txt, run here 2026-10-20 00:47 to 01:40 UTC (GBIF's count API, one request a second; 231 facet requests for the records, then three counts for each of 226 batches of 200 keys).
+
+  a species list: 46041 GBIF keys from its last column, no name matched; 2327 species with no GBIF key in the list are left out of the download (listed in bulk/unresolved.txt)
+  counting records per species (cached in bulk/counts.json)…
+  
+  45170 species with 142.3 M records go in the download; 871 species with more than 100000 records each (307.4 M in all) are left to the API path, listed in bulk/api-path.txt
+  
+  the Darwin Core Archive (gbif): about 64.9 GB (456 bytes a record, round seventy-two's download)
+  the SQL download (gbif-sql): about 4.8 GB (34 bytes a row, a sample in its shape; GBIF's own compression may differ)
+  records with images, human observations: 40240751; iNaturalist's dataset 37000387, the others 3240364
+  the images' download (gbif-media): about 1.5 GB without iNaturalist's dataset, 18.3 GB with it (--with-inat)
+
+Sizes are estimates: the DWCA at round seventy-two's 456 bytes a record (12,749,146,096 bytes for 27,941,930 records); the SQL download at 34 bytes a row (r79d-sql-proof.txt says why; 3.6 to 5.7 GB); the images' download at 456 bytes a record (its records carry more images a record than the average, so it may be larger).

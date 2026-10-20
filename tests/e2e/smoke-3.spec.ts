@@ -1191,9 +1191,9 @@ test('round forty-eight: on a phone the search row stays pinned through the list
 
 test('round forty-eight: a window opened partway (a letter, ?at=) fills in the rows before it as the reader scrolls up, and the list is whole (2)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 480 }); // short enough that the fixture's one-row list can be scrolled up under the bar
-  const res = await page.goto('/?at=2');
+  const res = await page.goto('/?at=3'); // the fourth row since K's Hesperocyparis joined the fixture (round seventy-nine)
   expect(res?.status()).toBe(200);
-  // the server's window starts at the third row; the rows before it come from the API once the reader is within the
+  // the server's window starts at the fourth row; the rows before it come from the API once the reader is within the
   // rows, not while the chips and the letters above them are what is on screen (round forty-nine, 2: a jump to W on the
   // live site filled all the way to A and landed there)
   await expect(page.locator('.rows .grow').first()).toContainText('Welwitschia');
@@ -1203,7 +1203,7 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   // the reader scrolls the rows up under the pinned bar: the fill runs, and the row they were looking at stays where it was
   await page.evaluate(() => { const r = document.querySelector('.rows .grow')!.getBoundingClientRect(); window.scrollTo(0, window.scrollY + r.top - 100); });
   const before = await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox();
-  await expect(page.locator('.rows .grow')).toHaveCount(3);
+  await expect(page.locator('.rows .grow')).toHaveCount(4);
   await expect(page.locator('.rows .grow').first()).toContainText('Copiapoa');
   await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
   await expect(page.locator('.rows h2.letter').first()).toContainText('C');

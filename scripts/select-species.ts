@@ -198,8 +198,9 @@ async function main() {
   // An index of version 3 names each page by its id (its file's name) and carries its GBIF key as `gbif` (round
   // seventy-eight); one of version 2 names it by its GBIF key. A page is held here by its GBIF key either way.
   const index = (JSON.parse(readFileSync(`${referenceDir}/index.json`, 'utf8')) as Array<{ key: number | string; gbif?: number; name: string }>)
-    .map((e) => ({ file: String(e.key), key: typeof e.key === 'number' ? e.key : e.gbif! }))
-    .filter((e) => !merged.has(e.key));
+    // A page without a GBIF key (round seventy-nine) is held by its Kew entry alone.
+    .map((e) => ({ file: String(e.key), key: typeof e.key === 'number' ? e.key : (e.gbif ?? null) }))
+    .filter((e) => e.key == null || !merged.has(e.key));
   const pages: ReferencePage[] = index.map((e) => {
     const d = JSON.parse(readFileSync(`${referenceDir}/${e.file}.json`, 'utf8')) as { name: { scientific: string; authorship?: string; family?: string; kew?: { entry?: string } } };
     return { key: e.key, name: d.name.scientific, author: d.name.authorship ?? '', family: d.name.family ?? '', kewEntry: d.name.kew?.entry || null };

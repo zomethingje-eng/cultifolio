@@ -25,6 +25,7 @@ names-followed.txt
 corpus.zip
 .pc.md5
 keep.txt
+prune.txt
 live-manifest.json
 live-search/
 live-search.txt
@@ -39,3 +40,4 @@ live-search.txt
 /ipni-powo.txt
 /cache/
 /bucket-unlisted.txt
+extra-keys-kew-refused.txt

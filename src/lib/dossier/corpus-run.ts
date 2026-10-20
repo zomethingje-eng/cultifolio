@@ -83,6 +83,8 @@ export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progr
     const d = store.read<Pick<Dossier, 'key' | 'ids' | 'photos' | 'upstream'>>(file);
     if (d.photos?.length) continue;
     if (askedOpen(d)) { c.before++; continue; }
+    // A page without a GBIF key (round seventy-nine): GBIF's records are not asked for it, and its record says why.
+    if (d.ids?.gbif == null) continue;
     c.asked++;
     const r = await fillOpenGbif(d, f);
     if ('failed' in r) { c.failed++; continue; }

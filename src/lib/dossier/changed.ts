@@ -16,6 +16,7 @@
  * sixty-seven; triage-66 N10, N4).
  */
 import { md5 } from './md5';
+import { byId, isPageId } from '../core/page-id';
 
 export interface Changed {
   /** The day (YYYY-MM-DD, UTC) the fingerprint first appeared. */
@@ -47,12 +48,30 @@ const withoutJudged = (p: unknown) => {
   const { judged: _, ...rest } = p as Obj;
   return rest;
 };
+/**
+ * A list of other pages in one order, whatever order it was written in (round seventy-nine): the order of a photograph's
+ * `shared` means nothing, and the index sorts it by id (`byId`), which orders Kew's ids otherwise than GBIF's keys order
+ * the same pages. Sorted as the index sorts it (or, in a version 2 dossier, by GBIF key, as round seventy-eight's index
+ * did), a list in that order hashes as it always did, so no stored fingerprint moves; a list of the same pages in
+ * another order hashes the same. Lists of anything else are left as they are.
+ */
+const asSet = (xs: unknown[]): unknown[] => {
+  if (xs.every(isPageId)) return [...xs].sort(byId);
+  if (xs.every((x) => typeof x === 'number')) return [...(xs as number[])].sort((a, b) => a - b);
+  return xs;
+};
+/** A photograph as its fingerprint reads it: without its stored judgement, and its `shared` as a set. */
+const photoSubstance = (p: unknown) => {
+  const q = withoutJudged(p);
+  if (!q || typeof q !== 'object' || !Array.isArray((q as Obj).shared)) return q;
+  return { ...(q as Obj), shared: asSet((q as Obj).shared as unknown[]) };
+};
 /** The dossier's substance as one string: everything its page shows, without the build's dates and notes. */
 export function substanceOf(d: object): string {
   const o: Obj = {};
   for (const [k, v] of Object.entries(d as Obj)) {
     if (LEFT_OUT.has(k)) continue;
-    o[k] = k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : k === 'photos' && Array.isArray(v) ? v.map(withoutJudged) : v;
+    o[k] = k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : k === 'photos' && Array.isArray(v) ? v.map(photoSubstance) : v;
   }
   return JSON.stringify(canon(o));
 }

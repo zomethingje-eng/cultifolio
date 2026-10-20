@@ -479,7 +479,9 @@
     q = '';
   };
   /** The climate state in words: a refusal is never shown as an absence. */
-  const climateWord = (c: string) => (c === 'ok' ? 'habitat climate known' : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
+  /** A page without a GBIF key (round seventy-nine; `$core/no-gbif`): a page (it has an id) whose entry carries no GBIF key. Its climate is not checked. */
+  const keyless = (c: { key?: string; gbif?: number }) => !!c.key && c.gbif == null;
+  const climateWord = (c: string, noKey = false) => (c === 'ok' ? 'habitat climate known' : c === 'pending' && noKey ? "habitat climate not checked: GBIF's records were not asked, the page having no GBIF key" : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
 </script>
 
 <svelte:head>
@@ -577,7 +579,7 @@
       <div class="fam">{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
     </div>
   </a>
 {/snippet}
@@ -588,7 +590,7 @@
     <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig">›</span>
   </a>

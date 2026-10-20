@@ -9,7 +9,7 @@
  * GBIF keys. Nothing else in a dossier changes: what the page shows is the same, and so is the day its substance last
  * changed (`changed.on`); its fingerprint is taken again, since the id is part of it.
  */
-import { gbifPage, isPageId, type PageId } from '../core/page-id';
+import { byId, gbifPage, isPageId, type PageId } from '../core/page-id';
 import { pageIds, idWords, type IdAnswer } from './page-ids';
 import { substanceHash } from './changed';
 import { DOSSIER_V } from './schema';
@@ -121,7 +121,9 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
     d.key = a.id;
     const via = d.distribution?.via;
     if (via?.page) via.page = String(moved(via.page));
-    for (const ph of d.photos ?? []) if (Array.isArray(ph.shared)) ph.shared = ph.shared.map(moved);
+    // In the index's order (`byId`, as `sharedPhotos` writes it; round seventy-nine): a list kept in GBIF's order would be
+    // sorted again by the next --index, a rewrite of a page whose content did not change.
+    for (const ph of d.photos ?? []) if (Array.isArray(ph.shared)) { const m = ph.shared.map(moved); ph.shared = m.every(isPageId) ? (m as PageId[]).sort(byId) : m; }
     if (current) d.changed = { on: d.changed!.on, h: substanceHash(d, o.hash) };
     if (!migrating && file === p.file && JSON.stringify(d) === was) return;
     if (migrating) { o.to.write(file, d); report.renamed++; return; }

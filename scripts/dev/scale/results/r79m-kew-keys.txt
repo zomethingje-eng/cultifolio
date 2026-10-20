@@ -1,0 +1,12 @@
+# Round seventy-nine (M): the keys Kew's synonymy gives the list's 2,327 species without a GBIF key (the owner's decision on K's offer, 2026-10-20).
+# scripts/kew-extra-keys.ts --bulk <Kew's file of 2026-06-04> --backbone <GBIF's backbone export, simple.txt.gz, as round seventy-five's list read it>: 132 s on the review machine.
+
+keys taken: 1956 on 1415 pages (how: 247 the entry's own name and author, 1709 a name Kew files under the entry, homotypic or a spelling; GBIF's status: 1106 ACCEPTED, 753 SYNONYM, 54 HETEROTYPIC_SYNONYM, 26 DOUBTFUL, 17 HOMOTYPIC_SYNONYM); no key on two pages, none a list key
+by K's reasons: of the 1758 the backbone holds only as another species' synonym, 1141 (237 by their own name's usage, 904 only by names Kew files under them); of the 564 it holds no name of, 270; of the 5 doubtful, 4
+pages that read no key: 912 (692 whose every usage was refused: 633 filed by GBIF under another page of the reference, 42 heterotypic only, 16 another type below the entry, 1 pro parte; 220 with no usage of any of their names)
+keys refused, by reason: 8478 heterotypic: the owner's decision; 3135 another type below the entry: the owner's decision; 3114 GBIF files it under key N, another page of this reference; 239 GBIF holds it as a pro parte synonym; 28 its author reads to Kew's rows of two plants; 1 it is another page of this reference
+
+# GBIF's occurrence count API, the download's filter (coordinates, no geospatial issue, present), one request a second, 2026-10-20 (scripts/dev/scale/r79m-kew-key-counts.mjs; r79m-kew-key-counts.json):
+keys with records: 1522 of 1956; records summed by key 6638098; union 6632128 (with images, human observations: 1246962)
+pages with records: 1356 of 1415 (1000 or more: 486; over 100,000: 12); 59 read keys that hold no record
+the download: 1944 keys of at most 100,000 records go in it (3,902,722 records summed by key: about 1.8 GB more DWCA at 456 bytes a record, about 0.13 GB more SQL download at 34 bytes a row); 12 keys over 100,000 (2,735,376) go to the API path, as the list's heavy species do; the request is 45,170 + 1,944 = 47,114 keys, within one request's 101,000 predicate items

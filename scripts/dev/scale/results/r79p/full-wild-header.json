@@ -1,0 +1,25 @@
+{
+    "inatOpenWild": 1,
+    "day": "2026-09-27",
+    "read": "2026-10-20T03:48:31.170Z",
+    "files": {
+        "taxa": 39999332,
+        "observations": 0,
+        "photos": 0,
+        "observers": 17423152
+    },
+    "keep": 24,
+    "rule": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)",
+    "counts": {
+        "observations": 282933221,
+        "photos": 501256126,
+        "plantResearch": 64366921,
+        "plantResearchOpen": 10789509,
+        "withoutPhotos": 0,
+        "taxaWithWild": 115849,
+        "kept": 1201219,
+        "unjoined": 0,
+        "farthest": 23049,
+        "heldAside": 0
+    }
+}

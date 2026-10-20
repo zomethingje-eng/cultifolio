@@ -13,7 +13,7 @@ import { parseMostGrown, openingGenera } from '../../src/lib/ui/ref/most-grown-r
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 const file = parseMostGrown(readFileSync('scripts/most-grown-genera.txt', 'utf8'));
-const FIXTURE = ['Copiapoa', 'Refusia', 'Welwitschia'];
+const FIXTURE = ['Copiapoa', 'Hesperocyparis', 'Refusia', 'Welwitschia']; // Hesperocyparis: K's page without a GBIF key (round seventy-nine)
 const expected = openingGenera(file, FIXTURE).genera;
 const DEVICES: Record<string, Parameters<Browser['newContext']>[0]> = {
   desktop: { viewport: { width: 1280, height: 800 } },
@@ -32,7 +32,7 @@ for (const [device, opts] of Object.entries(DEVICES)) {
     await expect(grown).toHaveText('Most grown, 1');
     await expect(grown).not.toHaveAttribute('aria-current', 'page');
     await expect(grown).toHaveAttribute('title', 'The species of the genus most observed in cultivation on iNaturalist');
-    await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 4');
+    await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 5');
     await grown.click();
     await expect(page).toHaveURL(/\?by=genus&chip=grown$/);
     await expect(grown).toHaveAttribute('aria-current', 'page');

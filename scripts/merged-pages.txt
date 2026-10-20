@@ -1,9 +1,27 @@
-# Pages merged into another by the owner's decision (round seventy-three; REVIEW-TRIAGE-71 A7, REVIEW-ROUND-72 section 7):
-# two pages that are one plant, homotypic, where Kew holds the one page's name as a synonym of the other's entry. The
-# page that leaves the reference reads into the one it joins: its GBIF key's records and photographs are read there as
-# an extra key (scripts/extra-keys.txt), its name answers there as an older name, and its old address and a grower's
-# plant under it find the kept page (the index's aliases). `--prune-followed` deletes its dossier once the kept page
-# records the merge.
+# Pages merged into another by the owner's decision: a page that leaves the reference reads into the one it joins. Its
+# GBIF key's records and photographs are read there as an extra key (scripts/extra-keys.txt), its name answers there as
+# an older name, and its old address and a grower's plant under it find the kept page (the index's aliases).
+# `--prune-followed` deletes its dossier once the kept page records the merge.
+#
+# The first two (round seventy-three; REVIEW-TRIAGE-71 A7, REVIEW-ROUND-72 section 7): two pages that are one plant,
+# homotypic, where Kew holds the one page's name as a synonym of the other's entry.
+#
+# The other seven (the owner's decision of 2026-10-19, listed in round seventy-eight and applied from round seventy-nine,
+# whose first change moved them here from scripts/merged-pages-79.txt): the seven pairs of pages that held one Kew entry
+# each (round seventy-eight's ids-gbif.txt), which no id rule can settle (rule 3). The page kept is the one under Kew's
+# accepted name and takes that entry's Kew id at the next `--index`. Six of the seven are Kew's heterotypic synonyms of the
+# entry; the merge is the owner's claim that the two are one plant, so `--list-extra-keys` reads the leaving page's key on
+# the kept page whatever its type (round seventy-eight). Kept (Kew's accepted name, its plant_name_id): Dudleya
+# pulverulenta 2778991, Weingartia canigueralii 2465834, Drosera paleacea 64497, Ceropegia cereiformis (Kew's Echidnopsis
+# cereiformis, homotypic) 505095, Ceropegia nigra 502875, Copiapoa calderana 2735922, Echeveria pinetorum 2781299.
+#
 # A line: <key that leaves>	<key it joins>	<name that leaves>
 3084426	11798439	Coryphantha macromeris
 7906297	7281301	Rebutia fidana
+7530398	2985894	Echeveria peacockii
+3947359	3948341	Weingartia pulchra
+3190985	3190812	Drosera parvula
+9592399	9574874	Ceropegia nubica
+3574291	3574112	Ceropegia melanops
+3959296	7284393	Copiapoa boliviana
+7334118	4199517	Echeveria sessiliflora

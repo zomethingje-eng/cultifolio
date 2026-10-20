@@ -5,6 +5,7 @@
  */
 import { GBIF } from '../src/lib/dossier/sources/gbif';
 import { INAT } from '../src/lib/dossier/sources/inat';
+import type { KewRow } from '../src/lib/dossier/kew-names';
 
 function pts(n: number, lat: number, lon: number, spread: number, licence: string, seed: number) {
   const out = [];
@@ -132,4 +133,18 @@ export function refused(): Record<string, unknown> {
     'https://commons.wikimedia.org/w/api.php': null,
     'https://api.openalex.org/works': null
   };
+}
+
+/**
+ * Kew's rows for the fixture species, as a build given Kew's file reads them (round seventy-nine): copied from
+ * wcvp_names.csv of 2026-06-04 (WCVP, RBG Kew, CC BY), the two real species' own accepted rows and nothing filed under
+ * them. Refusia testii is no species of Kew's: its page stands for one whose Kew rows were not read, keyed by GBIF.
+ * `--fixtures` reads these with the build's own Kew fill, then keys each page by the rule (k339841, k2735933, g999).
+ */
+export const KEW_FILE_DAY = '2026-06-04';
+export function kewRows(): KewRow[] {
+  return [
+    { id: '339841', name: 'Welwitschia mirabilis', authors: 'Hook.f.', status: 'Accepted', rank: 'Species', accepted: '339841', parent: '', powo: '383591-1' },
+    { id: '2735933', name: 'Copiapoa cinerea', authors: '(Phil.) Britton & Rose', status: 'Accepted', rank: 'Species', accepted: '2735933', parent: '2781658', powo: '131119-1' }
+  ];
 }

@@ -1,0 +1,14 @@
+{
+  "what": "npm run dossier -- --fill inat --wild --inat-open <the full read's file>, on a copy of round 77's corpus re-keyed to version 3 (8,947 dossiers), each page's inat.photos.wild record removed first so every page with an iNaturalist id is filled; 2026-10-20, the export of 2026-09-27",
+  "seconds": 216,
+  "dossiers": 8947,
+  "filledFromOpenData": 7870,
+  "withoutInatId": 1077,
+  "requestsToINaturalist": 0,
+  "after": { "ok": 5549, "none": 2321 },
+  "pagesWithWildInatPhotographs": { "before": 5110, "after": 5549, "gained": 439, "lostAll": 0 },
+  "wildInatPhotographs": { "before": 186756, "after": 193015 },
+  "pages": { "more": 1504, "fewer": 1690, "same": 5753, "tenOrMoreFewer": 777 },
+  "tenOrMoreFewer": { "meanBefore": 61.6, "meanAfter": 42.8, "observationsAfter": 24.0, "why": "the API's 24 most-voted observations carry 2.6 photographs each, the export's 24 newest 1.8" },
+  "gainedWere": "mostly 'skipped: not asked: N wild photographs already from the GBIF download' (the API was not asked where GBIF's download gave six or more)"
+}

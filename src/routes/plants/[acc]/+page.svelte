@@ -1,5 +1,6 @@
 <script lang="ts">
   import { climateReason } from '$dossier/range-via';
+  import { noGbif, recordsUnchecked, NO_GBIF_SENTENCE, NO_GBIF_WHY } from '$core/no-gbif';
   import { units } from '$lib/ui/units.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
@@ -276,6 +277,18 @@
   }
   /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
   const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
+  /**
+   * The reference's photograph's room, held while the sheet is asked (round seventy-nine, after round seventy-eight's
+   * offer line): with the reference's photographs switched on, the species' photograph arrived as a hero above the card
+   * and moved the card and the verb bar down by its height. Held where a hero is the likely answer: the grower shows the
+   * reference's photographs, the plant has no photograph of its own, and it is not a hybrid (which has no sheet of its
+   * own); 6,318 of the reference's 8,947 species (71 %) have a photograph. Where none comes (a species without one, a
+   * name the reference does not hold or could not be asked for, a picture that does not load), the held box goes and the
+   * card takes the small tile: the card and the bar move up by the hero's height, the rarer move.
+   */
+  const heroHeld = $derived(!hasHero && !cover && prefs.referencePhotos && ref === 'loading' && kind !== 'hybrid');
+  /** The first screen is laid out for a hero: one shown, or one's room held. */
+  const heroRoom = $derived(hasHero || heroHeld);
   const offerWhat = $derived(compared ? 'the reference’s photograph of the species it is compared with' : 'the reference’s photograph of this species');
   // One date style on the page, the log's: the card said "4 Oct 2026" over a log of "2026-10-15" (round sixty; the grower review, 16).
   const fmtDate = (d: string | null | undefined) => d ?? '';
@@ -582,6 +595,11 @@
 {#if a && keyDiffers}
   <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
 {/if}
+{#if a && dossier && noGbif(dossier) && a.taxonKey != null}
+  <!-- The species page has no GBIF key (round seventy-nine), so this plant's key is compared with none: the species is the
+       one of its name, and the line says so rather than leave the key unexplained. -->
+  <div class="notice" id="key-no-page">The reference holds {a.taxonName} without a GBIF key: {NO_GBIF_WHY}. This plant records GBIF key {a.taxonKey}, which no species page holds; the species shown here is the reference's page of that name.</div>
+{/if}
 {#if a && sharedWith.length}
   <!-- The other plant is a link by its identity: by number it opened whichever loaded first (round sixty). -->
   {#snippet others()}{#each othersIds as o, i (o.id)}{i ? (i === othersIds.length - 1 ? ' and ' : ', ') : ''}<a href="/plants/{encodeURIComponent(o.id)}">{o.name}</a>{/each}{/snippet}
@@ -627,10 +645,13 @@
     <div class="hero">
       <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph{dossier?.credit ? ` (${dossier.credit})` : ''} · add your own</button>
     </div>
+  {:else if heroHeld}
+    <!-- The hero's room while the sheet is asked, unseen and out of the accessibility tree (round seventy-nine; `heroHeld`). -->
+    <div class="hero hold" aria-hidden="true"></div>
   {/if}
   <PhotoTimeline acc={id} />
-  <div class="idcard" class:flat={!hasHero}>
-    {#if !hasHero}
+  <div class="idcard" class:flat={!heroRoom}>
+    {#if !heroRoom}
       <!-- No photograph: a small tile where one would go, beside the name, not a screen-high empty box. The reference's is one line beneath, with what showing it discloses on tap. -->
       <PhotoAdd acc={id} id="hero-photo" tile />
     {/if}
@@ -701,7 +722,7 @@
   <div class="quickbar">
     <!-- aria-disabled, not disabled, while it saves: a disabled button drops keyboard focus to the page (round sixty; the accessibility review, 1). -->
     {#if a.status === 'growing'}<button class="btn pri" id="water-now" onclick={waterNow} aria-disabled={wateringNow}>Water</button>{/if}
-    {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>Photo</button>{/if}
+    {#if heroRoom}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>Photo</button>{/if}
     <!-- "Record…", not "Log": it records any event, and "Log" read as "show the log" (round sixty; the grower review, 16). -->
     <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Record…</button>
     {#if a.status !== 'dead'}<button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>{/if}<!-- a dead plant is not moved, nor watered (round fifty-eight; the grower review) -->
@@ -843,8 +864,12 @@
   <details class="hab" id="habitat">
     <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this space{:else}Habitat vs this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
-      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier && recordsUnchecked(dossier)}<NotChecked what="Climate" why={NO_GBIF_SENTENCE} />{:else if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier && recordsUnchecked(dossier)}No season is read: the species page has no habitat climate, for that reason.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
+    {#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}
+      <!-- A species page without a GBIF key (round seventy-nine): nothing to compare this space with, and why. -->
+      <p class="small muted" id="habitat-not-checked">Habitat against this space: not checked. {NO_GBIF_SENTENCE} The habitat figures are read only from them.</p>
+    {/if}
     {#if habitat && a.locationId}
     <div class="factgrid hvh">
       {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
@@ -927,6 +952,7 @@
   .cardmenu .menu > *:hover, .cardmenu .menu > *:focus-visible { background: var(--sunk); outline: none; }
   /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
   .hero:not(.own) { min-height: 260px; }
+  .hero.hold { visibility: hidden; } /* the room of `.hero:not(.own)`: 260 px, its margin as the hero's */
   .hero .spthumb { width: 100%; height: 260px; object-fit: cover; display: block; }
   /* The skeleton fills the first screen, so the footer starts below the fold and does not move when the record's sections arrive (round eleven, 4). */
   .skel { min-height: calc(100vh - 150px); }

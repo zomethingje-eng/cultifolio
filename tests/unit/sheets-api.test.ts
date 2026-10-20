@@ -93,7 +93,7 @@ describe('/api/corpus', () => {
     const platform = { env: {} } as unknown as App.Platform;
     const r = await corpusGET({ platform, fetch: noStatic } as never);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(await r.json()).toEqual({ id: 'fixture', buckets: 32, manifest: false });
+    expect(await r.json()).toEqual({ id: 'fixture', buckets: 32, manifest: false, keyless: true });
   });
 });
 

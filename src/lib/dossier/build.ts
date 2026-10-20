@@ -30,6 +30,7 @@ import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type 
 import type { HeldNames } from './photo-kind';
 import { gbifPage, type PageId } from '../core/page-id';
 import { extraWhy, type ExtraKey } from './extra-keys';
+import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean';
 
 export interface ClimateProvider {
   /** The envelope across every in-range record's grid cell: what a species page carries. */
@@ -105,6 +106,12 @@ export interface BuildOptions {
    * another page's. A key with `merged` was another page here, merged into this one: its names join this page's too.
    */
   extraKeys?: readonly ExtraKey[];
+  /**
+   * The botanic gardens, herbaria and zoos of scripts/institutions.txt (round seventy-nine, Q; `clean.ts`): a record
+   * within the radius of one is left out of the map, the marker and the climate, and counted. The corpus script always
+   * gives it; without it no record is tested and the record of the occurrence source says so.
+   */
+  places?: PlaceIndex;
 }
 /** How long the previous build's identifiers may be carried through Wikidata not answering, in days (triage-68 M5). */
 export const CARRY_DAYS = 90;
@@ -156,6 +163,36 @@ export function mergeGbifPhotos(prev: Photo[], fresh: Photo[]): Photo[] {
   return dedupePhotos([...prev.filter((p) => p.src !== 'gbif'), ...fresh]);
 }
 
+
+/**
+ * A range's rows as the page's regions (exported in round seventy-nine, so the route without a GBIF key reads Kew's rows
+ * by the same rule; `build-kew.ts`). WCVP states native or introduced for every row. A national checklist that says
+ * neither is a report of presence, not a native range: it is kept as such and never promoted to native. A region where
+ * WCVP says the plant is extinct is part of its history, not its habitat. A region Kew records as doubtfully present is
+ * listed apart, and never a range box (round seventy-two, B5).
+ */
+export function regionsOf(rows: readonly gbif.GbifDistribution[], fromWcvp: boolean): { doubtful: Dossier['distribution']['native']; native: Dossier['distribution']['native']; introduced: Dossier['distribution']['native']; reported: Dossier['distribution']['native']; extinct: Dossier['distribution']['native']; boxes: Box[] } {
+  const doubtful: Dossier['distribution']['native'] = [];
+  const native: Dossier['distribution']['native'] = [];
+  const introduced: Dossier['distribution']['native'] = [];
+  const reported: Dossier['distribution']['native'] = [];
+  const extinct: Dossier['distribution']['native'] = [];
+  const boxes: Box[] = [];
+  for (const d of rows) {
+    const code = fromWcvp ? tdwgCode(d.locationId, d.locality) : null;
+    const region = { code: code ?? undefined, name: code ? tdwgLabel(code) : countryName(d.country) ?? d.locality ?? '?', box: code ? TDWG3[code] : undefined };
+    const intro = CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
+    const nativeSaid = /native|indigenous|endemic/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
+    if (fromWcvp && d.establishmentMeans === 'DOUBTFUL') doubtful.push(region);
+    else if (intro) introduced.push(region);
+    else if (/extinct/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`)) extinct.push(region);
+    else if (fromWcvp || nativeSaid) {
+      native.push(region);
+      if (region.box) boxes.push(region.box);
+    } else reported.push(region);
+  }
+  return { doubtful, native, introduced, reported, extinct, boxes };
+}
 
 /**
  * The range's source as the page's "Range source" row says it. Kew's entry under an older name names the entry and the
@@ -326,32 +363,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const viaSaid = rangeVia && dist.status === 'ok' && !dist.data.held && rangeVia.kind !== 'synonym-of' && rangeVia.kind !== 'older-name' ? viaDetail(rangeVia, authorship) : undefined;
   if (viaSaid) upstream['wcvp.distribution'].detail = [viaSaid, otherAuthor.slice(2)].filter(Boolean).join('; ');
   if (dist.status === 'ok' && dist.data.kewFile) upstream['wcvp.distribution'].asOf = dist.data.kewFile;
-  const doubtful: Dossier['distribution']['native'] = [];
-  const native: Dossier['distribution']['native'] = [];
-  const introduced: Dossier['distribution']['native'] = [];
-  const reported: Dossier['distribution']['native'] = [];
-  const extinct: Dossier['distribution']['native'] = [];
-  const boxes: Box[] = [];
   const fromWcvp = dist.status === 'ok' && dist.data.wcvp;
-  if (dist.status === 'ok') {
-    for (const d of dist.data.rows) {
-      const code = fromWcvp ? tdwgCode(d.locationId, d.locality) : null;
-      const region = { code: code ?? undefined, name: code ? tdwgLabel(code) : countryName(d.country) ?? d.locality ?? '?', box: code ? TDWG3[code] : undefined };
-      const intro = CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
-      const nativeSaid = /native|indigenous|endemic/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
-      // WCVP states native or introduced for every row. A national checklist that says neither is a
-      // report of presence, not a native range: it is kept as such and never promoted to native.
-      // A region where WCVP says the plant is extinct is part of its history, not its habitat.
-      // A region Kew records as doubtfully present is listed apart, and never a range box (round seventy-two, B5).
-      if (fromWcvp && d.establishmentMeans === 'DOUBTFUL') doubtful.push(region);
-      else if (intro) introduced.push(region);
-      else if (/extinct/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`)) extinct.push(region);
-      else if (fromWcvp || nativeSaid) {
-        native.push(region);
-        if (region.box) boxes.push(region.box);
-      } else reported.push(region);
-    }
-  }
+  const { doubtful, native, introduced, reported, extinct, boxes } = regionsOf(dist.status === 'ok' ? dist.data.rows : [], !!fromWcvp);
   const verified = fromWcvp && native.length > 0;
   const ambiguous = dist.status === 'ok' ? dist.data.ambiguous : undefined;
   const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate) ? dist.data.kew : undefined;
@@ -374,85 +387,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // A file's day only where every record set came from it.
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
-  const open: OccPoint[] = [];
-  const restrictedInRange: Array<[number, number]> = [];
-  /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated). */
-  const forClimate: Array<[number, number]> = [];
-  let nOutside = 0,
-    nVague = 0;
-  const datasets = new Map<string, { title?: string; licence: string; n: number }>();
+  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places);
   if (occ.status === 'ok') {
-    // Same coordinate to three decimals is one place; when an open and a restricted record share it, the
-    // open one is the one kept, so a licence never hides a record the map could show.
-    const byCoord = new Map<string, (typeof occ.data)[number]>();
-    for (const r of occ.data) {
-      if (r.decimalLatitude == null || r.decimalLongitude == null) continue;
-      if (r.basisOfRecord === 'LIVING_SPECIMEN') continue; // a plant somebody planted
-      if (CULTIVATED_RE.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
-      const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
-      const held = byCoord.get(dk);
-      // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
-      // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
-      // discarded for a 100 km one that happened to come first.
-      const unc = (x: typeof r) => x.coordinateUncertaintyInMeters ?? Infinity;
-      const better = !held || (!isOpen(licenceTag(held.license)) && isOpen(licenceTag(r.license))) || (isOpen(licenceTag(held.license)) === isOpen(licenceTag(r.license)) && unc(r) < unc(held));
-      if (better) byCoord.set(dk, r);
-    }
-    for (const r of byCoord.values()) {
-      const lat = +r.decimalLatitude!.toFixed(3),
-        lon = +r.decimalLongitude!.toFixed(3);
-      const tag = licenceTag(r.license);
-      const dsKey = r.datasetKey ?? '?';
-      const ds = datasets.get(dsKey) ?? { title: r.datasetName ?? undefined, licence: tag ?? 'unstated', n: 0 };
-      ds.n++;
-      datasets.set(dsKey, ds);
-      // No boxes (the range source refused, or a country-level range): nothing is tested and every record is kept; the
-      // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
-      const inRange = boxes.length ? boxes.some((b) => inBox(lat, lon, b)) : true;
-      if (!inRange) {
-        nOutside++;
-        continue;
-      }
-      if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
-      else restrictedInRange.push([lat, lon]);
-      // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
-      // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
-      // a herbarium sheet placed at a locality's centre with no figure stays out, as the de-duplication above already
-      // treats it (round thirty, R2-11). Takes effect when the corpus is next built.
-      // The decimals are counted as the record wrote them: the download's text keeps a trailing zero ("-33.120" is
-      // three) and the parser carries the count; a JSON number from the API has lost it, so the count from the number
-      // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
-      // coordinatePrecision of 0.001° or finer counts the same as three decimals.
-      const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
-      const written = r.coordDecimals ?? Math.min(decimals(r.decimalLatitude!), decimals(r.decimalLongitude!));
-      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && (written >= 3 || (r.coordinatePrecision != null && r.coordinatePrecision <= 0.001)) : r.coordinateUncertaintyInMeters <= 10_000;
-      if (precise) forClimate.push([lat, lon]);
-      else nVague++;
-    }
-  }
-  // The envelope and the map marker are derived numbers, so every in-range coordinate may inform them,
-  // whatever its licence; only the open records themselves are published (on the map and in the dossier).
-  const openPts = open.map((p) => [p[0], p[1]] as [number, number]);
-  const allPts = [...openPts, ...restrictedInRange];
-  const cluster = habitatCluster(allPts);
-  const openCluster = cluster && openPts.length ? habitatCluster(openPts, [cluster.cell]) : null;
-  const restrictedShiftKm = cluster && openCluster && restrictedInRange.length ? Math.round(haversineKm(openCluster.lat, openCluster.lon, cluster.lat, cluster.lon)) : null;
-
-  /* ---- 4. The map marker, and the climate envelope ---- */
-  // The marker is where the records are densest: a place to put the pin, nothing more. The climate is
-  // read across every in-range record's cell, so no single population decides it.
-  let centroid: Dossier['centroid'] | undefined;
-  // Without a verified range the records cannot be told from cultivation, so there is no population to mark either.
-  if (cluster && cluster.n >= 3 && verified && boxes.length) {
-    const at = habitatCentre(cluster, openPts);
-    centroid = {
-      lat: at.lat,
-      lon: at.lon,
-      n: cluster.n,
-      share: +cluster.share.toFixed(2),
-      // Says where the marker is and nothing about the climate: whether a climate was read is decided further down, and the page says which.
-      how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
-    };
+    // The record says what the institution rule left out, or that it was not applied (rule 2: not tested is not none).
+    const instSaid = o.places ? institutionWords(nInstitution, institutionKinds, o.places.radiusM) : 'records not tested against botanic gardens, herbaria and zoos: no list of them was given to this build';
+    if (instSaid) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, instSaid].filter(Boolean).join('; ');
   }
   let climate: Climate = { status: 'none', detail: 'no georeferenced record inside the range' };
   // A refusal said as a refusal, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2), each as a
@@ -748,6 +687,108 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   settleRange(dossier);
   // Never publish something the schema will refuse to serve.
   return { ok: true, dossier: parseDossier(dossier, o.held) };
+}
+
+/**
+ * The records of a page read against its range (round seventy-nine, the merge: one reading for a page with a GBIF key
+ * and a page without one, whose records come from the keys Kew's synonymy gives it): planted and garden records left
+ * out, one record a three-decimal coordinate, each tested against the range's boxes, the open ones kept for the map, the
+ * precise ones for the climate; then the map marker. Pure: the climate is read by the caller from `forClimate`.
+ */
+export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex) {
+  const open: OccPoint[] = [];
+  const restrictedInRange: Array<[number, number]> = [];
+  /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated). */
+  const forClimate: Array<[number, number]> = [];
+  let nOutside = 0,
+    nVague = 0;
+  const datasets = new Map<string, { title?: string; licence: string; n: number }>();
+  // Records at a botanic garden, a herbarium or a zoo (round seventy-nine, Q; `clean.ts`), counted by the kind of place.
+  let nInstitution = 0;
+  const institutionKinds = new Map<InstitutionKind, number>();
+  {
+    // Same coordinate to three decimals is one place; when an open and a restricted record share it, the
+    // open one is the one kept, so a licence never hides a record the map could show.
+    const byCoord = new Map<string, gbif.GbifOccurrence>();
+    for (const r of data) {
+      if (r.decimalLatitude == null || r.decimalLongitude == null) continue;
+      if (r.basisOfRecord === 'LIVING_SPECIMEN') continue; // a plant somebody planted
+      if (CULTIVATED_RE.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
+      // A plant at a botanic garden, a herbarium or a zoo is a planted one, or a specimen placed at its keeper's address,
+      // whatever its basis of record says: on round seventy-seven's corpus 20,701 kept points of 2,651 species lay within
+      // 1 km of one (round seventy-nine, Q). Tested on the record's own coordinates, before they are rounded.
+      const at = places?.near(r.decimalLatitude, r.decimalLongitude);
+      if (at) {
+        nInstitution++;
+        institutionKinds.set(at.kind, (institutionKinds.get(at.kind) ?? 0) + 1);
+        continue;
+      }
+      const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
+      const held = byCoord.get(dk);
+      // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
+      // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
+      // discarded for a 100 km one that happened to come first.
+      const unc = (x: typeof r) => x.coordinateUncertaintyInMeters ?? Infinity;
+      const better = !held || (!isOpen(licenceTag(held.license)) && isOpen(licenceTag(r.license))) || (isOpen(licenceTag(held.license)) === isOpen(licenceTag(r.license)) && unc(r) < unc(held));
+      if (better) byCoord.set(dk, r);
+    }
+    for (const r of byCoord.values()) {
+      const lat = +r.decimalLatitude!.toFixed(3),
+        lon = +r.decimalLongitude!.toFixed(3);
+      const tag = licenceTag(r.license);
+      const dsKey = r.datasetKey ?? '?';
+      const ds = datasets.get(dsKey) ?? { title: r.datasetName ?? undefined, licence: tag ?? 'unstated', n: 0 };
+      ds.n++;
+      datasets.set(dsKey, ds);
+      // No boxes (the range source refused, or a country-level range): nothing is tested and every record is kept; the
+      // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
+      const inRange = boxes.length ? boxes.some((b) => inBox(lat, lon, b)) : true;
+      if (!inRange) {
+        nOutside++;
+        continue;
+      }
+      if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
+      else restrictedInRange.push([lat, lon]);
+      // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
+      // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
+      // a herbarium sheet placed at a locality's centre with no figure stays out, as the de-duplication above already
+      // treats it (round thirty, R2-11). Takes effect when the corpus is next built.
+      // The decimals are counted as the record wrote them: the download's text keeps a trailing zero ("-33.120" is
+      // three) and the parser carries the count; a JSON number from the API has lost it, so the count from the number
+      // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
+      // coordinatePrecision of 0.001° or finer counts the same as three decimals.
+      const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
+      const written = r.coordDecimals ?? Math.min(decimals(r.decimalLatitude!), decimals(r.decimalLongitude!));
+      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && (written >= 3 || (r.coordinatePrecision != null && r.coordinatePrecision <= 0.001)) : r.coordinateUncertaintyInMeters <= 10_000;
+      if (precise) forClimate.push([lat, lon]);
+      else nVague++;
+    }
+  }
+  // The envelope and the map marker are derived numbers, so every in-range coordinate may inform them,
+  // whatever its licence; only the open records themselves are published (on the map and in the dossier).
+  const openPts = open.map((p) => [p[0], p[1]] as [number, number]);
+  const allPts = [...openPts, ...restrictedInRange];
+  const cluster = habitatCluster(allPts);
+  const openCluster = cluster && openPts.length ? habitatCluster(openPts, [cluster.cell]) : null;
+  const restrictedShiftKm = cluster && openCluster && restrictedInRange.length ? Math.round(haversineKm(openCluster.lat, openCluster.lon, cluster.lat, cluster.lon)) : null;
+
+  /* ---- 4. The map marker, and the climate envelope ---- */
+  // The marker is where the records are densest: a place to put the pin, nothing more. The climate is
+  // read across every in-range record's cell, so no single population decides it.
+  let centroid: Dossier['centroid'] | undefined;
+  // Without a verified range the records cannot be told from cultivation, so there is no population to mark either.
+  if (cluster && cluster.n >= 3 && verified && boxes.length) {
+    const at = habitatCentre(cluster, openPts);
+    centroid = {
+      lat: at.lat,
+      lon: at.lon,
+      n: cluster.n,
+      share: +cluster.share.toFixed(2),
+      // Says where the marker is and nothing about the climate: whether a climate was read is decided further down, and the page says which.
+      how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
+    };
+  }
+  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid };
 }
 
 /** The words a record of a species on a homonym key carries (`kewName`), by which a re-derivation keeps them. */

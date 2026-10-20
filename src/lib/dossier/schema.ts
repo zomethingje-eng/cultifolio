@@ -69,7 +69,7 @@ export const NameBlock = v.object({
 });
 
 export const Ids = v.object({
-  gbif: v.number(),
+  gbif: v.optional(v.number()),
   powo: v.optional(v.string()),
   ipni: v.optional(v.string()),
   inat: v.optional(v.number()),

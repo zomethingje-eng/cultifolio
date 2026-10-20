@@ -181,6 +181,11 @@ export async function fillKewLinks(store: DossierStore, f: JsonFetcher, now = ()
 /* ---------------------------------------------------------------- --fill inat-ids */
 
 export type InatIdCounts = {
+  /**
+   * Pages without a GBIF key (round seventy-nine), passed by: their iNaturalist taxon is the one `kewInatTaxon` takes
+   * (`build-kew.ts`), by Kew's names, and this fill's rule reads GBIF's. Absent when there are none.
+   */
+  noGbif?: number;
   checked: number;
   followed: number;
   dropped: number;
@@ -230,8 +235,11 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
   const held: Array<{ file: string; id: number; earlier: boolean; restore?: boolean }> = [];
   for (const file of store.files()) {
     const d = store.read<IdDossier>(file);
+    // A page without a GBIF key (round seventy-nine) is not judged here: this rule reads GBIF's answers by the page's key.
+    if (d.ids?.gbif == null) { c.noGbif = (c.noGbif ?? 0) + 1; continue; }
+    const gbifKey = d.ids.gbif;
     // By GBIF key (round seventy-eight): the reference here is what GBIF's and iNaturalist's answers are judged against.
-    if (d.name?.scientific) { byName.set(d.name.scientific.toLowerCase(), d.ids.gbif); entries.push({ key: d.ids.gbif, name: d.name.scientific, family: d.name.family }); }
+    if (d.name?.scientific) { byName.set(d.name.scientific.toLowerCase(), gbifKey); entries.push({ key: gbifKey, name: d.name.scientific, family: d.name.family }); }
     // A taxon an earlier rule of round seventy refused is judged again, and its id given back when the rule now takes it
     // (the owner's runs: Sprekelia formosissima's Zephyranthes formosissima and 34 more; Echinocereus chisosensis).
     const refusedBefore = !d.ids?.inat ? lastRefusal(d.upstream?.['inat.taxon']?.detail ?? '') : undefined;
@@ -256,7 +264,8 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       if (!got || (restore && !got.active)) continue;
       const d = store.read<IdDossier>(file);
       const name = d.name.scientific;
-      const heldElsewhere = heldElsewhereIn(byName, d.ids.gbif);
+      const gbifKey = d.ids.gbif!;
+      const heldElsewhere = heldElsewhereIn(byName, gbifKey);
       // An active id of another name, from Wikidata or carried, is read by B5's rule; one of the species' own names by
       // what the dossier holds (`ownNames` over its stored synonyms) asks nothing (round seventy, second pass).
       const carried = got.active && !earlier && !restore;
@@ -284,7 +293,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       // The taxon to judge: the current taxon an inactive id names, or the active one (followed earlier, or carried).
       const to = got.active ? id : got.current!;
       const target = got.active ? got : cur.data.get(to);
-      const st = await sameTypeOfRows(f, d.ids.gbif);
+      const st = await sameTypeOfRows(f, gbifKey);
       if ('failed' in st) return stop(st);
       const sameType = st.rows.map((x) => x.name);
       const owned = ownNames({ scientific: name, sameType, synonyms: st.all, heldElsewhere });
@@ -295,7 +304,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       // reference, is taken; GBIF's other species of this reference is not.
       const own = target?.name && target.active !== false && isOwnName(owned, target.name);
       if (carried && own) { checkedKept("active and this species' own"); continue; }
-      const g = own ? ({ status: 'ok', data: { take: true, why: `${target!.name} is one of this species' names`, to, name: target!.name } } as const) : await judgeIdTaxon(f, to, target, { key: d.ids.gbif, scientific: name, authorship: d.name.authorship ?? st.authorship, family: d.name.family, own: owned, heldElsewhere, reference });
+      const g = own ? ({ status: 'ok', data: { take: true, why: `${target!.name} is one of this species' names`, to, name: target!.name } } as const) : await judgeIdTaxon(f, to, target, { key: gbifKey, scientific: name, authorship: d.name.authorship ?? st.authorship, family: d.name.family, own: owned, heldElsewhere, reference });
       if (g.status !== 'ok') return stop(g);
       const why = g.data.why;
       const head = carried ? `iNaturalist's taxon ${named}, kept from an earlier build, is not this species: ${why}` : `${earlier ? `${before}; read again ${day(now())}: ${named}` : `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive; its current taxon ${named}`} is not this species: ${why}`;
@@ -321,7 +330,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       if (restore) continue; // refused again: left as the first run left it
       // Refused: the id, its link and the photographs it gave go, and the name is asked as the build asks it, never
       // taking the refused taxon (`taxonFor`).
-      const t = await taxonFor(f, { scientific: name, key: d.ids.gbif, family: d.name.family, own: owned, sameType, heldElsewhere, reference, refused: new Set([to]) });
+      const t = await taxonFor(f, { scientific: name, key: gbifKey, family: d.name.family, own: owned, sameType, heldElsewhere, reference, refused: new Set([to]) });
       if (t.status === 'refused' || t.status === 'error' || t.status === 'skipped') return stop(t);
       const gone = (d.photos ?? []).filter((p) => p.src === 'inat').length;
       d.photos = (d.photos ?? []).filter((p) => p.src !== 'inat');
@@ -364,6 +373,8 @@ export function inatTaxonRow(was: { status: string; detail?: string } | undefine
 /* ---------------------------------------------------------------- --fill wikidata */
 
 export type WikidataCounts = {
+  /** Pages without a GBIF key (round seventy-nine), passed by: their item is found by Kew's identifiers (`kewItem`). Absent when there are none. */
+  noGbif?: number;
   /** Items read from Wikidata, fifty a request, to see whether they carry the species' own GBIF key. */
   read: number;
   /** Of those, items that carry it: found by the key, and left as they are. */
@@ -419,6 +430,9 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     const row = d.upstream?.wikidata;
     const disagree = ipniPowoDisagree(d.ids);
     if (disagree) c.disagree.push(`${d.name.scientific} [${d.ids?.gbif ?? d.key}]: ${disagree}`);
+    // A page without a GBIF key (round seventy-nine) found its item by Kew's identifiers (`kewItem`), which this fill's
+    // proof by GBIF key cannot read: passed by, and counted.
+    if (d.ids?.gbif == null) { c.noGbif = (c.noGbif ?? 0) + 1; continue; }
     const placed = d.ids?.wikidata && row?.status === 'ok' ? { file, q: d.ids.wikidata, key: d.ids.gbif, ask: false } : null;
     if (placed) withItem.push(placed);
     if ((row?.detail ?? '').includes(REPROVED)) { c.before++; continue; }
@@ -453,7 +467,8 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
   }
   for (const file of reprove) {
     const d = store.read<WdDossier>(file);
-    const st = await sameTypeOfRows(f, d.ids.gbif);
+    const gbifKey = d.ids.gbif!; // pages without one were passed by above
+    const st = await sameTypeOfRows(f, gbifKey);
     if ('failed' in st) return stopped({ ...c, failed: st.failed });
     // Kew's numbers for the name and author, shared with the proof, as a build shares them (round seventy-two).
     const kewAsk: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {};

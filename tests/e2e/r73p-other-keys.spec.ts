@@ -40,6 +40,12 @@ async function withKeys(page: Page, keys: unknown) {
 /** The species page by a client-side visit from its genus row, so its data comes through `__data.json`. */
 async function open(page: Page) {
   await page.goto('/?by=genus&open=copiapoa'); await ready(page);
+  // The collection open first (round seventy-nine): a device whose plants were written behind the page's back (`inject`)
+  // has not yet set the front page's hint, so the page is drawn as a visitor's and redrawn as a grower's when the
+  // collection opens, and the tile moves. In the owner's WebKit run that move came during the click on the tile: the
+  // hover's preload asked for the page's data (the routed `__data.json`) and the click itself never landed, so the
+  // address never changed.
+  await page.locator('html[data-collection="open"]').waitFor({ state: 'attached' });
   await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).click();
   await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');

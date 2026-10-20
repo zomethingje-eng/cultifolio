@@ -25,6 +25,8 @@ describe('--rekey on the fixture corpus written as version 2', () => {
     // The fixture's dossiers as round seventy-seven's corpus held them: version 2, named and keyed by GBIF key.
     for (const f of readdirSync(join(ROOT, 'fixtures/dossiers/s/v3')).filter((x) => x.endsWith('.json'))) {
       const d = JSON.parse(readFileSync(join(ROOT, 'fixtures/dossiers/s/v3', f), 'utf8'));
+      // Version 2 had no page without a GBIF key (round seventy-nine's fixture, k457911, is not one of its pages).
+      if (d.ids.gbif == null) continue;
       writeFileSync(join(v2, `${d.ids.gbif}.json`), JSON.stringify({ ...d, v: 2, key: d.ids.gbif }));
     }
     for (const f of readdirSync(join(ROOT, 'fixtures/dossiers/s/v3/g'))) copyFileSync(join(ROOT, 'fixtures/dossiers/s/v3/g', f), join(v2, 'g', f));

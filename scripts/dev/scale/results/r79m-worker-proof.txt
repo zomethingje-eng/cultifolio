@@ -1,0 +1,67 @@
+# Round seventy-nine (M): scripts/dev/scale/r79m-worker-proof.mjs, 2026-10-20, on the review machine (two shared cores, quiet).
+# Corpus: round seventy-seven's real corpus (/tmp/claude-0/rev78/real-s/v2, 8,947 species) rekeyed to version 3 by r79base's own --rekey (corpus bfb1edeee7862289, round seventy-eight's code: the live corpus's analogue).
+# Base: r79base built (npm run build); this: r79 at the merge built the same way. Both Workers answer every path over that one corpus folder.
+
+## 1. This round's Worker over round seventy-eight's corpus: every species page (HTML and data), every /api/dossier/<id>, 300 lookups by GBIF key, the front page and five other pages, the sitemaps, robots.txt, /api/corpus, 14 searches, all 32 entry and sheet buckets, the three catalogues (18,285 paths)
+
+{
+ "paths": 18285,
+ "same": 18285,
+ "statuses": {
+  "200→200": 17984,
+  "302→302": 300,
+  "404→404": 1
+ },
+ "kinds": {},
+ "seconds": 276,
+ "setAside": {
+  "inlined styles": 35808,
+  "svelte class hashes": 6919580,
+  "hydration markers": 10729416,
+  "asset hashes": 161124,
+  "runs of white space": 89406692,
+  "F notes line held": 8947
+ }
+}
+
+## 2. Round seventy-eight's Worker over a corpus holding one page without a GBIF key (the merged corpus above with K's fixture k457911.json and --index): what an upload before the deploy would serve (79 paths: the page, its API, the front page, three searches that find it, every entry and sheet bucket, the genus catalogue, the first sitemap, three other species pages)
+
+{
+ "paths": 79,
+ "same": 77,
+ "statuses": {
+  "503→200": 2,
+  "200→200": 76,
+  "404→404": 1
+ },
+ "kinds": {
+  "status 503→200": 2
+ },
+ "seconds": 2,
+ "setAside": {
+  "inlined styles": 20,
+  "svelte class hashes": 3732,
+  "hydration markers": 5760,
+  "asset hashes": 86,
+  "runs of white space": 49472,
+  "F notes line held": 3
+ }
+}
+
+status 503→200: 2
+  /species/hesperocyparis-lusitanica
+      base: 503  <!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-r
+      this: 200  <!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-r
+  /api/dossier/k457911
+      base: 503  {"message":"This species page could not be read just now"}
+      this: 200  {"v":3,"key":"k457911","slug":"hesperocyparis-lusitanica","built":"2026-10-20T00:55:12.337Z","builtBy":"node","name":{"scientific":"Hesperocyparis lusitanica","authorship":"(Mill.) Bartel","rank":"SPE

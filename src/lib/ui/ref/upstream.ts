@@ -29,6 +29,8 @@ export const UPSTREAM_NAME: Record<string, string> = {
   'gbif.occurrences': 'GBIF occurrence records',
   'gbif.media': 'GBIF media',
   'wcvp.distribution': 'WCVP native range',
+  // A page without a GBIF key (round seventy-nine): its name, author, family and synonyms are read from Kew's file.
+  'kew.names': "Kew's names (WCVP)",
   wikidata: 'Wikidata',
   wikipedia: 'Wikipedia',
   'inat.taxon': 'iNaturalist taxon',

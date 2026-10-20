@@ -23,6 +23,7 @@
   import { climateDetail } from '$lib/ui/ref/upstream';
   import { showable } from '$lib/ui/ref/photos';
   import { yearRain } from '$climate/year-rain';
+  import { recordsUnchecked, NO_GBIF_SENTENCE } from '$core/no-gbif';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   let { data } = $props();
   const u = $derived(units.current);
@@ -39,7 +40,7 @@
     // Every month that ties as printed, named (round sixty-one; visitor 5: Copiapoa humilis, 23 °C in January and February, read "Jan").
     const at = (f: (x: Month) => number, hi: boolean, fmt: (v: number) => string) => (m ? monthNames(tiedMonths(m.map(f), hi, fmt), 'short') : '');
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: recordsUnchecked(d) ? 'unchecked' : cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const shown = d.photos.filter(showable); // a Commons photograph with no thumbnail is not shown (round sixty-two; outside review A35)
     const hero = shown.find((p) => !p.captive) ?? shown[0];
     return {
@@ -64,7 +65,8 @@
   const climateWhy = (d: D) => detailSentence(climateDetail(d.climate.status === 'refused' ? d.climate.detail : undefined, d.upstream), 'A source did not answer when this page was built').replace('when this page was built', 'when the species page was built');
   /** A sentence ended once: the climate's words may end their own (round sixty-seven; triage-66 P5, S-F11). */
   const ended = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
-  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
+  // A page without a GBIF key (round seventy-nine): not checked, and why, before "pending".
+  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : recordsUnchecked(d) ? `Climate not checked. ${NO_GBIF_SENTENCE}` : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
   $effect(() => {
     setCrumb([{ label: 'Species', href: '/' }, { label: 'Compare' }]);
     return () => setCrumb([]);

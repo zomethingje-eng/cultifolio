@@ -13,15 +13,15 @@ describe('dataset bundle', () => {
   const b = buildBundle(fixtures(), { version: '2026.09', homepage: 'https://example.test', repo: 'https://example.test/repo', today: '2026-09-17' });
 
   it('carries every species as built, plus the flat files and the terms', () => {
-    expect(b.species).toBe(4);
+    expect(b.species).toBe(5); // five since round seventy-nine's page without a GBIF key, Hesperocyparis lusitanica
     expect(b.withClimate).toBe(2);
-    expect(Object.keys(b.files).sort()).toEqual(['LICENSE.md', 'README.md', 'build-report.txt', 'climate.csv', 'index.json', 'species.csv', 'species/copiapoa-cinerea.json', 'species/copiapoa-humilis.json', 'species/refusia-testii.json', 'species/welwitschia-mirabilis.json']);
+    expect(Object.keys(b.files).sort()).toEqual(['LICENSE.md', 'README.md', 'build-report.txt', 'climate.csv', 'index.json', 'species.csv', 'species/copiapoa-cinerea.json', 'species/copiapoa-humilis.json', 'species/hesperocyparis-lusitanica.json', 'species/refusia-testii.json', 'species/welwitschia-mirabilis.json']);
     expect(JSON.parse(b.files['species/copiapoa-cinerea.json']).name.scientific).toBe('Copiapoa cinerea');
   });
 
   it('species.csv has one row per species with derived columns filled only where derivable', () => {
     const lines = b.files['species.csv'].replace(/^﻿/, '').trim().split('\n');
-    expect(lines).toHaveLength(5);
+    expect(lines).toHaveLength(6);
     const head = lines[0].split(',');
     const cop = Object.fromEntries(lines.find((l) => l.includes('Copiapoa cinerea'))!.split(',').map((v, i) => [head[i], v]));
     expect(cop.marker_lat).toBe('-28.55'); // a grid point: the fixture's densest cluster holds no openly licensed record
@@ -31,6 +31,11 @@ describe('dataset bundle', () => {
     expect(ref.climate_status).toBe('refused');
     expect(ref.growing_season).toBe('');
     expect(ref.annual_precip_mm).toBe('');
+    // A page without a GBIF key (round seventy-nine): no GBIF id, its climate pending for the reason its record gives.
+    const hes = Object.fromEntries(lines.find((l) => l.includes('Hesperocyparis lusitanica'))!.split(',').map((v, i) => [head[i], v]));
+    expect(hes.key).toBe('k457911');
+    expect(hes.gbif_id).toBe('');
+    expect(hes.climate_status).toBe('pending');
   });
 
   it('climate.csv has twelve rows per species with climate', () => {
@@ -40,7 +45,7 @@ describe('dataset bundle', () => {
   });
 
   it('README states the counts and the terms name every source', () => {
-    expect(b.files['README.md']).toContain('4 species, 2 with a habitat climate');
+    expect(b.files['README.md']).toContain('5 species, 2 with a habitat climate');
     expect(b.files['README.md']).toContain('2026.09');
     for (const s of ['GBIF', 'World Checklist', 'CHELSA', 'NASA POWER', 'Wikipedia', 'iNaturalist', 'OpenAlex', 'CC BY-SA']) expect(b.files['LICENSE.md']).toContain(s);
   });

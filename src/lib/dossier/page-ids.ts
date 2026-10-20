@@ -8,8 +8,9 @@
  *     is ''), two pages or more holding one entry (which of them is Kew's is not guessed: a merge decides it), or a page
  *     merged into another (`scripts/merged-pages.txt`), which is not a holder, so the page it joins takes the Kew id.
  *
- * A page with neither (no unshared entry and no GBIF key) has no id, and is refused. None exists today: every page is
- * built from a GBIF key.
+ * A page with neither (no unshared entry and no GBIF key) has no id, and is refused. A page built from Kew's file without
+ * a GBIF key (round seventy-nine; `build-kew.ts`) has Kew's entry as its own, so it is `k<plant_name_id>` unless another
+ * page holds that entry too, when it is refused and said (`ids-gbif.txt`), never given a GBIF key.
  *
  * Pure: the build and `--rekey` give it the pages, and write what it answers.
  */

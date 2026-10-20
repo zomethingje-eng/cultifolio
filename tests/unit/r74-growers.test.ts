@@ -33,7 +33,8 @@ const ALLOWED: Array<[string, RegExp]> = [
   // the example collection's own greenhouse bench
   ['src/lib/ui/grow/demo-seed.ts', /The cacti, in full sun\./],
   // how today's species list was derived: a fact about the corpus, worded as how it was built
-  ['src/routes/about/how/+page.svelte', /The species list was derived, not chosen by hand: every accepted species, as WCVP lists them, of 173 collector genera \(the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs/]
+  // (and round seventy-nine's, docs/PENDING-ABOUT-HOW-R79.md, once scripts/about-how-r79.mjs writes it)
+  ['src/routes/about/how/+page.svelte', /(?:The species list was derived, not chosen by hand: every accepted species, as WCVP lists them, of 173 collector genera|plus every species Kew accepts of [\d,]+ collector genera taken whole) \(the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs/]
 ];
 
 function files(dir: string): string[] {

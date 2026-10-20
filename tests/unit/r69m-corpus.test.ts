@@ -115,7 +115,9 @@ describe('the script\'s wiring (M11, S-F5, R46-31)', () => {
     expect(idsReadOn({ ids: { gbif: 1 }, upstream: { wikidata: { status: 'error', at: 'x', detail: 'wikidata maxlag; the identifiers of the build of 2026-08-02 are kept' } }, built: '2026-10-01' })).toBe('2026-08-02');
     expect(idsReadOn({ ids: { gbif: 1 }, upstream: { wikidata: { status: 'error', at: 'x', detail: "wikidata maxlag; the previous build's identifiers are kept" } }, built: '2026-10-01' })).toBeUndefined();
     expect(script).toMatch(/\.\.\.prevIdsFor\(prevOf\(j\.key\)\)/);
-    expect(script).toMatch(/heldElsewhere: heldElsewhereIn\(existing, /);
+    // Since round seventy-nine (K) the build's guard is `heldFor(j)`: the same GBIF guard, and the names of the pages without a GBIF key.
+    expect(script).toMatch(/const gbifHeld = heldElsewhereIn\(existing, j\.key \?\? existing\.get\(j\.name\.toLowerCase\(\)\)\);/);
+    expect(script).toMatch(/heldElsewhere: heldFor\(j\)/);
   });
   it('the homonym guard of iNaturalist: another species of the index is held elsewhere', () => {
     const held = heldElsewhereIn(new Map([['weingartia canigueralii', 7], ['weingartia pulchra', 3947359]]), 3947359);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { recordsUnchecked } from '$core/no-gbif';
   import { SvelteSet } from 'svelte/reactivity';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -239,7 +240,7 @@
           done();
           if (d === 'unreachable') { care[a.id] = null; return; } // not "no data": not reached
           const lat = readerLat(collection.locations); // the site, else the first place with coordinates: one helper with Today and the plant page (round sixty)
-          const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat: lat });
+          const line = careLine({ scientific: a.taxonName, climateStatus: d && recordsUnchecked(d) ? 'unchecked' : d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat: lat });
           // A cf. or aff. plant is not that species: its care line says whose care it borrows (round sixty-two; A21).
           const p = parseName(a.taxonName);
           const asFor = line && line !== 'climate not checked' && line !== 'climate pending' && p.qualifier && p.epithet ? `care as for ${p.genus.charAt(0)}. ${p.epithet}: ` : '';

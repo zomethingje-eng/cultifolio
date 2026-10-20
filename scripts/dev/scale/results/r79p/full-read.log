@@ -1,0 +1,11 @@
+Tue Oct 20 02:59:54 UTC 2026
+node 1135
+iNaturalist's open data of 2026-09-27 in /tmp/claude-0/rev79/P-scratch/full: reading the plant taxa, then observations and photographs together (one pass), then observers…
+
+  282933221 observations and 501256126 photographs read (0 observations with no photograph row); 64366921 research-grade observations of a plant at species rank or below, 10789509 of them with a CC0, CC BY or CC BY-SA photograph
+  398211 plant taxa; 115849 at species rank or below have wild photographs; 1201219 observations kept (at most 24 a taxon)
+  a photograph's observation was found at most 23049 observations back (the window holds 500000)
+  398211 taxa written to /tmp/claude-0/rev79/P-scratch/full-wild.jsonl (1111.1 MB) in 48.8 min. Next: npm run dossier -- --fill inat --wild --inat-open /tmp/claude-0/rev79/P-scratch/full-wild.jsonl
+  50 taxa, 200 observations at most each, written to /tmp/claude-0/rev79/P-scratch/full-more.jsonl
+exit 0 after 2942 s
+Tue Oct 20 03:48:56 UTC 2026

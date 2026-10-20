@@ -16,6 +16,8 @@ let dir: string;
 // Each dossier under its page's id (round seventy-eight), in the order the step reads them; GBIF is asked by `ids.gbif`.
 const keys = () => readdirSync(dir).filter((f) => /^[kg]\d+\.json$/.test(f)).map((f) => f.slice(0, -5)).sort();
 const read = (k: string) => JSON.parse(readFileSync(join(dir, `${k}.json`), 'utf8'));
+/** The pages with a GBIF key, which the step asks for (round seventy-nine: one without is passed by). */
+const withKey = () => keys().filter((k) => read(k).ids.gbif != null);
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'r62q-names-'));
   cpSync('fixtures/dossiers/s/v3', dir, { recursive: true });
@@ -45,10 +47,13 @@ const ROWS = (key: number) => [
 
 describe('the --names step', () => {
   it('rewrites only the vernacular block and its upstream record, with preferred flags and sources', async () => {
-    const before = keys().map((k) => read(k));
+    // A page without a GBIF key (round seventy-nine) is passed by, as it is: GBIF's names are not asked for it.
+    const all = keys().map((k) => read(k));
+    const before = all.filter((d) => d.ids.gbif != null);
     const { f } = gbif(ROWS);
     const r = await refetchNames(dir, f, { now: NOW });
-    expect(r).toMatchObject({ done: before.length, kept: 0, errors: 0, left: 0, truncated: 0 });
+    expect(r).toMatchObject({ done: before.length, kept: 0, errors: 0, left: 0, truncated: 0, noGbif: all.length - before.length });
+    for (const b of all.filter((d) => d.ids.gbif == null)) expect(read(b.key)).toEqual(b);
     for (const b of before) {
       const a = read(b.key);
       expect(a.name.vernacular).toEqual([
@@ -66,10 +71,10 @@ describe('the --names step', () => {
     }
   });
   it('is resumable: a refusal stops the run, says how many are left, and the same command picks up there', async () => {
-    const n = keys().length;
+    const n = withKey().length;
     const first = gbif(ROWS, 1000, 2);
     const r1 = await refetchNames(dir, first.f, { now: NOW });
-    expect(r1).toMatchObject({ done: 2, left: n - 2, refused: expect.stringMatching(/429/) });
+    expect(r1).toMatchObject({ done: 2, left: keys().length - 2, refused: expect.stringMatching(/429/) });
     const untouched = read(keys()[2]);
     expect(untouched.upstream?.['gbif.vernacular']?.detail ?? '').not.toMatch(NAMES_MARK);
     const second = gbif(ROWS);
@@ -92,7 +97,7 @@ describe('the --names step', () => {
     const k = keys()[0];
     const before = readFileSync(join(dir, `${k}.json`), 'utf8');
     const f = (async () => ({ status: 'error', detail: '502' })) as never;
-    expect(await refetchNames(dir, f, { now: NOW })).toMatchObject({ done: 0, errors: keys().length });
+    expect(await refetchNames(dir, f, { now: NOW })).toMatchObject({ done: 0, errors: withKey().length });
     expect(readFileSync(join(dir, `${k}.json`), 'utf8')).toBe(before);
   });
 });

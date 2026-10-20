@@ -61,7 +61,7 @@ describe('B1: a range read from Kew\'s files names their day, and the records th
     const r = await buildDossier(1, { fetcher: f, builtBy: 'node', skip: ['wikidata', 'wikipedia', 'inat', 'commons', 'openalex', 'gbif.media'] });
     if (!r.ok) throw new Error('build');
     expect(r.dossier.upstream['wcvp.distribution'].asOf).toBe('2026-06-04'); // r72base: undefined
-    expect(r.dossier.upstream['gbif.occurrences']).toMatchObject({ asOf: '2026-09-16', detail: 'GBIF occurrence download https://doi.org/10.15468/dl.3h4zam, of 2026-09-16' });
+    expect(r.dossier.upstream['gbif.occurrences']).toMatchObject({ asOf: '2026-09-16', detail: 'GBIF occurrence download https://doi.org/10.15468/dl.3h4zam, of 2026-09-16; records not tested against botanic gardens, herbaria and zoos: no list of them was given to this build' }); // round seventy-nine (Q): a build given no list says so
     expect(r.dossier.distribution.source).toBe("WCVP (Govaerts, RBG Kew), Kew's files of 2026-06-04");
     // B5: Angola is doubtfully present, listed apart, never a box
     expect(r.dossier.distribution.native.map((x) => x.code)).toEqual(['BEN']);

@@ -1,0 +1,967 @@
+{
+ "asked": "2026-10-20T03:50:06.147Z",
+ "export": "2026-09-27",
+ "requests": 1,
+ "tally": {
+  "species": 50,
+  "apiTotalSame": 37,
+  "setsCompared": 42,
+  "setsSame": 37,
+  "builderCompared": 30,
+  "builderSame": 29,
+  "photosBoth": 719,
+  "photoFieldsDiffer": 1,
+  "largeSpecies": 20,
+  "apiChosenAlsoChosen": 209,
+  "apiChosenWithVotes": 78,
+  "apiChosen": 480
+ },
+ "fieldDiffs": {
+  "placeOnlyApi": 701,
+  "attribution": 1
+ },
+ "order": {
+  "observations": 692,
+  "samePhotos": 692,
+  "apiIsPosition": 326,
+  "apiIsIdAscending": 267,
+  "apiIsNeither": 15,
+  "multi": 371
+ },
+ "rows": [
+  {
+   "name": "Beaucarnea guatemalensis",
+   "gbif": 2768020,
+   "taxon": 430718,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Ceropegia mirabilis",
+   "gbif": 3574213,
+   "taxon": 1528640,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Kalimeris indica",
+   "gbif": 3090169,
+   "taxon": 933838,
+   "apiTotal": 30,
+   "openTotal": 30,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 56",
+    "open": "ok 47",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "photoDiffs": [
+    "566656236 attribution: API \"(c) A4, some rights reserved (CC BY)\", open \"(c) Yi-Zhang Wang, some rights reserved (CC BY)\""
+   ],
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 18,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 39,
+    "photographsApi": 56,
+    "photographsOpen": 47
+   }
+  },
+  {
+   "name": "Echeveria rubromarginata",
+   "gbif": 4198807,
+   "taxon": 275984,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Albuca boucheri",
+   "gbif": 2772335,
+   "taxon": 579398,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Gethyllis ciliaris",
+   "gbif": 2855231,
+   "taxon": 568402,
+   "apiTotal": 41,
+   "openTotal": 41,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 56",
+    "open": "ok 52",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 16,
+    "apiChoicesWithVotes": 3,
+    "photographsBoth": 38,
+    "photographsApi": 56,
+    "photographsOpen": 52
+   }
+  },
+  {
+   "name": "Strumaria bidentata",
+   "gbif": 2859781,
+   "taxon": 594962,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Antimima piscodora",
+   "gbif": 5554747,
+   "taxon": 580040,
+   "apiTotal": 11,
+   "openTotal": 11,
+   "orderNeither": [
+    "9956cd8c-a75b-4b6e-ae71-6611f16e81ae: API 659766722,659766734,659766721, open 659766734,659766721,659766722"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 28",
+    "open": "ok 28",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Comptonia peregrina",
+   "gbif": 5414197,
+   "taxon": 121031,
+   "apiTotal": 3081,
+   "openTotal": 3021,
+   "builder": {
+    "api": "ok 49",
+    "open": "ok 51",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 0,
+    "apiChoicesWithVotes": 19,
+    "photographsBoth": 0,
+    "photographsApi": 49,
+    "photographsOpen": 51
+   }
+  },
+  {
+   "name": "Mesembryanthemum bulletrapense",
+   "gbif": 3707388,
+   "taxon": 589809,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Furcraea tuberosa",
+   "gbif": 2769836,
+   "taxon": 586080,
+   "apiTotal": 14,
+   "openTotal": 14,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 20",
+    "open": "ok 20",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Colchicum orienticapense",
+   "gbif": 2740562,
+   "taxon": 582554,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Othonna pachypoda",
+   "gbif": 3094366,
+   "taxon": 591106,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Nepenthes gantungensis",
+   "gbif": 11209874,
+   "taxon": 441215,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Yucca faxoniana",
+   "gbif": 2775736,
+   "taxon": 123902,
+   "apiTotal": 51,
+   "openTotal": 51,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 41",
+    "open": "ok 38",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 10,
+    "apiChoicesWithVotes": 4,
+    "photographsBoth": 19,
+    "photographsApi": 41,
+    "photographsOpen": 38
+   }
+  },
+  {
+   "name": "Heliconia latispatha",
+   "gbif": 2760940,
+   "taxon": 163640,
+   "apiTotal": 293,
+   "openTotal": 290,
+   "builder": {
+    "api": "ok 39",
+    "open": "ok 41",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 2,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 3,
+    "photographsApi": 39,
+    "photographsOpen": 41
+   }
+  },
+  {
+   "name": "Antimima leipoldtii",
+   "gbif": 5554793,
+   "taxon": 580011,
+   "apiTotal": 4,
+   "openTotal": 4,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 13",
+    "open": "ok 13",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Mesembryanthemum crassicaule",
+   "gbif": 3706588,
+   "taxon": 589817,
+   "apiTotal": 1,
+   "openTotal": 1,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 1",
+    "open": "ok 1",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Pachypodium eburneum",
+   "gbif": 5535489,
+   "taxon": 496318,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Malus fusca",
+   "gbif": 3001080,
+   "taxon": 77948,
+   "apiTotal": 325,
+   "openTotal": 316,
+   "builder": {
+    "api": "ok 66",
+    "open": "ok 43",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 1,
+    "apiChoicesWithVotes": 3,
+    "photographsBoth": 1,
+    "photographsApi": 66,
+    "photographsOpen": 43
+   }
+  },
+  {
+   "name": "Albuca xanthocodon",
+   "gbif": 2772586,
+   "taxon": 579505,
+   "apiTotal": 1,
+   "openTotal": 1,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 3",
+    "open": "ok 3",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Drosera rupicola",
+   "gbif": 3190830,
+   "taxon": 780686,
+   "apiTotal": 25,
+   "openTotal": 25,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 54",
+    "open": "ok 57",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 23,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 53,
+    "photographsApi": 54,
+    "photographsOpen": 57
+   }
+  },
+  {
+   "name": "Conophytum luckhoffii",
+   "gbif": 3704880,
+   "taxon": 582706,
+   "apiTotal": 12,
+   "openTotal": 12,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 34",
+    "open": "ok 34",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Gymnocalycium amerhauseri",
+   "gbif": 7283563,
+   "taxon": 438937,
+   "apiTotal": 3,
+   "openTotal": 3,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 23",
+    "open": "ok 23",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Leucanthemum maximum",
+   "gbif": 5401002,
+   "taxon": 77719,
+   "apiTotal": 80,
+   "openTotal": 80,
+   "orderNeither": [
+    "8e82142a-3401-4e94-a8e5-8e7863d6ac4a: API 601613823,601613782,601613764,601613864,601613851,601613873, open 601613764,601613864,601613851,601613873,601613823,601613782"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 39",
+    "open": "ok 41",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 9,
+    "apiChoicesWithVotes": 1,
+    "photographsBoth": 12,
+    "photographsApi": 39,
+    "photographsOpen": 41
+   }
+  },
+  {
+   "name": "Erigeron karvinskianus",
+   "gbif": 3147168,
+   "taxon": 76923,
+   "apiTotal": 3789,
+   "openTotal": 3739,
+   "builder": {
+    "api": "ok 39",
+    "open": "ok 29",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 0,
+    "apiChoicesWithVotes": 24,
+    "photographsBoth": 0,
+    "photographsApi": 39,
+    "photographsOpen": 29
+   }
+  },
+  {
+   "name": "Nepenthes hirsuta",
+   "gbif": 4930505,
+   "taxon": 441216,
+   "apiTotal": 1,
+   "openTotal": 1,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 3",
+    "open": "ok 3",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Discocactus catingicola",
+   "gbif": 7282141,
+   "taxon": 191671,
+   "apiTotal": 16,
+   "openTotal": 15,
+   "onlyApi": 1,
+   "onlyOpen": 0,
+   "why": [
+    "API only 325e72b9-9af0-4135-8968-55c10bd3d0fd: created 2026-10-14, updated 2026-10-16"
+   ],
+   "builder": {
+    "api": "ok 42",
+    "open": "ok 39",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": false,
+   "builderOnly": {
+    "api": [
+     "750647595",
+     "751270194",
+     "751270212"
+    ],
+    "open": []
+   }
+  },
+  {
+   "name": "Romulea pudica",
+   "gbif": 2744052,
+   "taxon": 593312,
+   "apiTotal": 10,
+   "openTotal": 10,
+   "orderNeither": [
+    "084ad1d7-0e8b-400c-b69c-72fea6417981: API 429741233,429741245,429741253,429741186,429741166,429741160, open 429741233,429741253,429741245,429741186,429741166,429741160",
+    "0c3b208c-3c30-4505-a42c-51e9161acf4a: API 162216183,162216130,162216064,162216302,162216261, open 162216064,162216183,162216130,162216302,162216261"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 30",
+    "open": "ok 30",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Cryptostegia grandiflora",
+   "gbif": 3170473,
+   "taxon": 84815,
+   "apiTotal": 205,
+   "openTotal": 202,
+   "builder": {
+    "api": "ok 52",
+    "open": "ok 58",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 4,
+    "apiChoicesWithVotes": 3,
+    "photographsBoth": 7,
+    "photographsApi": 52,
+    "photographsOpen": 58
+   }
+  },
+  {
+   "name": "Crocosmia paniculata",
+   "gbif": 2747927,
+   "taxon": 243783,
+   "apiTotal": 34,
+   "openTotal": 35,
+   "orderNeither": [
+    "488665e1-6b53-4c2b-be9a-d02bd5ea5afd: API 659986223,659986220,659986151,659986218, open 659986220,659986223,659986151,659986218",
+    "c0fbb2a7-36ce-4a23-871c-a42f134a261e: API 469464373,469464371,469464374,469464376,469464383,469464381, open 469464376,469464373,469464371,469464374,469464383,469464381",
+    "0ea48752-8cac-43b8-9c55-a191391fda72: API 239466086,239466097,239466084,239466077,239466090, open 239466084,239466086,239466097,239466077,239466090"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 1,
+   "why": [
+    "open only 5356256e-8ec6-451d-8e08-e94bfaeb5335: now needs_id, captive false, taxon 61186 Crocosmia, photo licences cc-by, updated 2026-10-14"
+   ],
+   "builder": {
+    "api": "ok 57",
+    "open": "ok 51",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 17,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 34,
+    "photographsApi": 57,
+    "photographsOpen": 51
+   }
+  },
+  {
+   "name": "Rhododendron austrinum",
+   "gbif": 2883083,
+   "taxon": 167810,
+   "apiTotal": 26,
+   "openTotal": 26,
+   "orderNeither": [
+    "8f3b3f5a-0bf8-48c4-8236-e3149a35c846: API 489548828,489548827, open 489548827,489548828"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 51",
+    "open": "ok 49",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 23,
+    "apiChoicesWithVotes": 1,
+    "photographsBoth": 47,
+    "photographsApi": 51,
+    "photographsOpen": 49
+   }
+  },
+  {
+   "name": "Geissorhiza demissa",
+   "gbif": 6310572,
+   "taxon": 586214,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Commiphora namibensis",
+   "gbif": 8033558,
+   "taxon": 1197136,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Argyroderma fissum",
+   "gbif": 3705796,
+   "taxon": 580173,
+   "apiTotal": 35,
+   "openTotal": 35,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 52",
+    "open": "ok 52",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 18,
+    "apiChoicesWithVotes": 1,
+    "photographsBoth": 41,
+    "photographsApi": 52,
+    "photographsOpen": 52
+   }
+  },
+  {
+   "name": "Nephrolepis cordifolia",
+   "gbif": 2650930,
+   "taxon": 48233,
+   "apiTotal": 1332,
+   "openTotal": 1314,
+   "builder": {
+    "api": "ok 40",
+    "open": "ok 49",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 0,
+    "apiChoicesWithVotes": 10,
+    "photographsBoth": 0,
+    "photographsApi": 40,
+    "photographsOpen": 49
+   }
+  },
+  {
+   "name": "Adenia racemosa",
+   "gbif": 5527635,
+   "taxon": 437220,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Adromischus marianiae",
+   "gbif": 8204958,
+   "taxon": 579121,
+   "apiTotal": 25,
+   "openTotal": 25,
+   "orderNeither": [
+    "79eac0d9-13ba-4c97-838f-4d9ae6064d2a: API 89769101,89768684,89768777,89768889,89768986,89768471, open 89768889,89769101,89768684,89768777,89768986,89768471"
+   ],
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 45",
+    "open": "ok 43",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 23,
+    "apiChoicesWithVotes": 2,
+    "photographsBoth": 41,
+    "photographsApi": 45,
+    "photographsOpen": 43
+   }
+  },
+  {
+   "name": "Alstonia scholaris",
+   "gbif": 5414410,
+   "taxon": 189179,
+   "apiTotal": 178,
+   "openTotal": 177,
+   "orderNeither": [
+    "9840776e-dbdb-4360-b712-007a5022a981: API 697217070,697217066, open 697217066,697217070",
+    "ba78442f-6ee0-453c-af3a-355947dd781d: API 380868988,380868936,380868876, open 380868936,380868988,380868876",
+    "d20d1880-5b62-4a06-846a-d4e3063a9d7d: API 534018821,534018777, open 534018777,534018821",
+    "6fb7a079-d0ee-4905-b810-393b531b7bcd: API 157899841,157899828,157899848, open 157899848,157899841,157899828"
+   ],
+   "onlyApi": 1,
+   "onlyOpen": 0,
+   "why": [
+    "API only 7b5de3a9-b989-4296-8a2e-e41c7abbde66: created 2024-10-05, updated 2024-10-11"
+   ],
+   "builder": {
+    "api": "ok 47",
+    "open": "ok 39",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 4,
+    "apiChoicesWithVotes": 1,
+    "photographsBoth": 5,
+    "photographsApi": 47,
+    "photographsOpen": 39
+   }
+  },
+  {
+   "name": "Euphorbia trigona",
+   "gbif": 3067098,
+   "taxon": 322318,
+   "apiTotal": 9,
+   "openTotal": 9,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 10",
+    "open": "ok 10",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Lithops verruculosa",
+   "gbif": 5554027,
+   "taxon": 589288,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Mammillaria ekmanii",
+   "gbif": 5620851,
+   "taxon": 440156,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Albuca arenosa",
+   "gbif": 3647644,
+   "taxon": 579389,
+   "apiTotal": 2,
+   "openTotal": 2,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 6",
+    "open": "ok 6",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Viola banksii",
+   "gbif": 5665311,
+   "taxon": 410980,
+   "apiTotal": 213,
+   "openTotal": 210,
+   "builder": {
+    "api": "ok 67",
+    "open": "ok 65",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 4,
+    "apiChoicesWithVotes": 5,
+    "photographsBoth": 12,
+    "photographsApi": 67,
+    "photographsOpen": 65
+   }
+  },
+  {
+   "name": "Geissorhiza tenella",
+   "gbif": 2743533,
+   "taxon": 569207,
+   "apiTotal": 39,
+   "openTotal": 37,
+   "orderNeither": [
+    "9316a65c-8e91-4546-8d7a-82e3ae7a7c38: API 443226421,443226774,443226336,443226284,443225897, open 443226336,443226284,443225897,443226421,443226774"
+   ],
+   "onlyApi": 2,
+   "onlyOpen": 0,
+   "why": [
+    "API only a9181748-42f1-47e7-a831-f2fdd90647be: created 2026-10-05, updated 2026-10-05",
+    "API only b0b652b9-8365-4308-8361-3a7040f21f6c: created 2025-10-21, updated 2026-10-08"
+   ],
+   "builder": {
+    "api": "ok 59",
+    "open": "ok 66",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 13,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 35,
+    "photographsApi": 59,
+    "photographsOpen": 66
+   }
+  },
+  {
+   "name": "Coleus barbatus",
+   "gbif": 8030165,
+   "taxon": 157127,
+   "apiTotal": 371,
+   "openTotal": 365,
+   "builder": {
+    "api": "ok 56",
+    "open": "ok 56",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 2,
+    "apiChoicesWithVotes": 1,
+    "photographsBoth": 6,
+    "photographsApi": 56,
+    "photographsOpen": 56
+   }
+  },
+  {
+   "name": "Colchicum schimperi",
+   "gbif": 2740005,
+   "taxon": 884872,
+   "apiTotal": 0,
+   "openTotal": 0,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "none 0",
+    "open": "none 0",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Albuca seineri",
+   "gbif": 3647965,
+   "taxon": 338726,
+   "apiTotal": 26,
+   "openTotal": 25,
+   "orderNeither": [
+    "7c176b99-da9a-4514-be0a-3032fc79d42f: API 458802746,458802747,458802740,458802739,458802766,458802767,458802751, open 458802740,458802739,458802767,458802751,458802766,458802746,458802747"
+   ],
+   "onlyApi": 1,
+   "onlyOpen": 0,
+   "why": [
+    "API only 23e306bb-6758-4737-9041-ef22992bb5c9: created 2026-10-10, updated 2026-10-10"
+   ],
+   "builder": {
+    "api": "ok 71",
+    "open": "ok 66",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "choice": {
+    "apiChose": 24,
+    "openChoseTheSame": 22,
+    "apiChoicesWithVotes": 0,
+    "photographsBoth": 64,
+    "photographsApi": 71,
+    "photographsOpen": 66
+   }
+  },
+  {
+   "name": "Babiana planifolia",
+   "gbif": 2746180,
+   "taxon": 580909,
+   "apiTotal": 1,
+   "openTotal": 1,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 2",
+    "open": "ok 2",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  },
+  {
+   "name": "Lapeirousia plicata",
+   "gbif": 5297710,
+   "taxon": 588698,
+   "apiTotal": 22,
+   "openTotal": 22,
+   "onlyApi": 0,
+   "onlyOpen": 0,
+   "builder": {
+    "api": "ok 50",
+    "open": "ok 50",
+    "openDetail": "from iNaturalist's open data of 2026-09-27: research-grade observations with an open-licence photograph, the 24 whose photographs iNaturalist received last (the open data holds no votes)"
+   },
+   "builderSame": true
+  }
+ ]
+}
