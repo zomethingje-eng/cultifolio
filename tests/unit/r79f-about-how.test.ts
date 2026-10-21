@@ -23,14 +23,14 @@ describe('the paragraph, from the list and the build', () => {
   it('with every species of the list built, it is the pending text, word for word', () => {
     const r = paragraph(listText, indexOf(list));
     expect(r.html).toBe(pending);
-    expect(r.figures).toMatchObject({ listed: 48368, held: 48368, missing: 0, aloe: 199, euphorbia: 401, genera: 173, alone: 26, unplaced: 15 });
+    expect(r.figures).toMatchObject({ listed: 48357, held: 48357, missing: 0, aloe: 199, euphorbia: 401, genera: 173, alone: 26, unplaced: 15 });
     expect(r.html).toContain('Aloe has 199 of the 611 species Kew accepts, Euphorbia 401 of 2,118.');
   });
   it('with fewer built, it refuses without the reason, and with it says how many are here and why the rest are not', () => {
     const some = list.filter((s, i) => i % 10 !== 0);
-    expect(() => paragraph(listText, indexOf(some))).toThrow(/the reference holds 43,531 of the list's 48,368 species: give --why/);
+    expect(() => paragraph(listText, indexOf(some))).toThrow(/the reference holds 43,521 of the list's 48,357 species: give --why/);
     const r = paragraph(listText, indexOf(some), 'the build stopped before them.');
-    expect(r.html).toContain('so that no page falls out: 48,368 species. The reference holds 43,531 of them; the other 4,837 are not here yet: the build stopped before them. Each page');
+    expect(r.html).toContain('so that no page falls out: 48,357 species. The reference holds 43,521 of them; the other 4,836 are not here yet: the build stopped before them. Each page');
     expect(r.figures.aloe).toBeLessThan(199);
     expect(r.html).toContain(`Aloe has ${r.figures.aloe} of the 611 species Kew accepts`);
   });
@@ -41,7 +41,7 @@ describe('the paragraph, from the list and the build', () => {
   it('refuses an index of another corpus (the fixture\'s) and a list of another day of Kew\'s file', () => {
     expect(() => paragraph(listText, [{ key: 'g999', gbif: 999 }])).toThrow(/holds none of the list's species/);
     // the fixture's corpus holds four of the list's species (three, and K's Hesperocyparis lusitanica without a GBIF key, since the merge): a reason is asked for the rest
-    expect(() => paragraph(listText, JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8')))).toThrow(/holds 4 of the list's 48,368 species: give --why/);
+    expect(() => paragraph(listText, JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8')))).toThrow(/holds 4 of the list's 48,357 species: give --why/);
     expect(() => paragraph(listText.replace('wcvp_names.csv of 2026-06-04', 'wcvp_names.csv of 2027-01-01'), indexOf(list))).toThrow(/Kew's file of 2027-01-01/);
   });
 });

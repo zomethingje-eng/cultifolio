@@ -37,7 +37,7 @@ import { writeAtomic } from './write-atomic';
 import { gbifLiving, inatCaptive, cacheDays, datasetFacetUrl, inatPageUrl, speciesFacetUrl, type Cache, type LivingDataset } from './select-species-sources';
 import {
   DATASET_RULE, MIN_RECORDS, REFUSALS, backboneLine, classifyDataset, collectorSpecies, deviationsOf, formatSpeciesList, gbifKeyFor, kewLoader,
-  matchInat, matchStrict, referenceSpecies, select, REASON_REFERENCE, type ReferencePage, words, type BackboneName, type DatasetFacts, type DatasetVerdict, type FrameworkRelationship, type Kew
+  matchInat, matchStrict, referenceSpecies, select, heldThroughRange, REASON_REFERENCE, type ReferencePage, words, type BackboneName, type DatasetFacts, type DatasetVerdict, type FrameworkRelationship, type Kew
 } from './select-species-lib';
 
 const args = process.argv.slice(2);
@@ -202,15 +202,19 @@ async function main() {
     .map((e) => ({ file: String(e.key), key: typeof e.key === 'number' ? e.key : (e.gbif ?? null) }))
     .filter((e) => e.key == null || !merged.has(e.key));
   const pages: ReferencePage[] = index.map((e) => {
-    const d = JSON.parse(readFileSync(`${referenceDir}/${e.file}.json`, 'utf8')) as { name: { scientific: string; authorship?: string; family?: string; kew?: { entry?: string } } };
-    return { key: e.key, name: d.name.scientific, author: d.name.authorship ?? '', family: d.name.family ?? '', kewEntry: d.name.kew?.entry || null };
+    const d = JSON.parse(readFileSync(`${referenceDir}/${e.file}.json`, 'utf8')) as { name: { scientific: string; authorship?: string; family?: string; kew?: { entry?: string } }; distribution?: { via?: { entry?: string; kind?: string } } };
+    return { key: e.key, name: d.name.scientific, author: d.name.authorship ?? '', family: d.name.family ?? '', kewEntry: d.name.kew?.entry || null, via: d.distribution?.via ?? null };
   });
   const reference = referenceSpecies(kew, pages);
   const manifestId = existsSync(`${referenceDir}/manifest.json`) ? (JSON.parse(readFileSync(`${referenceDir}/manifest.json`, 'utf8')) as { id?: string }).id : undefined;
   const twoPages = [...reference.byKew.values()].filter((v) => v.length > 1).length;
   log(`  reference: ${n(pages.length)} pages, ${n(reference.byKew.size)} Kew species (${twoPages} held by two pages or more), ${reference.unmatched.length} matching none`);
 
-  const list = select(kew, inatBy, gbifBy.counted, collector, (r) => gbifKeyFor(r, byWords), MIN_RECORDS, reference);
+  const selected = select(kew, inatBy, gbifBy.counted, collector, (r) => gbifKeyFor(r, byWords, kew), MIN_RECORDS, reference);
+  // A species without a GBIF key that a reference page holds through its range is that page (round eighty, X).
+  const held = heldThroughRange(selected.map((x) => ({ kewId: x.id, name: x.name, author: x.author, gbifKey: x.gbifKey == null ? null : Number(x.gbifKey) })), pages);
+  const list = selected.filter((x) => !x.id || !held.has(x.id));
+  if (held.size) log(`  ${held.size} species without a GBIF key left out, a page of the reference holding each through its range: ${[...held].map(([id, h]) => `${id} (${h.entry}, by page g${h.key})`).join('; ')}`);
   const count = (f: (s: (typeof list)[number]) => boolean) => list.filter(f).length;
   const byCounts = count((s) => s.byCounts), byGenus = count((s) => s.byGenus), byReference = count((s) => s.byReference);
   const byCountsOnly = count((s) => s.byCounts && !s.byGenus && !s.byReference);
@@ -242,6 +246,7 @@ async function main() {
     `GBIF: ${n(keyRecords.size)} species keys; ${n(gbifTaken)} taken (${fmt(gbifHow)}), ${n(gbifRefused)} refused (${fmt(refusals.gbif)}); counted datasets: ${n(gbifBy.counted.size)} Kew species, ${n(sum(gbifBy.counted))} records.`,
     'Every refusal is in scripts/species-refused.txt with its reason.',
     `Selected: ${n(list.length)} species: ${n(byCounts)} by their records, ${n(byGenus)} by their collector genus, ${n(byReference)} already in the reference; ${n(byCountsOnly)} by their records alone, ${n(byGenusOnly)} by their collector genus alone, ${n(byReferenceOnly)} only because they are already in the reference (${noKew} of them with no Kew id); ${n(withKey)} with a GBIF key, ${n(list.length - withKey)} without.`,
+    ...(held.size ? [`Left out (round eighty): ${held.size} species without a GBIF key that a page of the reference holds through its range (its range read through that species' Kew entry, the page matching no species Kew accepts by its own name): ${[...held].map(([id, h]) => `${id} ${h.entry}, by page g${h.key}`).join('; ')}.`] : []),
     `reason: "inat <observations> + gbif <records>" when the two reach ${MIN_RECORDS}, "collector genus" for a species of a collector genus, "${REASON_REFERENCE}" for a species of a page of the reference; every one that applies, separated by "; ".`
   ];
   writeAtomic(out, formatSpeciesList(header, list));

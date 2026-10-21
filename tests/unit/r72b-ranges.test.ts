@@ -42,9 +42,10 @@ const MIXTA = [
 const MIXTA_D = ['3|509402|2|AFRICA|27|Southern Africa|CPP|Cape Provinces|0|0|0'];
 
 describe('B1: a range read from Kew\'s files names their day, and the records their download\'s', () => {
-  it('reads the README\'s "Extracted:" day (day first) and a download key\'s day', () => {
+  it('reads the README\'s "Extracted:" day (day first) and a download\'s day', () => {
     expect(wcvpExtractedDay('<t>Version "16"</t><t>Extracted: 04/06/2026</t>')).toBe('2026-06-04');
-    expect(downloadDay({ key: '0006100-260916113435855', fetched: '2026-09-19T21:29:21.218Z' })).toBe('2026-09-16');
+    // Round eighty (X): the day GBIF made it, never its key's digits (this one was made on 2026-09-19, not 09-16).
+    expect(downloadDay({ key: '0006100-260916113435855', created: '2026-09-19T20:08:28.384+00:00', fetched: '2026-09-19T21:29:21.218Z' })).toBe('2026-09-19');
     expect(downloadDay({ fetched: '2026-09-19T21:29:21.218Z' })).toBe('2026-09-19');
   });
   it('the range source says "Kew\'s files of 2026-06-04", never "via GBIF"', async () => {

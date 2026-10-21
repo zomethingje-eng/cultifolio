@@ -3,10 +3,11 @@
  * Node-only (readline over files); the parsing and the indexes are in
  * src/lib/dossier/bulk.ts where they are unit-tested.
  */
-import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow, wcvpExtractedDay, downloadDay } from '../src/lib/dossier/bulk';
+import { USER_AGENT } from '../src/lib/dossier/fetch';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 
@@ -103,7 +104,7 @@ function members(zip: string, meta: string): { records: string; media?: string }
 }
 
 /** One archive of the records: the download, or one of its parts (round seventy-nine), with what download.json says of it. */
-export type DownloadPart = { file: string; records: string; media?: string; doi?: string; key?: string; fetched?: string; plain?: boolean };
+export type DownloadPart = { file: string; records: string; media?: string; doi?: string; key?: string; created?: string; fetched?: string; plain?: boolean };
 
 /**
  * The records' archives in `dir`, in the order they are read: `occurrence.csv` (a plain file, the small case), else the
@@ -113,9 +114,9 @@ export type DownloadPart = { file: string; records: string; media?: string; doi?
 export function downloadParts(dir: string): DownloadPart[] | null {
   const csv = `${dir}/occurrence.csv`, zip = `${dir}/occurrence.zip`, meta = `${dir}/download.json`;
   if (existsSync(csv)) return [{ file: csv, records: csv, plain: true }];
-  const m = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { parts?: Array<{ file?: string; csv?: string; media?: string; doi?: string; key?: string; fetched?: string }>; doi?: string; key?: string; fetched?: string }) : null;
+  const m = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { parts?: Array<{ file?: string; csv?: string; media?: string; doi?: string; key?: string; created?: string; fetched?: string }>; doi?: string; key?: string; created?: string; fetched?: string }) : null;
   if (m?.parts?.length) {
-    const parts = m.parts.map((p) => ({ file: `${dir}/${p.file}`, records: p.csv ?? '', media: p.media, doi: p.doi, key: p.key, fetched: p.fetched }));
+    const parts = m.parts.map((p) => ({ file: `${dir}/${p.file}`, records: p.csv ?? '', media: p.media, doi: p.doi, key: p.key, created: p.created, fetched: p.fetched }));
     const missing = parts.filter((p) => !p.records || !existsSync(p.file));
     if (missing.length) throw new Error(`download.json lists ${parts.length} parts, and ${missing.length} of them (${missing.map((p) => p.file).join(', ')}) are not fetched yet: run npm run bulk -- gbif-status --wait`);
     return parts;
@@ -126,8 +127,36 @@ export function downloadParts(dir: string): DownloadPart[] | null {
   if (m?.key && !(m as { csv?: string }).csv && !m.fetched) throw new Error(`download.json names download ${m.key}, asked for and not fetched yet, so ${zip} is an older one: run npm run bulk -- gbif-status --wait first`);
   const mm = members(zip, meta);
   if (!mm) return null;
-  return [{ file: zip, records: mm.records, media: mm.media, doi: m?.doi, key: m?.key, fetched: m?.fetched }];
+  return [{ file: zip, records: mm.records, media: mm.media, doi: m?.doi, key: m?.key, created: m?.created, fetched: m?.fetched }];
 }
+
+/**
+ * The day GBIF made each download download.json names, where it does not say it yet (round eighty, X): GBIF's own answer
+ * for the download (`created`), asked once and kept in download.json, so every page states the day its records are of.
+ * A download fetched before bulk-fetch.ts kept it (round seventy-nine's) has only its key and its fetching day, and the
+ * key's digits are not the day it was made. A download GBIF does not answer for keeps its fetching day. Says what it did,
+ * or null when there was nothing to ask.
+ */
+export async function addCreated(dir: string, ask: (key: string) => Promise<string | undefined> = gbifCreated): Promise<string | null> {
+  const meta = `${dir}/download.json`;
+  if (!existsSync(meta)) return null;
+  const m = JSON.parse(readFileSync(meta, 'utf8')) as { key?: string; created?: string; fetched?: string; parts?: Array<{ key?: string; created?: string; fetched?: string }> };
+  const parts = m.parts?.length ? m.parts : [m];
+  const todo = parts.filter((p) => p.key && p.fetched && !p.created);
+  if (!todo.length) return null;
+  let got = 0;
+  for (const p of todo) {
+    const c = await ask(p.key!).catch(() => undefined);
+    if (c && /^\d{4}-\d{2}-\d{2}/.test(c)) { p.created = c; got++; }
+  }
+  if (got) writeAtomic(meta, JSON.stringify(m, null, 1));
+  return got === todo.length ? `  the day GBIF made the download${todo.length > 1 ? 's' : ''}, asked of GBIF: ${todo.map((p) => `${p.key} ${p.created!.slice(0, 10)}`).join(', ')} (kept in ${meta})` : `  GBIF did not say the day it made ${todo.length - got} download${todo.length - got === 1 ? '' : 's'} (${todo.filter((p) => !p.created).map((p) => p.key).join(', ')}): ${todo.length - got === 1 ? 'its' : 'their'} records are dated by the day ${todo.length - got === 1 ? 'it was' : 'they were'} fetched`;
+}
+async function gbifCreated(key: string): Promise<string | undefined> {
+  const r = await fetch(`https://api.gbif.org/v1/occurrence/download/${key}`, { headers: { 'user-agent': USER_AGENT }, signal: AbortSignal.timeout(60_000) });
+  return r.ok ? ((await r.json()) as { created?: string }).created : undefined;
+}
+function writeAtomic(p: string, text: string): void { writeFileSync(`${p}.tmp`, text); renameSync(`${p}.tmp`, p); }
 
 /**
  * Whether the download in `dir` was asked for these keys, the species list's (round seventy-nine): a sentence saying what

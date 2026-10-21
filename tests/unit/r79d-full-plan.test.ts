@@ -16,8 +16,10 @@ describe('the full build\'s plan', () => {
   it('every step in order, from the extra keys to the live check, with its review stops', () => {
     expect(plan.map((s) => (s.kind === 'review' ? 'review' : line(s)))).toEqual([
       'backup',
-      'dossier --list-extra-keys --bulk bulk --backbone bulk/backbone/simple.txt.gz',
-      'dossier scripts/species-list.txt --grid climate --bulk bulk --skip inat',
+      // Round eighty (X): over the species list, not only the pages on disk.
+      'dossier --list-extra-keys scripts/species-list.txt --bulk bulk --backbone bulk/backbone/simple.txt.gz',
+      // Round eighty (X): round seventy-eight's pages are built again too.
+      'dossier scripts/species-list.txt --grid climate --bulk bulk --skip inat --renew',
       'review',
       'dossier --prune-followed',
       'dossier --fill inat --wild --bulk bulk',
@@ -43,7 +45,7 @@ describe('the full build\'s plan', () => {
     expect(first).toMatch(/media\.zip/);
     expect(first).toMatch(/--fill gbif --bulk bulk/);
     // the merge: K's species without a GBIF key and Q's institution rule are read at the same stop
-    expect(first).toMatch(/2327 species without a GBIF key read from Kew's file/);
+    expect(first).toMatch(/2335 species without a GBIF key read from Kew's file/); // round eighty (X)
     // the owner's decision on K's offer: the keys Kew's synonymy gives them are in the download, and the stop reads the count
     expect(text).toContain('Every GBIF request above asks too for the 1,956 keys of scripts/extra-keys-kew.txt');
     expect(first).toMatch(/1415 of them read GBIF's records under 1956 keys Kew's synonymy gives them/);

@@ -14,14 +14,15 @@ const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
 
 describe('the real list, read as the build and the bulk fetch read it', () => {
   it('names every species by a page id of the form --index gives', () => {
-    expect(list.length).toBe(48368);
+    expect(list.length).toBe(48357); // round eighty (X): 11 held by a reference page through its range left out
     expect(list.every((e) => isPageId(e.pageId) && (e.kewId ? e.pageId === `k${e.kewId}` : e.pageId === `g${e.gbifKey}`))).toBe(true);
   });
   it('gives the download each GBIF key once, matches no name, and names the species with none', () => {
     const { byName, keys, none } = downloadKeysOf(list);
     expect(keys.length).toBe(new Set(list.flatMap((e) => (e.gbifKey ? [e.gbifKey] : []))).size);
-    expect(list.filter((e) => e.gbifKey != null).length).toBe(46041);
-    expect(none.length).toBe(48368 - 46041);
+    // Round eighty (X): 20 keys Kew's file reads as another species' name, by GBIF's author, not taken (19 lines read none).
+    expect(list.filter((e) => e.gbifKey != null).length).toBe(46022);
+    expect(none.length).toBe(48357 - 46022);
     expect(Object.values(byName).every((k) => keys.includes(k))).toBe(true);
   });
   it('builds no species by its name: a job has the GBIF key or none', () => {

@@ -258,7 +258,7 @@ function stateOf(route: Route, parts: Array<{ key: string; taxa: number; request
   return { format, of, parts: parts.map((p, i) => ({ ...p, file: `occurrence-${i + 1}.zip` })) };
 }
 
-type Part = { key: string; file?: string; doi?: string; records?: number; csv?: string; media?: string; fetched?: string };
+type Part = { key: string; file?: string; doi?: string; records?: number; csv?: string; media?: string; created?: string; fetched?: string };
 async function gbifStatus(route: Route, wait: boolean): Promise<void> {
   const p = STATE[route];
   if (!existsSync(p)) throw new Error(`No pending download; run \`${route === 'media' ? 'gbif-media' : 'gbif'} names.txt\` first.`);
@@ -270,7 +270,7 @@ async function gbifStatus(route: Route, wait: boolean): Promise<void> {
       if (part.fetched) continue;
       const res = await fetch(`${GBIF}/occurrence/download/${part.key}`);
       if (!res.ok) throw new Error(`status check failed: HTTP ${res.status}`);
-      const d = (await res.json()) as { status: string; downloadLink?: string; totalRecords?: number; size?: number; doi?: string };
+      const d = (await res.json()) as { status: string; downloadLink?: string; totalRecords?: number; size?: number; doi?: string; created?: string };
       console.log(`  ${part.key}: ${d.status}${d.totalRecords ? ` · ${d.totalRecords} records` : ''}${d.size ? ` · ${mb(d.size)}` : ''}`);
       if (d.status === 'SUCCEEDED' && d.downloadLink) {
         const zip = `${DIR}/${part.file}`;
@@ -281,9 +281,10 @@ async function gbifStatus(route: Route, wait: boolean): Promise<void> {
         const csv = listed.find((f) => f === 'occurrence.txt') ?? listed.find((f) => f.endsWith('.csv'));
         const media = listed.find((f) => f === 'multimedia.txt');
         if (!csv) throw new Error(`no occurrence.txt or .csv inside ${zip} (found: ${listed.join(', ')})`);
-        Object.assign(part, { doi: d.doi, records: d.totalRecords, csv, media, fetched: new Date().toISOString() });
+        // The day GBIF made it (round eighty, X): the records are as GBIF held them then, and the key's digits are not that day.
+        Object.assign(part, { doi: d.doi, records: d.totalRecords, csv, media, ...(d.created ? { created: d.created } : {}), fetched: new Date().toISOString() });
         if (state.parts) writeFileSync(p, JSON.stringify(state, null, 1));
-        else writeFileSync(p, JSON.stringify({ key: part.key, format: state.format, doi: d.doi, records: d.totalRecords, taxa: state.taxa, csv, media, ...(route === 'media' ? { inat: state.inat } : {}), fetched: part.fetched }, null, 1));
+        else writeFileSync(p, JSON.stringify({ key: part.key, format: state.format, doi: d.doi, records: d.totalRecords, taxa: state.taxa, csv, media, ...(route === 'media' ? { inat: state.inat } : {}), ...(d.created ? { created: d.created } : {}), fetched: part.fetched }, null, 1));
         console.log(`  ${zip} ready (${mb(statSync(zip).size)}, ${d.totalRecords} records). Cite as https://doi.org/${d.doi}`);
         continue;
       }

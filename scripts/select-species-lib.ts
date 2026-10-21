@@ -11,6 +11,8 @@
  */
 
 import { gbifPage, kewPage, type PageId } from '../src/lib/core/page-id';
+import { ownByAuthor } from '../src/lib/dossier/authors';
+import { abbreviates } from '../src/lib/dossier/extra-keys';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // 1. The datasets: a living collection is counted, a genebank is not.
@@ -328,8 +330,27 @@ export function backboneLine(line: string): BackboneName | null {
   if (!canonical) return null;
   const sci = x[18];
   // "Aloe vera L., 1753": the year after the author is not part of it.
-  const author = sci.startsWith(canonical) ? sci.slice(canonical.length).trim().replace(/,\s*\d{4}$/, '') : '';
+  // A hybrid's scientific name carries its sign ("Plagianthus ×cymosus Cockayne & Allan") where its canonical name does not
+  // (round eighty, X): read without the sign, so a hybrid's author is read too.
+  const bare = sci.startsWith(canonical) ? sci : sci.replace(/×\s*/g, '');
+  const author = bare.startsWith(canonical) ? bare.slice(canonical.length).trim().replace(/,\s*\d{4}$/, '') : '';
   return { key: x[0], name: canonical, author, status: x[4] };
+}
+
+/**
+ * Whether Kew's file reads GBIF's usage, by GBIF's own author, as a name of another species than `row` (round eighty, X;
+ * agent R's finding): Kew's rows of the usage's words that its author reads to (`ownByAuthor`, or a shorter abbreviation
+ * of Kew's, as round seventy-three's rule reads a usage), and none of them leads to `row`'s species. GBIF's
+ * "Gymnosporia acuminata (L.fil.) Szyszyl." is Kew's illegitimate "Gymnosporia acuminata (L.f.) Szyszył.", filed under
+ * Maytenus acuminata, while the list's Gymnosporia acuminata is Kew's "Hook.f. ex M.A.Lawson": a homonym, another plant,
+ * whose records the page would have read. A usage whose author Kew's file reads to no row says nothing either way, and is
+ * not refused by this.
+ */
+export function kewReadsElsewhere(kew: Kew, b: BackboneName, row: KewRow): boolean {
+  const rows = (kew.byWords.get(words(b.name)) ?? []).filter((r) => r.status !== 'Misapplied');
+  const own = ownByAuthor(rows, b.author || undefined, (r) => r.authors);
+  const read = own.length ? own : rows.length === 1 && abbreviates(b.author, rows[0].authors) ? rows : [];
+  return read.length > 0 && !read.some((r) => speciesOf(kew, r.id) === row.id);
 }
 
 /**
@@ -337,10 +358,13 @@ export function backboneLine(line: string): BackboneName | null {
  * one GBIF accepts; of several accepted, the one of Kew's author; where GBIF accepts none, the one it holds as doubtful,
  * or of several doubtful the one of Kew's author. Else null ("-" in the list). GBIF's accepted key comes first because it
  * is the one GBIF files the species' occurrences under (Aloysia virgata: accepted 7297208 "(Ruiz & Pav.) Juss.", and a
- * doubtful 7775299 of Kew's author).
+ * doubtful 7775299 of Kew's author). With Kew's file (round eighty), a usage Kew reads as another species' name
+ * (`kewReadsElsewhere`) is none of these: a homonym's key is never taken, and the species reads no key unless a usage of
+ * its own author is one.
  */
-export function gbifKeyFor(row: KewRow, backboneByWords: Map<string, BackboneName[]>): string | null {
-  const all = backboneByWords.get(words(row.name)) ?? [];
+export function gbifKeyFor(row: KewRow, backboneByWords: Map<string, BackboneName[]>, kew?: Kew): string | null {
+  // Round eighty (X): with Kew's file, a usage Kew reads as another species' name is not this species' key.
+  const all = (backboneByWords.get(words(row.name)) ?? []).filter((b) => !kew || !kewReadsElsewhere(kew, b, row));
   for (const status of ['ACCEPTED', 'DOUBTFUL']) {
     const of = all.filter((b) => b.status === status);
     if (of.length === 1) return of[0].key;
@@ -393,6 +417,31 @@ export interface ReferencePage {
   author: string;
   family: string;
   kewEntry: string | null;
+  /** Where its range is read (the dossier's `distribution.via`): the Kew entry, as Kew's file cites it, and how (round eighty). */
+  via?: { entry?: string; kind?: string } | null;
+}
+
+/**
+ * The list's species without a GBIF key that a page of the reference holds already (round eighty, X; agent R's finding):
+ * a page with a GBIF key and no Kew entry of its own (one of the reference's pages that match no species Kew accepts,
+ * listed by its GBIF key with "-" for plant_name_id), whose range the build reads through a Kew entry (`distribution.via`:
+ * Kew's spelling of its name, Kew's synonym of it, or an older name GBIF gives it that Kew accepts), holds that entry's
+ * plant. A line without a GBIF key for that same entry would be a second page of it, built from Kew's file, beside the
+ * page that holds its GBIF records and Kew's range already. Such lines are left out: the list leaves them out when it is
+ * written, and the build when it reads a list made before. By Kew's entry as Kew's file cites it, its name and author,
+ * never by the words alone. Returns each such line's plant_name_id → the page's GBIF key and the entry.
+ */
+export function heldThroughRange(list: ReadonlyArray<{ kewId: string | null; name: string; author: string; gbifKey: number | null }>, pages: ReadonlyArray<Pick<ReferencePage, 'key' | 'kewEntry' | 'via'>>): Map<string, { key: number; entry: string }> {
+  const byEntry = new Map<string, number>();
+  for (const p of pages) if (p.key != null && !p.kewEntry && p.via?.entry && p.via.kind !== 'own') byEntry.set(p.via.entry, p.key);
+  const out = new Map<string, { key: number; entry: string }>();
+  for (const e of list) {
+    if (e.gbifKey != null || !e.kewId) continue;
+    const label = `${e.name}${e.author ? ` ${e.author}` : ''}`;
+    const key = byEntry.get(label);
+    if (key != null) out.set(e.kewId, { key, entry: label });
+  }
+  return out;
 }
 
 /**

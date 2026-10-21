@@ -15,10 +15,11 @@ import { SQL_SELECT } from '$dossier/bulk';
 const { keys } = downloadKeysOf(parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8')));
 
 describe('the Darwin Core Archive request at full size', () => {
-  it('asks for the list\'s 46,041 keys in one request, inside GBIF\'s 101,000 items', () => {
-    expect(keys.length).toBe(46041);
+  it('asks for the list\'s 46,022 keys in one request, inside GBIF\'s 101,000 items', () => {
+    // 46,041 until round eighty (X): 19 homonyms' keys no longer the list's.
+    expect(keys.length).toBe(46022);
     const body = dwcaRequest(keys, { creator: 'grower', email: 'grower@example.org' });
-    expect(predicateItems(body.predicate)).toBe(46041 + 3);
+    expect(predicateItems(body.predicate)).toBe(46022 + 3);
     expect(predicateItems(body.predicate)).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
     expect(partsNeeded(keys.length)).toBe(1);
   });
@@ -48,7 +49,7 @@ describe('the Darwin Core Archive request at full size', () => {
     expect(parts.length).toBe(3);
     expect(parts.flat()).toEqual(many);
     for (const p of parts) expect(predicateItems(recordsPredicate(p))).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
-    expect(splitKeys(keys, 4).map((p) => p.length)).toEqual([11511, 11511, 11511, 11508]);
+    expect(splitKeys(keys, 4).map((p) => p.length)).toEqual([11506, 11506, 11506, 11504]);
   });
 });
 
@@ -66,7 +67,7 @@ describe('the SQL download', () => {
     expect(full.match(/\bSELECT\b/g)).toHaveLength(1);
     expect(full.match(/\bFROM occurrence\b/g)).toHaveLength(1);
     expect(full).toContain('"year"');
-    expect(full.match(/'\d+'/g)).toHaveLength(46041);
+    expect(full.match(/'\d+'/g)).toHaveLength(46022);
   });
   it('its WHERE is GBIF\'s own conversion of the DWCA\'s predicate (asked of GBIF on 2026-10-20)', () => {
     // GBIF's answer, from POST /v1/occurrence/download/request/sql with the DWCA body for these two keys:

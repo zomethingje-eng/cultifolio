@@ -57,9 +57,11 @@ describe('the rule, for a page without a GBIF key', () => {
 describe('the download asks for them', () => {
   const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
   const kew = parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8'));
-  it('scripts/extra-keys-kew.txt: 1,956 keys on 1,415 of the list\'s 2,327 pages without a GBIF key, none of them a list key', () => {
+  it('scripts/extra-keys-kew.txt: 1,956 keys on 1,415 of the list\'s 2,335 pages without a GBIF key, none of them a list key', () => {
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
-    expect(keyless.size).toBe(2327);
+    // Round eighty (X): 11 that a reference page holds through its range left out of the list, none of which read a key;
+    // 19 whose key Kew's file reads as another species' name read none now, and no key of Kew's synonymy yet.
+    expect(keyless.size).toBe(2335);
     expect(kew.length).toBe(1956);
     expect(kew.every((k) => k.pageId && keyless.has(k.pageId) && k.page === 0)).toBe(true);
     expect(new Set(kew.map((k) => k.pageId)).size).toBe(1415);

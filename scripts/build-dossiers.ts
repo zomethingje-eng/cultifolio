@@ -138,10 +138,10 @@ import { batchSources, BATCH_CHUNK } from '../src/lib/dossier/batch';
 import { kewRowsFetcher } from '../src/lib/dossier/kew-rows';
 import { loadKewRows } from './kew-rows-load';
 import { nearestByClimate } from '../src/lib/core/near';
-import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf } from './bulk-load';
+import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated } from './bulk-load';
 import { downloadDay } from '../src/lib/dossier/bulk';
 import { outsideLog } from '../src/lib/dossier/range-via';
-import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf } from './select-species-lib';
+import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange } from './select-species-lib';
 import { buildKewDossier, kewInatTaxon, type KewSpecies } from '../src/lib/dossier/build-kew';
 import { canonicalOfKew } from '../src/lib/dossier/kew-rows';
 import { loadKewSpecies } from './kew-species-load';
@@ -457,12 +457,24 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
   return out;
 }
 
+/**
+ * `--renew` (round eighty, X): a page built before the day GBIF made the download this build reads is built again, and a
+ * page built since is kept as any clean page is, so a build that stops goes on where it stopped. The full build's plan
+ * gives it: without it the list's build kept round seventy-eight's 8,945 pages as they were ("kept (clean)": their
+ * climate settled, no source refused), with round seventy-two's records, without the institution rule, the other keys
+ * or the merges, which only a build of the page reads. Set once the download is read (`renewBefore`).
+ */
+const renew = args.includes('--renew');
+let renewBefore: string | undefined;
+const builtBeforeRenewal = (d: { built?: string }) => !!renewBefore && !(String(d.built ?? '') >= renewBefore);
+
 function needsRebuild(key: number): boolean {
   const id = idOfGbif(key);
   const p = id ? `${outDir}/${dossierPath(id)}` : null;
   if (!p || !existsSync(p)) return true;
   try {
-    const d = JSON.parse(readFileSync(p, 'utf8')) as { climate?: { status: string }; upstream?: Record<string, { status: string }> };
+    const d = JSON.parse(readFileSync(p, 'utf8')) as { built?: string; climate?: { status: string }; upstream?: Record<string, { status: string }> };
+    if (builtBeforeRenewal(d)) return true;
     // 'none' is a settled answer (too few records, no verified range, a cultigen), not a failure: it is redone by
     // --rederive when the rules change, not on every run. 'pending' and 'refused' are unfinished and are retried.
     if (d.climate?.status === 'pending' || d.climate?.status === 'refused') return true;
@@ -488,6 +500,7 @@ const kewOnDisk = (id: PageId) => id.startsWith('k') && (() => { const d = readK
 function needsKewRebuild(kewId: string): boolean {
   const d = readKewPrev(`k${kewId}` as PageId);
   if (!d) return true;
+  if (builtBeforeRenewal(d)) return true;
   // The keys Kew's synonymy gives it (round seventy-nine): a page built without them, or with others, is built again, and
   // so is one whose records under them were not read.
   const want = (kewExtra.get(`k${kewId}`) ?? []).map((x) => x.key).sort((a, b) => a - b).join(',');
@@ -782,20 +795,43 @@ function pruneFollowed(): void {
  * by the rule (`extra-keys.ts`), from Kew's file and GBIF's backbone export, offline, into scripts/extra-keys.txt, and the
  * keys the rule did not take into extra-keys-refused.txt; then, with or without them, the pages whose stored records do
  * not come from the keys the list gives into rebuild-extra.txt, for `--keys`.
+ *
+ * `--list-extra-keys <species list>` (round eighty, X): the pages the list's build will write, not only those on disk.
+ * Each listed species with a GBIF key and no page on disk yet is a page by that key, its Kew entry the list's
+ * plant_name_id; and the reference whose pages a key must not be filed under is every page on disk and every GBIF key of
+ * the list, as scripts/kew-extra-keys.ts reads it for the species without one (a page merged away is not one). Before, the full
+ * build's step read the 8,945 pages on disk alone: the list's 39,000 new pages had no other key (1,032 keys at the list,
+ * not one read), and 21 keys it gave the old pages are filed by GBIF under another of the list's species, whose own
+ * records already hold theirs, so those records were on two pages.
  */
 async function listExtraKeysStep(): Promise<void> {
   const backbone = (() => { const i = args.indexOf('--backbone'); return i >= 0 ? args[i + 1] : undefined; })();
+  const listFile = (() => { const a = args[args.indexOf('--list-extra-keys') + 1]; return a && !a.startsWith('--') ? a : undefined; })();
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   type P = Parameters<typeof listExtraKeys>[0]['pages'][number] & { key: number; occurrences?: { keys?: Array<{ key: number }> } };
   // Each dossier cut to what the rule reads: 8,947 whole dossiers held at once are well over a gigabyte.
   // A page by its GBIF key here: the list's pages and keys are GBIF's (round seventy-eight).
   const slim = (d: P & { ids?: { gbif?: number } }): P => ({ key: d.ids?.gbif ?? (d.key as unknown as number), name: { scientific: d.name.scientific, ...(d.name.kew ? { kew: { entry: d.name.kew.entry } } : {}) }, occurrences: { keys: d.occurrences?.keys?.map((k) => ({ key: k.key })) } });
   // A page without a GBIF key (round seventy-nine) is not one of the list's pages: its GBIF records are not asked at all.
-  const pages: P[] = readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)).flatMap((f) => { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as P & { ids?: { gbif?: number } }; return d.ids?.gbif == null ? [] : [slim(d)]; } catch { return []; } });
+  const onDisk: P[] = existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)).flatMap((f) => { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as P & { ids?: { gbif?: number } }; return d.ids?.gbif == null ? [] : [slim(d)]; } catch { return []; } }) : [];
+  // The species list's pages not on disk yet, and the whole list as the reference (round eighty, X).
+  const pages: P[] = [...onDisk];
+  let reference: Set<number> | undefined;
+  if (listFile) {
+    const text = existsSync(listFile) ? readFileSync(listFile, 'utf8') : '';
+    if (!isSpeciesList(text)) { console.error(`--list-extra-keys ${listFile}: not a species list`); process.exit(2); }
+    const listed = parseSpeciesList(text);
+    const held = new Set(onDisk.map((p) => p.key));
+    for (const e of listed) if (e.gbifKey != null && e.kewId && !held.has(e.gbifKey)) { pages.push({ key: e.gbifKey, name: { scientific: e.name, kew: { entry: e.kewId } } }); held.add(e.gbifKey); }
+    // A page merged into another (scripts/merged-pages.txt) is not one: its key is the page it joins.
+    const away = new Set(merges().map((m) => m.from));
+    reference = new Set([...onDisk.map((p) => p.key), ...listed.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : []))].filter((k) => !away.has(k)));
+    console.log(`  ${listFile}: ${listed.length} species; ${pages.length - onDisk.length} pages by their GBIF key not on disk yet, read with the ${onDisk.length} on disk; the reference: ${reference.size} keys`);
+  }
   let list: ExtraKey[];
   if (backbone) {
     if (!bulkDir) { console.error('--list-extra-keys --backbone needs --bulk <dir> with wcvp_names.csv'); process.exit(2); }
-    const r = await listExtraKeys({ bulk: bulkDir, backbone, pages, merges: merges() });
+    const r = await listExtraKeys({ bulk: bulkDir, backbone, pages, merges: merges(), ...(reference ? { reference } : {}) });
     if (!r) { console.error(`  no ${bulkDir}/wcvp_names.csv or no ${backbone}: nothing done`); process.exit(2); }
     list = r.keys;
     const day = kewFileDay(bulkDir);
@@ -806,7 +842,8 @@ async function listExtraKeysStep(): Promise<void> {
     if (!existsSync(EXTRA_KEYS)) { console.error(`no ${EXTRA_KEYS}: run with --bulk bulk --backbone <simple.txt.gz> to make it`); process.exit(2); }
     list = parseExtraKeys(readFileSync(EXTRA_KEYS, 'utf8'));
   }
-  const lines = extraRebuild(pages, list, merges());
+  // The pages on disk whose records lack their keys; a page not built yet reads its keys when it is built.
+  const lines = extraRebuild(onDisk, list, merges());
   if (lines.length) writeFileSync('rebuild-extra.txt', lines.join('\n') + '\n');
   else if (existsSync('rebuild-extra.txt')) unlinkSync('rebuild-extra.txt');
   console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} to rebuild with their other keys${lines.length ? ' → rebuild-extra.txt; run --keys rebuild-extra.txt --rederive --grid climate --bulk bulk, then --prune-followed' : ''}`);
@@ -1590,6 +1627,16 @@ async function main() {
     // under its id that has one, is built from Kew's file by its plant_name_id, never by its name (its GBIF records only under
     // the keys Kew's synonymy gives it, round seventy-nine).
     for (const j of listed ?? []) if (j.gbifKey == null && gbifOfLine(j.pageId) == null && j.kewId) kewWanted.set(j.kewId, j.name);
+    // Round eighty (X; agent R's finding): a species without a GBIF key that a page on disk holds through its range is that
+    // page, not a second one (`heldThroughRange`, the rule the list is written by). Such a page has no Kew entry of its own,
+    // so its id is its GBIF key's: only the g… dossiers are read.
+    if (listed && kewWanted.size) {
+      const dir = `${outDir}/s/v${DOSSIER_V}`;
+      const gPages = existsSync(dir) ? readdirSync(dir).filter((f) => /^g[1-9][0-9]*\.json$/.test(f)).flatMap((f) => { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as { ids?: { gbif?: number }; name?: { kew?: { entry?: string } }; distribution?: { via?: { entry?: string; kind?: string } } }; return [{ key: d.ids?.gbif ?? null, kewEntry: d.name?.kew?.entry || null, via: d.distribution?.via ?? null }]; } catch { return []; } }) : [];
+      const held = heldThroughRange(parseSpeciesList(text), gPages);
+      for (const id of held.keys()) kewWanted.delete(id);
+      if (held.size) console.log(`  ${held.size} species without a GBIF key not built: a page on disk holds each through its range, ${[...held].map(([id, h]) => `k${id} (${h.entry}) by g${h.key}`).join('; ')}`);
+    }
     if (listed && fromList) console.log(`${file}: a species list of ${listed.length} species: ${fromList.length} built by their GBIF key, ${kewWanted.size} with no GBIF key in the list (its lines whose last column is "-") built from Kew's file by their plant_name_id, never matched to GBIF by their name`);
     // An index of version 3 names each page by its id and its GBIF key (round seventy-eight); one of version 2 by its GBIF key.
     const lines = fromList
@@ -1648,6 +1695,8 @@ async function main() {
       // A species list is built from the download asked for it (round seventy-nine, D): never from an older one, nor
       // beside an images' download asked for fewer species.
       // The keys Kew's synonymy gives the species without a GBIF key are in the download too (round seventy-nine).
+      // The day GBIF made the download, where download.json does not hold it yet (round eighty, X): one request a download.
+      if (!offline) { const said = await addCreated(bulkDir); if (said) console.log(said); }
       const short = isSpeciesList(text) ? downloadShortOf(bulkDir, [...new Set([...downloadKeysOf(parseSpeciesList(text)).keys, ...[...kewExtra.values()].flat().map((x) => x.key)])]) : null;
       if (short) { console.error(`  ${short}`); process.exit(2); }
       // The genera of each species' older names too, so a range Kew files under another name can be found (round
@@ -1664,6 +1713,10 @@ async function main() {
       // And those Kew's synonymy gives the pages without a GBIF key (round seventy-nine).
       if (wanted) for (const id of kewWanted.keys()) for (const x of kewExtra.get(`k${id}`) ?? []) wanted.add(x.key);
       const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera], fixtures ? undefined : scanDossiers().map((e) => e.name)), loadOccurrences(bulkDir, 2000, wanted)]);
+      if (renew) {
+        renewBefore = loaded?.occ.day;
+        console.log(renewBefore ? `  --renew: every page built before ${renewBefore}, the day GBIF made the download, is built again; a page built since is kept` : '  --renew: no download read, or none whose day is known, so no page is built again for it');
+      }
       // Kew's names from Kew's file in place of GBIF's copy of them (round seventy-eight; `kew-rows.ts`), for the same
       // genera: the IPNI and POWO links, the name cited, and every Kew reading of a proof. `--kew-api` asks GBIF's copy.
       if (!args.includes('--kew-api')) {

@@ -237,7 +237,7 @@ On the corpus of 8,945 pages, 8,916 take Kew's id and 29 keep their GBIF key, ea
 
 ### Round seventy-nine: the full build of the species list
 
-**What waits on what.** The full build of `scripts/species-list.txt` (48,368 species, 46,041 with a GBIF key) waits only on GBIF's occurrence records for the list. You asked GBIF's helpdesk on 2026-10-20 to enable SQL downloads for your account. If they do, the **SQL download** (about 4.8 GB, with an images' download of about 1.5 GB beside it) replaces the **Darwin Core Archive** (DWCA, about 65 GB), which is the fallback if they refuse or are slow. The build reads either, and both give the same pages from the same records (the proof is in the GBIF part below). Everything else is ready: the 2,327 species without a GBIF key (your decision 1), the seven merges (decision 2), iNaturalist's open data and the budgeted fill (decision 3), the institution rule from the cross-checks (decision 5), and the index, upload and Worker at the full size.
+**What waits on what.** The full build of `scripts/species-list.txt` (48,357 species since round eighty, 46,022 with a GBIF key) waits only on GBIF's occurrence records for the list. You asked GBIF's helpdesk on 2026-10-20 to enable SQL downloads for your account. If they do, the **SQL download** (about 4.8 GB, with an images' download of about 1.5 GB beside it) replaces the **Darwin Core Archive** (DWCA, about 65 GB), which is the fallback if they refuse or are slow. The build reads either, and both give the same pages from the same records (the proof is in the GBIF part below). Everything else is ready: the 2,327 species without a GBIF key (your decision 1), the seven merges (decision 2), iNaturalist's open data and the budgeted fill (decision 3), the institution rule from the cross-checks (decision 5), and the index, upload and Worker at the full size.
 
 This section is one walk, in the order you type it. The parts after it give each step's detail, what good output looks like and what to do when something else comes back. Every time and size is an estimate from a rate measured here or on your PC, each part says whose, until your PC measures it: there is no `occurrence.zip` or climate grid here, so the build, the fills and the upload could not be run at this size.
 
@@ -269,10 +269,10 @@ This section is one walk, in the order you type it. The parts after it give each
 | Plan step | What it does | How long | Disk |
 |---|---|---|---|
 | backup | copies `static\s\v3` (round seventy-eight's 8,945 pages, corpus `c14b776c7296ad11`) to `backups\v3-c14b776c7296ad11` | a minute or two | 0.7 GB |
-| `--list-extra-keys` | the other GBIF keys each page reads, the seven merged pages' among them, from Kew's file and the backbone export | about five minutes at 8,945 pages (round seventy-three's); more at 48,368, not measured | small |
-| the build | every species of the list: the records and GBIF's photographs from `bulk\`, the institution rule, Kew's range and names, the climate, GBIF's three requests a species, Commons, POWER's new cells, Wikidata and Wikipedia in batches; the 2,327 species without a GBIF key from Kew's file, 1,415 of them with GBIF's records under the keys Kew's synonymy gives them, the other 912 "not checked"; nothing of iNaturalist yet | reading the download first (the SQL download about 10 minutes, the DWCA about an hour), then about 19 hours (1.4 s a species, agent B's), plus up to 12 hours of POWER's new cells (the scaling study's bound) | dossiers 1.5 to 1.9 GB; `cache\upstream\` a GB or two for the day; POWER's cells up to about 3 GB |
+| `--list-extra-keys scripts/species-list.txt` | the other GBIF keys each page reads, the merged pages' among them, from Kew's file and the backbone export, for every page the build will write (round eighty: 1,348 keys on 1,206 pages) | about three minutes (measured here at the list's size) | small |
+| the build (`--renew`) | every species of the list, round seventy-eight's pages among them (round eighty): the records and GBIF's photographs from `bulk\`, the institution rule, Kew's range and names, the climate, GBIF's three requests a species, Commons, POWER's new cells, Wikidata and Wikipedia in batches; the 2,327 species without a GBIF key from Kew's file, 1,415 of them with GBIF's records under the keys Kew's synonymy gives them, the other 912 "not checked"; nothing of iNaturalist yet | reading the download first (the SQL download about 10 minutes, the DWCA about an hour), then about 19 hours (1.4 s a species, agent B's), plus up to 12 hours of POWER's new cells (the scaling study's bound) | dossiers 1.5 to 1.9 GB; `cache\upstream\` a GB or two for the day; POWER's cells up to about 3 GB |
 | review | the build's lines (below) | you | |
-| `--prune-followed` | the seven merged pages leave | seconds | |
+| `--prune-followed` | the merged pages leave, but Echeveria peacockii (round eighty, below) | seconds | |
 | `--fill inat --wild --bulk bulk` | iNaturalist's wild photographs from the open data, every page, no request to iNaturalist | about 20 minutes (3.6 for 8,947 pages here) | |
 | `--index` | the index, the products, the manifest | 10 to 30 minutes (17 here at 48,368, 1.8 GB of heap) | products about 2.5 GB |
 | review | the index's lines and the list's paragraph (below) | you | |
@@ -285,22 +285,22 @@ On disk at the most, then: on the SQL route about 6.3 GB of GBIF's downloads, on
 
 - `GBIF occurrences from bulk/occurrence.zip (… MB zipped, 00…-26….csv streamed)` on the SQL route, or `(… occurrence.txt streamed)` on the DWCA route, then `… rows → … taxa, … rows kept (≤2000 each)`;
 - the photographs: `GBIF photographs' records from bulk/media.zip …; iNaturalist's dataset left out of it` and `… image rows → … species with openly licensed photographs` (SQL), or `GBIF photographs from multimedia.txt of bulk/occurrence.zip…` (DWCA). If it says GBIF's photographs are not asked, run `npm run dossier -- --fill gbif --bulk bulk` before going on;
-- `scripts/species-list.txt: a species list of 48368 species: 46041 built by their GBIF key, 2327 with no GBIF key in the list … built from Kew's file by their plant_name_id, never matched to GBIF by their name`, and `2327 species without a GBIF key read from Kew's file, to be built from it`;
+- `scripts/species-list.txt: a species list of 48357 species: 46022 built by their GBIF key, 2335 with no GBIF key in the list … built from Kew's file by their plant_name_id, never matched to GBIF by their name`, and `2335 species without a GBIF key read from Kew's file, to be built from it` (the counts since round eighty, below);
 - `Kew's names: … answered from Kew's file`;
-- about 48,360 species built or kept;
+- about 48,357 species built (or kept, after a stop);
 - near the end, `Institution rule (Wikidata's 6656 botanic gardens, herbaria and zoos, 1 km): …`. Expect records left out on about a third of the species that have records (on round seventy-seven's corpus, 2,651 of 7,776 species, 1.8% of the open points), and read its list of species that lost their habitat climate whole if it names more than a few dozen;
 - `drops.txt`, if it is there, naming nothing unexpected.
 
 Then `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt --go-on`.
 
-**The second review: good looks like this.** `index: <n> species`, n about 48,360 (48,368 less the seven merged pages and any the build said it could not build); `page ids: … by Kew's plant_name_id`; the corpus line, about 64,000 search key files and about 2,100 MB; nearly every dossier differs from the backup, since every page is built anew. Then, in the same window, the list's paragraph for `/about/how` (agent F's script; seconds, offline):
+**The second review: good looks like this.** `index: <n> species`, n about 48,350 (the list's 48,357 less the merged pages that left at `--prune-followed` and any the build said it could not build); `page ids: … by Kew's plant_name_id`; the corpus line, about 64,000 search key files and about 2,100 MB; nearly every dossier differs from the backup, since every page is built anew. Then, in the same window, the list's paragraph for `/about/how` (agent F's script; seconds, offline):
 
 ```
 node scripts/about-how-r79.mjs
 node scripts/about-how-r79.mjs --write
 ```
 
-The first says what it would write: `about-how: the list holds 48,368 species; the reference (static/s/v3/index.json, N pages) holds 48,368 of them, every one; Aloe 199 of 611, Euphorbia 401 of 2118.` If it says the reference holds fewer and asks for the reason, use `--write --why "<the build's own words>"`. The page is deployed in step 6, once the corpus it describes is live. Then `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt --go-on`: the upload (which stops at once if step 0 was not done) and the live check, which must find the site serving the corpus on disk.
+The first says what it would write: `about-how: the list holds 48,357 species; the reference (static/s/v3/index.json, N pages) holds 48,357 of them, every one; Aloe 199 of 611, Euphorbia 401 of 2118.` If it says the reference holds fewer and asks for the reason, use `--write --why "<the build's own words>"`. The page is deployed in step 6, once the corpus it describes is live. Then `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt --go-on`: the upload (which stops at once if step 0 was not done) and the live check, which must find the site serving the corpus on disk.
 
 **Step 6. The list's paragraph, deployed.** Commit `src/routes/about/how/+page.svelte` (the only file `--write` changed), then `node scripts/predeploy.mjs --tier=corpus` (only an about paragraph changed) and `node scripts/corpus-ready.mjs && npm run deploy`. Its live check passes, and `/about/how` says the reference holds the list's species.
 
@@ -412,9 +412,9 @@ node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt
 Its build step's first lines then say:
 
 ```
-scripts/species-list.txt: a species list of 48368 species: 46041 built by their GBIF key, 2327 with no GBIF key in the list (its lines whose last column is "-") built from Kew's file by their plant_name_id, never matched to GBIF by their name
-  2327 species without a GBIF key read from Kew's file, to be built from it
-  1415 of them read GBIF's records under 1956 keys Kew's synonymy gives them (scripts/extra-keys-kew.txt); the other 912 say GBIF's records not checked
+scripts/species-list.txt: a species list of 48357 species: 46022 built by their GBIF key, 2335 with no GBIF key in the list (its lines whose last column is "-") built from Kew's file by their plant_name_id, never matched to GBIF by their name
+  2335 species without a GBIF key read from Kew's file, to be built from it
+  1415 of them read GBIF's records under 1956 keys Kew's synonymy gives them (scripts/extra-keys-kew.txt); the other 920 say GBIF's records not checked
 ```
 
 and each such species' line reads like `✓ Hesperocyparis lusitanica [k457911] 0 photos, 312 open/40 restricted in range, climate ok (… ms)` for one that reads keys, or `… 0 open/0 restricted in range, climate pending` for one that reads none: no photographs yet, since the build skips iNaturalist and `--fill inat` adds them over the following days; "climate pending" is the record's word, and the page says "not checked" with the reason. A line `… plant_name_ids of the list Kew's file of … does not hold as an accepted species, not built` names any the Kew file in `bulk\` has moved since the list was written; rerun `scripts/select-species.ts` if it is more than a handful. Reading Kew's file for them takes about 20 seconds; building them about 1 to 2 seconds a species (Wikidata 47 queries and about 38 item reads in batches, Wikipedia about 40 reads, Commons one request a species), so under an hour of the build's 19.
@@ -426,7 +426,7 @@ node -e "const fs=require('fs');const t=fs.readFileSync('scripts/species-list.tx
 npm run dossier -- kew-only.txt --bulk bulk --skip inat
 ```
 
-The first line writes `kew-only.txt`, the list's header and its 2,327 lines without a GBIF key. The build says "a species list of 2327 species: 0 built by their GBIF key, 2327 with no GBIF key in the list…", writes them to `static\s\v3\k<id>.json`, and is kept by the full build after it ("kept (clean)"). Delete `kew-only.txt` afterwards.
+The first line writes `kew-only.txt`, the list's header and its 2,335 lines without a GBIF key (2,327 before round eighty). The build says "a species list of 2335 species: 0 built by their GBIF key, 2335 with no GBIF key in the list…", writes them to `static\s\v3\k<id>.json`, and is kept by the full build after it ("kept (clean)"). Delete `kew-only.txt` afterwards.
 
 **The fills.** `--fill inat` asks each such page's iNaturalist taxon by its own and Kew's names (its Wikidata item's id checked the same way), and then its photographs, inside the day's 9,000 requests; `--fill inat-ids`, `--fill wikidata`, `--fill gbif-open` and `--names` pass these pages by and say how many ("… pages without a GBIF key passed by"), since each reads GBIF's answers by the page's key.
 
@@ -540,7 +540,7 @@ Nothing to type beyond the plan: its `--index`, upload and live-check steps are 
 node scripts/about-how-r79.mjs
 ```
 
-Good output starts `about-how: the list holds 48,368 species; the reference (static/s/v3/index.json, N pages) holds 48,368 of them, every one; Aloe 199 of 611, Euphorbia 401 of 2118.`, then the paragraph, then "Nothing written". If it says the reference holds fewer of the list's species, it asks for the reason: give it as the build's own line says it, then write the page:
+Good output starts `about-how: the list holds 48,357 species; the reference (static/s/v3/index.json, N pages) holds 48,357 of them, every one; Aloe 199 of 611, Euphorbia 401 of 2118.`, then the paragraph, then "Nothing written". If it says the reference holds fewer of the list's species, it asks for the reason: give it as the build's own line says it, then write the page:
 
 ```
 node scripts/about-how-r79.mjs --write
@@ -550,6 +550,28 @@ node scripts/about-how-r79.mjs --write --why "the build stopped before them"
 The second form only when the first refuses. It says `written into src/routes/about/how/+page.svelte.`; commit that file and deploy it once the upload's live check has passed (walk step 6; its test run checks the page). It refuses, writing nothing, with no `static\s\v3\index.json`, with the fixture's or round seventy-eight's corpus on disk, or if the page's paragraph has changed since round seventy-eight.
 
 **Nothing to run for the pages.** With the reference's photographs switched on, a plant page now keeps the species photograph's room while it asks for the sheet, so the photograph's arrival moves neither the card nor the buttons under a finger; a species page keeps "Your notes: none yet"'s line while the collection opens, so the cultivation cards do not move. In the owner's WebKit runs a press made in that moment was lost (r69p P5, and r73p keys 1 on the front page, whose test now waits for the collection).
+
+### Round eighty: round seventy-nine's build path, reviewed before the build (agent X)
+
+Six faults in round seventy-nine's build path were found before the build started (four below, two more in the species list after them), each put right in a commit of its own (round eighty, X). Take them before you start the plan: with round seventy-nine's code the build would stop in its first hour, or build a reference that is not the one the walk describes. Nothing else in the walk changes; the plan file carries the two changed lines, so type the same command.
+
+1. **Memory.** The download's sample of records (up to 2,000 a key) held each record as 241 bytes. At the list's size that is about 34 million records kept (726 a key, from GBIF's counts for a random 500 of the list's keys), about 8 GB, and the build's limit is 8 GB: it would have stopped with "JavaScript heap out of memory" while reading the download. A record is now 80 bytes (about 2.5 GB in all), and the build gives the same pages. At its most the builder now holds about 5 to 6 GB (the sample, and Kew's names for the list's 6,484 genera, 1.7 GB, measured here): on a PC with 16 GB of memory, close other large programs while it runs; with less, tell the developer before starting.
+2. **The other GBIF keys.** The plan's `--list-extra-keys` read only the 8,945 pages on disk. It now reads the species list too (`dossier --list-extra-keys scripts/species-list.txt …`): 1,348 keys on 1,206 pages, where it gave 338 on 311, and none of them a key GBIF files under another of the list's species (21 of the 338 were, so those records would have been on two pages). Their records are not in the download (it was asked before they were known), so the build asks GBIF for them, up to 900 records a key: about 4,000 more requests, 20 minutes more of the build.
+3. **Round seventy-eight's pages are built again.** The build keeps a page on disk whose climate is settled, which is every one of round seventy-eight's 8,945: they would have stayed as they are, with September's records and none of this round's rules (the botanic gardens' rule, the other keys, the merges). The plan's build now has `--renew`: a page built before the day GBIF made the download is built again, and one built since is kept, so after a stop the same command still goes on where it stopped.
+4. **The download's day.** Every page states the day its records are of. The build read it from the download's key, and "0036848-260928105237408" was made on 2026-10-20, not on 2026-09-28. `bulk-fetch.ts` now keeps GBIF's own day when it fetches, and for a download fetched before (with round seventy-nine's code) the build asks GBIF once.
+
+**Two more, in the species list itself** (agent R's findings, put right the same way: a rule in the code, a test, the committed list rewritten by the rule):
+
+5. **Eleven plants were on the list twice.** A page of the reference that matches no species Kew accepts by its own name (listed by its GBIF key, "-" for plant_name_id), whose range the build reads through a Kew entry (Kew's spelling of its name, Kew's synonym of it, or an older name GBIF gives it that Kew accepts), and a line without a GBIF key for that same entry, which the build would have made a second page of. They are Ceropegia ananthapuramensis, hadramautica, linophylla and marnierana, Conophytum tomasii, Cyphostemma degraerii, Dorstenia poinsettifolia, Handroanthus impetiginosum, Harpephyllum caffrum, Monsonia lheritieri and Tylecodon cacaliodes: each keeps its page, and the second line is left out (`heldThroughRange`, which `select-species.ts` and the build both apply). Bisnaga hamatacantha and Ceropegia macrocarpa are not such pairs by Kew's file (it holds no row of the first name, and the second only by another author), so they stay as they are.
+6. **Twenty GBIF keys were homonyms.** The list took the one accepted usage of a name's words whatever its author; for 20 lines Kew's file reads that usage, by GBIF's author, as another species' name (Gymnosporia acuminata: GBIF's is "(L.fil.) Szyszyl.", which Kew files under Maytenus acuminata). Now such a key is not taken: 19 of those species have no GBIF key, are built from Kew's file and say GBIF's records "not checked"; Prunus glandulosa Thunb. takes GBIF's usage of Kew's own author (3022160), whose records the build asks GBIF for.
+
+So the list is **48,357 species, 46,022 with a GBIF key and 2,335 without** (1,415 of those read GBIF's records under the 1,956 keys of Kew's synonymy, as before; the other 920 say not checked). Your download need not change: it holds every key the list gives but Prunus glandulosa's new one, and a few keys no page reads now cost nothing.
+
+**What the build's first lines now say**, besides those of the walk above: `the day GBIF made the download, asked of GBIF: 0036848-260928105237408 2026-10-20 (kept in bulk/download.json)` (only when it was fetched with round seventy-nine's code), then `--renew: every page built before 2026-10-20, the day GBIF made the download, is built again; a page built since is kept`, and at the end `48… built, 0 kept` (after a stop, the pages built before it are "kept (clean)"). The extra keys' step says `scripts/species-list.txt: 48368 species; <about 37,100> pages by their GBIF key not on disk yet, read with the <about 8,945> on disk; …` and about 1,350 keys; ignore its "run --keys rebuild-extra.txt" sentence, which the plan's build does.
+
+**One merge waits for round eighty.** `--prune-followed` deletes each merged page whose kept page now reads its key, but Echeveria peacockii into Dudleya pulverulenta (7530398 into 2985894): Kew writes its author "Croucher ex T.Moore & Mast.", GBIF "Croucher", and the rule reads no GBIF key for it. Its line ends `not yet, the kept page not rebuilt with it (--keys rebuild-extra.txt): Echeveria peacockii [7530398] into 2985894`; leave it, and go on. Its page stays as it is live now, and the index holds one page more than the merges would leave.
+
+**Disk, if you need it.** Once `bulk\inat-wild.jsonl` is written, nothing reads `bulk\inat-open` again (the wild pass and the cultivated fill read the `.jsonl`), so its 34 GB may be deleted before the build rather than after the fill.
 
 ### Round seventy-seven's corpus step: the search from key files, and a species page's card files
 

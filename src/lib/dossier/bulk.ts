@@ -97,13 +97,15 @@ export function wcvpExtractedDay(readmeText: string): string | undefined {
 }
 
 /**
- * The day of a GBIF download (B1): its key begins with the day GBIF made it ("0006100-260916113435855" is 2026-09-16), else
- * the day it was fetched. The records are as GBIF held them on that day, not on the build's.
+ * The day of a GBIF download (B1): the day GBIF made it (`created`, GBIF's own answer for the download, which
+ * bulk-fetch.ts and the build keep in download.json since round eighty), else the day it was fetched. The records are as
+ * GBIF held them on that day, not on the build's. Never the key's digits (round eighty, X): "0036848-260928105237408"
+ * was made on 2026-10-20, and its "260928" is the day GBIF's download service last started, not the download's;
+ * round seventy-two's "0006100-260916113435855" was made on 2026-09-19, not 2026-09-16.
  */
-export function downloadDay(meta: { key?: string; fetched?: string }): string | undefined {
-  const m = /^\d+-(\d{2})(\d{2})(\d{2})\d*$/.exec(meta.key ?? '');
-  if (m) return `20${m[1]}-${m[2]}-${m[3]}`;
-  return /^\d{4}-\d{2}-\d{2}/.test(meta.fetched ?? '') ? meta.fetched!.slice(0, 10) : undefined;
+export function downloadDay(meta: { key?: string; created?: string; fetched?: string }): string | undefined {
+  for (const t of [meta.created, meta.fetched]) if (/^\d{4}-\d{2}-\d{2}/.test(t ?? '')) return t!.slice(0, 10);
+  return undefined;
 }
 
 /** Levenshtein distance, for the near-spelling rule only (`nearSpellings`). */
@@ -532,15 +534,67 @@ export function idHash(id: number): number {
  * the buffer never exceeds cap × 1.25 and admissions become rare quickly.
  *
  * Memory is the whole game: a download for 9,000 species is 28 M rows, so
- * only species in `wanted` (when given) are kept at all, and a kept row is a
- * flat array with its strings interned, about a tenth of an object per row.
+ * only species in `wanted` (when given) are kept at all. The full list's is
+ * about 146 M rows of 47,116 keys, of which about 34 M are kept for the whole
+ * build (round eighty, X: 726 a key on a random 500 of the list's keys), so a
+ * kept row is 80 bytes of a typed array (`Rows`), its strings numbered once in
+ * `Strings`. As a 15-element array it was 241 bytes of heap: about 8.3 GB at
+ * the full list, more than the builder's 8 GB.
  */
-type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number, taxon: number, part: number];
+
+/** Strings numbered in the order first seen, 0 for none; one table a field, so a small field's numbers stay small. */
+class Strings {
+  private ids = new Map<string, number>([['', 0]]);
+  private list: string[] = [''];
+  constructor(private what: string, private max = 0xffffffff) {}
+  id(s: string | undefined): number {
+    if (!s) return 0;
+    let i = this.ids.get(s);
+    if (i === undefined) {
+      i = this.list.length;
+      if (i > this.max) throw new Error(`more than ${this.max} distinct values of ${this.what} in the occurrence download: the sample cannot number them`);
+      this.ids.set(s, i);
+      this.list.push(s);
+    }
+    return i;
+  }
+  at(i: number): string { return this.list[i]; }
+}
+
+/**
+ * One key's kept rows (round eighty, X): row i is eight doubles at f[i * 10], hash, gbifID, latitude, longitude, year,
+ * uncertainty, precision and the record's taxon key, then four 32-bit numbers at u[i * 20 + 16], the country, the dataset,
+ * the cultivation flags, and the decimals + 1, the part + 1, the basis and the licence a byte each.
+ */
+class Rows {
+  f: Float64Array;
+  u: Uint32Array;
+  n = 0;
+  constructor(public room: number) {
+    const b = new ArrayBuffer(room * Rows.BYTES);
+    this.f = new Float64Array(b);
+    this.u = new Uint32Array(b);
+  }
+  static readonly BYTES = 80;
+  /** Room for one more row, grown by half up to `most`. */
+  grow(most: number): void {
+    if (this.n < this.room) return;
+    const to = Math.max(this.n + 1, Math.min(Math.max(8, Math.ceil(this.room * 1.5)), most));
+    const r = new Rows(to);
+    r.f.set(this.f.subarray(0, this.n * 10));
+    r.n = this.n;
+    this.room = to; this.f = r.f; this.u = r.u;
+  }
+}
 
 export class OccIndex {
-  private by = new Map<number, Row[]>();
+  private by = new Map<number, Rows>();
   private worst = new Map<number, number>(); // per species, the largest hash still inside the cap (Infinity until full)
-  private strings = new Map<string, string>();
+  private cc = new Strings('countryCode');
+  private ds = new Strings('datasetKey');
+  private est = new Strings('establishmentMeans');
+  private basis = new Strings('basisOfRecord', 255);
+  private lic = new Strings('license', 255);
   /** The download's DOI, when known: every record served carries it so the dossier can cite it. */
   doi?: string;
   /** The day GBIF made the download (`downloadDay`): the records are as GBIF held them then (round seventy-two, B1). */
@@ -562,12 +616,6 @@ export class OccIndex {
   readonly mediaRank = new Map<number, number>();
   static readonly MEDIA_PER_SPECIES = 40;
   constructor(private cap = 2000, private wanted?: Set<number>) {}
-  private intern(s: string | undefined): string {
-    if (!s) return '';
-    let v = this.strings.get(s);
-    if (!v) this.strings.set(s, (v = s));
-    return v;
-  }
   private isWanted(k: number): boolean {
     return !this.wanted || this.wanted.has(k);
   }
@@ -601,10 +649,17 @@ export class OccIndex {
       if (!k) continue;
       if (!this.isWanted(k)) continue;
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
-      const arr = this.by.get(k) ?? [];
-      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0, o.taxonKey ?? 0, this.part]);
-      if (arr.length > this.cap * 1.25) this.trim(k, arr);
-      this.by.set(k, arr);
+      let rows = this.by.get(k);
+      if (!rows) this.by.set(k, (rows = new Rows(8)));
+      rows.grow(Math.floor(this.cap * 1.25) + 1);
+      const i = rows.n++, f = i * 10, u = i * 20 + 16;
+      rows.f[f] = h; rows.f[f + 1] = o.key; rows.f[f + 2] = o.decimalLatitude ?? NaN; rows.f[f + 3] = o.decimalLongitude ?? NaN;
+      rows.f[f + 4] = o.year ?? 0; rows.f[f + 5] = o.coordinateUncertaintyInMeters ?? 0; rows.f[f + 6] = o.coordinatePrecision ?? 0; rows.f[f + 7] = o.taxonKey ?? 0;
+      const dec = (o.coordDecimals ?? -1) + 1, part = this.part + 1;
+      if (dec > 255 || part > 255) throw new Error(`a record with ${o.coordDecimals} decimals in its coordinates, or of part ${this.part + 1}: more than the sample can hold`);
+      rows.u[u] = this.cc.id(o.countryCode); rows.u[u + 1] = this.ds.id(o.datasetKey); rows.u[u + 2] = this.est.id(o.establishmentMeans);
+      rows.u[u + 3] = dec | (part << 8) | (this.basis.id(o.basisOfRecord) << 16) | (this.lic.id(o.license) << 24);
+      if (rows.n > this.cap * 1.25) this.trim(k, rows);
     }
   }
   /**
@@ -624,45 +679,66 @@ export class OccIndex {
     const rank = !o.license || isOpen(licenceTag(o.license)) ? h : 1 + h;
     if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank);
   }
-  private trim(k: number, arr: Row[]): void {
-    arr.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  /** The rows in the order `order` gives, the first `n` of them, into a buffer of `room` rows (at least `n`). */
+  private reorder(rows: Rows, order: number[], n: number, room: number): void {
+    const r = new Rows(Math.max(n, room));
+    for (let j = 0; j < n; j++) {
+      const i = order[j];
+      r.f.set(rows.f.subarray(i * 10, i * 10 + 8), j * 10);
+      r.u.set(rows.u.subarray(i * 20 + 16, i * 20 + 20), j * 20 + 16);
+    }
+    rows.f = r.f; rows.u = r.u; rows.room = r.room; rows.n = n;
+  }
+  private trim(k: number, rows: Rows, room = rows.room): void {
+    const f = rows.f;
+    // By hash, then gbifID; a sort that keeps the order of equal rows, as the array's sort did.
+    const order = Array.from({ length: rows.n }, (_, i) => i).sort((a, b) => f[a * 10] - f[b * 10] || f[a * 10 + 1] - f[b * 10 + 1]);
     // A record two parts of a download both hold (round seventy-nine: one part asked for a synonym's key, another for its
     // species') is one record: its copies sort together, and only the first is kept.
     let w = 0;
-    for (let r = 0; r < arr.length; r++) if (!w || arr[r][1] !== arr[w - 1][1]) arr[w++] = arr[r];
-    arr.length = w;
-    if (arr.length > this.cap) {
-      arr.length = this.cap;
-      this.worst.set(k, arr[this.cap - 1][0]);
+    for (let r = 0; r < order.length; r++) if (!w || f[order[r] * 10 + 1] !== f[order[w - 1] * 10 + 1]) order[w++] = order[r];
+    let n = w;
+    if (n > this.cap) {
+      n = this.cap;
+      this.worst.set(k, f[order[this.cap - 1] * 10]);
     }
+    this.reorder(rows, order, n, room);
   }
-  /** Finish: apply the cap to every species and put rows in id order. */
+  /** Finish: apply the cap to every species and put rows in id order, each key's buffer cut to its rows. */
   seal(): void {
-    for (const [k, arr] of this.by) {
-      this.trim(k, arr);
-      arr.sort((a, b) => a[1] - b[1]);
+    for (const [k, rows] of this.by) {
+      this.trim(k, rows, 0);
+      const f = rows.f;
+      this.reorder(rows, Array.from({ length: rows.n }, (_, i) => i).sort((a, b) => f[a * 10 + 1] - f[b * 10 + 1]), rows.n, 0);
     }
   }
   get(key: number): GbifOccurrence[] | undefined {
-    const arr = this.by.get(key);
-    return arr?.map((r) => ({
-      key: r[1],
-      decimalLatitude: r[2],
-      decimalLongitude: r[3],
-      year: r[4] || undefined,
-      countryCode: r[5] || undefined,
-      basisOfRecord: r[6] || undefined,
-      license: r[7] || undefined,
-      datasetKey: r[8] || undefined,
-      establishmentMeans: r[9] || undefined,
-      coordinateUncertaintyInMeters: r[10] || undefined,
-      coordDecimals: r[11] >= 0 ? r[11] : undefined,
-      coordinatePrecision: r[12] || undefined,
-      // The name the record is identified as (round seventy-three): a page's other keys leave some out by it.
-      ...(r[13] ? { taxonKey: r[13] } : {}),
-      downloadDoi: this.parts[r[14]]?.doi ?? this.doi,
-      ...((this.parts[r[14]]?.day ?? this.day) ? { downloadDay: this.parts[r[14]]?.day ?? this.day } : {})
-    }));
+    const rows = this.by.get(key);
+    if (!rows) return undefined;
+    const out: GbifOccurrence[] = [];
+    for (let i = 0; i < rows.n; i++) {
+      const f = i * 10, u = i * 20 + 16, packed = rows.u[u + 3];
+      const dec = (packed & 255) - 1, part = ((packed >>> 8) & 255) - 1;
+      out.push({
+        key: rows.f[f + 1],
+        decimalLatitude: rows.f[f + 2],
+        decimalLongitude: rows.f[f + 3],
+        year: rows.f[f + 4] || undefined,
+        countryCode: this.cc.at(rows.u[u]) || undefined,
+        basisOfRecord: this.basis.at((packed >>> 16) & 255) || undefined,
+        license: this.lic.at(packed >>> 24) || undefined,
+        datasetKey: this.ds.at(rows.u[u + 1]) || undefined,
+        establishmentMeans: this.est.at(rows.u[u + 2]) || undefined,
+        coordinateUncertaintyInMeters: rows.f[f + 5] || undefined,
+        coordDecimals: dec >= 0 ? dec : undefined,
+        coordinatePrecision: rows.f[f + 6] || undefined,
+        // The name the record is identified as (round seventy-three): a page's other keys leave some out by it.
+        ...(rows.f[f + 7] ? { taxonKey: rows.f[f + 7] } : {}),
+        downloadDoi: this.parts[part]?.doi ?? this.doi,
+        ...((this.parts[part]?.day ?? this.day) ? { downloadDay: this.parts[part]?.day ?? this.day } : {})
+      });
+    }
+    return out;
   }
   get species(): number {
     return this.by.size;
@@ -670,7 +746,7 @@ export class OccIndex {
   /** Rows currently held, over every species. */
   get kept(): number {
     let n = 0;
-    for (const a of this.by.values()) n += a.length;
+    for (const r of this.by.values()) n += r.n;
     return n;
   }
 }
