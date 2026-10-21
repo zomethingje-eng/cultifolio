@@ -6,6 +6,7 @@
  */
 import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { ownText } from '../src/lib/dossier/bulk';
 import { WcvpIndex, parseWcvpName, parseWcvpDist, wcvpRow } from '../src/lib/dossier/bulk';
 import type { KewSpecies } from '../src/lib/dossier/build-kew';
 import { wcvpFileDay } from './bulk-load';
@@ -13,7 +14,8 @@ import { wcvpFileDay } from './bulk-load';
 async function eachLine(path: string, each: (line: string, i: number) => void): Promise<void> {
   const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity });
   let i = 0;
-  for await (const line of rl) each(line, i++);
+  // Each line its own copy, so a kept field keeps only its line alive, not readline's 64 KB chunk (round eighty, X).
+  for await (const line of rl) each(ownText(line), i++);
 }
 
 /** What the loader found: each species asked for that Kew accepts, and the ids Kew's file does not hold as an accepted species. */

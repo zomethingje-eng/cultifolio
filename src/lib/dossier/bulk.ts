@@ -25,6 +25,16 @@ import { authorKey, authorsAgree, ownByAuthor, inFamily, plainlyAnother, parenth
 import { spellingKey } from './epithet';
 import type { RangeVia } from './range-via';
 
+
+/**
+ * A copy of a string that shares no storage with the text it was cut from (round eighty, X). A field split from a line
+ * that readline cut from a stream's 64 KB chunk is a slice of that chunk, and keeps the whole chunk alive for as long as
+ * it is kept: at the full list's size the photographs' index kept the whole of multimedia.txt (22 GB of text) alive, and
+ * each Kew index its own copy of Kew's 300 MB names file. Short strings are copies already.
+ */
+const OWN_ENC = new TextEncoder(), OWN_DEC = new TextDecoder();
+export const ownText = (s: string): string => (s.length < 13 ? s : OWN_DEC.decode(OWN_ENC.encode(s)));
+
 /* ------------------------------------------------------------------ WCVP */
 
 export interface WcvpName {
@@ -61,7 +71,7 @@ export function wcvpRow(header: string[], line: string): Record<string, string> 
 }
 
 const families = new Map<string, string>();
-const family = (f?: string) => { if (!f) return undefined; let v = families.get(f); if (!v) families.set(f, (v = f)); return v; };
+const family = (f?: string) => { if (!f) return undefined; let v = families.get(f); if (!v) families.set(f, (v = ownText(f))); return v; };
 export const parseWcvpName = (h: string[], line: string): WcvpName => {
   const r = wcvpRow(h, line);
   return { id: r.plant_name_id, name: r.taxon_name, status: r.taxon_status, acceptedId: r.accepted_plant_name_id || r.plant_name_id, rank: r.taxon_rank, authors: r.taxon_authors || undefined, family: family(r.family), lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined };
@@ -553,8 +563,9 @@ class Strings {
     if (i === undefined) {
       i = this.list.length;
       if (i > this.max) throw new Error(`more than ${this.max} distinct values of ${this.what} in the occurrence download: the sample cannot number them`);
-      this.ids.set(s, i);
-      this.list.push(s);
+      const own = ownText(s);
+      this.ids.set(own, i);
+      this.list.push(own);
     }
     return i;
   }
@@ -797,9 +808,14 @@ export class MediaIndex {
     if (m.format && !/^image\//i.test(m.format)) return;
     if (!isOpen(licenceTag(m.license))) return; // the per-photo licence decides; a CC-BY-NC image is not served
     const arr = this.by.get(k) ?? [];
-    const row = { gbifID: m.gbifID, m, rank: this.rankOf?.get(m.gbifID) ?? idHash(m.gbifID), seq: this.seq++ };
-    const before = (a: typeof row, b: typeof row) => a.rank < b.rank || (a.rank === b.rank && (a.gbifID < b.gbifID || (a.gbifID === b.gbifID && a.seq < b.seq)));
-    if (arr.length >= MediaIndex.CAP && !before(row, arr[arr.length - 1])) return;
+    const rank = this.rankOf?.get(m.gbifID) ?? idHash(m.gbifID);
+    type Row = { gbifID: number; m: MediaRow; rank: number; seq: number };
+    const before = (a: Row, b: Row) => a.rank < b.rank || (a.rank === b.rank && (a.gbifID < b.gbifID || (a.gbifID === b.gbifID && a.seq < b.seq)));
+    const probe: Row = { gbifID: m.gbifID, m, rank, seq: this.seq };
+    if (arr.length >= MediaIndex.CAP && !before(probe, arr[arr.length - 1])) return;
+    // Kept: its text copied out of the line (`ownText`), so the photograph does not keep the file's text alive.
+    const o = (x?: string) => (x === undefined ? undefined : ownText(x));
+    const row: Row = { gbifID: m.gbifID, m: { gbifID: m.gbifID, identifier: ownText(m.identifier), license: o(m.license), creator: o(m.creator), rightsHolder: o(m.rightsHolder), references: o(m.references), type: o(m.type), format: o(m.format) }, rank, seq: this.seq++ };
     let i = arr.length;
     while (i > 0 && before(row, arr[i - 1])) i--;
     arr.splice(i, 0, row);

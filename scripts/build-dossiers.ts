@@ -1733,7 +1733,9 @@ async function main() {
       const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath, covered });
       mediaFromFiles = !!loaded?.media;
       // Kew's names below species, so an iNaturalist observation of a taxon Kew places under another species is not taken (round seventy-two, C1).
-      kewInfra = (await loadKewInfra(bulkDir))?.kew;
+      // Read for iNaturalist's observations only; a build that skips iNaturalist (the full build's --skip inat) does not hold
+      // it (round eighty, X: 0.5 to 0.9 GB of heap at the list's size).
+      if (!skip.includes('inat')) kewInfra = (await loadKewInfra(bulkDir))?.kew;
       // The download's photographs are files, not a network extra: a re-derivation reads them and merges them in.
       if (mediaFromFiles) skip.splice(0, skip.length, ...skip.filter((x) => x !== 'gbif.media'));
       bulkStats = bf.stats;

@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { run, parsePlan, classify, uploadCommands, collapse, UNFINISHED, EXIT } from '../../scripts/corpus-step.mjs';
+import { run, parsePlan, classify, uploadCommands, collapse, UNFINISHED, EXIT, builderHeap } from '../../scripts/corpus-step.mjs';
 
 type Call = { cmd: string; args: string[]; env?: Record<string, string | undefined> };
 let root: string;
@@ -171,7 +171,8 @@ describe('the run', () => {
     await go();
     const c = calls.find((x) => x.args.includes('scripts/build-dossiers.ts'))!;
     expect(c.cmd).toBe(process.execPath);
-    expect(c.args.slice(0, 4)).toEqual(['--max-old-space-size=8192', '--import', 'tsx', 'scripts/build-dossiers.ts']);
+    // The heap is sized from the machine since round eighty (X).
+    expect(c.args.slice(0, 4)).toEqual([`--max-old-space-size=${builderHeap().mb}`, '--import', 'tsx', 'scripts/build-dossiers.ts']);
     expect(c.env?.CORPUS_STEP).toBe('1');
   });
 

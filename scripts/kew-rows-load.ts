@@ -4,6 +4,7 @@
  */
 import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { ownText } from '../src/lib/dossier/bulk';
 import { wcvpRow } from '../src/lib/dossier/bulk';
 import { KewRows } from '../src/lib/dossier/kew-rows';
 import { wcvpFileDay } from './bulk-load';
@@ -16,7 +17,9 @@ export async function loadKewRows(dir: string, genera: Iterable<string>): Promis
   let h: string[] = [];
   let i = 0;
   const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity });
-  for await (const line of rl) {
+  // Each line its own copy, so a kept field keeps only its line alive, not readline's 64 KB chunk (round eighty, X).
+  for await (const raw of rl) {
+    const line = ownText(raw);
     if (i++ === 0) { h = line.replace(/^﻿/, '').split('|'); continue; }
     if (!line) continue;
     const r = wcvpRow(h, line);

@@ -28,6 +28,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { totalmem } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 export const EXIT = { done: 0, failed: 1, review: 2, blocked: 2, unfinished: 3, interrupted: 130 };
@@ -40,6 +41,20 @@ const BEFORE = `static/s/v${VERSION - 1}`;
 /** A dossier's file: its page's id (round seventy-eight), or, in a corpus of version 2, its GBIF key. */
 export const DOSSIER_FILE = /^[kg][1-9][0-9]*\.json$/;
 const V2_FILE = /^[1-9][0-9]*\.json$/;
+
+/**
+ * The builder's heap, in MB (round eighty, X): the larger of 8,192 and 70% of the machine's memory, at most 32,768, so a
+ * machine with more memory gives the build room; or CULTIFOLIO_HEAP_MB, when it is set to 1,024 or more. The full build
+ * stopped with "JavaScript heap out of memory" at 8,192 on the owner's PC (round seventy-nine's code). Returns the size and
+ * where it came from, for the step's first line.
+ */
+export function builderHeap(total = totalmem(), env = process.env) {
+  const set = Number(env.CULTIFOLIO_HEAP_MB);
+  if (env.CULTIFOLIO_HEAP_MB && Number.isFinite(set) && set >= 1024) return { mb: Math.round(set), why: 'CULTIFOLIO_HEAP_MB' };
+  const ram = Math.floor(total / 1048576);
+  const mb = Math.min(32768, Math.max(8192, Math.floor(ram * 0.7)));
+  return { mb, why: `70% of this machine's ${ram} MB is ${Math.floor(ram * 0.7)}; at least 8192, at most 32768` };
+}
 
 /** The plan: one step a line, `#` starts a comment. Throws on a line it does not know, so a typo stops before anything runs. */
 export function parsePlan(text) {
@@ -136,9 +151,9 @@ function writeAtomic(p, text) { writeFileSync(`${p}.tmp`, text); renameSync(`${p
  * are given by a test.
  */
 /**
- * @param {{ root?: string, argv?: string[], exec?: (cmd: string, args: string[], onOutput: (s: string) => void, opts: { cwd?: string, env?: Record<string, string | undefined> }) => Promise<number>, fetchCorpus?: () => Promise<string | null>, fetchLive?: () => Promise<{ keyless?: boolean } | null>, log?: (s: string) => void, now?: () => Date, waitMs?: number, heartbeatMs?: number }} [o]
+ * @param {{ root?: string, argv?: string[], exec?: (cmd: string, args: string[], onOutput: (s: string) => void, opts: { cwd?: string, env?: Record<string, string | undefined> }) => Promise<number>, fetchCorpus?: () => Promise<string | null>, fetchLive?: () => Promise<{ keyless?: boolean } | null>, log?: (s: string) => void, now?: () => Date, waitMs?: number, heartbeatMs?: number, heap?: { mb: number, why: string } }} [o]
  */
-export async function run({ root = process.cwd(), argv = [], exec = spawnExec, fetchCorpus = liveCorpus, fetchLive = liveAnswer, log = (s) => process.stdout.write(s), now = () => new Date(), waitMs = 15_000, heartbeatMs = 120_000 } = {}) {
+export async function run({ root = process.cwd(), argv = [], exec = spawnExec, fetchCorpus = liveCorpus, fetchLive = liveAnswer, log = (s) => process.stdout.write(s), now = () => new Date(), waitMs = 15_000, heartbeatMs = 120_000, heap = builderHeap() } = {}) {
   const at = (p) => join(root, p);
   const logFile = at('corpus-step.log');
   // The log keeps whole lines, each progress line rewritten with \r in its last form only.
@@ -234,7 +249,8 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         // two quiet minutes says it is still working, so a novice watching the screen is not left to guess (round 72's dry run).
         let quietSince = Date.now();
         const beat = setInterval(() => { if (Date.now() - quietSince >= heartbeatMs) { say(`  … still working: ${Math.round((Date.now() - t0) / 60000)} min on this step so far. Leave it running.\n`); quietSince = Date.now(); } }, Math.min(heartbeatMs, 30_000));
-        const code = await exec(process.execPath, ['--max-old-space-size=8192', '--import', 'tsx', 'scripts/build-dossiers.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
+        say(`  the builder's heap: ${heap.mb} MB (${heap.why}; CULTIFOLIO_HEAP_MB sets another)\n`);
+        const code = await exec(process.execPath, [`--max-old-space-size=${heap.mb}`, '--import', 'tsx', 'scripts/build-dossiers.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
         if (interrupted) break;
         const dropsWritten = existsSync(at('drops.txt')) && statSync(at('drops.txt')).mtimeMs > dropsBefore && statSync(at('drops.txt')).mtimeMs >= t0 - 1000;
         // Pages merged away leave the index on purpose: the species before are counted without them from here on (round 73).

@@ -6,7 +6,7 @@
 import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow, wcvpExtractedDay, downloadDay } from '../src/lib/dossier/bulk';
+import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow, wcvpExtractedDay, downloadDay, ownText } from '../src/lib/dossier/bulk';
 import { USER_AGENT } from '../src/lib/dossier/fetch';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
@@ -14,7 +14,8 @@ const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 async function eachLine(path: string, each: (line: string, i: number) => void): Promise<void> {
   const rl = createInterface({ input: createReadStream(path, { encoding: 'utf8' }), crlfDelay: Infinity });
   let i = 0;
-  for await (const line of rl) each(line, i++);
+  // Each line its own copy, so a kept field keeps only its line alive, not the stream's chunk (round eighty, X).
+  for await (const line of rl) each(ownText(line), i++);
 }
 
 /**
