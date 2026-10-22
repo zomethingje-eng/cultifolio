@@ -11,7 +11,9 @@ const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
 describe('r72f /about/how', () => {
   it('F2: the stapeliads are not said to be Ceropegia by Kew', () => {
     expect(how).not.toContain('since WCVP counts Brachystelma and the stapeliads');
-    expect(how).toMatch(/Kew's checklist now accepts most of the stapeliads in their own genera again/);
+    // Round seventy-nine's list paragraph replaced the one that said so: the pages are now Kew's own species, so no page
+    // carries a Ceropegia name Kew holds as a stapeliad's synonym, and the paragraph names no such pages (round eighty).
+    expect(how).not.toMatch(/carry a Ceropegia name that Kew holds as a synonym/);
   });
   it('F1: a frozen wet winter is no growing season', () => {
     expect(how).toMatch(/has a month whose mean nightly low is below 0 °C is read as no growing season/);

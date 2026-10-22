@@ -253,7 +253,7 @@ This section is one walk, in the order you type it. The parts after it give each
 | 4. GBIF's backbone export, if `bulk\backbone\simple.txt.gz` is not there from round seventy-three | the address in round seventy-eight's list part | minutes | 466 MB |
 | 5. The plan, to the first upload | `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt`, and the same with `--go-on` at each of its two review stops (each stop prints the command) | a day to a day and a half (below) | about 10 GB besides the downloads |
 | 6. The list's paragraph, deployed | commit `src/routes/about/how/+page.svelte`, then `node scripts/predeploy.mjs --tier=corpus`, then `node scripts/corpus-ready.mjs && npm run deploy` | as long as a `--tier=corpus` run, then a few minutes | none |
-| 7. The cultivated fill, over about six days | `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt` once a day after midnight UTC, until it goes past the fill; then the same with `--go-on` at its last review stop | about three hours a day, unattended, then minutes for the second upload | small |
+| 7. The cultivated fill, over about six days | `node scripts/corpus-step.mjs --plan scripts/corpus-plan-full.txt` once a day after midnight UTC, until it goes past the fill; then the same with `--go-on` at its last review stop | about four hours a day (one request every 1.5 s, round eighty), unattended, then minutes for the second upload | small |
 | 8. The cold-start check | section 3, "A cold start's CPU and memory" | minutes | none |
 | 9. The prune, a day or more after the last upload | `rclone version` (1.65 or later), then `node scripts/corpus-step.mjs --prune`, then `node scripts/corpus-step.mjs --prune --go-on` | minutes | none |
 | 10. The purge of `s/v2/`, on or after 26 October (your reminder; a week after round seventy-eight's deploy) | `rclone purge r2:cultifolio/s/v2` | a minute | none |
@@ -393,7 +393,7 @@ with the list's 45,170 keys in the `ARRAY` (508 KB of SQL). The three keys are r
 | OpenAlex | 48,000: $48, or 48 days on a free key | none |
 | GBIF's species record, synonyms and common names | 3 a species: 145,000, 10 hours at 0.25 s | the same (the common names have no bulk source: below) |
 | iNaturalist, in the build | 2.83 a species: 137,000, 15 days | none (`--skip inat`) |
-| iNaturalist, the fill after it | | about 2 a species: 97,000, 11 days at 9,000 a day, about 3 hours a day; the cultivated set alone 1.01 a species: 49,000, 6 days, about a third of species gaining photographs |
+| iNaturalist, the fill after it | | about 2 a species: 97,000, 11 days at 9,000 a day, about 4 hours a day; the cultivated set alone 1.01 a species: 49,000, 6 days, about a third of species gaining photographs |
 
 **Common names stay a request a species.** GBIF's backbone archive (`backbone.zip`, 2023) holds 41,604 common names for today's species where GBIF's API gives 103,389, has no "preferred" mark, and has no English name for 1,711 species that have one today. Taking them from it would lose names, so the build still asks GBIF's API, which sets no daily limit.
 
@@ -494,7 +494,7 @@ It says how many dossiers have an iNaturalist taxon the file holds, and "… wil
 npm run dossier -- --fill inat --bulk bulk
 ```
 
-It asks iNaturalist only for what the open data cannot give: the cultivated set of each page, the taxon of a page without one (and that page's wild set is then read from the file), and the wild set of a taxon newer than the export. At the day's allowance it stops (exit 3); the same command the next day goes on. About 49,000 to 54,000 requests in all: the cultivated set, one a page, and the taxon of a page without one (one page in eight on today's corpus; a species without a GBIF key costs 1.8 requests, measured on 25 of them). So about six days at 9,000 a day, about three hours a day.
+It asks iNaturalist only for what the open data cannot give: the cultivated set of each page, the taxon of a page without one (and that page's wild set is then read from the file), and the wild set of a taxon newer than the export. At the day's allowance it stops (exit 3); the same command the next day goes on. About 49,000 to 54,000 requests in all: the cultivated set, one a page, and the taxon of a page without one (one page in eight on today's corpus; a species without a GBIF key costs 1.8 requests, measured on 25 of them). So about six days at 9,000 a day, about four hours a day (one request every 1.5 s, round eighty).
 
 **Afterwards.** `bulk\inat-wild.jsonl` is read by the fills only; once the cultivated fill has finished, delete the downloads: `rmdir /s /q bulk\inat-open` (34 GB), and `del bulk\inat-wild.jsonl` if you will not fill again before the next export. Nothing on a page depends on either: each page's record names the export's day.
 

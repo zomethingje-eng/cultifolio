@@ -4,7 +4,6 @@
  * nudiflorus among them, and the paragraph would have said they were not there. Failed on r80base, which held only the page under Kew's id.
  */
 import { describe, it, expect } from 'vitest';
-// @ts-expect-error a plain .mjs script, read as the owner runs it
 import { held } from '../../scripts/about-how-r79.mjs';
 
 describe('held: a page under GBIF\'s key holds its listed species', () => {

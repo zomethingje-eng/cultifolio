@@ -39,7 +39,9 @@ export type JsonFetcher = <T = unknown>(url: string, opts?: FetchOptions) => Pro
 
 /** Per-host pacing so a corpus build is a good citizen (iNat asks for ~1/s). */
 const MIN_GAP_MS: Record<string, number> = {
-  'api.inaturalist.org': 1100,
+  // 1.5 s (40 a minute): at 1.1 s (about 54 a minute, sustained) iNaturalist answered 429 to every call after 97 minutes
+  // and 5,273 requests of the owner's first cultivated fill (2026-10-22), well inside the day's 9,000.
+  'api.inaturalist.org': 1500,
   'api.gbif.org': 250,
   // Wikimedia's hosts share one allowance from 2026: 200 requests a minute for a client named by a User-Agent with an
   // address, across every site and API (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits, read 2026-10-19).

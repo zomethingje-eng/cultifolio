@@ -58,7 +58,7 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['geographic', /cannot place a climate cell/],
   // Kew's word for a name it does not place under an accepted species, and a verb
   ['Kew', /\bunplaced\b/i],
-  ['Kew', /Kew's file places under|where neither places it/],
+  ['Kew', /Kew's file places under|where neither places it|Kew's checklist does not place/],
   // the sync ceilings: a vault's place among the day's new vaults and among the vaults in all
   ['vault', /vault('s)? place|its place (was|is) (given back|kept)|takes? (a|its) place|day's (new-vault )?places|places in all|gives (its )?places? back|gives the place back|the place is given back|for the places new vaults|new-vault places|keeps no place|no place recorded|no place is free|keeps its place|that place is checked|count of places|loses no place|a place given back|a place left unused|whose place was given back|its place was not|after its place was|its place could not|a reclaimed vault's place|does not reclaim places/],
   // an order: a change's place in the arrival order, a name's place among names
