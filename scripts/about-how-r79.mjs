@@ -79,7 +79,10 @@ export function readList(text) {
 export function held(list, index) {
   const keys = new Set(index.map((e) => e.key));
   const gbifs = new Set(index.map((e) => e.gbif).filter((g) => typeof g === 'number'));
-  return list.filter((s) => (s.kew !== '-' && keys.has(`k${s.kew}`)) || (s.kew === '-' && s.gbif != null && (keys.has(`g${s.gbif}`) || gbifs.has(s.gbif))));
+  // A species with a Kew id is held by its page under that id, or, where Kew's file did not settle which taxon the page is
+  // and the page keeps GBIF's key (ids-gbif.txt), by its page under that key (round eighty: the owner's build held eight
+  // listed species so, Crocus nudiflorus among them, and the paragraph said they were not there).
+  return list.filter((s) => (s.kew !== '-' && keys.has(`k${s.kew}`)) || (s.gbif != null && (keys.has(`g${s.gbif}`) || gbifs.has(s.gbif))));
 }
 
 /**

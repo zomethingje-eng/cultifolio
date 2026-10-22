@@ -14,7 +14,9 @@
  * must be refused (round sixteen, 16); the requests do count against the address's rate limits like any visit's.
  */
 const origin = (process.argv[2] ?? process.env.LIVE_CHECK_ORIGIN ?? 'https://cultifolio.com').replace(/\/+$/, '');
-const ua = 'cultifolio-live-check (deploy)';
+// With the site's address in it: Wikimedia's image servers answer 429 to a client that does not say who it is (its
+// User-Agent policy; the owner's live check of round 79's upload, 2026-10-22, met it on a home-page photograph).
+const ua = 'cultifolio-live-check (deploy; https://cultifolio.com)';
 let n = 0;
 const skip = new Set((process.env.LIVE_CHECK_SKIP ?? '').split(',').map((s) => s.trim()).filter(Boolean));
 
