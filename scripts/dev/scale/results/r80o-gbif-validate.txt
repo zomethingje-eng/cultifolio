@@ -1,0 +1,10 @@
+Round eighty, agent O: GBIF's validation of the SQL query in the analyst's pattern (POST https://api.gbif.org/v1/occurrence/download/request/validate, no account), 2026-10-22.
+Two keys (5384013, 3084426):
+2 keys, 684 chars; HTTP 201 in 855 ms
+{"sql":"SELECT\n  gbifid,\n  occurrence.gbif_classification.specieskey specieskey,\n  occurrence.gbif_classification.taxonkey taxonkey,\n  occurrence.gbif_classification.acceptedtaxonkey acceptedtaxonkey,\n  decimallatitude,\n  decimallongitude,\n  coordinateuncertaintyinmeters,\n  coordinateprecision,\n  \"year\",\n  countrycode,\n  basisofrecord,\n  license,\n  datasetkey,\n  establishmentmeans.concept establishmentmeans,\n  degreeofestablishment.concept degreeofestablishment\nFROM\n  occurrence\nWHERE\n  occurrence.hascoordinate = TRUE\n  AND occurrence.hasgeospatialissues = FALSE\n  AND occurrence.occurrencestatus = 'PRESENT'\n  AND EXISTS (occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN ('5384013', '3084426'))","notificationAddresses":[],"sendNotification":false,"format":"SQL_TSV_ZIP","type":"OCCURRENCE"}
+
+The list's keys (read here from the list's last column; 46,007 of them, where bulk-fetch sends 46,022):
+46007 keys, 508094 chars; HTTP 201 in 2498 ms
+{"sql":"SELECT\n  gbifid,\n  occurrence.gbif_classification.specieskey specieskey,\n  occurrence.gbif_classification.taxonkey taxonkey,\n  occurrence.gbif_classification.acceptedtaxonkey acceptedtaxonkey,\n  decimallatitude,\n  decimallongitude,\n  coordinateuncertaintyinmeters,\n  coordinateprecision,\n  \"year\",\n  countrycode,\n  basisofrecord,\n  license,\n  datasetkey,\n  establishmentmeans.concept establishmentmeans,\n  degreeofestablishment.concept degreeofestablishment\nFROM\n  occurrence\nWHERE\n  occurrence.hascoordinate = TRUE\n  AND oc …
+(the rest is GBIF's formatted copy of the query, 508,249 bytes)
+Validation is not a run: whether GBIF's workflow makes the download, and how long it takes, is known only when it runs.

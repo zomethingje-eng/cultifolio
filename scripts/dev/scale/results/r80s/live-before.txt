@@ -1,0 +1,12 @@
+rose n=71 ttfb=2.234542 total=2.271933 size=63756 code=200
+cactus n=72 ttfb=1.957990 total=1.995470 size=51029 code=200
+echeveria n=73 ttfb=0.544595 total=0.561934 size=24090 code=200
+x n=74 ttfb=2.591610 total=2.627553 size=47765 code=200
+red%20flowers n=75 ttfb=3.205218 total=3.219541 size=26416 code=200
+snake%20pl n=76 ttfb=0.499205 total=0.499403 size=10203 code=200
+provinses n=77 ttfb=0.633076 total=0.633311 size=25 code=200
+haworthiaa n=78 ttfb=1.768469 total=1.768668 size=32676 code=200
+zzqqxw n=79 ttfb=1.223210 total=1.223384 size=11 code=200
+Echinocactus%20chrysacanthus n=80 ttfb=1.343937 total=1.344113 size=11 code=200
+monstera n=81 ttfb=0.611818 total=0.630943 size=14894 code=200
+lithops n=82 ttfb=1.614564 total=1.637302 size=18708 code=200

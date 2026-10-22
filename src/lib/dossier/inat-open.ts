@@ -50,6 +50,13 @@ export const WILD_PER_TAXON = 24;
 /** The words a wild-photographs record carries when the open data answered it (the export's day follows). */
 export const OPEN_WILD_RULE = "from iNaturalist's open data";
 export const openWildDetail = (day: string) => `${OPEN_WILD_RULE} of ${day}: research-grade observations with an open-licence photograph, the ${WILD_PER_TAXON} whose photographs iNaturalist received last (the open data holds no votes)`;
+/**
+ * The words a wild-photographs record carries when iNaturalist's API answered it for a taxon of which the open data holds
+ * more than the set's 24 observations (round eighty, agent V): the API's wild request (`wildUrl`), whose 24 are the ones it
+ * puts first by votes. No "; " in them: a record's words are joined by it (`inat-kew-fill.ts`).
+ */
+export const MOST_VOTED_RULE = 'the observations iNaturalist puts first by votes';
+export const mostVotedDetail = (day: string, n: number) => `from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, ${MOST_VOTED_RULE}, ${WILD_PER_TAXON} of them (the open data of ${day} holds ${n}, and no votes)`;
 
 /** The API's `attribution` for a photograph, from its licence and the observer's name, or login where there is no name. */
 export function attributionOf(licence: string, name: string | undefined, login: string | undefined): string {
@@ -401,7 +408,9 @@ export function* wildLines(w: WildSets, header: Omit<OpenHeader, 'inatOpenWild' 
   const ids = [...(o.taxa ?? w.only ?? w.taxa.keys())].filter((id) => (w.taxa.get(id)?.rankLevel ?? Infinity) <= 10).sort((a, b) => a - b);
   for (const id of ids) {
     const g = w.groups.get(id);
-    yield JSON.stringify({ t: id, n: g?.n ?? 0, results: (g?.rows ?? []).slice(0, keep).map((r) => observationOf(r.s, w.taxa, w.observers)) });
+    // A taxon iNaturalist has made inactive says so (round eighty, agent I): its set is none, and none is not an answer.
+    const inactive = w.taxa.get(id)?.active === false;
+    yield JSON.stringify({ t: id, n: g?.n ?? 0, ...(inactive ? { active: false } : {}), results: (g?.rows ?? []).slice(0, keep).map((r) => observationOf(r.s, w.taxa, w.observers)) });
   }
 }
 
@@ -413,6 +422,14 @@ export interface OpenWildStore {
   header: OpenHeader;
   /** Whether the file holds this taxon (its set, or none). */
   holds(taxonId: number): boolean;
+  /** The taxon's qualifying observations by the open data (its line's `n`), or undefined where the file does not hold it. */
+  count(taxonId: number): number | undefined;
+  /**
+   * False where the file says iNaturalist has made the taxon inactive (round eighty, agent I: files written by this round's
+   * reader on); undefined otherwise, which a file written before cannot tell from active. An inactive taxon's set is not
+   * read from the file: an inactive id holds no observations, and "none" from it would be a false absence.
+   */
+  active(taxonId: number): false | undefined;
   get(taxonId: number): { n: number; results: OpenObservation[] } | undefined;
   detail: string;
   close(): void;
@@ -422,6 +439,8 @@ export function openWildStore(path: string): OpenWildStore {
   const fd = openSync(path, 'r');
   const size = statSync(path).size;
   const at = new Map<number, [number, number]>();
+  const counted = new Map<number, number>();
+  const inactive = new Set<number>();
   let header: OpenHeader | null = null;
   const buf = Buffer.alloc(1 << 20);
   let pos = 0;
@@ -437,8 +456,8 @@ export function openWildStore(path: string): OpenWildStore {
       const start = lineStart + from;
       if (!header) header = JSON.parse(line.toString('utf8')) as OpenHeader;
       else {
-        const m = /^\{"t":(\d+),/.exec(line.subarray(0, 24).toString('latin1'));
-        if (m) at.set(Number(m[1]), [start, line.length]);
+        const m = /^\{"t":(\d+),(?:"n":(\d+),)?("active":false,)?/.exec(line.subarray(0, 60).toString('latin1'));
+        if (m) { at.set(Number(m[1]), [start, line.length]); if (m[2] !== undefined) counted.set(Number(m[1]), Number(m[2])); if (m[3]) inactive.add(Number(m[1])); }
       }
       from = i + 1;
     }
@@ -452,6 +471,9 @@ export function openWildStore(path: string): OpenWildStore {
     header: h,
     detail: openWildDetail(h.day),
     holds: (id) => at.has(id),
+    // `wildLines` writes every line as `{"t":<id>,"n":<count>,…`, so the count is read with its place.
+    count: (id) => counted.get(id),
+    active: (id) => (inactive.has(id) ? false : undefined),
     get(id) {
       const p = at.get(id);
       if (!p) return undefined;
@@ -494,14 +516,40 @@ export function wildAsk(url: string): { taxon: number; perPage: number } | null 
  * against iNaturalist's day (`day-budget.ts`) and never asked of iNaturalist; anything else, and a taxon the file does
  * not hold (one newer than the export), goes to `inner` as before. The answer carries the record's words
  * (`openWildDetail`), which `inat.photos` passes on.
+ *
+ * `mostVoted` (round eighty, agent V): the file answers only where its set is the taxon's whole qualifying set (its count
+ * at most the observations asked for), which is then the set the API gives too, whatever its order. A taxon of which it
+ * holds more goes to `inner`, the API, whose answer is the observations it puts first by votes, which the open data cannot
+ * know; that answer carries `mostVotedDetail`. Without it (`--fill inat --wild`, which asks iNaturalist nothing, and
+ * `--cultivated`), such a taxon is answered from the file: the observations whose photographs iNaturalist received last.
  */
-export function heldWild(inner: JsonFetcher, store: OpenWildStore | null, said?: { held: number }): JsonFetcher {
+export function heldWild(inner: JsonFetcher, store: OpenWildStore | null, said?: { held: number; mostVoted?: number }, opts: { mostVoted?: boolean } = {}): JsonFetcher {
   if (!store) return inner;
-  return (async <T>(url: string, opts?: Parameters<JsonFetcher>[1]): Promise<FetchResult<T>> => {
+  return (async <T>(url: string, o?: Parameters<JsonFetcher>[1]): Promise<FetchResult<T>> => {
     const ask = wildAsk(url);
-    const held = ask && ask.perPage <= store.header.keep ? store.get(ask.taxon) : undefined;
-    if (!ask || !held) return inner<T>(url, opts);
+    // A taxon the file holds as inactive goes to `inner`, as a taxon it does not hold does (round eighty).
+    const held = ask && ask.perPage <= store.header.keep && store.active(ask.taxon) !== false ? store.get(ask.taxon) : undefined;
+    if (!ask || !held) return inner<T>(url, o);
+    if (opts.mostVoted && held.n > ask.perPage) {
+      const r = await inner<T>(url, o);
+      if (r.status !== 'ok') return r;
+      if (said) said.mostVoted = (said.mostVoted ?? 0) + 1;
+      return { ...r, detail: mostVotedDetail(store.header.day, held.n) };
+    }
     if (said) said.held++;
     return { status: 'ok', data: { total_results: held.n, results: held.results.slice(0, ask.perPage) } as T, detail: store.detail };
   }) as JsonFetcher;
+}
+
+/**
+ * Whether the fill asks iNaturalist's API for a page's most-voted wild set (round eighty, agent V): only where its wild
+ * record is the open data's (`OPEN_WILD_RULE`, answered or answered with none) and the open data holds more qualifying
+ * observations of its taxon than the set's 24, so the record holds the 24 newest, not the most voted. Never a set the
+ * API answered (its record is the most voted already), never a taxon of 24 or fewer (the open data's set is the whole set,
+ * the API's too), and never without the file (the count is not known; nothing is asked).
+ */
+export function mostVotedToAsk(store: OpenWildStore | null, taxonId: number | undefined, row: { status?: string; detail?: string } | undefined, perPage = WILD_PER_TAXON): boolean {
+  if (!store || !taxonId || !row || (row.status !== 'ok' && row.status !== 'none')) return false;
+  if (!(row.detail ?? '').startsWith(OPEN_WILD_RULE)) return false;
+  return (store.count(taxonId) ?? 0) > perPage;
 }

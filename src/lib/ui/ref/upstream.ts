@@ -32,6 +32,8 @@ export const UPSTREAM_NAME: Record<string, string> = {
   // A page without a GBIF key (round seventy-nine): its name, author, family and synonyms are read from Kew's file.
   'kew.names': "Kew's names (WCVP)",
   wikidata: 'Wikidata',
+  // A page's English names from its Wikidata item, for a page without a GBIF key (round eighty).
+  'wikidata.names': 'Wikidata common names',
   wikipedia: 'Wikipedia',
   'inat.taxon': 'iNaturalist taxon',
   'inat.photos.wild': 'iNaturalist photographs, wild',
@@ -73,4 +75,22 @@ export function registersNotChecked(upstream: Up): string | null {
   const st = upstream.wikidata?.status;
   if (st !== 'error' && st !== 'refused') return null;
   return `Wikidata ${notAnswered(st)} when this page was built, so the links it gives (POWO, IPNI, World Flora Online, Wikipedia) were not checked; any shown here are kept from an earlier build.`;
+}
+
+/**
+ * Where a page's English names come from when GBIF's are not asked or gave none (round eighty): Wikidata's item and the
+ * day it was read, where names were taken from it; for a page without a GBIF key, why its names were not checked
+ * (rule 2: never said as "none"). Null where Wikidata answered and holds none the rule takes, and for any other page.
+ */
+export function namesSource(d: {
+  ids: { gbif?: number | null; wikidata?: string };
+  name: { vernacular: ReadonlyArray<{ source?: string }> };
+  upstream: Record<string, { status: string; at?: string; detail?: string } | undefined>;
+}): { item: string; day: string } | { unchecked: string } | null {
+  const rec = d.upstream['wikidata.names'];
+  const item = /\b(Q\d+)\b/.exec(rec?.detail ?? '')?.[1] ?? d.ids.wikidata;
+  if (rec?.status === 'ok' && item && d.name.vernacular.some((v) => v.source === 'Wikidata')) return { item, day: (rec.at ?? '').slice(0, 10) };
+  if (d.ids.gbif != null || rec?.status === 'none' || rec?.status === 'ok') return null;
+  if (!rec) return { unchecked: "Wikidata's common names were not read for this page" };
+  return { unchecked: (rec.detail ?? `Wikidata ${notAnswered(rec.status)}`).replace(/^not (?:checked|asked): /, '') };
 }

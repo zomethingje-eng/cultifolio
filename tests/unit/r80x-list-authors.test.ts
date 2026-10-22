@@ -44,6 +44,6 @@ describe('round eighty, X: a GBIF key Kew reads as another species\' name is not
     const by = new Map(list.map((e) => [e.kewId, e.gbifKey]));
     for (const id of ['3320793', '500245', '2727610', '2760205', '2800308', '2836016', '3234994', '2841926', '2861129', '2344177', '2534334', '2551191', '2546982', '2953596', '2525426', '2975950', '3032634', '2476687', '2455213']) expect(by.get(id), id).toBeNull();
     expect(by.get('2959828')).toBe(3022160);
-    expect(list.filter((e) => e.gbifKey != null).length).toBe(46022);
+    expect(list.filter((e) => e.gbifKey != null).length).toBe(46021); // round eighty (A): Xanthoceras sorbifolium's key refused (familyRefuses)
   });
 });

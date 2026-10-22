@@ -31,6 +31,12 @@ export interface IndexEntry {
   syn?: string[];
   /** Every other older name of species rank, past the six of `syn`: searched, never shown (round sixty-seven; triage-66 N1). Absent in an index built before, and where there is none. */
   older?: string[];
+  /**
+   * Kew's older names for the plant (the dossier's `name.kew.synonyms`) that `syn` and `older` do not hold, written at
+   * index time (`kewOlderOf`; round eighty, review-d 5): searched, never shown, never an address and never read by the
+   * photograph rules. Absent in an index built before, where Kew was not read, and where there is none.
+   */
+  kew?: string[];
   /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
   changed?: number;
 }
@@ -42,6 +48,12 @@ export type VernacularName = { name: string; lang?: string; source?: string; pre
 export interface NameScope {
   genus?: string;
   genera?: ReadonlySet<string>;
+  /**
+   * The species' own older names (GBIF's synonyms and Kew's, `name.synonyms` and `name.kew.synonyms`), as binomials
+   * with or without an author: a common name that is one of them, or one of them spelt one letter otherwise, is a
+   * scientific name and is not shown (round eighty, A; review-d 7).
+   */
+  older?: readonly string[];
 }
 
 import { canonicalSynonym } from '../core/names';
@@ -58,6 +70,29 @@ export function olderNamesOf(accepted: string, synonyms: readonly string[] = [])
   const genus = accepted.split(' ')[0];
   const all = [...new Set(synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' ')));
   return { syn: all.slice(0, 6), older: all.slice(6).filter((x) => x.split(' ').length === 2) };
+}
+
+/**
+ * Kew's older names for a plant as the index carries them (round eighty; review-d 5: on 38 of 109 sampled pages, 757 of
+ * Kew's older names found nothing, "Echinocactus chrysacanthus" and Aloe framesii's "Aloe amoena" among them): each name
+ * of `kew` (`name.kew.synonyms`, species rank, without authors) whose words as the search reads them are neither the
+ * accepted name's nor those of a name already `held` (`syn` and `older`), once, in Kew's order. The search reads them as
+ * it reads `older`; the shown older names, the addresses and the photograph rules read `syn` and `older` alone, so
+ * nothing a page shows changes.
+ */
+export function kewOlderOf(accepted: string, held: readonly string[], kew: readonly string[] | undefined): string[] {
+  const key = (n: string) => searchWords(n).join(' ');
+  const seen = new Set([accepted, ...held].map(key));
+  const out: string[] = [];
+  for (const raw of kew ?? []) {
+    if (typeof raw !== 'string') continue;
+    const n = raw.trim().replace(/\s+/g, ' ');
+    const k = key(n);
+    if (!k || k.split(' ').length < 2 || seen.has(k)) continue;
+    seen.add(k);
+    out.push(n);
+  }
+  return out;
 }
 
 /** Folded for comparing words: accents off, lower case. */
@@ -105,6 +140,34 @@ const tokensOf = (s: string) => s.split(/[\s-]+/).filter(Boolean);
 export const ENGLISH_USE: ReadonlySet<string> = new Set(['acacia', 'agave', 'aloe', 'amaryllis', 'anemone', 'aralia', 'cereus', 'crocus', 'geranium', 'haworthia', 'iris', 'lotus', 'mimosa', 'petunia', 'verbena', 'yucca']); // lotus and mimosa: Nelumbo nucifera's and Leucaena's English names in the live index (round sixty-two, after --names)
 /** An epithet's stem, so a genus transfer that changed its ending ("dichotoma", "dichotomum") still reads as one epithet. */
 const stem = (w: string) => foldWord(w).replace(/(?:us|um|a|is|e|es|i)$/, '');
+/** Whether two words are one spelling or one letter apart: one added, dropped, changed, or two neighbours swapped. */
+export function oneLetterApart(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+/**
+ * Whether a common name is the species' own scientific name or one of its older names, written as an English one: two
+ * words, the first the genus of the name or older name, the second its epithet or that spelt one letter otherwise, in any
+ * case (round eighty, A; review-d 7): "Calathea musaica" on Goeppertia kegeljanii, "Veronica recurva" on Veronica albicans
+ * and "Gerbera anandra" (Catalogue of Life's spelling of Gerbera anandria) on Leibnitzia anandria. Such a name is not
+ * shown, whether or not another English name is given (before, it was set back and shown when it was the only one).
+ */
+export function scientificOfOwn(spelling: string, scope: NameScope): boolean {
+  const ws = spelling.trim().split(/\s+/);
+  if (ws.length !== 2) return false;
+  const [g, e] = ws.map(foldWord);
+  if (!/^[a-z]+$/.test(g) || !/^[a-z-]+$/.test(e)) return false;
+  for (const n of [scope.genus ?? '', ...(scope.older ?? [])]) {
+    const w = n.replace(/^(?:×\s*|x\s+)/i, '').trim().split(/\s+/);
+    if (w.length < 2 || !/^\p{Ll}/u.test(w[1])) continue;
+    if (foldWord(w[0].replace(/^×/, '')) === g && oneLetterApart(foldWord(w[1].replace(/^×/, '')), e)) return true;
+  }
+  return false;
+}
 
 /**
  * The names one vernacular value gives: a value with commas is a list of names (round sixty-three, N1; the lead's count
@@ -270,13 +333,15 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     const ws = spelling.split(' ');
     return ws.length === 2 && other(ws[0]) && !!epithet && stem(ws[1]) === stem(epithet);
   };
-  const named = [...groups.values()].map((g) => {
+  const named = [...groups.values()].flatMap((g) => {
     const spelling = casedSpelling([...g.spellings].map(([s, c]) => ({ spelling: s, from: c.from, at: c.at })), across);
+    // The species' own name or one of its older names, written as an English one, is not a common name (round eighty, A).
+    if ([...g.spellings.keys()].some((x) => scientificOfOwn(x, scope))) return [];
     const back = setBack(spelling);
     // A single word that names no species: a bare genus word, a generic noun, or a word only ever given inside a list.
     const single = bareGenus(spelling, scope) || genericNoun(spelling) || (!g.alone && tokensOf(spelling).length === 1);
     // 0 a name; 1 a single word that names no species (rule 2a); 2 set back.
-    return { spelling, tier: back ? 2 : single ? 1 : 0, at: g.at, sources: g.from.size, preferred: g.preferred };
+    return [{ spelling, tier: back ? 2 : single ? 1 : 0, at: g.at, sources: g.from.size, preferred: g.preferred }];
   });
   // GBIF's order last: each name's place is its first place in GBIF's list, which no two names share, so nothing after it could decide.
   named.sort((a, b) => a.tier - b.tier || b.sources - a.sources || Number(b.preferred) - Number(a.preferred) || a.at - b.at);

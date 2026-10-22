@@ -15,11 +15,11 @@ import { SQL_SELECT } from '$dossier/bulk';
 const { keys } = downloadKeysOf(parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8')));
 
 describe('the Darwin Core Archive request at full size', () => {
-  it('asks for the list\'s 46,022 keys in one request, inside GBIF\'s 101,000 items', () => {
+  it('asks for the list\'s 46,021 keys (round eighty, A: Xanthoceras sorbifolium\'s refused) in one request, inside GBIF\'s 101,000 items', () => {
     // 46,041 until round eighty (X): 19 homonyms' keys no longer the list's.
-    expect(keys.length).toBe(46022);
+    expect(keys.length).toBe(46021);
     const body = dwcaRequest(keys, { creator: 'grower', email: 'grower@example.org' });
-    expect(predicateItems(body.predicate)).toBe(46022 + 3);
+    expect(predicateItems(body.predicate)).toBe(46021 + 3);
     expect(predicateItems(body.predicate)).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
     expect(partsNeeded(keys.length)).toBe(1);
   });
@@ -49,7 +49,7 @@ describe('the Darwin Core Archive request at full size', () => {
     expect(parts.length).toBe(3);
     expect(parts.flat()).toEqual(many);
     for (const p of parts) expect(predicateItems(recordsPredicate(p))).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
-    expect(splitKeys(keys, 4).map((p) => p.length)).toEqual([11506, 11506, 11506, 11504]);
+    expect(splitKeys(keys, 4).map((p) => p.length)).toEqual([11506, 11506, 11506, 11503]);
   });
 });
 
@@ -57,7 +57,7 @@ describe('the SQL download', () => {
   const q = sqlQuery([5384013, 3084426]);
   it('is one SELECT on occurrence, of the reader\'s columns under the reader\'s names, filtered as the DWCA is', () => {
     expect(q).toBe(
-      "SELECT gbifid, occurrence.gbif_classification.specieskey AS specieskey, occurrence.gbif_classification.taxonkey AS taxonkey, occurrence.gbif_classification.acceptedtaxonkey AS acceptedtaxonkey, decimallatitude, decimallongitude, coordinateuncertaintyinmeters, coordinateprecision, \"year\", countrycode, basisofrecord, license, datasetkey, establishmentmeans.concept AS establishmentmeans, degreeofestablishment.concept AS degreeofestablishment FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY('5384013', '3084426'))"
+      "SELECT gbifid, occurrence.gbif_classification.specieskey AS specieskey, occurrence.gbif_classification.taxonkey AS taxonkey, occurrence.gbif_classification.acceptedtaxonkey AS acceptedtaxonkey, decimallatitude, decimallongitude, coordinateuncertaintyinmeters, coordinateprecision, \"year\", countrycode, basisofrecord, license, datasetkey, establishmentmeans.concept AS establishmentmeans, degreeofestablishment.concept AS degreeofestablishment FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN ('5384013', '3084426'))"
     );
     expect(SQL_SELECT.length).toBe(15);
   });
@@ -67,13 +67,15 @@ describe('the SQL download', () => {
     expect(full.match(/\bSELECT\b/g)).toHaveLength(1);
     expect(full.match(/\bFROM occurrence\b/g)).toHaveLength(1);
     expect(full).toContain('"year"');
-    expect(full.match(/'\d+'/g)).toHaveLength(46022);
+    expect(full.match(/'\d+'/g)).toHaveLength(46021);
   });
-  it('its WHERE is GBIF\'s own conversion of the DWCA\'s predicate (asked of GBIF on 2026-10-20)', () => {
+  it('its WHERE is GBIF\'s own conversion of the DWCA\'s predicate (asked of GBIF on 2026-10-20), the keys asked as GBIF\'s analyst advised (round eighty)', () => {
     // GBIF's answer, from POST /v1/occurrence/download/request/sql with the DWCA body for these two keys:
     const gbifs = "WHERE\n  ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY('5384013', '3084426'))\n  AND occurrence.hascoordinate = TRUE\n  AND occurrence.hasgeospatialissues = FALSE\n  AND occurrence.occurrencestatus = 'PRESENT'";
+    // Round eighty: the keys' clause in the pattern of GBIF's data analyst (2026-10-21), for the same records.
+    const analysts = (w: string) => w.replace("ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY('5384013', '3084426'))", "EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN ('5384013', '3084426'))");
     const clauses = (w: string) => w.replace(/^WHERE\s+/, '').split(/\s+AND\s+/).map((c) => c.trim()).sort();
-    expect(clauses(q.slice(q.indexOf('WHERE')))).toEqual(clauses(gbifs));
+    expect(clauses(q.slice(q.indexOf('WHERE')))).toEqual(clauses(analysts(gbifs)));
   });
   it('the request body: format SQL_TSV_ZIP and the query', () => {
     expect(sqlRequest([1], { creator: 'grower' })).toEqual({ creator: 'grower', sendNotification: false, format: 'SQL_TSV_ZIP', sql: sqlQuery([1]) });

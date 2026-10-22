@@ -119,7 +119,10 @@ describe('the search from key files (round seventy-seven)', () => {
     const narrow: string[] = [], other: string[] = [];
     for (let i = 0; i < qs.length; i++) {
       const w = await ask(whole, qs[i]), f = viaFiles[i];
-      if (w.status === f.status && w.body === f.body) continue;
+      // Round eighty: a heavy key's answers say how many of the matches they can list (`kept`), which the whole index,
+      // listing all, never needs to; the rest of the answer is the same.
+      const unkept = (b: string) => { try { const j = JSON.parse(b); delete j.kept; return JSON.stringify(j); } catch { return b; } };
+      if (w.status === f.status && unkept(w.body) === unkept(f.body)) continue;
       if (JSON.parse(f.body).narrow === true && f.narrow === '1') narrow.push(qs[i]);
       else other.push(`${qs[i]}: files ${f.body.slice(0, 200)} whole ${w.body.slice(0, 200)}`);
     }
@@ -129,7 +132,9 @@ describe('the search from key files (round seventy-seven)', () => {
     // key's own best answers ("cape"), and with a trailing rank marker from the marker's own key ("cape var"), unless it
     // is a typing error of a heavy word ("provinses"), whose similar spellings are as many as the word's own species.
     // "a e" and "c a" are answered here, "a" and "e" being light in this corpus; on the real one they are heavy.
-    expect(narrow.sort()).toEqual(['Cape Provinces', 'cape province', 'cape provinces', 'pro cape', 'provinses']);
+    // Round eighty (review-w 6): a region of origin typed whole is answered from the build's own answers to it, as the
+    // whole index answers it ("Cape Provinces", "cape provinces"); "cape province" is no region's name.
+    expect(narrow.sort()).toEqual(['cape province', 'pro cape', 'provinses']);
     for (const q of narrow) expect(rankedWords(q).length > 1 || q === 'provinses').toBe(true);
   }, 240_000);
 
@@ -139,10 +144,10 @@ describe('the search from key files (round seventy-seven)', () => {
     const c = await corpusNow(platform, noStatic);
     expect(c.idx).toBeNull();
     const shapes: string[] = [];
-    for (const q of ['aloe', 'cape', 'Cape.', 'cape provinces', 'aloe verra', 'Copiapoa cinerea var. columna-alba', 'Echeveria Lola', 'Aloe vera L.', 'zzzz', 'c'])
+    for (const q of ['aloe', 'cape', 'Cape.', 'cape provinces', 'pro cape', 'aloe verra', 'Copiapoa cinerea var. columna-alba', 'Echeveria Lola', 'Aloe vera L.', 'zzzz', 'c'])
       for (const extra of ['&n=100&shape=2', '&n=6', '']) { const r = await ask(platform, q, extra); shapes.push(`${q}${extra}:${r.status}`); expect(r.status).toBe(200); }
     // the plain list's shape says "narrow" in a header, as the picker, Compare and the front page read it
-    const plain = await ask(platform, 'cape provinces', '&n=6');
+    const plain = await ask(platform, 'pro cape', '&n=6'); // round eighty: "cape provinces", a region typed whole, is answered
     expect([JSON.parse(plain.body), plain.narrow]).toEqual([[], '1']);
     // the species 404's three suggestions go through the search
     const ev = (slug: string) => { const url = new URL(`https://cultifolio.com/species/${slug}`); return { params: { slug }, platform, fetch: noStatic, setHeaders: () => {}, cookies: { get: () => undefined }, request: new Request(url), url, getClientAddress: () => '192.0.2.7', locals: { corpus: c } } as never; };

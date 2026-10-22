@@ -42,7 +42,7 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
     expect(r.genera).toEqual(counted.slice(0, r.genera.length).map((x) => x.g));
     expect(r.covered).toBeGreaterThanOrEqual(SHARE * total);
     expect(r.covered - counted[r.genera.length - 1].n).toBeLessThan(SHARE * total); // one fewer is not enough
-    // What it gives today (17 October 2026): 95 genera. A phone-sized set, and not the collector genera.
+    // What it gives today (22 October 2026, over the full list's 6,529 genera): 118 genera; 95 on 17 October over 1,321. A phone-sized set, and not the collector genera.
     expect(r.genera.length).toBeGreaterThan(40);
     expect(r.genera.length).toBeLessThan(200);
     expect(r.genera).toContain('Rosa');
@@ -85,7 +85,12 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
   it('/about/how says the source, the day and the rule, true of the code and the file', () => {
     expect(SHARE).toBe(0.5);
     expect(about).toContain(`The front page's catalogue is the same on every device, every genus and every species, and its chip “Most grown”, off until chosen, narrows it to the species of the most-grown genera: the fewest genera of the reference that, taken from the most observed down, together hold half of iNaturalist's observations of plants marked captive or cultivated across all the reference's genera that were counted, each genus counted with every taxon under it, on ${longDay(m.day)} (<code>scripts/most-grown-genera.txt</code> in the source holds every count, the query and iNaturalist's terms).`);
-    expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip.');
+    expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip, and nor is a genus that joins the reference after the count, until it is made again.');
+    // Round eighty (review-w 1): the count is the full list's, and the page says over which genera it was made.
+    // Asked with the live index's names and the species list's (scripts/species-list.txt), whose genera differ by a few.
+    const [, genera, nCounted] = /^index\t\d+ species in (\d+) genera; (\d+) counted/m.exec(text)!;
+    const n = (x: string) => Number(x).toLocaleString('en-GB');
+    expect(about).toContain(`That count was made over ${n(genera)} genera, every genus of the reference's 48,361 pages and of the species list they were built from, and ${n(nCounted)} of them were counted.`);
     expect(about).toContain('unfiltered and under each climate chip (the rows under “Most grown” are worked out by the server from the genus rows\' files and the counts\' file, once for each corpus)'); // round seventy-six: no longer from the index
     expect(about).not.toMatch(/On a phone the front page's catalogue opens|opens on the most-grown|opens on the genera of that list/);
     // The examples it names are refused in the file, as old names iNaturalist holds only inactive.

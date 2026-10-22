@@ -21,6 +21,13 @@
  * a word always leaves one of these keys shared (the proof is in `nearKeysOf`). A family or a region of origin is matched as typed
  * only, so its words are posted under their prefixes alone.
  *
+ * **Kew's older names** (round eighty; review-d 5; `kew` in the index) are read only as a name typed, its genus in full
+ * first (`kewTyped`), so they are never words of the trees above, which they would have grown by two fifths (the full
+ * list's 71,424 names: 1,830 MB of key files became 2,574 MB, the largest light file 1.06 MB became 1.43 MB). Each genus
+ * of a Kew name has a key `@<genus>` (folded as a query's words are) with one light file: the species holding a Kew name
+ * of that genus, as `Doc`s with those names in the ninth field. A query of two words or more reads its first word's
+ * `@` file beside the exact pass's own, and the two are ranked together.
+ *
  * **A query.** An entry must match every word of the query, so the candidates of any one word hold every hit: the
  * lightest word's files are read, its species prepared with the whole reference's genera and their photograph counts
  * (`search/blocks.json` names blocks of 4,096 counts by position), and ranked by `search` exactly as the whole index ranks
@@ -79,18 +86,21 @@ export type Dir = Record<string, DirEntry>;
 /**
  * A species as a key file holds it, what the ranking reads: its name, its family and regions of origin as numbers into
  * `search/tables.json` (-1 for no family), its headline common name ('' for none), its other common names, its pooled
- * spellings, its shown and its other older names. Empty fields at the end are left off.
+ * spellings, its shown and its other older names; and, in a Kew file only (an `@` key), Kew's older names of that key's
+ * genus (round eighty). Empty fields at the end are left off.
  */
-export type Doc = [name: string, family?: number, origin?: number[], common?: string, commons?: string[], spellings?: string[], syn?: string[], older?: string[]];
+export type Doc = [name: string, family?: number, origin?: number[], common?: string, commons?: string[], spellings?: string[], syn?: string[], older?: string[], kew?: string[]];
 /** A light key's file: its species as `Doc`s, each with its position in the index, in the index's order. */
 export type NodeFile = Array<[number, Doc]>;
 /**
  * A heavy key's file, by position in the index: the best answers to the word alone (`a`); the same with no common name
  * written as typed (`b`, when it differs); for a typed form of the word that a common name is written as, its own (`t`);
  * and `x`, 1 when they came from the word as typed (not from a similar spelling), so they answer the word with a
- * trailing rank marker too.
+ * trailing rank marker too. `n` (round eighty) is how many species the whole index answers, of which these are the first:
+ * the page says "the first 100 of 3,402" where it said "100 matches" (review-w 2, review-p 3). Absent in a file built
+ * before; the count is then not known.
  */
-export interface Answers { a: number[]; b?: number[]; t?: Record<string, number[]>; x?: 1 }
+export interface Answers { a: number[]; b?: number[]; t?: Record<string, number[]>; x?: 1; n?: number }
 /** `search/tables.json`: the families and regions of origin a `Doc` numbers. */
 export interface Tables { families: string[]; regions: string[] }
 /** `search/blocks.json`: the photograph-count blocks and the show blocks, by hash, in position order. */
@@ -161,7 +171,7 @@ export interface SearchBuild {
   /** Every node and answer file's hash. */
   hashes: Set<string>;
   /** For the report: light files and their rows, heavy keys, of each tree. */
-  counts: { exactFiles: number; exactRows: number; nearFiles: number; nearRows: number; heavy: number; nearHeavy: number };
+  counts: { exactFiles: number; exactRows: number; nearFiles: number; nearRows: number; heavy: number; nearHeavy: number; kewFiles: number; kewRows: number; regions: number };
 }
 
 /**
@@ -202,7 +212,7 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
   const dirs = searchDirsFor(index.length);
   const listed = new Map<string, Dir>([['top', {}], ...Array.from({ length: dirs }, (_, i) => [String(i), {}] as [string, Dir])]);
   const stored = new Map<string, string>();
-  const counts = { exactFiles: 0, exactRows: 0, nearFiles: 0, nearRows: 0, heavy: 0, nearHeavy: 0 };
+  const counts = { exactFiles: 0, exactRows: 0, nearFiles: 0, nearRows: 0, heavy: 0, nearHeavy: 0, kewFiles: 0, kewRows: 0, regions: 0 };
   const json = index.map((e) => JSON.stringify(e));
   const families = [...new Set(index.map((e) => e.family).filter((f): f is string => !!f))].sort();
   const regions = [...new Set(index.flatMap((e) => e.origin ?? []))].sort();
@@ -212,6 +222,18 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
     while (d.length > 1 && (Array.isArray(d[d.length - 1]) ? !(d[d.length - 1] as unknown[]).length : d[d.length - 1] === '' || d[d.length - 1] === -1)) d.pop();
     return JSON.stringify(d);
   });
+  // Kew's older names by genus (round eighty): the species holding a Kew name of each genus, and its names of that genus.
+  const kewBy = new Map<string, Array<[number, string[]]>>();
+  index.forEach((e, i) => {
+    const by = new Map<string, string[]>();
+    for (const n of e.kew ?? []) {
+      const ws = words(n).filter((w) => !RANK_MARKERS.has(w));
+      if (ws.length < 2) continue;
+      (by.get(ws[0]) ?? by.set(ws[0], []).get(ws[0])!).push(n);
+    }
+    for (const [g, ns] of by) (kewBy.get(g) ?? kewBy.set(g, []).get(g)!).push([i, ns]);
+  });
+  const kewDoc = (i: number, ns: string[]) => { const d = JSON.parse(docs[i]) as unknown[]; while (d.length < 8) d.push(d.length === 1 ? -1 : d.length === 3 ? '' : []); d.push(ns); return JSON.stringify(d); };
   const hashes = new Set<string>();
   // Each body to the sink as it is made, when one is given: at fifty thousand species they are gigabytes, never held at once.
   const store = (body: string) => { const h = hash(body); if (!hashes.has(h)) { hashes.add(h); if (sink) sink(h, body); else stored.set(h, body); } return h; };
@@ -219,10 +241,22 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
   const list = (key: string, entry: DirEntry) => { listed.get(searchDirOf(key, dirs))![key] = entry; };
   const posOf = new Map(index.map((e, i) => [e, i]));
   const light = (k: string, xs: number[]): DirEntry => (split(k, xs.length) ? [xs.length, store(nodeBody(xs)), 2] : [xs.length, store(nodeBody(xs))]);
+  const heavyWords = new Set<string>();
   for (const [k, xs] of tree(index, exactKeysAt)) {
     if (xs.length <= SEARCH_CAP) { list(k, light(k, xs)); counts.exactFiles++; counts.exactRows += xs.length; continue; }
     list(k, [xs.length, store(JSON.stringify(answersOf(index, whole, k, xs, posOf))), 1]);
+    heavyWords.add(k);
     counts.heavy++;
+  }
+  // A region of origin whose every word is heavy ("Cape Provinces", "Northern Provinces"; round eighty, review-w 6) is
+  // answered whole, as a heavy word is: its key `=<words>` holds the whole index's best answers to the name and their
+  // count, so the name typed in full lists its species where the page said only "too many".
+  for (const name of regions) {
+    const ws = words(name);
+    if (ws.length < 2 || !ws.every((w) => heavyWords.has(w))) continue;
+    const all = search(whole, name);
+    list(`=${ws.join(' ')}`, [all.length, store(JSON.stringify({ a: all.slice(0, SEARCH_HITS).map((h) => posOf.get(h)!), n: all.length } satisfies Answers)), 1]);
+    counts.regions++;
   }
   for (const [k, xs] of tree(index, nearKeysAt)) {
     // A near key is asked at three characters or more (`nearKeysOf`), so one shorter needs no file.
@@ -230,6 +264,7 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
     list(`~${k}`, [xs.length]);
     counts.nearHeavy++;
   }
+  for (const [g, xs] of kewBy) { list(`@${g}`, [xs.length, store(`[${xs.map(([i, ns]) => `[${i},${kewDoc(i, ns)}]`).join(',')}]`)]); counts.kewFiles++; counts.kewRows += xs.length; }
   const named = new Map<string, string>();
   const sorted = (d: Dir) => JSON.stringify(Object.fromEntries(Object.entries(d).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))));
   named.set('search/top.json', sorted(listed.get('top')!));
@@ -252,7 +287,8 @@ const IDLE = new Set([...RANK_MARKERS, 'sp', 'spp', 'nov']);
  */
 function answersOf<T extends Searchable & Wordy>(index: readonly T[], whole: Prepared<T>[], k: string, xs: number[], at: ReadonlyMap<T, number>): Answers {
   const pos = (hits: T[]) => hits.map((h) => at.get(h)!);
-  const out: Answers = { a: pos(search(whole, k, SEARCH_HITS)), ...(hasExact(whole, k) ? { x: 1 as const } : {}) };
+  const all = search(whole, k);
+  const out: Answers = { a: pos(all.slice(0, SEARCH_HITS)), ...(hasExact(whole, k) ? { x: 1 as const } : {}), n: all.length };
   const a = out.a;
   const texts = new Set<string>();
   let asWord = false;
@@ -291,22 +327,46 @@ export interface SearchReader<T> {
   photos(b: number): Promise<number[]>;
   /** The index entries of positions b × `SHOW_BLOCK` on, as the index holds them. */
   show(b: number): Promise<T[]>;
+  /**
+   * Starts reading what every query needs and an isolate holds once read (the tables, the blocks' names and every
+   * photograph-count block), so they come beside the directories rather than after the key files (round eighty: a cold
+   * search read them one after another, six waves of reads before any ranking). Optional; nothing waits on it.
+   */
+  warm?(): void;
+}
+
+/**
+ * The directories a query's exact pass reads (round eighty): `top`, the directory of each word's first three letters, and
+ * of its first word's Kew file for a query of two words or more. Read together at the start, where `descend` reached
+ * them one after another.
+ */
+export function searchDirsOfQuery(q: string, dirs: number): string[] {
+  const qs = rankedWords(q);
+  const out = new Set<string>(['top']);
+  for (const w of qs) if (w.length > 2) out.add(searchDirOf(w.slice(0, 3), dirs));
+  if (qs.length >= 2) out.add(searchDirOf(`@${qs[0]}`, dirs));
+  return [...out];
 }
 /** A candidate as the ranking reads it, with its position. */
 type Cand = Searchable & { at: number };
 /** What a word's candidates are: none (no entry has a word so begun), a light set of files, or heavy (with the answers of a heavy exact key). */
 type Bound = { kind: 'none' } | { kind: 'light'; count: number; files: string[] } | { kind: 'heavy'; answers?: string };
 /** `reads`: files read; `ranked`: species ranked; `nearCount`: the near pass's bound, as the directories count it (0 when none ran). */
-export type KeyAnswer<T> = ({ hits: T[] } | { narrow: true }) & { reads: number; ranked: number; nearCount: number };
+/**
+ * `total` (round eighty; review-w 2, review-p 3): how many species answer the query, of which `hits` are those from
+ * `at`; absent where it is not known (a heavy key's answers of a file built before). `kept`: how many of them can be
+ * listed, past which the page asks for another letter (a heavy key's answers keep `SEARCH_HITS`); absent when all can.
+ */
+export type KeyAnswer<T> = ({ hits: T[]; total?: number; kept?: number } | { narrow: true }) & { reads: number; ranked: number; nearCount: number };
 
 /**
  * The answer to `q` from the key files: the hits as the whole index ranks them, best first, `n` at most; or `narrow`
  * when every word the answer must hold is too common to list and the query is more than one word. `charge` is told how
  * many candidates each pass ranks and may stop the request (the caller's allowance).
  */
-export async function searchFromFiles<T>(r: SearchReader<T>, q: string, n: number, charge: (ranked: number) => Promise<boolean> = async () => false, nearCap = NEAR_CAP, rankCap = RANK_CAP): Promise<KeyAnswer<T> | { stop: true }> {
+export async function searchFromFiles<T>(r: SearchReader<T>, q: string, n: number, charge: (ranked: number) => Promise<boolean> = async () => false, nearCap = NEAR_CAP, rankCap = RANK_CAP, at = 0): Promise<KeyAnswer<T> | { stop: true }> {
   try {
-    return await searchFromFilesOnce(r, q, n, charge, nearCap, rankCap);
+    return await searchFromFilesOnce(r, q, n, charge, nearCap, rankCap, Math.max(0, Math.floor(at) || 0));
   } catch (e) {
     if (e instanceof TooMany) return { narrow: true, reads: e.reads, ranked: 0, nearCount: e.nearCount };
     throw e;
@@ -314,7 +374,7 @@ export async function searchFromFiles<T>(r: SearchReader<T>, q: string, n: numbe
 }
 /** A near pass that would rank more than `RANK_CAP` species: answered `narrow`. */
 class TooMany extends Error { reads = 0; nearCount = 0; }
-async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, charge: (ranked: number) => Promise<boolean>, nearCap: number, rankCap: number): Promise<KeyAnswer<T> | { stop: true }> {
+async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, charge: (ranked: number) => Promise<boolean>, nearCap: number, rankCap: number, at: number): Promise<KeyAnswer<T> | { stop: true }> {
   let reads = 0, ranked = 0, nearCount = 0;
   const dirsRead = new Map<string, Promise<Dir>>();
   const dirOf = (name: string) => { let p = dirsRead.get(name); if (!p) { reads++; dirsRead.set(name, (p = r.dir(name))); } return p; };
@@ -381,23 +441,46 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     }
     return best;
   };
-  /** A light bound's species, in the index's order, as the ranking reads them: the key files' `Doc`s with their photograph counts. */
-  const read = async (b: Bound, cap = Infinity): Promise<Cand[]> => {
-    if (b.kind !== 'light') return [];
-    reads += b.files.length;
+  /**
+   * A light bound's species, in the index's order, as the ranking reads them: the key files' `Doc`s with their photograph
+   * counts. With `kew` (a query's first word, for a query of two words or more), the species holding a Kew name of that
+   * genus too (its `@` file; round eighty), each with those names, whether or not the bound holds it.
+   */
+  const read = async (b: Bound, cap = Infinity, kew?: string): Promise<Cand[]> => {
+    const files = b.kind === 'light' ? b.files : [];
+    reads += files.length;
     // Each file parsed as it comes and let go once its species are taken: what a pass holds is the species it ranks,
     // never every file at once (a typing error's keys reach files that share most of their species).
     const byAt = new Map<number, Doc>();
-    await Promise.all(b.files.map(async (h) => { for (const [i, d] of JSON.parse(await r.node(h)) as NodeFile) if (!byAt.has(i)) byAt.set(i, d); }));
+    const kewDocs = new Map<number, Doc>();
+    await Promise.all([
+      ...files.map(async (h) => { for (const [i, d] of JSON.parse(await r.node(h)) as NodeFile) if (!byAt.has(i)) byAt.set(i, d); }),
+      (async () => {
+        if (!kew) return;
+        const e = await line(`@${kew}`);
+        if (!e || e.length !== 2) return;
+        reads++;
+        for (const [i, d] of JSON.parse(await r.node(e[1])) as NodeFile) kewDocs.set(i, d);
+      })()
+    ]);
+    for (const [i, d] of kewDocs) {
+      const own = byAt.get(i);
+      if (!own) { byAt.set(i, d); continue; }
+      const x = own.slice() as unknown[];
+      while (x.length < 8) x.push(x.length === 1 ? -1 : x.length === 3 ? '' : []);
+      x[8] = d[8];
+      byAt.set(i, x as Doc);
+    }
     if (byAt.size > cap) throw Object.assign(new TooMany(), { reads, nearCount });
+    if (!byAt.size) return [];
     const ats = [...byAt.keys()].sort((a, b) => a - b);
     const t = await r.tables();
     const blocks = [...new Set(ats.map((i) => Math.floor(i / PHOTO_BLOCK)))];
     reads += blocks.length;
     const counts = new Map(await Promise.all(blocks.map(async (k) => [k, await r.photos(k)] as const)));
     return ats.map((i) => {
-      const [name, family = -1, origin = [], common = '', commons = [], spellings = [], syn = [], older = []] = byAt.get(i)!;
-      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK] };
+      const [name, family = -1, origin = [], common = '', commons = [], spellings = [], syn = [], older = [], kew = []] = byAt.get(i)!;
+      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, kew, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK] };
     });
   };
   /** The entries of the hits, in their order: from the show blocks, read only for them. */
@@ -407,30 +490,35 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     const got = new Map(await Promise.all(blocks.map(async (k) => [k, await r.show(k)] as const)));
     return ats.map((i) => got.get(Math.floor(i / SHOW_BLOCK))![i % SHOW_BLOCK]);
   };
-  const hitsOf = async (cs: Cand[]) => ({ hits: await show(cs.map((c) => c.at)) });
-  const done = (x: { hits: T[] } | { narrow: true }): KeyAnswer<T> => ({ ...x, reads, ranked, nearCount });
+  // Every hit ranked, and those from `at` shown: the count is the whole answer's, and only the hits shown are read.
+  const hitsOf = async (cs: Cand[]) => ({ hits: await show(cs.slice(at, at + n).map((c) => c.at)), total: cs.length });
+  const done = (x: { hits: T[]; total?: number; kept?: number } | { narrow: true }): KeyAnswer<T> => ({ ...x, reads, ranked, nearCount });
   const rank = async (cands: Cand[]) => { ranked += cands.length; return charge(cands.length); };
 
   const qs = rankedWords(q);
-  if (!qs.length) return done({ hits: [] });
+  if (!qs.length) return done({ hits: [], total: 0 });
+  // Everything the exact pass reads before its key files, asked at once (round eighty).
+  r.warm?.();
+  for (const d of searchDirsOfQuery(q, r.dirs)) void dirOf(d).catch(() => {});
   // The words every hit holds: all of them but a trailing rank marker, which the search may drop ("aloe var").
   const trailing = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
   const held = trailing ? qs.slice(0, -1) : qs;
   const genera = r.genera();
   const exact = lightest(await Promise.all(held.map(exactBound)));
   if (exact) {
-    const cands = await read(exact);
+    // Kew's older names are reached only as a name typed, its genus the query's first word (`kewTyped`; round eighty).
+    const cands = await read(exact, Infinity, qs.length >= 2 ? qs[0] : undefined);
     if (await rank(cands)) return { stop: true };
     const pe = prepare(cands, await genera);
-    if (hasExact(pe, q)) return done(await hitsOf(search(pe, q, n)));
+    if (hasExact(pe, q)) return done(await hitsOf(search(pe, q)));
     // Nothing matches as typed: the near pass, as `search` runs it, only for a word of four letters or more.
-    if (!qs.some((x) => x.length >= 4)) return done({ hits: [] });
+    if (!qs.some((x) => x.length >= 4)) return done({ hits: [], total: 0 });
     const near = lightest(await Promise.all(held.map(nearBound)));
     if (near?.kind === 'light') nearCount = near.count;
     if (!near || (near.kind === 'light' && near.count > nearCap)) return done({ narrow: true });
     const nc = await read(near, rankCap);
     if (await rank(nc)) return { stop: true };
-    return done(await hitsOf(search(prepare(nc, await genera), q, n)));
+    return done(await hitsOf(search(prepare(nc, await genera), q)));
   }
   // Every word the hits hold is heavy. The whole query read as one common name first, from a light word of its own.
   if (wholeReading(q)) {
@@ -438,7 +526,7 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     if (!w) return done({ narrow: true });
     const cands = await read(w);
     if (await rank(cands)) return { stop: true };
-    const hits = wholeHits(prepare(cands, await genera), q, n) ?? [];
+    const hits = wholeHits(prepare(cands, await genera), q) ?? [];
     if (hits.length) return done(await hitsOf(hits));
   }
   // A trailing rank marker the hits may hold as a word ("cape var"): from its own light key, when anything has both.
@@ -448,9 +536,19 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     if (m.kind !== 'heavy') {
       const cands = await read(m);
       if (await rank(cands)) return { stop: true };
-      const hits = readingHits(prepare(cands, await genera), q, n);
+      const hits = readingHits(prepare(cands, await genera), q);
       if (hits.length) return done(await hitsOf(hits));
       full = 'none';
+    }
+  }
+  // A region of origin typed whole, every word of it heavy: the whole index's answers to it, kept by the build (round eighty).
+  if (held.length > 1 && !trailing) {
+    const e = await line(`=${held.join(' ')}`);
+    if (e && e.length === 3 && e[2] === 1) {
+      reads++;
+      const a = await r.answers(e[1]);
+      const total = typeof a.n === 'number' && a.n >= a.a.length ? a.n : undefined;
+      return done({ hits: await show(a.a.slice(at, at + n)), ...(total !== undefined ? { total } : {}), ...(total === undefined || total > a.a.length ? { kept: a.a.length } : {}) });
     }
   }
   // One word alone (or with a trailing marker nothing holds with it): the whole index's answers to it, kept by the build.
@@ -464,7 +562,8 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
       if (!trailing || a.x === 1) {
         const typed = typedOf(q);
         const list = typed === held[0] ? a.a : a.t && Object.hasOwn(a.t, typed) ? a.t[typed] : (a.b ?? a.a);
-        return done({ hits: await show(list.slice(0, n)) });
+        const total = typeof a.n === 'number' && a.n >= list.length ? a.n : undefined;
+        return done({ hits: await show(list.slice(at, at + n)), ...(total !== undefined ? { total } : {}), ...(total === undefined || total > list.length ? { kept: list.length } : {}) });
       }
     }
   }

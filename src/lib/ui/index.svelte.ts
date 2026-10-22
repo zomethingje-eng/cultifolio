@@ -197,13 +197,21 @@ export type Found = IndexEntry;
  * search 503 "did not answer").
  */
 export type SearchStop = { limited: number; kind?: 'refused' | 'unread' };
-export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean; narrow?: boolean }) | SearchStop | null> {
+/** A region of origin a query names, with the Origin grouping's row it falls under (round eighty; review-w 6). */
+export type SearchRegion = { name: string; row: { id: string; label: string } };
+/**
+ * `total`: how many species answer (absent where the server does not know); `kept`: how many of them it can list, past
+ * which the page asks for another letter (absent when all can); `from`: where these hits start (round eighty; review-w 2,
+ * review-p 3: the page said "60 matches" where 60 was the cap).
+ */
+export type SearchFound = Found[] & { relaxed?: { query: string; left?: string }; near?: boolean; narrow?: boolean; total?: number; kept?: number; from?: number; regions?: SearchRegion[] };
+export async function searchCatalogue(q: string, n = 60, at = 0): Promise<SearchFound | SearchStop | null> {
   // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
   // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
   const text = [...q.trim()].slice(0, 80).join('');
   if (!text) return [];
   try {
-    const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}`).then(timed);
+    const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}${at > 0 ? `&at=${at}` : ''}`).then(timed);
     if (r.status === 400) return []; // not a search (nothing the index has words in): nothing matches
     if (r.status === 429) return { limited: Math.max(1, Number(r.headers.get('retry-after')) || 60) }; // the address's allowance is spent: a wait, not "not reached" (round forty, R1-3)
     if (!r.ok) {
@@ -228,7 +236,11 @@ export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { r
     // Every word is too common for the server to list what matches them all (round seventy-seven; `narrow`): no hits,
     // and the page asks for another letter or word rather than saying nothing matches.
     const narrow = r.headers.get('x-search-narrow') === '1';
-    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {}, narrow ? { narrow } : {});
+    const int = (h: string | null) => (h !== null && /^\d+$/.test(h) ? Number(h) : undefined);
+    const total = int(r.headers.get('x-search-total')), kept = int(r.headers.get('x-search-kept'));
+    let regions: SearchRegion[] = [];
+    try { const x = JSON.parse(decodeURIComponent(r.headers.get('x-search-regions') ?? '') || '[]'); if (Array.isArray(x)) regions = x.filter((y) => y && typeof y.name === 'string' && typeof y.row?.id === 'string' && typeof y.row?.label === 'string'); } catch { regions = []; }
+    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {}, narrow ? { narrow } : {}, total !== undefined ? { total } : {}, kept !== undefined ? { kept } : {}, at > 0 ? { from: at } : {}, regions.length ? { regions } : {});
   } catch {
     return null;
   }

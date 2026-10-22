@@ -1,0 +1,21 @@
+# Default points (round eighty, A; src/lib/dossier/default-points.ts says the rule): a coordinate where the open in-range records of 20 species or more lie, 95% of them or more with no year.
+# Written 2026-10-22 by --list-default-points from 8947 dossiers; a point listed before and not found again keeps its line, with 0s.
+# lat,lon, species, records, records with no year
+23.874,-101.554	180	180	179
+3.924,-53.235	84	84	82
+-28.554,24.753	81	81	80
+3.915,-53.24	67	67	67
+16.198,-61.54	54	54	54
+14.655,-61.019	53	53	53
+-12.821,45.147	44	44	44
+-19.042,46.685	31	31	31
+-25.88,-54.41	26	26	26
+-28.21,-56.23	26	26	26
+38.073,104.691	26	26	25
+17.904,-62.832	25	25	25
+-35.697,-64.532	24	24	24
+-6.356,34.818	24	24	24
+-27.16,-55.34	22	22	22
+18.035,-63.209	22	22	21
+-27.44,-55.59	20	20	20
+-27.5,-58.77	20	20	20

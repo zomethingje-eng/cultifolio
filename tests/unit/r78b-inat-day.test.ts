@@ -34,9 +34,10 @@ describe("iNaturalist's day", () => {
     expect((await a(INAT)).status).toBe('ok');
     expect(a.used()).toBe(1);
   });
-  it('the corpus script keeps to 9,000 a day, counted in cache/day-budget/, and a stopped fill says to run it again', () => {
+  it('the corpus script keeps to 4,000 a day, counted in cache/day-budget/, and a stopped fill says to run it again', () => {
     const { INAT_DAY_BUDGET } = need();
-    expect(INAT_DAY_BUDGET).toBe(9000);
+    // Round eighty (agent I): 4,000, after iNaturalist throttled the first fill at about 5,500 (`r80i-inat-gentle.test.ts`).
+    expect(INAT_DAY_BUDGET).toBe(4000);
     const script = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(script).toMatch(/dayBudget\(makeFetcher\(\), 'api\.inaturalist\.org', inatBudget, budgetStore\)/);
     expect(script).toContain("const BUDGET_ROOT = 'cache/day-budget';");

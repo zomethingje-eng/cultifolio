@@ -137,6 +137,8 @@ interface ObsPhoto {
 interface Observation {
   /** The observation's number, or its uuid where it came from iNaturalist's open data (`inat-open.ts`): either is its page's address. */
   id: number | string;
+  /** The observation's uuid, which the API gives beside its number: a wild photograph's page is by it (round eighty), as the open data's is. */
+  uuid?: string;
   observed_on?: string;
   place_guess?: string;
   captive?: boolean;
@@ -148,7 +150,20 @@ interface Observation {
   num_identification_disagreements?: number;
   /** Each identification, `current` while it is the identifier's latest for the observation. */
   identifications?: Array<{ current?: boolean; taxon?: { id?: number; ancestor_ids?: number[] }; taxon_id?: number }>;
+  /** The observer: the API's and the open data's (`inat-open.ts`) both give the login, and the name where there is one. */
+  user?: { login?: string | null; name?: string | null };
   photos: ObsPhoto[];
+}
+
+/**
+ * The credit of a CC0 photograph, naming its observer (round eighty, agent I): iNaturalist's API writes a CC0 photograph's
+ * `attribution` as "no rights reserved" alone, so 492 CC0 photographs on 58 of 109 sampled pages named no one, though
+ * iNaturalist names the observer of each. The observer's name, or login where there is no name, as the API's CC BY lines
+ * name them: "Alan Weakley, no rights reserved (CC0)". No "(c)": CC0 waives the copyright.
+ */
+export function cc0Credit(attribution: string, user: Observation['user']): string {
+  const who = (user?.name ?? '').trim() || (user?.login ?? '').trim();
+  return who && /^no rights reserved$/i.test(attribution.trim()) ? `${who}, no rights reserved (CC0)` : attribution;
 }
 
 /**
@@ -244,9 +259,11 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
       const base = p.url.replace(/\/square\.(\w+)$/, '');
       const ext = /\.(\w+)$/.exec(p.url)?.[1] ?? 'jpg';
       if (!p.attribution && tag !== 'cc0') continue; // no attribution line means no author to credit, which CC BY requires (round sixteen, 3)
-      // An e-mail address is never published as the author; with nothing else left, a CC BY or CC BY-SA photograph is not taken (C10).
-      const credit = p.attribution ? creditWithoutMail({ src: 'inat', licence: tag, attribution: p.attribution }) : null;
-      if (p.attribution && !credit) continue;
+      // A CC0 line names its observer (`cc0Credit`; round eighty). An e-mail address is never published as the author;
+      // with nothing else left, a CC BY or CC BY-SA photograph is not taken (C10).
+      const line = tag === 'cc0' ? cc0Credit(p.attribution ?? '', o.user) : p.attribution;
+      const credit = line ? creditWithoutMail({ src: 'inat', licence: tag, attribution: line }) : null;
+      if (line && !credit) continue;
       out.push({
         src: 'inat',
         id: String(p.id),
@@ -256,7 +273,8 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
         height: p.original_dimensions?.height ?? undefined,
         licence: tag,
         attribution: credit ?? 'author not stated, CC0',
-        page: `https://www.inaturalist.org/observations/${o.id}`,
+        // A wild photograph's page by its observation's uuid, by either route (round eighty, agent V): the open data has no number.
+        page: `https://www.inaturalist.org/observations/${wild && o.uuid ? o.uuid : o.id}`,
         captive: !wild,
         observedOn: o.observed_on ?? undefined,
         place: o.place_guess ?? undefined

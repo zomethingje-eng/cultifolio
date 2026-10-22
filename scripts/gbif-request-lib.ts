@@ -12,9 +12,9 @@
  *
  * The records' filter is the same in each: the species' keys (TAXON_KEY: a record whose backbone classification holds
  * the key, its subspecies and its synonyms' records among them), with coordinates, no geospatial issue, and present.
- * GBIF's own conversion of that predicate to SQL (`POST /v1/occurrence/download/request/sql`, asked 2026-10-20) gives
- * exactly the WHERE clause of `sqlQuery`: `ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY(…))` and the
- * three flags. Nothing else the build applies can be applied by GBIF without changing the dossiers: the build keeps a
+ * GBIF's own conversion of that predicate to SQL (`POST /v1/occurrence/download/request/sql`, asked 2026-10-20) gave
+ * `ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY(…))` and the three flags, which round seventy-nine sent;
+ * since round eighty the keys are asked as GBIF's data analyst advised (`taxonFilter`), the same records by another form. Nothing else the build applies can be applied by GBIF without changing the dossiers: the build keeps a
  * uniform sample of each species' records (2,000, by a hash of the record's id) and judges each kept record after
  * (its licence, its basis, its establishment, its uncertainty, its place); a record left out by GBIF would change which
  * records are in the sample. SQL cannot take the sample itself: no sub-queries, HAVING or QUALIFY
@@ -61,12 +61,24 @@ export function dwcaRequest(keys: readonly number[], who: Who = {}) {
 }
 
 /**
+ * The species' keys as the SQL query filters by them, in the pattern GBIF's data analyst gave on 2026-10-21 (round eighty):
+ * `EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN (…))`, where round seventy-nine sent GBIF's
+ * own conversion of the DWCA's predicate, `ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY(…))`. The two
+ * select the same records (a record whose backbone classification holds any of the keys); GBIF's download of the list's
+ * 46,022 keys by ARRAYS_OVERLAP ran 23 hours and was cancelled, and the analyst advised this form, which GBIF runs as a
+ * filter on each record's array rather than as an overlap of two arrays. The keys are strings, as `taxonkeys` holds them.
+ */
+export function taxonFilter(keys: readonly number[]): string {
+  return `EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN (${keys.map((k) => `'${k}'`).join(', ')}))`;
+}
+
+/**
  * The SQL query: one SELECT on `occurrence` of the columns the build reads, under the names it reads them by, filtered as
  * the DWCA is. No comment lines (GBIF's parser refuses them), single quotes for strings, `"year"` quoted (a keyword).
  */
 export function sqlQuery(keys: readonly number[]): string {
   const cols = SQL_SELECT.map(([e, a]) => (e === a || e === `"${a}"` ? e : `${e} AS ${a}`)).join(', ');
-  return `SELECT ${cols} FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND ARRAYS_OVERLAP(occurrence.gbif_classification.taxonkeys, ARRAY(${keys.map((k) => `'${k}'`).join(', ')}))`;
+  return `SELECT ${cols} FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND ${taxonFilter(keys)}`;
 }
 
 /** The SQL download request (format SQL_TSV_ZIP, the only one GBIF offers). */

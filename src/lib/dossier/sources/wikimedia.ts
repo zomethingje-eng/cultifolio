@@ -253,8 +253,10 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
  * describing them, Q110694306 for Cyphostemma calcarium).
  */
 export const NO_ITEM = "no taxon item carries its GBIF key or Kew's IPNI identifier for it, or the name as its label or an alias";
+/** The same for a page matched by its identifiers alone (round eighty, A): its label is not read. */
+export const NO_ITEM_BY_IDS = "no taxon item carries its GBIF key or Kew's IPNI or POWO identifier for it (a page with a GBIF key that Kew holds by its name and author is matched by those identifiers alone, never by its label)";
 
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string; kew?: { r?: FetchResult<gbif.KewIds> } } = {}): Promise<CrossResult> {
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string; kew?: { r?: FetchResult<gbif.KewIds> }; /** The page has a Kew id (`k<plant_name_id>`, round eighty): matched by its GBIF key and Kew's identifiers alone. */ kewPage?: boolean } = {}): Promise<CrossResult> {
   const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
   const olderKeys = older.map((o) => o.key);
   const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
@@ -270,6 +272,32 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     if (opts.kew) opts.kew.r = r;
     return r;
   };
+  /** The item by Kew's identifiers (round eighty, A): of `keyed` (the items carrying the GBIF key), else of a search. */
+  const byKewIds = async (keyed: string[], k: Kew): Promise<CrossResult> => {
+    const carries = (e: Entity) => ipnisOf(e).some((i) => k.ids.includes(i)) || strings(e, P.powo).map((x) => x.replace(/^urn:lsid:ipni\.org:names:/, '')).some((i) => k.ids.includes(i));
+    if (keyed.length) {
+      const read: Array<{ id: string; e: Entity }> = [];
+      for (const id of keyed) { const e = await entityOf(f, id); if (e.status !== 'ok') return e; if (e.data && isTaxonItem(e.data) && carries(e.data)) read.push({ id, e: e.data }); }
+      if (read.length === 1) return { status: 'ok', detail: `found by its GBIF key and Kew's identifier for ${k.label ?? scientificName}, of ${keyed.length} items that carry the key`, data: crossOf(read[0].id, read[0].e) };
+      if (read.length > 1) return { status: 'ambiguous', detail: `not taken: two items carry its GBIF key and Kew's identifier for ${k.label ?? scientificName} (${read.map((r) => r.id).join(', ')})` };
+    }
+    const terms = k.ids.flatMap((i) => [`P961=${i}`, `P5037=urn:lsid:ipni.org:names:${i}`]).join('|');
+    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${k.ids.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${terms}`)}`);
+    if (q.status !== 'ok') return q;
+    const bad = failed(q.data);
+    if (bad) return bad;
+    const ids = [...new Set((q.data.query?.search ?? []).map((h) => h.title))];
+    if (ids.length > 1) return { status: 'ambiguous', detail: `not taken: two items carry Kew's identifier for ${k.label ?? scientificName} (${ids.join(', ')})${keyed.length ? `, and ${keyed.length} carry its GBIF key` : ''}` };
+    if (ids.length === 1) {
+      const e = await entityOf(f, ids[0]);
+      if (e.status !== 'ok') return e;
+      if (e.data && isTaxonItem(e.data) && carries(e.data)) {
+        const hit = ipnisOf(e.data).find((i) => k.ids.includes(i));
+        return { status: 'ok', detail: `found by Kew's identifier for ${k.label ?? scientificName}${keyed.length ? ` (${keyed.length} items carry its GBIF key, none of them Kew's identifier)` : ''}`, data: { ...crossOf(ids[0], e.data), ...(hit ? { ipni: hit } : {}) } };
+      }
+    }
+    return { status: 'none', detail: `${NO_ITEM_BY_IDS}${keyed.length ? ` (${keyed.length} items carry its GBIF key, none of them Kew's identifier for ${k.label ?? scientificName})` : ''}` };
+  };
   if (gbifKey) {
     const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}`);
     if (q.status !== 'ok') return q;
@@ -281,6 +309,15 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       if (e.status !== 'ok') return e;
       if (!e.data) return { status: 'none' };
       return { status: 'ok', data: crossOf(hits[0].title, e.data) };
+    }
+    // Round eighty (A; Datura innoxia lost its item, IPNI, POWO and WFO to two items labelled with its name): a page with a
+    // GBIF key whose name and author Kew holds is matched by those identifiers, never by its label. Of two items that carry
+    // the GBIF key, the one that carries Kew's IPNI or POWO identifier for the name; with none, the one item that carries
+    // either. Nothing else is read: no label, no alias, no older name's record.
+    if (opts.kewPage) {
+      const k = await kewOf();
+      if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
+      if (k.status === 'ok' && k.data.ids.length) return byKewIds(hits.map((h) => h.title), k.data);
     }
   }
   const notes: string[] = [];

@@ -7,7 +7,7 @@
 import { scan } from './kew-names-load';
 import { loadBackbone } from './backbone-load';
 import { KewNamesIndex, words, type KewRow } from '../src/lib/dossier/kew-names';
-import { extraKeysFor, kewForm, type ExtraKey, type Refused, type Merge } from '../src/lib/dossier/extra-keys';
+import { extraKeysFor, noKeyFor, kewForm, mergeKeys, mergeTarget, mergedExcept, type ExtraKey, type Refused, type Merge, type NoKeyReading } from '../src/lib/dossier/extra-keys';
 import { slugify } from '../src/lib/core/names';
 
 /** A page: its GBIF key, or (round seventy-nine) none and its id `k<plant_name_id>`; its Kew entry. */
@@ -16,7 +16,7 @@ type Page = { key: number | null; id?: string; name: { scientific: string; kew?:
 const own = (s: string) => Buffer.from(s, 'utf8').toString('utf8');
 const kept = (r: KewRow): KewRow => ({ id: own(r.id), name: own(r.name), authors: own(r.authors), status: own(r.status), rank: own(r.rank), accepted: own(r.accepted), parent: own(r.parent), powo: '', ...(r.homotypic ? { homotypic: true } : {}) });
 
-export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[]; reference?: ReadonlySet<number> }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number } | null> {
+export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[]; reference?: ReadonlySet<number> }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number; none: NoKeyReading[] } | null> {
   const csv = `${o.bulk}/wcvp_names.csv`;
   const away = new Set(o.merges.map((m) => m.from));
   const pages = o.pages.filter((p) => p.key == null || !away.has(p.key));
@@ -43,15 +43,27 @@ export async function listExtraKeys(o: { bulk: string; backbone: string; pages: 
   const holders = new Map<number, number[]>();
   for (const k of reference) for (const a of bb.lineage(k).slice(1)) holders.set(a, [...(holders.get(a) ?? []), k]);
   const merged = new Map(o.merges.map((m) => [m.from, slugify(m.name)]));
-  const into = new Map(o.merges.map((m) => [m.from, m.into]));
+  const into = new Map(o.merges.map((m) => [m.from, mergeTarget(m)]));
   const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '', ...(p.id ? { id: p.id } : {}) }, idx, bb, reference, holders, merged, into));
   // First without what GBIF files under each candidate; then that is read, with Kew's rows of its words, and the rule run again.
-  const candidates = new Set(run().flatMap((r) => r.keys.map((k) => k.key)));
+  // The merged keys too (round eighty, A): each is read by the page it joins whatever the rule makes of it.
+  const candidates = new Set([...run().flatMap((r) => r.keys.map((k) => k.key)), ...o.merges.map((m) => m.from)]);
   console.log(`  ${candidates.size} candidate keys; reading what GBIF files under them…`);
   await bb.readUnder(candidates);
   const more = new Set<string>();
   for (const k of candidates) for (const u of bb.under!(k)) { const w = kewForm(u); if (w && !wanted.has(w)) more.add(w); }
   if (more.size) await scan(csv, (r) => more.has(words(r.name)), (r) => idx.add(kept(r)));
   const all = run();
-  return { keys: all.flatMap((r) => r.keys), refused: all.flatMap((r) => r.refused), pages: pages.length, usages: bb.size, noEntry: pages.filter((p) => !p.name.kew?.entry).length };
+  // A merge the rule gave no line is read all the same (round eighty, A; X's need): the owner's decision is the claim.
+  const entryOf = new Map(pages.flatMap((p) => [[String(p.key ?? p.id), p.name.kew?.entry ?? ''] as const]));
+  // Only for a page of this listing (the merge, round eighty): `scripts/kew-extra-keys.ts` lists the pages without a GBIF
+  // key, and a merge into a keyed page is not one of its lines (the build adds every merge's line itself).
+  const listed = new Set(pages.map((p) => String(p.key ?? p.id)));
+  const forced = mergeKeys(o.merges, all.flatMap((r) => r.keys), slugify, (k) => bb.usage(k), (m) => { const e = entryOf.get(String(mergeTarget(m))); return e ? mergedExcept(m.from, e, idx, bb) : []; }).filter((k) => listed.has(k.pageId ?? String(k.page)));
+  if (forced.length) console.log(`  ${forced.length} merged key${forced.length === 1 ? '' : 's'} the rule gave no line, read by the page each joins (the owner's merges): ${forced.map((k) => `${k.key} into ${k.pageId ?? k.page}`).join(', ')}`);
+  // Round eighty (R): why each page without a GBIF key that the rule gives no key reads none, by the same rule's steps
+  // (a page that reads a merged key, A's `forced`, reads a key, so it is not one of them; M).
+  const forcedPages = new Set(forced.flatMap((k) => (k.pageId ? [k.pageId] : [])));
+  const none = pages.flatMap((p, i) => (p.key == null && p.id && !all[i].keys.length && !forcedPages.has(p.id) ? [noKeyFor({ key: null, entry: p.name.kew?.entry ?? '', id: p.id }, idx, bb, reference, holders, merged, into)] : [])).filter((x): x is NoKeyReading => !!x);
+  return { keys: [...all.flatMap((r) => r.keys), ...forced], refused: all.flatMap((r) => r.refused), pages: pages.length, usages: bb.size, noEntry: pages.filter((p) => !p.name.kew?.entry).length, none };
 }

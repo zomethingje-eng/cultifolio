@@ -39,9 +39,12 @@ export type JsonFetcher = <T = unknown>(url: string, opts?: FetchOptions) => Pro
 
 /** Per-host pacing so a corpus build is a good citizen (iNat asks for ~1/s). */
 const MIN_GAP_MS: Record<string, number> = {
-  // 1.5 s (40 a minute): at 1.1 s (about 54 a minute, sustained) iNaturalist answered 429 to every call after 97 minutes
-  // and 5,273 requests of the owner's first cultivated fill (2026-10-22), well inside the day's 9,000.
-  'api.inaturalist.org': 1500,
+  // 2 s (30 a minute; round eighty, agent I): at 1.1 s (about 54 a minute, sustained) iNaturalist answered 429 to every
+  // call after 97 minutes and 5,273 requests of the owner's first cultivated fill (2026-10-22), well inside the day's
+  // 9,000; at 1.5 s, later that day, again after about 350 pages. Its practices ask for "about 1 per second, and around 10k
+  // API requests a day" (https://www.inaturalist.org/pages/api+recommended+practices, read 2026-10-22); the fill now asks
+  // at half that pace, under a day of 4,000 (`INAT_DAY_BUDGET`), and batches its observation searches (`inat-batch.ts`).
+  'api.inaturalist.org': 2000,
   'api.gbif.org': 250,
   // Wikimedia's hosts share one allowance from 2026: 200 requests a minute for a client named by a User-Agent with an
   // address, across every site and API (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits, read 2026-10-19).
@@ -108,12 +111,16 @@ export function markCooledRecently(host: string): void {
 /** Reserve the next slot for a host before waiting for it, so two concurrent callers take two slots, not the same one. */
 /** The pacing key of a host: Wikimedia's API hosts are one (their allowance is shared); the query service is its own. */
 export const paceKey = (host: string) => (host !== 'query.wikidata.org' && /(^|\.)(wikipedia|wikidata|wikimedia)\.org$/.test(host) ? 'wikimedia' : host);
+/**
+ * The other allowances a host's request is counted in (round eighty): a query to Wikidata's query service takes a slot of
+ * Wikimedia's shared allowance too, so the build's and the fills' queries are paced as one with Wikimedia's other sites
+ * (200 requests a minute across every site and API), as well as at the query service's own one a second.
+ */
+export const alsoPacedAs = (host: string): string[] => (host === 'query.wikidata.org' ? ['wikimedia'] : []);
 async function pace(host: string): Promise<void> {
-  const k = paceKey(host);
-  const gap = MIN_GAP_MS[k] ?? 100;
-  const prev = lastAt.get(k) ?? 0;
-  const slot = Math.max(prev + gap, Date.now());
-  lastAt.set(k, slot);
+  const keys = [paceKey(host), ...alsoPacedAs(host)];
+  const slot = Math.max(Date.now(), ...keys.map((k) => (lastAt.get(k) ?? 0) + (MIN_GAP_MS[k] ?? 100)));
+  for (const k of keys) lastAt.set(k, slot);
   const wait = slot - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
@@ -134,6 +141,16 @@ function retryAfterMs(res: Response, attempt: number): number | undefined {
 
 /** The longest a single retry will wait in place. A host asking for more is honoured by refusing now and saying when to come back. */
 const MAX_WAIT_MS = 120_000;
+/** Hosts whose 429 is retried once, slowly, and is then a throttle refusal (round eighty, agent I). */
+const SLOW_RETRY = new Set(['api.inaturalist.org']);
+/** The wait before that one retry, when the host names none (a minute; a test sets it shorter, or `CULTIFOLIO_SLOW_RETRY_MS`). */
+let SLOW_RETRY_MS = (typeof process !== 'undefined' && Number(process.env?.CULTIFOLIO_SLOW_RETRY_MS)) || 60_000;
+/** For tests: the slow retry's wait. */
+export function setSlowRetryMs(ms: number): void { SLOW_RETRY_MS = ms; }
+/** The words of a refusal that is a host's throttle (429), not an allowance of ours: `isThrottle` reads them. */
+export const THROTTLED = 'throttled by the host';
+/** Whether a refusal is a host's throttle (429, or a host cooled after a run of them), never the day's allowance. */
+export const isThrottle = (detail: string | undefined): boolean => !!detail && !/allowance/.test(detail) && (detail.includes(THROTTLED) || /\b429\b|throttled|rate-limiting/.test(detail));
 
 export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
   return async <T>(url: string, opts: FetchOptions = {}): Promise<FetchResult<T>> => {
@@ -153,6 +170,22 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         coolUntil.set(host, Date.now() + COOLDOWN_MS);
         strikes.set(host, 0);
         return { status: 'refused', detail: `${host} 429 again after a cooldown; not asked for a while` };
+      }
+      // iNaturalist's 429 is its throttle (round eighty, agent I): its practices say to add delays "especially if you're
+      // getting 429 errors", and five quick retries a call were five more requests to a host that had said stop. One
+      // retry, after its Retry-After or a minute, then a refusal that says it is a throttle (`THROTTLED`), which the
+      // fill waits out at length (`build-dossiers.ts`, `fillPhotos`) rather than reading it as the day's allowance.
+      if (res.status === 429 && SLOW_RETRY.has(host)) {
+        const asked = retryAfterMs(res, 1);
+        if (!(opts.attempt ?? 0) && !(asked !== undefined && asked > MAX_WAIT_MS)) {
+          const wait = asked !== undefined ? Math.min(Math.max(asked, SLOW_RETRY_MS), MAX_WAIT_MS) : SLOW_RETRY_MS;
+          clearTimeout(timer);
+          if (typeof process !== 'undefined' && (process.stdout?.isTTY || process.env?.CORPUS_STEP)) process.stdout.write(`\n  ${host} 429: waiting ${Math.round(wait / 1000)} s, once…`);
+          await new Promise((r) => setTimeout(r, wait));
+          return makeFetcher(fetchImpl)<T>(url, { ...opts, attempt: 1 });
+        }
+        strike(host);
+        return { status: 'refused', detail: `${host} 429: ${THROTTLED}${asked !== undefined ? ` (asked to wait ${Math.max(1, Math.round(asked / 60_000))} minutes)` : ''}` };
       }
       // Up to five polite retries: GBIF's occurrence search answers 429 with a Retry-After of 3 s under load, and three
       // tries at that were giving up on a host that was about to answer.

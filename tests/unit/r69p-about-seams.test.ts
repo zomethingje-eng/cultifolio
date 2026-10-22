@@ -116,15 +116,22 @@ describe('the cached 404 and 302 of a species address (R46-8)', () => {
     expect(server).toMatch(/setHeaders\(\{ 'cache-control': 'public, max-age=86400' \}\);\n\s*redirect\(302, `\/species\/\$\{syn\.slug\}/);
     expect(server).toMatch(/setHeaders\(\{ 'cache-control': unchecked \? 'no-store' : 'public, max-age=300' \}\);/);
   });
-  it('both lists say them, each with its lifetime (read by the method of round seventy, tests/about-pages.ts)', () => {
+  // Round eighty (review C 4): the edge keeps neither (the adapter keeps no answer of status 400 or more, and worktop's
+  // cache no 302), so both lists now say they are made anew, with the browser's lifetimes the headers give.
+  it('both lists say the edge keeps neither, and the browser\'s lifetimes (read by the method of round seventy, tests/about-pages.ts)', () => {
+    const adapter = raw('node_modules/@sveltejs/adapter-cloudflare/files/worker.js');
+    expect(adapter).toMatch(/pragma && res\.status < 400 \? c\(req, res, ctx\) : res/);
+    expect(adapter).toMatch(/new Set\(\[200, 203, 204, 300, 301, 404, 405, 410, 414, 501\]\)/);
     const short = said('how', 'It keeps a forecast for a rounded site for an hour');
-    expect(spanWords(claim(short, /a species address the reference does not hold, answered "not found", for (five minutes|an hour|a day)/)), short.where).toBe(300_000);
-    expect(spanWords(claim(short, /the redirect from an older name to its species' page for (a day|an hour)/))).toBe(86_400_000);
-    expect(short.text).toMatch(/not at all when GBIF could not be asked or a species' record could not be read/);
-    const full = said('how', "Cloudflare's edge, in front of the server, keeps copies of public answers");
-    expect(claim(full, /for five minutes \((public, max-age=\d+)/)).toBe('public, max-age=300');
-    expect(claim(full, /older name to its species' page for a day \((public, max-age=\d+)\)/), full.where).toBe('public, max-age=86400');
-    expect(full.text).toMatch(/not kept when GBIF could not be asked or a species' record could not be read/);
+    expect(short.text).not.toMatch(/answered "not found", for five minutes/);
+    const before = said('how', 'The edge keeps no copy of an error or of a redirect to another page');
+    expect(before.text).toMatch(/The edge keeps no copy of an error or of a redirect to another page: an address the reference does not hold is answered "not found" anew each time/);
+    expect(before.text).toMatch(/your browser may keep the page for five minutes, not when GBIF could not be asked/);
+    expect(before.text).toMatch(/an older name's redirect to its species is made anew each time too, your browser keeping it for a day/);
+    const full = said('how', 'The edge keeps no error answer and no redirect to another page');
+    expect(claim(full, /the "not found" for five minutes \((public, max-age=\d+)/)).toBe('public, max-age=300');
+    expect(claim(full, /the redirect for a day \((public, max-age=\d+)\)/), full.where).toBe('public, max-age=86400');
+    expect(full.text).toMatch(/not at all when GBIF could not be asked or a species' record could not be read/);
     expect(raw('src/routes/species/[slug]/+page.server.ts')).toMatch(/setHeaders\(\{ 'cache-control': records\.every\(Boolean\) \? 'public, max-age=300' : 'no-store' \}\);/);
   });
 });

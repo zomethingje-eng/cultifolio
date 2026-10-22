@@ -34,7 +34,8 @@ describe('N3: the headline rule', () => {
     expect(genericNoun('Barbados cherry')).toBe(false);
   });
   it('the species\' own binomial written as an English name is set back', () => {
-    expect(names([eng('Podocarpus costalis', { sources: 3 }), eng('Arius')], 'Podocarpus costalis')).toEqual({ common: 'Arius', commons: ['Podocarpus costalis'] });
+    // Round eighty (A; review-d 7): not shown at all, as /about/how says, so not among the other names either.
+    expect(names([eng('Podocarpus costalis', { sources: 3 }), eng('Arius')], 'Podocarpus costalis')).toEqual({ common: 'Arius' });
   });
 });
 

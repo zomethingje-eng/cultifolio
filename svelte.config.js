@@ -22,7 +22,8 @@ const config = {
     // sheets as files (Kit names them as disabled links), so nothing is lost there. Styles allow inline already
     // (`style-src 'unsafe-inline'`), so Kit adds no hashes for them (round forty-six, 1; round forty-seven, 1).
     inlineStyleThreshold: 40 * 1024,
-    // The corpus under static/s/ is served by the platform, never listed in the worker: 19,000 paths in the script would be 400 KB of nothing it uses.
+    // The corpus is never listed in the worker: 19,000 paths in the script would be 400 KB of nothing it uses. It is no
+    // longer in the assets folder at all (round eighty, `files` below); the `s/` rule stays for a corpus put there by hand.
     // The layout registers the worker itself (after load, and it watches the registration for a waiting build); Kit's
     // own inline registration on top of that made two registrations per load, and the second always installed a
     // spurious waiting worker, which the take-over then reloaded the page for, without end.
@@ -51,6 +52,13 @@ const config = {
         'form-action': ['self']
       }
     },
+    // The app's own files (the icons, the maps, the link-preview image, `.assetsignore`) are in static/app/, and the
+    // corpus the build writes is beside them in static/s/, outside the folder the build copies (round eighty; review C,
+    // the owner's PC): with the corpus inside it, every build copied its 4.5 GB and 145,812 files twice, into
+    // .svelte-kit/output/client and again into .svelte-kit/cloudflare, which took minutes and ran the browser suite's
+    // server start past its budget, for files `.assetsignore` then kept out of the deploy. `vite dev` serves the corpus on
+    // disk at /s/ itself (vite.config.ts), as the fallback in src/lib/server/dossiers.ts reads it.
+    files: { assets: 'static/app' },
     alias: { $core: 'src/lib/core', $dossier: 'src/lib/dossier', $db: 'src/lib/db', $climate: 'src/lib/climate' },
     // Absolute asset paths: the service worker serves the /plants shell for /plants/<acc> when that page is not cached,
     // and a shell with relative ./_app/ paths would then look for its scripts under /plants/_app/ and find nothing.

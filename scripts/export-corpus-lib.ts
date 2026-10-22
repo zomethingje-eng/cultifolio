@@ -177,6 +177,7 @@ The bundle carries data from the sources below unchanged or lightly reshaped. Ea
 | Part of the bundle | Source | Licence |
 |---|---|---|
 | \`name\`, \`ids\`, synonyms, vernacular names | GBIF Backbone Taxonomy | CC BY 4.0 |
+| vernacular names whose \`source\` is \`Wikidata\` (a page's Wikidata item, P1843; round eighty) | Wikidata | CC0 1.0 |
 | \`occurrences.open\` (coordinates; each row's last field is its own licence code: \`cc0\`, \`by\` or \`by-sa\`) | GBIF occurrence records, dataset-by-dataset; the download DOI is under \`upstream\` | CC0 1.0, CC BY 4.0 or CC BY-SA 4.0 per record, as coded. CC BY-NC records were used to find the marker and the envelope and are not included. |
 | \`distribution\` (regions, boxes) | World Checklist of Vascular Plants, Royal Botanic Gardens, Kew (Govaerts et al.) | CC BY 4.0 |
 | \`climate.months\`, \`climate.p10\`, \`climate.p90\`, \`climate.annualRain\` and \`climate.csv\` | CHELSA V2.1 (Karger et al.), read at every cell holding an in-range record | CC0 1.0 |

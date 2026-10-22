@@ -1,0 +1,18 @@
+workerd (wrangler dev, one warm copy, requests in order), CPU ms by the inspector's profile; corpus at 48,361 species
+path	base n=60	new n=60	new n=30
+/api/search?q=rose&n=60	282.9	257.2	369.4
+/api/search?q=cactus&n=60	72.4	93.1	68.8
+/api/search?q=echeveria&n=60	23	30.5	30
+/api/search?q=x&n=60	176.1	221	210.7
+/api/search?q=red%20flowers&n=60	279.6	172.8	164.3
+/api/search?q=snake%20pl&n=60	36.2	24.8	23.7
+/api/search?q=provinses&n=60	26.2	29.6	18.9
+/api/search?q=haworthiaa&n=60	69.2	88.6	45.3
+/api/search?q=zzqqxw&n=60	15.1	34.7	17.6
+/api/search?q=Echinocactus%20chrysacanthus&n=60	45	21.6	16.4
+/api/search?q=cape%20provinces&n=60	14.3	57.3	47.7
+/api/search?q=Lavandula%20officinalis&n=60	10.7	26.7	26
+/api/search?q=ech&n=60	95.4	78.3	80.7
+/api/search?q=quercus&n=60	21.5	29.1	21.7
+/api/search?q=Aloe%20%C3%97%20nobilis&n=60	100.2	79.7	65.9
+/api/search?q=aloe&n=60	26.8	15.5	14.8

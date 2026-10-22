@@ -6,7 +6,7 @@
  */
 import { prepare, search, hasExact, rankedWords, relaxedQuery, searchGenera, type Prepared } from '$core/search';
 import { queryPlan, candidates, postingFileOf } from '$core/postings';
-import { searchFromFiles, searchDirsFor, type SearchReader, type Dir, type Answers, type Tables, type Blocks } from '$core/search-files';
+import { searchFromFiles, searchDirsFor, searchDirsOfQuery, type SearchReader, type Dir, type Answers, type Tables, type Blocks } from '$core/search-files';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { heldNamesOf } from '$dossier/photo-kind';
@@ -599,8 +599,12 @@ export async function entriesIn(c: Loaded, platform: Platform, fetch: Fetch, buc
  */
 /** Past this many exact candidates a search is charged as a whole-index one (round fifty-nine). */
 export const WHOLE_LIKE = 2000;
-export type SearchAnswer = { hits: IndexEntry[]; corpus: string; relaxed?: { query: string }; narrow?: true } | { stop: Response };
-export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>, held?: Loaded): Promise<SearchAnswer> {
+/**
+ * `total` and `kept` (round eighty; review-w 2, review-p 3): how many species answer, and how many of them can be listed
+ * (`KeyAnswer`); `at` is where the hits start among them, for the page's "Show more".
+ */
+export type SearchAnswer = { hits: IndexEntry[]; corpus: string; relaxed?: { query: string }; narrow?: true; total?: number; kept?: number } | { stop: Response };
+export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>, held?: Loaded, at = 0): Promise<SearchAnswer> {
   const c = held ?? (await loadIndex(platform, fetch));
   // Charged once a request, however many passes cost what the whole index costs (round sixty; the corpus review, 6).
   let charged: Promise<Response | null> | null = null;
@@ -608,34 +612,36 @@ export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, 
   // The candidates ranked by every pass of this request, the retry's included, against one threshold (round sixty-one; the corpus review, 17).
   let ranked = 0;
   const heavy = (k: number) => (ranked += k) > WHOLE_LIKE;
-  const first = await searchOnce(c, platform, fetch, q, n, charge, heavy);
+  const first = await searchOnce(c, platform, fetch, q, n, charge, heavy, at);
   // Too common to list (the key files' `narrow`): said as it is, never retried on fewer words.
   if ('stop' in first || first.hits.length || first.narrow) return first;
   // Nothing matches the query as written: once more on its first two words before any rank marker, and the answer says
   // so, so the page can say "Showing results for …" (round sixty; the corpus review, 3; the self-review, 15).
   const relaxed = relaxedQuery(q);
   if (!relaxed) return first;
-  const again = await searchOnce(c, platform, fetch, relaxed, n, charge, heavy);
+  const again = await searchOnce(c, platform, fetch, relaxed, n, charge, heavy, at);
   if ('stop' in again) return again;
   if (again.narrow) return { ...again, relaxed: { query: relaxed } };
   if (!again.hits.length) return first;
   return { ...again, relaxed: { query: relaxed } };
 }
-async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE): Promise<{ hits: IndexEntry[]; corpus: string; narrow?: true } | { stop: Response }> {
+async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE, at = 0): Promise<{ hits: IndexEntry[]; corpus: string; narrow?: true; total?: number; kept?: number } | { stop: Response }> {
   const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
   const m = c.manifest;
   // From the key files (round seventy-seven): a few small files a query, and never the index.
   if (searchedFromFiles(c)) {
     let stop: Response | null = null;
-    const a = await searchFromFiles(keyReader(c, platform, fetch), q, n, async (k) => (heavy(k) ? !!(stop = await charge()) : false));
+    const a = await searchFromFiles(keyReader(c, platform, fetch), q, n, async (k) => (heavy(k) ? !!(stop = await charge()) : false), undefined, undefined, at);
     if ('stop' in a) return { stop: stop! };
-    return 'narrow' in a ? { hits: [], corpus, narrow: true } : { hits: a.hits, corpus };
+    return 'narrow' in a ? { hits: [], corpus, narrow: true } : { hits: a.hits, corpus, ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}) };
   }
   // The search is what still reads the index whole (round seventy-six): held from the load, or read on the first query.
   const idx = await indexOf(c, platform, fetch);
-  if (!m) return { hits: search(searchIndex(idx), q, n), corpus };
+  // Every hit ranked and those from `at` given, with their count (round eighty).
+  const paged = (all: IndexEntry[]) => ({ hits: all.slice(at, at + n), corpus, total: all.length });
+  if (!m) return paged(search(searchIndex(idx), q));
   const plan = queryPlan(q);
-  if (!plan.exact.length) return { hits: [], corpus }; // no word the tokeniser keeps: nothing matches, and nothing is read
+  if (!plan.exact.length) return { hits: [], corpus, total: 0 }; // no word the tokeniser keeps: nothing matches, and nothing is read
   const entries = (ix: number[]) => { const out: IndexEntry[] = []; for (const i of ix) { const e = idx[i]; if (e) out.push(e); } return out; };
   // One word and nothing else, as the ranking reads the query: a trailing rank marker still counts ("a var" is two), and
   // a leading one or a repeat does not ("f a" and "a a" are "a"; round fifty-nine).
@@ -645,7 +651,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
     if (short && typeof short === 'object') {
       const xs = Object.hasOwn(short, only[0]) ? short[only[0]] : [];
       // Positions in this index, or the file is not this corpus's answers (a hash naming another file): the postings answer (round fifty-nine).
-      if (Array.isArray(xs) && xs.every((i) => Number.isInteger(i) && i >= 0 && i < idx.length)) return { hits: entries(xs.slice(0, n)), corpus };
+      if (Array.isArray(xs) && xs.every((i) => Number.isInteger(i) && i >= 0 && i < idx.length)) return { hits: entries(xs.slice(at, at + n)), corpus, kept: xs.length };
     }
   }
   const files = new Map<string, Record<string, number[]> | null>();
@@ -657,7 +663,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   const posting = (k: string) => { const f = files.get(postingFileOf(k, m.postings)); const xs = f && Object.hasOwn(f, k) ? f[k] : undefined; return Array.isArray(xs) ? xs : undefined; };
   const whole = async () => {
     const stop = await charge();
-    return stop ? { stop } : { hits: search(await searchWhole(c, idx), q, n), corpus };
+    return stop ? { stop } : paged(search(await searchWhole(c, idx), q));
   };
   if (!(await read(plan.exact))) return whole();
   // The exact pass in a function of its own, so its prepared candidates are garbage before the near pass waits on the
@@ -667,16 +673,34 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // are charged as it is (round fifty-nine; the corpus reviews: 127 to 309 ms each under the ordinary search allowance).
   const cands = candidates(plan.exact, posting);
   if (heavy(cands.length)) { const stop = await charge(); if (stop) return { stop }; }
-  const exactHits = exactPass(entries(cands), q, n, generaOfIndex(idx));
-  if (exactHits) return { hits: exactHits, corpus };
-  if (!plan.near) return { hits: [], corpus };
+  const exactHits = exactPass(entries(cands), q, Infinity, generaOfIndex(idx));
+  if (exactHits) return paged(exactHits);
+  if (!plan.near) return { hits: [], corpus, total: 0 };
   if (!(await read(plan.near))) return whole();
   // The near pass too: a typo whose keys reach a family or an origin ranks close to two thousand candidates after the
   // exact pass ranked its own, and was never charged (round sixty; the corpus review, 6; A26).
   const near = candidates(plan.near, posting);
   if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
-  return { hits: search(prepare(entries(near), generaOfIndex(idx)), q, n), corpus };
+  return paged(search(prepare(entries(near), generaOfIndex(idx)), q));
 }
+/**
+ * The reference's regions of origin, as the search's tables name them (round eighty): what a query naming a region is
+ * matched against (`regionsTyped`). Null when they cannot be read: the answer then names no region, and the search
+ * itself is unchanged.
+ */
+export async function searchRegions(c: Loaded, platform: Platform, fetch: Fetch): Promise<string[] | null> {
+  if (searchedFromFiles(c)) {
+    const t = await product<Tables>(c, platform, fetch, 'search/tables.json').catch(() => null);
+    return t && Array.isArray(t.regions) ? t.regions.filter((x): x is string => typeof x === 'string') : null;
+  }
+  // A corpus searched through its index (one built before the key files, or the fixture): its regions, once per index.
+  const idx = await indexOf(c, platform, fetch).catch(() => null);
+  if (!idx) return null;
+  let r = indexRegions.get(idx);
+  if (!r) indexRegions.set(idx, (r = [...new Set(idx.flatMap((e) => e.origin ?? []))].sort()));
+  return r;
+}
+const indexRegions = new WeakMap<IndexEntry[], string[]>();
 /**
  * The search's key files of the corpus a request holds (round seventy-seven), read as products are and kept with them. A
  * file a directory names that the bucket cannot give is a 503 (`UNREADABLE`), never "nothing matches" (rule 2).
@@ -694,6 +718,8 @@ function keyReader(c: Loaded, platform: Platform, fetch: Fetch): SearchReader<In
   const isObject = (x: unknown) => !!x && typeof x === 'object' && !Array.isArray(x);
   const blocks = () => need<Blocks>(product<Blocks>(c, platform, fetch, 'search/blocks.json'), 'search/blocks.json', (x) => isObject(x) && Array.isArray((x as Blocks).photos) && Array.isArray((x as Blocks).show));
   return {
+    // The tables, the blocks' names and every photograph-count block, read once an isolate and held (round eighty).
+    warm: () => { warmSearch(c, platform, fetch); },
     dirs: searchDirsFor(c.manifest!.species),
     dir: (name) => need<Dir>(product<Dir>(c, platform, fetch, `search/${name}.json`), `search/${name}.json`, isObject),
     node: (hash) => need<string>(storedText(c, platform, fetch, hash), hash, (x) => typeof x === 'string'),
@@ -716,6 +742,20 @@ function keyReader(c: Loaded, platform: Platform, fetch: Fetch): SearchReader<In
   };
 }
 
+/**
+ * Starts reading what a search will read before its key files (round eighty): the tables, the blocks' names, every
+ * photograph-count block, the genera, and, with `q`, the directories its exact pass reads (`searchDirsOfQuery`). Each
+ * is held once read, as `product` holds it, so the search finds them read; a read that fails here is read again by the
+ * search, which says so. The search route asks it before it waits on the address's allowance, so the two overlap.
+ */
+export function warmSearch(c: Loaded, platform: Platform, fetch: Fetch, q?: string): void {
+  if (!searchedFromFiles(c)) return;
+  const quiet = (p: Promise<unknown>) => { p.catch(() => {}); };
+  quiet(product(c, platform, fetch, 'search/tables.json'));
+  quiet(product(c, platform, fetch, 'search/genera.json'));
+  quiet(product<Blocks>(c, platform, fetch, 'search/blocks.json').then((b) => { if (b && Array.isArray(b.photos)) for (const h of b.photos) if (typeof h === 'string') quiet(stored(c, platform, fetch, h)); }));
+  if (q) for (const d of searchDirsOfQuery(q, searchDirsFor(c.manifest!.species))) quiet(product(c, platform, fetch, `search/${d}.json`));
+}
 /**
  * The genera of the whole index, once per index: the candidates of a request are prepared with them, so a typed genus
  * is never the start of a family however few of its species the postings drew (round seventy; triage-69 N2, S-F6).

@@ -11,10 +11,13 @@
  *                                                                # Literature is off (round seventy-eight, the owner's decision 2): no build asks
  *                                                                # OpenAlex, and --fill openalex says so and stops; a later round fills the papers
  *                                                                # from OpenAlex's snapshot.
- *   npx tsx scripts/build-dossiers.ts --fill inat               # photographs only, the same way: iNaturalist allows 10,000 calls a day, about
- *                                                                # 3,300 species; a long run leaves photos out (--skip inat) and fills them daily.
- *   npx tsx scripts/build-dossiers.ts --fill inat --cultivated  # the cultivated set alone (round seventy-eight): about 1.1 requests a species. Every
- *                                                                # run of a UTC day together asks iNaturalist at most 9,000 times (--inat-budget <n>),
+ *   npx tsx scripts/build-dossiers.ts --fill inat               # photographs only, the same way: iNaturalist asks for about 1 a second and 10,000
+ *                                                                # a day, and throttled this fill at about 5,500; a long run leaves photos out (--skip
+ *                                                                # inat) and fills them daily. Round eighty: ids not yet checked are checked first
+ *                                                                # (thirty a request), and the observation searches ask several taxa a request
+ *                                                                # (src/lib/dossier/inat-batch.ts), one request every 2 s; a run of 429s is waited out.
+ *   npx tsx scripts/build-dossiers.ts --fill inat --cultivated  # the cultivated set alone (round seventy-eight). Every
+ *                                                                # run of a UTC day together asks iNaturalist at most 4,000 times (--inat-budget <n>),
  *                                                                # counted in cache/day-budget/; at the allowance it stops, exit 3, and the same command
  *                                                                # the next day goes on from where it stopped (each dossier is written as it is filled).
  *   npx tsx scripts/build-dossiers.ts --fill inat --wild --inat-open bulk/inat-wild.jsonl
@@ -23,6 +26,10 @@
  *                                                                # pass: no request to iNaturalist. With --inat-open (or --bulk <dir> holding
  *                                                                # inat-wild.jsonl), --fill inat and the build read the wild set from the file wherever
  *                                                                # it holds the taxon and ask iNaturalist only for the rest; --no-inat-open does not.
+ *                                                                # Round eighty: --fill inat (not --wild, not --cultivated) also asks the API, once, for
+ *                                                                # the 24 most-voted wild observations of each page whose wild set the open data gave
+ *                                                                # and whose taxon it holds more than 24 of (the open data's 24 are the newest: it
+ *                                                                # holds no votes), under the same day's budget; a set of 24 or fewer is the whole set.
  *   npx tsx scripts/build-dossiers.ts static/s/v2/index.json --offline --grid climate --bulk bulk
  *                                                                # a re-derivation that asks no upstream: the backbone's name block is carried from the
  *                                                                # previous build too, so the run is the files and the grid, an hour rather than a day. The
@@ -60,6 +67,9 @@
  *   npx tsx scripts/build-dossiers.ts --fill commons            # photographs for every dossier that has fewer than six, from Wikimedia Commons' category for the species (one API call each)
  *   npx tsx scripts/build-dossiers.ts --fill gbif-licence       # every stored GBIF photograph not on iNaturalist's hosts read again from its occurrence record (one call a
  *                                                                # record); one whose media item states no open licence of its own is dropped; resumable; then the index
+ *   npx tsx scripts/build-dossiers.ts --fill inat-restore backups/v3-<corpus>
+ *                                                                # round eighty: the iNaturalist ids a build that skipped iNaturalist dropped, given
+ *                                                                # back from the corpus before it, unchecked, for --fill inat to check; offline
  *   npx tsx scripts/build-dossiers.ts --fill inat-ids           # every stored iNaturalist id checked with iNaturalist (thirty a call); an inactive one followed to its
  *                                                                # current taxon only when that taxon's name is the species' or a same-type name (GBIF asked for
  *                                                                # those) held by no other species, and every follow of an earlier run read again so; a taxon
@@ -68,6 +78,8 @@
  *   npx tsx scripts/build-dossiers.ts --fill wikidata           # every Wikidata item that does not carry its species' own GBIF key (read fifty a call), and every
  *                                                                # item refused by the label rule, proved again (IPNI first; GBIF for the rest): an item that stands
  *                                                                # says how; one refused, replaced or newly found is left as it is and listed in rebuild-wd.txt for --keys
+ *   npx tsx scripts/build-dossiers.ts --fill wikidata-names     # English common names for every page without a GBIF key, from its own Wikidata item (P1843),
+ *                                                                # two hundred items a query; --keyed also for keyed pages with no English name from GBIF; then the index
  *   npx tsx scripts/build-dossiers.ts --fill summaries          # every stored summary under another title proved again, or dropped; those set aside asked again
  *                                                                # (a record that names its proof, or a title set aside, is settled and not asked: add --again after a rule changes)
  *   npx tsx scripts/build-dossiers.ts --fill gbif-basis         # every stored GBIF photograph not on iNaturalist's hosts read again from its record; one not from a
@@ -85,6 +97,12 @@
  *   npx tsx scripts/build-dossiers.ts --list-extra-keys --bulk bulk --backbone backbone/simple.txt.gz
  *                                                                # first writes scripts/extra-keys.txt afresh from Kew's file and GBIF's backbone export
  *                                                                # (offline; extra-keys-refused.txt lists the keys the rule did not take, and why)
+ *   npx tsx scripts/build-dossiers.ts --list-default-points      # scripts/default-points.txt (round eighty): a dataset's default coordinates, read from the
+ *                                                                # dossiers on disk, and rebuild-default-points.txt, the pages holding one, for --keys; offline
+ *   npx tsx scripts/build-dossiers.ts --list-range-shapes        # rebuild-shapes.txt (round eighty): every page with an open in-range record outside every
+ *                                                                # native region's shape (scripts/tdwg3-shapes.json), for --keys … --offline; offline
+ *   npx tsx scripts/build-dossiers.ts --list-wikidata-retry      # rebuild-wd-retry.txt (round eighty): every page Wikidata did not answer at its build, and
+ *                                                                # every page with a Kew id whose item a label refused, for --keys; offline
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --names                   # GBIF's vernacular names asked afresh for every dossier on disk (one paced call
  *                                                                # each, about 9,000), only each dossier's vernacular block rewritten, so the
@@ -97,28 +115,33 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync } from 'node:fs';
 import { loadKewNames, kewFileDay } from './kew-names-load';
+import { fillWikidataNames } from '../src/lib/dossier/wikidata-names';
 import { fillKewNames, KewNamesIndex } from '../src/lib/dossier/kew-names';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_SPECIES, MIN_UNDATED } from '../src/lib/dossier/default-points';
+import { regionTester, outsideShapes, SHAPES_FILE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { englishNames, indexNames, generaOf, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify } from '../src/lib/core/names';
-import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
+import { makeFetcher, fixtureFetcher, isThrottle } from '../src/lib/dossier/fetch';
 import { dayCached, type DayStore } from '../src/lib/dossier/day-cache';
 import { dayBudget, INAT_DAY_BUDGET } from '../src/lib/dossier/day-budget';
 import { writeAtomic } from './write-atomic';
 import { loadKewInfra } from './kew-infra-load';
-import { inatKewFill, type InatKewDossier } from '../src/lib/dossier/inat-kew-fill';
-import { openWildStore, heldWild, wildToAsk, type OpenWildStore } from '../src/lib/dossier/inat-open';
+import { inatKewFill, kewReading, type InatKewDossier } from '../src/lib/dossier/inat-kew-fill';
+import { inatBatched, wildGroups, CULTIVATED_BATCH } from '../src/lib/dossier/inat-batch';
+import { restoreInatIds } from '../src/lib/dossier/inat-restore';
+import { openWildStore, heldWild, wildToAsk, mostVotedToAsk, OPEN_WILD_RULE, MOST_VOTED_RULE, WILD_PER_TAXON, type OpenWildStore } from '../src/lib/dossier/inat-open';
 import type { KewInfra } from '../src/lib/dossier/kew-infra';
 import { dossierPath, DOSSIER_V, parseDossier, unchain, Dossier as DossierSchema } from '../src/lib/dossier/schema';
 import * as vb from 'valibot';
@@ -142,7 +165,7 @@ import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated } fr
 import { downloadDay } from '../src/lib/dossier/bulk';
 import { outsideLog } from '../src/lib/dossier/range-via';
 import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange } from './select-species-lib';
-import { buildKewDossier, kewInatTaxon, type KewSpecies } from '../src/lib/dossier/build-kew';
+import { buildKewDossier, kewInatTaxon, fillKewWhy, type KewSpecies } from '../src/lib/dossier/build-kew';
 import { canonicalOfKew } from '../src/lib/dossier/kew-rows';
 import { loadKewSpecies } from './kew-species-load';
 import { refetchNames, vernacularMark } from './names-step';
@@ -151,11 +174,11 @@ import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { referenceOf } from '../src/lib/dossier/reference';
 import { ownNames } from '../src/lib/dossier/own-names';
-import { offlineFetcher, carryRederivedRows, carriedOrigin } from '../src/lib/dossier/rederive';
+import { offlineFetcher, carryRederivedRows, carriedOrigin, keptInatId, carryInatRows } from '../src/lib/dossier/rederive';
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
-import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
+import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, wikidataRetryList, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 import { proofByName } from '../src/lib/dossier/summary-proof';
-import { parseExtraKeys, formatExtraKeys, byPage, byPageId, parseMerges, mergedToPrune, extraRebuild, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
+import { parseExtraKeys, formatExtraKeys, byPage, byPageId, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
 import { listExtraKeys } from './extra-keys-list';
 import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/clean';
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
@@ -177,7 +200,9 @@ let dayStore: DayStore | null = null;
  * `INAT_DAY_BUDGET` times (`--inat-budget <n>` names another), counted in cache/day-budget/, so a fill over 54,000 species
  * stops at the day's allowance and goes on the next day.
  */
-const inatBudget = (() => { const i = process.argv.indexOf('--inat-budget'); return i >= 0 ? Number(process.argv[i + 1]) : INAT_DAY_BUDGET; })();
+// Round eighty (agent I): `CULTIFOLIO_INAT_BUDGET` names another day too, so the owner can lower it without touching a
+// plan's step line (a changed step starts a plan again).
+const inatBudget = (() => { const i = process.argv.indexOf('--inat-budget'); const env = Number(process.env.CULTIFOLIO_INAT_BUDGET); return i >= 0 ? Number(process.argv[i + 1]) : Number.isInteger(env) && env >= 0 && process.env.CULTIFOLIO_INAT_BUDGET !== '' ? env : INAT_DAY_BUDGET; })();
 const BUDGET_ROOT = 'cache/day-budget';
 const budgetStore = {
   read: (day: string) => { try { return Number(readFileSync(`${BUDGET_ROOT}/${day}-api.inaturalist.org.txt`, 'utf8')) || 0; } catch { return 0; } },
@@ -190,7 +215,7 @@ const budgetStore = {
  * `--no-inat-open` asks the API as before.
  */
 let inatOpen: OpenWildStore | null | undefined;
-const inatOpenHeld = { held: 0 };
+const inatOpenHeld: { held: number; mostVoted?: number } = { held: 0 };
 function openWild(): OpenWildStore | null {
   if (inatOpen !== undefined) return inatOpen;
   const named = (() => { const i = process.argv.indexOf('--inat-open'); return i >= 0 ? process.argv[i + 1] : undefined; })();
@@ -200,10 +225,15 @@ function openWild(): OpenWildStore | null {
   if (inatOpen) console.log(`  iNaturalist's wild photographs from its open data of ${inatOpen.header.day} (${path}), in place of the API`);
   return inatOpen;
 }
-function upstream(): ReturnType<typeof makeFetcher> {
+/**
+ * `mostVoted` (round eighty, agent V; on but for `--fill inat --cultivated`): the open data answers a taxon's wild set only
+ * where it is the whole qualifying set (24 observations or fewer); for a taxon of which it holds more, the API is asked
+ * for the 24 it puts first by votes, counted in the day like any request (`heldWild`).
+ */
+function upstream(mostVoted = true): ReturnType<typeof makeFetcher> {
   // Outermost, so an answer from the open data is neither counted in iNaturalist's day nor kept in the day's cache.
   const open = openWild();
-  return open ? heldWild(upstreamApi(), open, inatOpenHeld) : upstreamApi();
+  return open ? heldWild(upstreamApi(), open, inatOpenHeld, { mostVoted }) : upstreamApi();
 }
 function upstreamApi(): ReturnType<typeof makeFetcher> {
   const f = dayBudget(makeFetcher(), 'api.inaturalist.org', inatBudget, budgetStore);
@@ -330,19 +360,21 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; changed?: number };
-type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
+type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; kew?: string[]; changed?: number };
+type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[]; kew?: { synonyms?: string[] } }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
 /**
  * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
  * `englishNames`'s rule, which sets back a name naming another genus of the corpus, and the corpus's genera are known
  * only once every entry is (`nameEntries`; round sixty-one, decision 7).
  */
 const vernOf = new Map<PageId, VernacularName[]>();
+/** Each species' own older names, GBIF's and Kew's, kept with its vernacular names: one written as a common name is not one (round eighty, A). */
+const olderOf = new Map<PageId, string[]>();
 /** The common names of every entry of the finished index, by the rule with the index's own genera. */
 function nameEntries(index: IndexEntry[]): void {
   const genera = generaOf(index.map((e) => e.name));
   index.forEach((e, i) => {
-    const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera });
+    const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera, older: olderOf.get(e.key) ?? [] });
     // In the entry's own place, after `family`, so a rebuilt index differs from the last only where a name does.
     const o: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(e)) {
@@ -370,13 +402,16 @@ function photoFields(d: Pick<Dossierish, 'key' | 'name' | 'photos'>, held?: Held
 function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { status?: string } {
   const { thumb, credit, photos } = photoFields(d, held);
   vernOf.set(d.key, d.name.vernacular.filter((v) => v.lang === 'eng'));
+  olderOf.set(d.key, [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])]);
   // Older names: six shown, the rest of species rank searched (`olderNamesOf`; round sixty-seven, N1).
   const genus = d.name.scientific.split(' ')[0];
   const { syn, older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
+  // Kew's older names the two do not hold, for the search alone (`kewOlderOf`; round eighty, review-d 5).
+  const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) ? d.name.kew.synonyms : undefined);
   // The day the dossier last changed in substance, for the sitemap (round sixty-three).
   const changed = dayNumber(d.changed?.on);
   // The names with the other spellings the search alone reads (`indexNames`; round sixty-nine; triage-68 N2, S-F2).
-  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(changed ? { changed } : {}) };
+  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus, older: olderOf.get(d.key) }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(kew.length ? { kew } : {}), ...(changed ? { changed } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
@@ -523,14 +558,25 @@ let kewInfra: KewInfra | undefined;
  * file `--extra-keys` names. Every build reads it, so no rebuild of a page drops them; fixtures read none.
  */
 const EXTRA_KEYS = (() => { const i = args.indexOf('--extra-keys'); return i >= 0 ? args[i + 1] : 'scripts/extra-keys.txt'; })();
-const extraKeys: Map<number, ExtraKey[]> = fixtures || !existsSync(EXTRA_KEYS) ? new Map() : byPage(parseExtraKeys(readFileSync(EXTRA_KEYS, 'utf8')));
+// With every merge of scripts/merged-pages.txt the list does not give a line (round eighty, A; X's need): the page joined
+// reads the leaving page's key whatever the rule makes of it (`mergeKeys`), so the merge can be pruned.
+const extraKeys: Map<number, ExtraKey[]> = fixtures ? new Map() : byPage(withMergeKeys(existsSync(EXTRA_KEYS) ? parseExtraKeys(readFileSync(EXTRA_KEYS, 'utf8')) : []).filter((k) => !k.pageId));
 /**
  * The GBIF keys Kew's synonymy gives the pages without a GBIF key (round seventy-nine; the owner's decision on K's offer):
  * `scripts/extra-keys-kew.txt` (scripts/kew-extra-keys.ts writes it), or the file `--kew-extra-keys` names. Their records
  * are read into those pages, which keep no GBIF key of their own.
  */
 const KEW_EXTRA_KEYS = (() => { const i = args.indexOf('--kew-extra-keys'); return i >= 0 ? args[i + 1] : 'scripts/extra-keys-kew.txt'; })();
-const kewExtra: Map<string, ExtraKey[]> = fixtures || !existsSync(KEW_EXTRA_KEYS) ? new Map() : byPageId(parseExtraKeys(readFileSync(KEW_EXTRA_KEYS, 'utf8')));
+// With the lines of scripts/extra-keys.txt that name a page without a GBIF key (round eighty, A: a page merged into one, as
+// `mergeKeys` writes them), one line a key, the line of a merge first, so its old address is read.
+const kewExtra: Map<string, ExtraKey[]> = fixtures ? new Map() : byPageId(oneLineAKey([...(existsSync(KEW_EXTRA_KEYS) ? parseExtraKeys(readFileSync(KEW_EXTRA_KEYS, 'utf8')) : []), ...withMergeKeys(existsSync(EXTRA_KEYS) ? parseExtraKeys(readFileSync(EXTRA_KEYS, 'utf8')) : []).filter((k) => k.pageId)]));
+/**
+ * Why each page without a GBIF key that reads no key reads none (round eighty, R): `scripts/extra-keys-kew-none.txt`
+ * (scripts/kew-extra-keys.ts writes it), or the file `--kew-no-keys` names. The build and `--fill kew-why` write it into
+ * the page, which says it; without the file a page says the general reason.
+ */
+const KEW_NO_KEYS = (() => { const i = args.indexOf('--kew-no-keys'); return i >= 0 ? args[i + 1] : 'scripts/extra-keys-kew-none.txt'; })();
+const kewNoKey = fixtures || !existsSync(KEW_NO_KEYS) ? new Map<string, never>() : parseNoKeys(readFileSync(KEW_NO_KEYS, 'utf8'));
 /**
  * The botanic gardens, herbaria and zoos a record at which is left out (round seventy-nine, Q; `clean.ts`):
  * `scripts/institutions.txt`, Wikidata's, or the file `--institutions` names. Every build reads it; without the file each
@@ -538,6 +584,31 @@ const kewExtra: Map<string, ExtraKey[]> = fixtures || !existsSync(KEW_EXTRA_KEYS
  */
 const INSTITUTIONS = (() => { const i = args.indexOf('--institutions'); return i >= 0 ? args[i + 1] : 'scripts/institutions.txt'; })();
 const places: PlaceIndex | undefined = existsSync(INSTITUTIONS) ? new PlaceIndex(parsePlaces(readFileSync(INSTITUTIONS, 'utf8'))) : undefined;
+/**
+ * The regions' shapes for the range test (round eighty, A; `tdwg-shapes.ts`): scripts/tdwg3-shapes.json, made by
+ * scripts/dev/r80a-tdwg-shapes.py from Natural Earth (public domain). Every build reads it; without the file each region is
+ * its bounding box, as before, and each page's record says which.
+ */
+/**
+ * The default points (round eighty, A; `default-points.ts`): scripts/default-points.txt, written by --list-default-points
+ * from the dossiers on disk. Every build reads it; a record at one is left out, and counted.
+ */
+const DEFAULT_POINTS = 'scripts/default-points.txt';
+const defaults: Set<string> | undefined = !fixtures && existsSync(DEFAULT_POINTS) ? parseDefaultPoints(readFileSync(DEFAULT_POINTS, 'utf8')) : undefined;
+/** The page's own Kew entry for a GBIF key, once the list or the disk says it (round eighty, A): `bulkFetcher`'s and `crossIds`' reading. */
+let entryOfKey: ((key: number) => string | undefined) | undefined;
+const regions: RegionTester | undefined = !fixtures && existsSync(SHAPES_FILE) ? regionTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile) : undefined;
+/** The list's lines and a line for every merge the list does not give one (round eighty, A; `mergeKeys`). */
+function withMergeKeys(keys: ExtraKey[]): ExtraKey[] {
+  const ms = existsSync('scripts/merged-pages.txt') ? parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')) : [];
+  return oneLineAKey([...keys, ...mergeKeys(ms, keys, slugify)]);
+}
+/** Of a page's lines for one key, one: a merge's (which names the old address) before any other (round eighty, A). */
+function oneLineAKey(keys: ExtraKey[]): ExtraKey[] {
+  const by = new Map<string, ExtraKey>();
+  for (const k of keys) { const id = `${k.pageId ?? k.page}:${k.key}`; const was = by.get(id); if (!was || (!was.merged && k.merged)) by.set(id, was && !k.except && was.except ? { ...k, except: was.except } : k); }
+  return [...by.values()];
+}
 /** The pages merged into another by the owner's decision (round seventy-three): `scripts/merged-pages.txt`. */
 const MERGES = 'scripts/merged-pages.txt';
 const merges = (): Merge[] => (existsSync(MERGES) ? parseMerges(readFileSync(MERGES, 'utf8')) : []);
@@ -605,6 +676,20 @@ function fillLiterature(): void {
  *     open data;
  *   - neither asks iNaturalist only for what the open data cannot give: a taxon by name, the cultivated set, and the wild
  *     set of a taxon the open data does not hold (one newer than its export).
+ *
+ * Round eighty (agent I), gentler and smarter, after iNaturalist throttled the owner's first fill:
+ *   - every id no build or fill has checked is checked first, thirty a request (`fillInatIds`, `unchecked`), an inactive
+ *     one followed to its current taxon by the build's rule, so no set is asked of a taxon iNaturalist has retired;
+ *   - the observation searches are asked several taxa a request, ahead of their pages (`inat-batch.ts`: up to 50 taxa a
+ *     cultivated search, 6 of like size a most-voted wild search, 200 observations, only the fields read);
+ *   - a wild set of the API's builds before the open data (round seventy-eight's, which the open data's pass passed by) is
+ *     read again: from the open data where its set is the whole set, else the API's 24 most voted (agent V's rule), so
+ *     every wild set is read as `/about/how` says, and names its observers;
+ *   - a CC0 photograph whose credit names no one is read again (from the open data at no request, or its set asked);
+ *   - with Kew's file (`--bulk`), the sets are read with Kew's filter of descendants, and the page marked, so the step
+ *     after (`fillInatDescendants`) passes it by;
+ *   - a run of 429s is iNaturalist's throttle: waited out at length (30, 60, then 120 minutes) and the fill goes on; said
+ *     as a throttle, never as the day's allowance, which is its own stop.
  */
 async function fillPhotos(): Promise<void> {
   const cultivatedOnly = args.includes('--cultivated');
@@ -612,55 +697,151 @@ async function fillPhotos(): Promise<void> {
   const open = openWild();
   if (wildOnly && !open) { console.error(`--fill inat --wild reads iNaturalist's open data: run scripts/inat-open-load.ts first, then --bulk <dir> with inat-wild.jsonl in it (or --inat-open <file>)`); process.exitCode = 2; return; }
   const dir = `${outDir}/s/v${DOSSIER_V}`;
-  const files = existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)) : [];
-  type D = { key: PageId; name: { scientific: string; family?: string; synonyms?: string[] }; ids: { gbif?: number; inat?: number }; links: Record<string, string>; photos: Array<{ src: string; captive?: boolean }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
-  const todo: Array<{ path: string; d: D }> = [];
-  const entries: Array<{ key: number; name: string; family?: string }> = [];
+  type D = InatKewDossier & { key: PageId; name: { scientific: string; family?: string; synonyms?: string[] }; ids: { gbif?: number; inat?: number }; links: Record<string, string>; photos: Array<{ src: string; captive?: boolean; licence?: string; attribution?: string }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+  const read = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as D;
+  // `--wild` asks iNaturalist nothing: anything but the open data's answer is refused, never sent.
+  const bf = wildOnly ? null : inatBatched(upstreamApi());
+  const f = wildOnly ? heldWild((async () => ({ status: 'refused', detail: 'not asked: --fill inat --wild asks iNaturalist nothing' })) as unknown as ReturnType<typeof makeFetcher>, open, inatOpenHeld) : open ? heldWild(bf!, open, inatOpenHeld, { mostVoted: !cultivatedOnly }) : bf!;
+  let done = 0;
+  let todoN = 0;
+  let left = 0;
+  const waits = throttleWaits();
+  let files: string[] = [];
+  // The pages to fill, by path (each read again when its turn comes), with what each needs asked again.
+  let todo: Array<{ path: string; againWild: boolean; againCult: boolean }> = [];
+  let n = { mostVoted: 0, apiEra: 0, cc0: 0, noTaxon: 0, unchecked: 0, kew: 0 };
+  let votedUnanswered = 0;
+  let againUnanswered = 0;
+  let entries: Array<{ key: number; name: string; family?: string }> = [];
   // The reference's species by name: iNaturalist's taxon filed under another species of it is never taken (round sixty-nine; triage-68 M6).
-  const byName = new Map<string, number>();
+  let byName = new Map<string, number>();
+  const unnamedCc0 = (p: { src: string; licence?: string; attribution?: string }) => p.src === 'inat' && p.licence === 'cc0' && /^no rights reserved$/i.test((p.attribution ?? '').trim());
+  // Kew's names below species (round seventy-two, C1), read once for this step and the descendants step after it.
+  const kewLoaded = bulkDir && !wildOnly ? await loadKewInfra(bulkDir) : null;
+  scan();
+  const todoN0 = todo.length;
+  function scan(): void {
+  files = existsSync(dir) ? readdirSync(dir).filter((x) => DOSSIER_FILE.test(x)) : [];
+  todo = [];
+  n = { mostVoted: 0, apiEra: 0, cc0: 0, noTaxon: 0, unchecked: 0, kew: 0 };
+  entries = [];
+  byName = new Map<string, number>();
   // By GBIF key (round seventy-eight): what iNaturalist's and GBIF's answers are judged against.
-  for (const f of files) {
-    const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as D;
+  for (const file of files) {
+    const d = read(`${dir}/${file}`);
     // A page without a GBIF key (round seventy-nine) holds its name as 0, which no GBIF key is, so no page takes its taxon.
     byName.set(d.name.scientific.toLowerCase(), d.ids.gbif ?? 0);
     if (d.ids.gbif != null) entries.push({ key: d.ids.gbif, name: d.name.scientific, family: d.name.family });
     const settled = (k: string) => ['ok', 'none'].includes(d.upstream?.[k]?.status ?? '');
+    const wildRow = d.upstream?.['inat.photos.wild'];
     // A "not asked: already from the GBIF download" stands only while those photographs are here (round sixty-seven; triage-66 N4).
     // With the open data, the wild set costs nothing, so a "not asked" for the GBIF download's photographs is asked now (round seventy-nine).
-    const wildDone = settled('inat.photos.wild') || (!open && (d.upstream?.['inat.photos.wild']?.detail ?? '').startsWith('not asked') && d.photos.some((p) => p.src === 'gbif' && !p.captive));
+    const wildDone = settled('inat.photos.wild') || (!open && (wildRow?.detail ?? '').startsWith('not asked') && d.photos.some((p) => p.src === 'gbif' && !p.captive));
     // `--cultivated`: the cultivated set alone, the one the open data cannot give (round seventy-eight).
     // A cultivated record of the rule before (research grade and captive, which finds nothing) is asked again (round seventy-eight).
     const cultDone = inat.cultivatedSettled(d.upstream?.['inat.photos.cultivated']);
+    // Round eighty (agent V): a wild set the open data gave as its 24 newest, of a taxon it holds more than 24 of, is asked
+    // of the API for its 24 most voted, by a fill that asks the API (neither --wild nor --cultivated); once, since the
+    // API's answer is recorded as the API's.
+    const votedToAsk = !wildOnly && !cultivatedOnly && mostVotedToAsk(open, d.ids.inat, wildRow);
     // `--wild`: a dossier with an iNaturalist id whose wild set the open data holds (one without waits for the next fill).
     // A page without a GBIF key (round seventy-nine, agent K's) only once its id has passed Kew's names (`inat.taxon` ok):
     // an id its Wikidata item gave, not yet checked, waits for the fill that checks it.
     const idChecked = d.ids.gbif != null || d.upstream?.['inat.taxon']?.status === 'ok';
-    if (wildOnly ? !wildDone && !!d.ids.inat && idChecked && open!.holds(d.ids.inat) : cultivatedOnly ? !cultDone : !wildDone || !cultDone) todo.push({ path: `${dir}/${f}`, d });
+    const held = !!open && !!d.ids.inat && open.holds(d.ids.inat) && open.active(d.ids.inat) !== false;
+    // Round eighty (agent I): a wild set the API gave before the open data (round seventy-eight's builds, carried since),
+    // of a taxon the open data holds, is read again as the rule now reads it: from the open data where its set is the
+    // whole set, else the API's 24 most voted (V's rule); never by `--cultivated`, and by `--wild` only from the file.
+    const apiEra = !cultivatedOnly && held && settled('inat.photos.wild') && !(wildRow?.detail ?? '').startsWith(OPEN_WILD_RULE) && !(wildRow?.detail ?? '').includes(MOST_VOTED_RULE) && (!wildOnly || (open!.count(d.ids.inat!) ?? 0) <= WILD_PER_TAXON);
+    // A CC0 photograph whose credit names no one (round eighty): its set read again, which names the observer.
+    const cc0Wild = !cultivatedOnly && held && settled('inat.photos.wild') && d.photos.some((p) => unnamedCc0(p) && !p.captive) && (!wildOnly || (open!.count(d.ids.inat!) ?? 0) <= WILD_PER_TAXON);
+    const cc0Cult = !wildOnly && !!d.ids.inat && cultDone && d.photos.some((p) => unnamedCc0(p) && !!p.captive);
+    // A page whose names Kew places a taxon below under another species, not yet read against Kew's file (round eighty):
+    // its sets read again with Kew's filter, the wild set from the open data at no request where it is the whole set,
+    // the cultivated set (where it holds photographs) in a batch, so the page is marked and the descendants step does not
+    // ask its taxon's children, a request a page (about one page in five; their marks did not survive the full build).
+    const kr = kewLoaded && held ? kewReading(d, kewLoaded.kew, kewLoaded.day) : null;
+    const kewAgain = !!kr && !kr.mark.split('; ').every((m) => (wildRow?.detail ?? '').includes(m)) && (!wildOnly && !cultivatedOnly);
+    if (kewAgain) n.kew++;
+    const againWild = apiEra || cc0Wild || kewAgain, againCult = cc0Cult || (kewAgain && cultDone && d.photos.some((p) => p.src === 'inat' && !!p.captive));
+    const need = wildOnly ? (!wildDone || againWild) && !!d.ids.inat && idChecked && held : cultivatedOnly ? !cultDone || againCult : !wildDone || !cultDone || votedToAsk || againWild || againCult;
+    if (need) {
+      todo.push({ path: `${dir}/${file}`, againWild, againCult });
+      if (votedToAsk) n.mostVoted++;
+      if (apiEra) n.apiEra++;
+      if (cc0Wild || cc0Cult) n.cc0++;
+      if (!d.ids.inat) n.noTaxon++;
+    }
+    if (d.ids.gbif != null && d.ids.inat && d.upstream?.['inat.taxon']?.status !== 'ok') n.unchecked++;
   }
+  todoN = todo.length;
+  }
+  const again = [n.apiEra ? `${n.apiEra} whose wild set the API gave before the open data, read again` : '', n.cc0 ? `${n.cc0} with a CC0 photograph whose credit names no one, read again` : '', n.noTaxon && !wildOnly ? `${n.noTaxon} without an iNaturalist taxon, asked by name` : '', n.kew ? `${n.kew} read again against Kew's file of ${kewLoaded!.day}, which places a taxon below one of their names under another species` : ''].filter(Boolean);
   console.log(wildOnly
-    ? `${files.length} dossiers on disk; ${todo.length} with an iNaturalist taxon whose wild photographs the open data of ${open!.header.day} holds, read from it now; iNaturalist is asked nothing…`
-    : `${files.length} dossiers on disk; ${todo.length} without iNaturalist's ${cultivatedOnly ? 'cultivated photographs' : 'photographs'}; at most ${inatBudget} requests to iNaturalist today, ${budgetStore.read(today())} already made${open ? `; the wild set from the open data of ${open.header.day} where it holds the taxon` : ''}…`);
+    ? `${files.length} dossiers on disk; ${todo.length} with an iNaturalist taxon whose wild photographs the open data of ${open!.header.day} holds, read from it now${again.length ? ` (${again.join('; ')})` : ''}; iNaturalist is asked nothing…`
+    : `${files.length} dossiers on disk; ${todo.length} without iNaturalist's ${cultivatedOnly ? 'cultivated photographs' : 'photographs'}${n.mostVoted ? ` (${n.mostVoted} of them for their 24 most-voted wild observations: the open data of ${open!.header.day} holds more than 24 of their taxon)` : ''}${again.length ? ` (${again.join('; ')})` : ''}; at most ${inatBudget} requests to iNaturalist today, ${budgetStore.read(today())} already made, one every 2 s, the observation searches several taxa a request${open ? `; the wild set from the open data of ${open.header.day} where it holds the taxon${cultivatedOnly ? '' : ' and 24 observations of it or fewer, else the API\'s most voted'}` : ''}…`);
+  // Ids no build or fill has checked (round eighty): checked before any set is asked of them, thirty a request, and the
+  // pages read again when the check changed one (an id followed, dropped or refused reopens the page's sets).
+  if (!wildOnly && n.unchecked) {
+    console.log(`  first, the ${n.unchecked} iNaturalist ids no build or fill has checked, checked with iNaturalist (thirty a request), an inactive one followed to its current taxon by the build's rule…`);
+    for (;;) {
+      const c = await fillInatIds(diskStore(), f, undefined, { unchecked: true });
+      console.log(`  ${c.checked} ids checked: ${c.followed} inactive ids followed to their current taxon (or taxa given back), ${c.refused} whose taxon is not this species' (dropped, the name asked), ${c.dropped} inactive with no single current taxon (asked by name)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : ''}`);
+      if (c.followed || c.refused || c.dropped) scan();
+      if (!c.failed) break;
+      if (isThrottle(c.failed) || /allowance/.test(c.failed)) { if (await waitOut(c.failed)) continue; return stop(c.failed); }
+      // Another failure (an error, GBIF not answering): the pages whose id is still unchecked wait for the next fill.
+      unfinished();
+      console.log(`  the check did not finish (${c.failed}): the pages whose id is not yet checked are left for the next fill.`);
+      break;
+    }
+    if (todo.length !== todoN0) console.log(`  now ${todo.length} to fill.`);
+  }
   const reference = referenceOf(entries);
   // The reference's names, so an observation iNaturalist files below this species that Kew holds as another is left out (round seventy-two).
   const heldOnDisk = indexHeld();
-  // `--wild` asks iNaturalist nothing: anything but the open data's answer is refused, never sent.
-  const f = wildOnly ? heldWild((async () => ({ status: 'refused', detail: 'not asked: --fill inat --wild asks iNaturalist nothing' })) as unknown as ReturnType<typeof makeFetcher>, open, inatOpenHeld) : upstream();
-  let done = 0;
   const t0 = Date.now();
-  for (const { path, d } of todo) {
+  /** The batches asked ahead: the pages of the next window whose sets go to the API (round eighty, `inat-batch.ts`). */
+  const WINDOW = 300;
+  let aheadTo = 0;
+  async function ahead(from: number): Promise<string | undefined> {
+    if (!bf || from < aheadTo) return undefined;
+    aheadTo = from + WINDOW;
+    const cult: number[] = [], wild: number[] = [];
+    for (const { path, againWild, againCult } of todo.slice(from, aheadTo)) {
+      const d = read(path);
+      const id = d.ids.inat;
+      if (!id || (d.ids.gbif == null && d.upstream['inat.taxon']?.status !== 'ok')) continue;
+      if (!inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) || againCult) cult.push(id);
+      if (cultivatedOnly) continue;
+      const row = d.upstream['inat.photos.wild'];
+      const toApi = open?.holds(id) ? (open.count(id) ?? 0) > WILD_PER_TAXON && (mostVotedToAsk(open, id, row) || againWild) : !['ok', 'none'].includes(row?.status ?? '') && d.photos.filter((p) => p.src === 'gbif' && !p.captive).length < 6;
+      if (toApi) wild.push(id);
+    }
+    for (let i = 0; i < cult.length; i += CULTIVATED_BATCH) { const r = await bf.prefetch('cultivated', cult.slice(i, i + CULTIVATED_BATCH), 12); if (r) return r; }
+    for (const g of wildGroups(wild, (t) => open?.count(t))) { const r = await bf.prefetch('wild', g, 24); if (r) return r; }
+    return undefined;
+  }
+  for (let i = 0; i < todo.length; i++) {
+    const r0 = await ahead(i);
+    if (r0) { if (await waitOut(r0)) { aheadTo = i; i--; continue; } return stop(r0); }
+    const { path, againWild, againCult } = todo[i];
+    const d = read(path);
     // A page without a GBIF key (round seventy-nine): an id its Wikidata item gave, kept unchecked by a build that skipped
     // iNaturalist, is checked here by its own and Kew's names (`kewInatTaxon`), since `--fill inat-ids` passes it by.
     const unchecked = d.ids.gbif == null && !!d.ids.inat && d.upstream['inat.taxon']?.status !== 'ok';
+    // An id the check above could not reach (round eighty): no set is asked of it until it is checked, by the next fill.
+    if (!wildOnly && d.ids.gbif != null && d.ids.inat && d.upstream['inat.taxon']?.status !== 'ok') { left++; continue; }
     let id = unchecked ? undefined : d.ids.inat;
     if (!id) {
       // Asked as the build asks it (`taxonFor`; round seventy, second pass, triage-69 B5, B7), with the own names the
       // dossier holds: a taxon GBIF holds as another species of this reference is not taken.
       const own = d.name.scientific.toLowerCase();
-      const heldElsewhere = d.ids.gbif != null ? heldElsewhereIn(byName, d.ids.gbif) : (n: string) => { const k = byName.get(n.toLowerCase()); return k != null && (k !== 0 || n.toLowerCase() !== own); };
+      const heldElsewhere = d.ids.gbif != null ? heldElsewhereIn(byName, d.ids.gbif) : (x: string) => { const k = byName.get(x.toLowerCase()); return k != null && (k !== 0 || x.toLowerCase() !== own); };
       const owned = ownNames({ scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], heldElsewhere });
       // A page without a GBIF key (round seventy-nine) by its own names alone (`kewInatTaxon`): nothing is judged at GBIF.
       const t = d.ids.gbif == null ? ((await kewInatTaxon(f, { scientific: d.name.scientific, own: owned, heldElsewhere, id: d.ids.inat })) as Awaited<ReturnType<typeof inat.taxonFor>>) : await inat.taxonFor(f, { scientific: d.name.scientific, key: d.ids.gbif, family: d.name.family, own: owned, sameType: [], heldElsewhere, reference });
-      if (t.status === 'refused') return stop(t.detail);
+      if (t.status === 'refused') { if (await waitOut(t.detail)) { i--; continue; } return stop(t.detail); }
       // What `--fill inat-ids` said of an id it dropped stays before the name search's answer (`inatTaxonRow`; round seventy, S-B7).
       d.upstream['inat.taxon'] = inatTaxonRow(d.upstream['inat.taxon'], t, new Date().toISOString());
       if (t.status === 'error') {
@@ -685,34 +866,93 @@ async function fillPhotos(): Promise<void> {
     const settled = (k: string) => ['ok', 'none'].includes(d.upstream[k]?.status ?? '');
     const wildFromGbif = d.photos.filter((p) => p.src === 'gbif' && !p.captive).length;
     // The open data's answer costs no request, so it is read whatever GBIF gave; the API's only where it was asked before.
-    const askWild = wildToAsk({ held: !!open && open.holds(id), settled: settled('inat.photos.wild'), wildOnly, cultivatedOnly, wildFromGbif });
-    const wild = askWild ? await inat.photos(f, id, true, 24, { key: d.key, held: heldOnDisk }) : null;
-    if (wild?.status === 'refused') return stop(wild.detail);
-    const cult = !wildOnly && !inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) ? await inat.photos(f, id, false, 12, { key: d.key, held: heldOnDisk }) : null;
-    if (cult?.status === 'refused') return stop(cult.detail);
+    // Round eighty: the 24 most-voted, where the open data gave its 24 newest of a taxon it holds more than 24 of.
+    const voted = !wildOnly && !cultivatedOnly && mostVotedToAsk(open, id, d.upstream['inat.photos.wild']);
+    const held = !!open && open.holds(id) && open.active(id) !== false;
+    const askWild = wildToAsk({ held, settled: settled('inat.photos.wild') && !againWild, wildOnly, cultivatedOnly, wildFromGbif }) || voted;
+    // Kew's filter of descendants (round seventy-two, C1; round eighty: read here, so the step after passes the page by).
+    const kr = kewLoaded ? kewReading(d, kewLoaded.kew, kewLoaded.day) : null;
+    const owner = { key: d.key, held: heldOnDisk, ...(kr ? { kew: kr.filter } : {}) };
+    let wild = askWild ? await inat.photos(f, id, true, 24, owner) : null;
+    if (wild?.status === 'refused') { if (await waitOut(wild.detail)) { i--; continue; } return stop(wild.detail); }
+    // `--wild` (round eighty): a "none" for an id no build or fill has checked is not written: an inactive id holds no
+    // observations, so "none" would be a false absence (Iris germanica's 57097). The fill checks the id first.
+    if (wildOnly && wild?.status === 'none' && d.upstream['inat.taxon']?.status !== 'ok') {
+      d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: the open data holds no such observation of taxon ${id}, whose id is not yet checked with iNaturalist (an inactive id holds none); the next --fill inat checks it, then reads the set` };
+      writeAtomic(path, JSON.stringify(d));
+      done++;
+      continue;
+    }
+    // A most-voted set the API did not answer (an error): the open data's set and its record stay, asked again by the next fill.
+    if (voted && wild && wild.status !== 'ok' && wild.status !== 'none') { votedUnanswered++; wild = null; }
+    // A set read again (round eighty: an API-era set, a credit naming no one) that did not answer keeps what it had, the same way.
+    if (againWild && wild && wild.status !== 'ok' && wild.status !== 'none') { againUnanswered++; wild = null; }
+    let cult = !wildOnly && (!inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) || againCult) ? await inat.photos(f, id, false, 12, owner) : null;
+    if (cult?.status === 'refused') { if (await waitOut(cult.detail)) { i--; continue; } return stop(cult.detail); }
+    if (againCult && inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) && cult && cult.status !== 'ok' && cult.status !== 'none') { againUnanswered++; cult = null; }
     const fresh = [...(wild?.status === 'ok' ? wild.data : []), ...(cult?.status === 'ok' ? cult.data : [])];
     // iNat photos lead; whatever Commons or GBIF media gave earlier stays behind them. A set not asked for this time keeps what it had.
     d.photos = [...fresh, ...d.photos.filter((p) => p.src !== 'inat' || (wild == null && !p.captive) || (cult == null && p.captive))];
     const stamp = `filled ${new Date().toISOString().slice(0, 10)}`;
+    // Read against Kew's file (round eighty): every iNaturalist set the page holds was read with the filter now.
+    const kewDone = kr && wild && (cult || !d.photos.some((p) => p.src === 'inat' && p.captive)) ? `; ${kr.mark}` : '';
     // The open data's answer says so, and of which day (`openWildDetail`); the API's says the day it was filled.
-    if (wild) d.upstream['inat.photos.wild'] = { status: wild.status, at: new Date().toISOString(), detail: 'detail' in wild && wild.detail ? `${wild.detail}; ${stamp}` : stamp };
+    if (wild) d.upstream['inat.photos.wild'] = { status: wild.status, at: new Date().toISOString(), detail: `${'detail' in wild && wild.detail ? `${wild.detail}; ${stamp}` : stamp}${kewDone}` };
     else if (!cultivatedOnly && !wildOnly && !settled('inat.photos.wild')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${wildFromGbif} wild photographs already from the GBIF download` };
     if (cult) d.upstream['inat.photos.cultivated'] = { status: cult.status, at: new Date().toISOString(), detail: cult.status === 'ok' || cult.status === 'none' ? `${inat.CULTIVATED_RULE}; ${stamp}` : `${(cult as { detail?: string }).detail ?? cult.status}; ${stamp}` };
     writeAtomic(path, JSON.stringify(d));
     done++;
     if (done % 25 === 0) process.stdout.write(`\r  ${done} of ${todo.length} (${((Date.now() - t0) / done / 1000).toFixed(1)} s each)…   `);
   }
-  console.log(`\n  ${done} filled${open ? `; ${inatOpenHeld.held} wild sets read from iNaturalist's open data` : ''}. ${wildOnly ? `Every dossier with an iNaturalist taxon the open data holds has its wild photographs; now --fill inat --bulk ${bulkDir ?? '<dir>'} for the cultivated set and the rest.` : 'Every dossier has been asked for its photographs.'}`);
+  console.log(`\n  ${done} filled${open ? `; ${inatOpenHeld.held} wild sets read from iNaturalist's open data${inatOpenHeld.mostVoted ? `, ${inatOpenHeld.mostVoted} asked of its API for the 24 most voted (the open data holds more than 24)` : ''}` : ''}${bf ? `; ${bf.stats.batches} batched searches answered ${bf.stats.served} sets, ${bf.stats.own} asked alone` : ''}. ${wildOnly ? `Every dossier with an iNaturalist taxon the open data holds has its wild photographs; now --fill inat --bulk ${bulkDir ?? '<dir>'} for the cultivated set and the rest.` : 'Every dossier has been asked for its photographs.'}`);
+  if (votedUnanswered) { unfinished(); console.log(`  most-voted wild sets: ${votedUnanswered} not answered (asked again by the next fill); those pages keep the open data's set until then.`); }
+  if (againUnanswered) { unfinished(); console.log(`  sets read again: ${againUnanswered} not answered (asked again by the next fill); those pages keep the set they had until then.`); }
+  if (left) { unfinished(); console.log(`  ${left} pages whose iNaturalist id is not yet checked were left for the next fill, which checks it first.`); }
   // Round seventy-two (C1): with Kew's file, the pages whose iNaturalist taxon takes in a taxon Kew places under another
   // species. It asks iNaturalist (a taxon's children), so not under --wild; the next fill reads them.
-  if (bulkDir && !wildOnly && (await fillInatDescendants(f, dir)) === 'refused') return;
+  if (bulkDir && !wildOnly) {
+    for (;;) {
+      const r = await fillInatDescendants(f, dir, kewLoaded);
+      if (r === 'done') break;
+      if (!(r.refused && (await waitOut(r.refused)))) { if (r.refused) say(r.refused); writeIndexFromDisk(); return; }
+    }
+  }
   writeIndexFromDisk();
+
+  /** The day's allowance used, and what it is. */
+  function used(): string { return `${budgetStore.read(today())} of the day's ${inatBudget} requests made (UTC ${today()})`; }
+  /** A refusal of iNaturalist's, said as what it is: its throttle, the day's allowance, or another refusal. */
+  function say(detail?: string): void {
+    const left = `${done} filled; ${todo.length - done} still to do`;
+    if (/allowance/.test(detail ?? '')) console.log(`\n  The day's allowance is spent (${detail}): ${used()}; not a throttle. ${left}; run this again tomorrow (UTC), and it goes on from here.`);
+    else if (isThrottle(detail)) console.log(`\n  iNaturalist is throttling this address (${detail}), and still was after waiting ${waits.waited()} minutes: this is iNaturalist's throttle, not the day's allowance (${used()}). ${left}; run this again tomorrow (UTC), and it goes on from here.`);
+    else console.log(`\n  iNaturalist refused (${detail ?? ''}); ${used()}. ${left}; run this again tomorrow (UTC), and it goes on from here.`);
+  }
   function stop(detail?: string) {
     unfinished();
     // Each dossier is written as it is filled, so the same command tomorrow goes on from here (round seventy-eight).
-    console.log(`\n  iNaturalist refused (${detail ?? ''}). ${done} filled; ${todo.length - done} still to do. iNaturalist allows about 10,000 calls a day; run this again tomorrow (UTC), and it goes on from here.`);
+    say(detail);
     writeIndexFromDisk();
   }
+  /** iNaturalist's throttle waited out (round eighty): true when the fill goes on, after the wait; false for the stop. */
+  async function waitOut(detail?: string): Promise<boolean> {
+    if (!isThrottle(detail)) return false;
+    const m = waits.next();
+    if (m == null) return false;
+    console.log(`\n  iNaturalist is throttling this address (${detail}): waiting ${m} minutes, then going on. This is its throttle, not the day's allowance (${used()}).`);
+    await new Promise((r) => setTimeout(r, m * 60_000));
+    return true;
+  }
+}
+
+/**
+ * The fill's waits on iNaturalist's throttle, in minutes (round eighty): 30, 60 and 120, three and a half hours in all,
+ * then the stop for the day; `CULTIFOLIO_INAT_WAITS` (minutes, comma-separated) names others, for a test.
+ */
+function throttleWaits(): { next: () => number | undefined; waited: () => number } {
+  const list = (process.env.CULTIFOLIO_INAT_WAITS ?? '30,60,120').split(',').map(Number).filter((x) => Number.isFinite(x) && x >= 0);
+  let i = 0, sum = 0;
+  return { next: () => { const m = list[i++]; if (m != null) sum += m; return m; }, waited: () => sum };
 }
 
 /**
@@ -722,10 +962,11 @@ async function fillPhotos(): Promise<void> {
  * such page iNaturalist is asked its taxon's children (one request), and where a child is one of those names, both
  * photograph sets are asked again (two requests) and an observation of such a child is left out. Each page read carries
  * the day of Kew's file on its wild-photographs row, so a rerun passes it by; a refusal stops the fill and a rerun resumes.
+ * Round eighty: a page the fill read with Kew's filter carries the mark already, and is passed by.
  */
-async function fillInatDescendants(f: ReturnType<typeof makeFetcher>, dir: string): Promise<'done' | 'refused'> {
+async function fillInatDescendants(f: ReturnType<typeof makeFetcher>, dir: string, given?: { kew: KewInfra; day: string } | null): Promise<'done' | { refused?: string }> {
   console.log("Reading Kew's names below species, for iNaturalist's descendant taxa…");
-  const loaded = await loadKewInfra(bulkDir!);
+  const loaded = given ?? (await loadKewInfra(bulkDir!));
   if (!loaded) { console.log(`  no wcvp_names.csv in ${bulkDir}: not checked`); return 'done'; }
   const c = { pages: 0, asked: 0, before: 0, unanswered: 0 };
   const lines: string[] = [];
@@ -738,7 +979,7 @@ async function fillInatDescendants(f: ReturnType<typeof makeFetcher>, dir: strin
     c.pages++;
     if (r.done === 'read before') { c.before++; continue; }
     if (r.done === 'unanswered') { c.unanswered++; continue; }
-    if (r.done === 'refused') { unfinished(); say(); console.log(`  iNaturalist refused (${r.detail ?? ''}); run again to go on: a page read is passed by.`); return 'refused'; }
+    if (r.done === 'refused') { unfinished(); say(); console.log(`  iNaturalist refused (${r.detail ?? ''}); run again to go on: a page read is passed by.`); return { refused: r.detail }; }
     if (r.done === 'asked again') { c.asked++; lines.push(`${d.key}\t${d.name.scientific}\t${r.placed.map(([n, to]) => `${n} (Kew: ${to})`).join('; ')}\t${r.was} iNaturalist photographs before, ${r.now} now`); }
     else if (r.done === 'marked' && r.asked) c.asked++;
     writeAtomic(path, JSON.stringify(d));
@@ -782,9 +1023,10 @@ function pruneFollowed(): void {
     }
   }
   console.log(`  ${gone} dossiers under synonym names deleted; each has an accepted species' page that says it was followed from that name.`);
-  // The merges are by GBIF key; each page's file is its id's (round seventy-eight).
+  // The merges are by GBIF key; each page's file is its id's (round seventy-eight). A page joined without a GBIF key is
+  // found by its id (round eighty, A: Ceropegia cereiformis and C. nubica into Echidnopsis cereiformis, k505095).
   const fileOf = new Map(all.flatMap(({ f, d }) => (d.ids?.gbif != null ? [[d.ids.gbif, f] as const] : [])));
-  const m = mergedToPrune(all.flatMap(({ d }) => (d.ids?.gbif != null ? [{ ...(d as D & { occurrences?: { keys?: Array<{ key: number; slug?: string }> } }), key: d.ids.gbif }] : [])), merges());
+  const m = mergedToPrune(all.map(({ d }) => ({ ...(d as D & { occurrences?: { keys?: Array<{ key: number; slug?: string }> } }), key: d.ids?.gbif ?? null, id: String(d.key) })), merges());
   for (const k of m.prune) { const f = fileOf.get(k); if (f && existsSync(`${dir}/${f}`)) unlinkSync(`${dir}/${f}`); }
   if (m.prune.length || m.waiting.length) console.log(`  ${m.prune.length} dossier${m.prune.length === 1 ? '' : 's'} of pages merged into another deleted (${m.prune.join(', ') || 'none'}); each kept page reads its key and answers its old address${m.waiting.length ? `; not yet, the kept page not rebuilt with it (--keys rebuild-extra.txt): ${m.waiting.join('; ')}` : ''}.`);
   writeIndexFromDisk();
@@ -1051,6 +1293,17 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
 }
 
 /**
+ * `--fill kew-why` (round eighty, R): each page without a GBIF key that reads no key says why, for itself
+ * (`fillKewWhy`, from `scripts/extra-keys-kew-none.txt`); nothing is asked. Then the index.
+ */
+function fillKewWhyStep(): void {
+  if (!existsSync(KEW_NO_KEYS)) { console.error(`--fill kew-why: no ${KEW_NO_KEYS} (npx tsx scripts/kew-extra-keys.ts writes it)`); process.exit(2); }
+  const c = fillKewWhy(diskStore(), kewNoKey, idOfGbif);
+  console.log(`  ${c.read} pages without a GBIF key read no key; ${c.changed} changed: ${[...c.kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'} say why for themselves (${KEW_NO_KEYS})${c.general ? `, ${c.general} the general reason (not in the file)` : ''}`);
+  writeIndexFromDisk();
+}
+
+/**
  * `--fill kew-links` (round seventy-one; self-review 70 S-B5): every stored IPNI and POWO link read against Kew's number
  * for the name and author (one GBIF request a dossier); each change printed. Resumable; then the index.
  */
@@ -1064,6 +1317,24 @@ async function fillKewLinksStep(): Promise<void> {
   if (c.failed) unfinished();
   if (c.failed) console.log(`  GBIF did not answer (${c.failed}); run --fill kew-links again: it picks up where it stopped.`);
   writeIndexFromDisk();
+}
+
+/**
+ * `--fill inat-restore <backup>` (round eighty, agent I; `inat-restore.ts`): the iNaturalist ids the build that skipped
+ * iNaturalist dropped, given back from the corpus before it (the plan's backup, `backups/v3-<corpus>`), unchecked, for the
+ * next `--fill inat` to check and fill. Offline: nothing is asked. The list in inat-restored.txt.
+ */
+function fillInatRestoreStep(): void {
+  const from = args[args.indexOf('inat-restore') + 1];
+  if (!from || from.startsWith('--') || !existsSync(from)) { console.error('usage: --fill inat-restore <the corpus before the build, e.g. backups/v3-<corpus id> (corpus-step.json names it as backupDir)>'); process.exitCode = 2; return; }
+  const backup: DossierStore = {
+    files: () => readdirSync(from).filter((f) => DOSSIER_FILE.test(f)),
+    read: <T,>(file: string) => JSON.parse(readFileSync(`${from}/${file}`, 'utf8')) as T,
+    write: () => { throw new Error('the backup is read, never written'); }
+  };
+  const c = restoreInatIds(diskStore(), backup, from);
+  writeFileSync('inat-restored.txt', c.lines.join('\n') + (c.lines.length ? '\n' : ''));
+  console.log(`${c.found} pages without an iNaturalist id had one in ${from}: ${c.restored} given back (not yet checked: the next --fill inat checks each with iNaturalist, then asks its photographs), ${c.heldElsewhere} held by another page now, ${c.refused} refused by the fill's rule since → inat-restored.txt. Nothing was asked of anyone; run --fill inat next (the plan's own step does).`);
 }
 
 /**
@@ -1116,6 +1387,24 @@ async function fillWikidataStep(): Promise<void> {
   }
   if (c.failed) unfinished();
   if (c.failed) console.log(`  ${c.failed}: not answered; run --fill wikidata again later: what was read and proved stands, the next run takes up the rest, and rebuild-wd.txt is written in full by the run that ends.`);
+  writeIndexFromDisk();
+}
+
+/**
+ * `--fill wikidata-names` (round eighty, the owner's decision): the English common names of every page without a GBIF
+ * key from its own Wikidata item (P1843, by the rule of `wikidata-names.ts`), two hundred items a query; `--keyed` also
+ * asks for the pages with a GBIF key whose GBIF names give them no English name (off by default: the owner's decision,
+ * offered in round eighty). A query that does not answer leaves its pages as they were: run it again. Then the index.
+ */
+async function fillWikidataNamesStep(): Promise<void> {
+  const keyed = args.includes('--keyed');
+  console.log(`Reading the English common names of every page without a GBIF key${keyed ? ', and of every page with one whose GBIF names give it no English name,' : ''} from its Wikidata item…`);
+  const t0 = Date.now();
+  // Through the day's cache, as every fill asks (a second run the same day reads the same answers; --no-cache asks afresh).
+  const c = await fillWikidataNames(diskStore(), upstream(), { keyed });
+  console.log(`  ${c.read} pages read: ${c.keyless} without a GBIF key${keyed ? `, ${c.keyed} with one and no English name from GBIF` : ''}; ${c.items} Wikidata items asked in ${c.queries} queries (${Math.round((Date.now() - t0) / 1000)} s).`);
+  console.log(`  ${c.taken} pages given English names from Wikidata (${c.shown} of them now show one; the others only a generic noun, which is searched and not shown); ${c.none} whose item holds none the rule takes; ${c.noItem} with no item taken, each saying why; ${c.written} dossiers written${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  if (c.unchecked) { unfinished(); console.log(`  ${c.unchecked} pages not checked: Wikidata did not answer (${c.failed}); they are left as they were; run --fill wikidata-names again.`); }
   writeIndexFromDisk();
 }
 
@@ -1560,7 +1849,9 @@ async function main() {
   if (fill === 'commons') return fillCommonsPhotos();
   if (fill === 'gbif-licence') return fillGbifLicencePhotos();
   if (fill === 'inat-ids') return fillInatIdsStep();
+  if (fill === 'inat-restore') return fillInatRestoreStep();
   if (fill === 'wikidata') return fillWikidataStep();
+  if (fill === 'wikidata-names') return fillWikidataNamesStep();
   if (fill === 'summaries') return fillSummaries();
   if (fill === 'commons-kind') return fillCommonsKindStep();
   if (fill === 'genus') return fillGenera();
@@ -1568,9 +1859,56 @@ async function main() {
   if (fill === 'range-source') return fillRangeSourceStep();
   if (fill === 'kew-links') return fillKewLinksStep();
   if (fill === 'kew-names') return fillKewNamesStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, wikidata, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names or genus`);
+  if (fill === 'kew-why') return fillKewWhyStep();
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
+  // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.
+  if (args.includes('--list-default-points')) {
+    const dir = `${outDir}/s/v${DOSSIER_V}`;
+    const files = readdirSync(dir).filter((x) => DOSSIER_FILE.test(x));
+    const read = function* () { for (const f of files) { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as { key: string; name: { scientific: string }; occurrences?: { open?: Array<[number, number, number | null]> } }; yield d; } catch { /* half-written */ } } };
+    const found = defaultPoints([...read()].map((d) => ({ open: d.occurrences?.open ?? [] })));
+    // A point once listed stays listed: pages rebuilt under the rule no longer hold its records, and would not find it again.
+    const before = defaults ?? new Set<string>();
+    const kept = [...before].filter((k) => !found.some((p) => p.key === k)).map((key) => ({ key, species: 0, records: 0, undated: 0 }));
+    const all = [...found, ...kept];
+    writeFileSync(DEFAULT_POINTS, formatDefaultPoints(all, [`Default points (round eighty, A; src/lib/dossier/default-points.ts says the rule): a coordinate where the open in-range records of ${MIN_SPECIES} species or more lie, ${Math.round(MIN_UNDATED * 100)}% of them or more with no year.`, `Written ${new Date().toISOString().slice(0, 10)} by --list-default-points from ${files.length} dossiers; a point listed before and not found again keeps its line, with 0s.`, 'lat,lon, species, records, records with no year']));
+    const keys = new Set(all.map((p) => p.key));
+    const pages = [...read()].filter((d) => (d.occurrences?.open ?? []).some((r) => keys.has(pointKey(r[0], r[1])))).map((d) => `${d.key} ${d.name.scientific}`);
+    if (pages.length) writeFileSync('rebuild-default-points.txt', pages.join('\n') + '\n');
+    else if (existsSync('rebuild-default-points.txt')) unlinkSync('rebuild-default-points.txt');
+    console.log(`  ${found.length} default points found in ${files.length} dossiers (${kept.length} more kept from ${DEFAULT_POINTS}) → ${DEFAULT_POINTS}; ${pages.length} pages hold a record at one → rebuild-default-points.txt; run --keys rebuild-default-points.txt --offline --grid climate --bulk bulk`);
+    return;
+  }
+  // Round eighty (A): the pages whose open in-range records include one outside every native region's shape, for --keys.
+  if (args.includes('--list-range-shapes')) {
+    if (!regions) { console.error(`no ${SHAPES_FILE}: nothing to test against`); process.exit(2); }
+    const dir = `${outDir}/s/v${DOSSIER_V}`;
+    const lines: string[] = [];
+    let read = 0, recs = 0;
+    for (const f of readdirSync(dir).filter((x) => DOSSIER_FILE.test(x))) {
+      let d: Parameters<typeof outsideShapes>[0] & { key: string; name: { scientific: string } };
+      try { d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')); } catch { continue; }
+      read++;
+      const n = outsideShapes(d, regions);
+      // And a page holding a record at a default point (`--list-default-points`, run first): one re-derivation for both rules.
+      const atDefault = defaults ? ((d as { occurrences?: { open?: Array<[number, number]> } }).occurrences?.open ?? []).filter((r) => defaults.has(pointKey(r[0], r[1]))).length : 0;
+      if (n || atDefault) { lines.push(`${d.key} ${d.name.scientific}\t${[n ? `${n} open record${n === 1 ? '' : 's'} inside the native regions' boxes and outside their shapes` : '', atDefault ? `${atDefault} at a default point` : ''].filter(Boolean).join('; ')}`); recs += n; }
+    }
+    if (lines.length) writeFileSync('rebuild-shapes.txt', lines.join('\n') + '\n');
+    else if (existsSync('rebuild-shapes.txt')) unlinkSync('rebuild-shapes.txt');
+    console.log(`  ${read} dossiers read; ${lines.length} pages with an open record outside every native region's shape (${recs} records) or at a default point${lines.length ? ' → rebuild-shapes.txt; run --keys rebuild-shapes.txt --offline --grid climate --bulk bulk' : ''}`);
+    return;
+  }
+  // Round eighty (A): the pages to build again for Wikidata (not answered, or refused by a label), for --keys.
+  if (args.includes('--list-wikidata-retry')) {
+    const lines = wikidataRetryList(diskStore());
+    if (lines.length) writeFileSync('rebuild-wd-retry.txt', lines.join('\n') + '\n');
+    else if (existsSync('rebuild-wd-retry.txt')) unlinkSync('rebuild-wd-retry.txt');
+    console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} to build again for Wikidata → rebuild-wd-retry.txt${lines.length ? '; run --keys rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat' : ''}`);
+    return;
+  }
   if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
   if (gridDir) {
@@ -1622,7 +1960,9 @@ async function main() {
     const text = file.endsWith('.json') ? '' : readFileSync(file, 'utf8');
     const listed = isSpeciesList(text) ? jobsFromList(parseSpeciesList(text)) : null;
     const mergedInto = new Map(merges().map((x) => [x.from, x.into]));
-    const fromList = listed?.flatMap((j) => { const g = j.gbifKey ?? gbifOfLine(j.pageId); return g == null ? [] : [{ name: j.name, key: mergedInto.get(g) ?? g }]; }) ?? null;
+    // A key merged into a page without a GBIF key (round eighty, A) is not built: that page reads it, from Kew's file.
+    const intoKew = new Set(merges().filter((x) => x.intoPage).map((x) => x.from));
+    const fromList = listed?.flatMap((j) => { const g = j.gbifKey ?? gbifOfLine(j.pageId); return g == null || intoKew.has(g) ? [] : [{ name: j.name, key: mergedInto.get(g) ?? g }]; }) ?? null;
     // Round seventy-nine (the owner's decision 1; `build-kew.ts`): a species the list gives no GBIF key, with no page on disk
     // under its id that has one, is built from Kew's file by its plant_name_id, never by its name (its GBIF records only under
     // the keys Kew's synonymy gives it, round seventy-nine).
@@ -1648,6 +1988,11 @@ async function main() {
     // is by GBIF key, so an id is read as the GBIF key of the page on disk under it, and one no page has is said.
     const unknownIds: string[] = [];
     const parsed = (fromList ?? lines.map((line) => {
+      // "k<plant_name_id> -" (round eighty, A): the page has no GBIF key now (the list refused the key it had, as a key
+      // GBIF files in another order than Kew's genus: Xanthoceras sorbifolium's 9479204), so it is built again from Kew's
+      // file by its id, whatever key its dossier on disk has.
+      const nokey = /^(k[1-9]\d*)\s+-\s*(?:\t.*)?$/.exec(line);
+      if (nokey) { kewWanted.set(nokey[1].slice(1), readKewPrev(nokey[1] as PageId)?.name.scientific ?? nokey[1]); return null; }
       const m = /^([kg]?\d+)\s+([^\t]+)/.exec(line);
       const g = m ? gbifOfLine(m[1]) : null;
       if (m && g != null) return { name: m[2].trim(), key: g };
@@ -1730,7 +2075,11 @@ async function main() {
       // download's sample: they are marked not asked, and `--fill gbif --bulk bulk` takes them once media.zip is there.
       if (loaded?.format === 'sql' && !loaded.media && !skip.includes('gbif.media')) { skip.push('gbif.media'); console.log(`  the SQL download carries no photographs and ${bulkDir}/media.zip is not there: GBIF's photographs are not asked (npm run bulk -- gbif-media fetches them; then --fill gbif --bulk ${bulkDir})`); }
       const apiPath = readApiPath(bulkDir);
-      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath, covered });
+      // The page's own Kew entry for a key (round eighty, A): the list's plant_name_id, else the page on disk under k<id>.
+      const listKew = new Map((listed ?? []).flatMap((j) => (j.gbifKey != null && j.kewId ? [[j.gbifKey, j.kewId] as const] : [])));
+      const entryOf = (key: number) => listKew.get(key) ?? (() => { const id = idOfGbif(key); return id?.startsWith('k') ? id.slice(1) : undefined; })();
+      entryOfKey = entryOf;
+      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath, covered, entryOf });
       mediaFromFiles = !!loaded?.media;
       // Kew's names below species, so an iNaturalist observation of a taxon Kew places under another species is not taken (round seventy-two, C1).
       // Read for iNaturalist's observations only; a build that skips iNaturalist (the full build's --skip inat) does not hold
@@ -1778,10 +2127,14 @@ async function main() {
   };
   // The reference's names, so a slip in a Commons title is read as the Worker reads it (round seventy, a need of C; C1).
   const held = onDisk.length ? heldNamesOf(onDisk) : null;
+  // The reference's genera, so a Wikidata name that is a genus alone is refused for a page without a GBIF key (round eighty).
+  const kewGenera = generaOf([...onDisk.map((e) => e.name), ...[...kewWanted.values()].map((n) => canonicalOfKew(n))]);
   // The previous build of each species, read once a species, and the index's names: what its build is given (round sixty-nine; triage-68 M5, M6).
   const prevOf = (key?: number) => (key ? readPrev(key) : null);
   if (onDisk.length) console.log(`  ${onDisk.length} dossiers already on disk${force ? ' (rebuilding all)' : ' (clean ones kept)'}`);
   let built = 0, keptN = 0;
+  // Round eighty (agent I): the pages this build left without an iNaturalist taxon, for the fill to ask by name; said at the end.
+  let inatLeft = 0;
   const thisRun = new Map<PageId, IndexEntry>();
   const drops: string[] = [];
   // What the institution rule left out across this build, and the climate beside the build before (round seventy-nine, Q).
@@ -1803,7 +2156,7 @@ async function main() {
       if (j.kew) {
         // Round seventy-nine: from Kew's file, by its plant_name_id (`build-kew.ts`); GBIF's records are not asked.
         // Round seventy-nine (the owner's decision on K's offer): the records under the keys Kew's synonymy gives it.
-        r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), climate, places });
+        r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined, climate, places, regions, defaults, genera: kewGenera });
       } else if (offline && !prevTaxon) {
         say(`✗ ${j.name}: no previous dossier to carry the name from; build it online first`);
         continue;
@@ -1814,7 +2167,7 @@ async function main() {
         climate,
         skip,
         mediaFirst: mediaFromFiles,
-        taxon: prevTaxon ? { key: prevTaxon.ids.gbif ?? j.key!, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], species: prevTaxon.upstream?.['gbif.species'], builtOn: prevTaxon.built } : undefined,
+        taxon: prevTaxon ? { key: prevTaxon.ids.gbif ?? j.key!, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], species: prevTaxon.upstream?.['gbif.species'], builtOn: prevTaxon.built, ...(prevTaxon.upstream?.['wikidata.names'] ? { wdNames: prevTaxon.upstream['wikidata.names'] } : {}) } : undefined,
         // Kept when Wikidata does not answer, with the day they were read (round sixty-eight; round sixty-nine, triage-68 M5).
         ...prevIdsFor(prevOf(j.key)),
         heldElsewhere: heldFor(j),
@@ -1828,7 +2181,11 @@ async function main() {
         // page is `g<key>` until `--index` gives it the id by the rule.
         pageIdOf: idOfGbif,
         // The botanic gardens, herbaria and zoos (round seventy-nine, Q).
-        places
+        places,
+        regions,
+        defaults,
+        // A page of the list with a Kew id is matched on Wikidata by its identifiers alone (round eighty, A).
+        kewEntryOf: entryOfKey
       });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
@@ -1880,6 +2237,12 @@ async function main() {
         d.summary = prev.summary;
         return true;
       });
+      // Round eighty (agent I): a build that skips iNaturalist keeps the id the page had, never drops it: 475 pages lost their
+      // id to round eighty's build, which left iNaturalist to the fill (`--skip inat`) and took only the id each Wikidata
+      // item gave. The previous id stands where this build has none, or the same, or where the previous was checked (its
+      // `inat.taxon` row "ok") and the item's is not; its taxon row and both photograph rows (and their photographs, below)
+      // are carried with it, so the fill reads the page where it was.
+      const inatKept = keptInatId(prev, d, skip.includes('inat') && !rederive);
       // Photographs are carried per source: a refused iNat does not discard this build's Commons photographs, nor the reverse.
       const photoSrc: Record<string, (p: { src: string; captive?: boolean }) => boolean> = {
         'inat.photos.wild': (p) => p.src === 'inat' && !p.captive,
@@ -1901,6 +2264,8 @@ async function main() {
           }
           return true;
         });
+      // The rows the photographs above do not carry (a taxon row, a set answered with none) go with the id kept.
+      if (inatKept) carryInatRows(prev, d);
       // The range, the records, the marker and the climate are one derivation and are carried as one snapshot: when the
       // occurrence or distribution source refused this build, the previous build's answer (same dossier version) stands,
       // with every one of those upstream records saying so. Never piecemeal: a range from one build and records from another
@@ -1960,6 +2325,7 @@ async function main() {
     say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
     thisRun.set(d.key, indexEntry(d, held));
     built++;
+    if (skip.includes('inat') && !d.ids.inat) inatLeft++;
     if (upload) execSync(`npx wrangler r2 object put cultifolio/${dossierPath(d.key)} --file="${path}" --content-type=application/json`, { stdio: 'inherit' });
   }
   // A build given Kew's files reads Kew's names for what it built, as `--fill kew-names` does (round seventy-two, A); the
@@ -1979,6 +2345,7 @@ async function main() {
   writeFileSync(`${idxDir}/report.txt`, report.join('\n'));
   sayUnreadable();
   console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)`);
+  if (inatLeft) console.log(`  ${inatLeft} of the pages built have no iNaturalist taxon: this build left iNaturalist to the daily fill (--skip inat), which asks each by name (their rows say so)`);
   if (kewRowsStats) console.log(`Kew's names: ${kewRowsStats.answered} questions answered from Kew's file, ${kewRowsStats.through} of genera not loaded asked of GBIF's copy`);
   if (batch) console.log(`batched: ${batch.stats.sparql} Wikidata queries, ${batch.stats.entities} item reads and ${batch.stats.extracts} Wikipedia reads held ${batch.stats.held} answers, of which the build read ${batch.stats.served}`);
   if (places && instEffect.records) console.log(instEffect.words(places.size, places.radiusM));

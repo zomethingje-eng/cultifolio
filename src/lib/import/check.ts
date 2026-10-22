@@ -22,7 +22,7 @@ export type NameCheck =
   | { s: 'hybrid' };
 
 /** An entry as the check reads it: `gbif` is the page's GBIF key (round seventy-eight), what a plant files. */
-type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[] };
+type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[]; kew?: string[] };
 export interface Lookup {
   entries(slugs: string[]): Promise<Map<string, Entry> | null>;
   search(q: string): Promise<Entry[] | { limited: number } | null>;
@@ -93,7 +93,8 @@ export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry
   const exact = hits.find((h) => h.name.toLowerCase() === want);
   if (exact) return { s: 'found', slug: exact.slug, refName: exact.name, key: rankSpecies ? (exact.gbif ?? null) : null };
   // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
-  const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? [])].some((n) => n.toLowerCase() === want));
+  // And Kew's older names, which the search reads too (round eighty; review-d 5).
+  const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].some((n) => n.toLowerCase() === want));
   if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name' };
   const genus = want.split(' ')[0];
   const close = hits.find((h) => h.name.toLowerCase().split(' ')[0] === genus && editDistance(h.name.toLowerCase(), want) <= 2);

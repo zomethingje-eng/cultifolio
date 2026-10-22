@@ -1,0 +1,35 @@
+# Round eighty, agent A: the repair of the live pages that round eighty's rules of the reference change. Run it once the
+# full build's plan (scripts/corpus-plan-full.txt) has finished, every step done ("every step is done" in corpus-step.log):
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-r80-repair.txt
+# Before then, do not: the corpus step keeps one plan's record at a time, and a run of this plan would put the full
+# plan's record aside. While the full plan is unfinished, type its steps by hand instead (docs/DEPLOY.md, "Round eighty:
+# the reference's data (agent A)"): the same lines, each as `npm run dossier -- …`, between the cultivated fill and the
+# full plan's --index, whose index and upload then carry the repaired pages.
+# Disk: no new copy (the full plan's backup stands); the rebuilt dossiers replace their files in place.
+#
+# The default points (a dataset's centroid; src/lib/dossier/default-points.ts) from every dossier on disk, offline, a
+# minute or two: scripts/default-points.txt, and the pages holding one.
+dossier --list-default-points
+# The pages with an open record outside every native region's shape (scripts/tdwg3-shapes.json) or at a default point:
+# rebuild-shapes.txt, offline, a minute (round seventy-seven's corpus: 2,300 of 8,947 pages, so about 12,000 of the live
+# 48,361).
+dossier --list-range-shapes
+# The pages Wikidata did not answer at the build (the full build's 22), and the pages with a Kew id whose item a label
+# refused (Datura innoxia): rebuild-wd-retry.txt, offline, seconds.
+dossier --list-wikidata-retry
+# The pages changed by name (scripts/r80-repair-keys.txt: 13 pages), online: GBIF's species records, Wikidata, Wikipedia
+# and Commons asked (about 2 s a page), iNaturalist's photographs carried; plus reading the download first (about ten
+# minutes for the SQL download, about an hour for the Darwin Core Archive).
+dossier --keys scripts/r80-repair-keys.txt --grid climate --bulk bulk --skip inat
+if-exists rebuild-wd-retry.txt dossier --keys rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat
+# The range and the default points re-derived offline from the download and the climate grid, asking no source: about
+# 0.4 s a page (round seventy-seven's offline re-derivation, 8,947 pages in about an hour), so about 80 minutes, plus
+# reading the download, plus NASA POWER for a typical cell not yet cached.
+if-exists rebuild-shapes.txt dossier --keys rebuild-shapes.txt --offline --grid climate --bulk bulk
+# The owner's merges: the three pages that left (Ceropegia cereiformis, Ceropegia nubica, Echeveria peacockii) deleted
+# once their kept pages record their keys and old addresses.
+dossier --prune-followed
+dossier --index
+review corpus-step.log: the four listings' counts; the --keys runs' "<n> built" and drops.txt if written (a page that lost records outside its shapes is expected; a page that lost its photographs or identifiers is not); "3 dossiers of pages merged into another deleted"; the --index step's "index: <n> species", three fewer than before; its old addresses line naming ceropegia-cereiformis, ceropegia-nubica and echeveria-peacockii.
+upload
+live-check

@@ -1,0 +1,14 @@
+  iNaturalist's wild photographs from its open data of 2026-09-27 (/tmp/claude-0/rev79/P-scratch/full-more.jsonl), in place of the API
+50 dossiers on disk; 50 without iNaturalist's photographs (20 of them for their 24 most-voted wild observations: the open data of 2026-09-27 holds more than 24 of their taxon) (28 with a CC0 photograph whose credit names no one, read again); at most 300 requests to iNaturalist today, 0 already made, one every 2 s, the observation searches several taxa a request; the wild set from the open data of 2026-09-27 where it holds the taxon and 24 observations of it or fewer, else the API's most voted…
+  first, the 49 iNaturalist ids no build or fill has checked, checked with iNaturalist (thirty a request), an inactive one followed to its current taxon by the build's rule…
+  49 ids checked: 0 inactive ids followed to their current taxon (or taxa given back), 0 whose taxon is not this species' (dropped, the name asked), 0 inactive with no single current taxon (asked by name)
+
+  50 filled; 9 wild sets read from iNaturalist's open data, 20 asked of its API for the 24 most voted (the open data holds more than 24); 8 batched searches answered 70 sets, 0 asked alone. Every dossier has been asked for its photographs.
+Reading Kew's names below species, for iNaturalist's descendant taxa…
+  9 pages hold a name below species that Kew places under another species and an iNaturalist taxon; 0 asked iNaturalist now, 9 read before; 0 took in such a taxon and were asked again.
+  page ids: 50 by Kew's plant_name_id, 0 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  50 dossiers changed since their last stamp (or never stamped): the day each last changed written into the file, for the sitemap
+  nearest habitat climates for 29 species (0.0 s)
+  index: 50 species
+  photograph judgement: 35 Commons files on 50 pages read with the reference's names; 0 dossiers written anew
+  corpus e3c9bc1da8623f00: 50 species in 32 buckets, 64 posting files, 401 search key files (0.6 MB) → static/s/v3/p/ (99 files written, 688 already on disk under their hash, 96 of older corpora deleted); manifest.json names it

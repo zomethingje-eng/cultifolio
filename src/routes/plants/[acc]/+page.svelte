@@ -1,6 +1,6 @@
 <script lang="ts">
   import { climateReason } from '$dossier/range-via';
-  import { noGbif, recordsUnchecked, NO_GBIF_SENTENCE, NO_GBIF_WHY } from '$core/no-gbif';
+  import { noGbif, recordsUnchecked, keylessPlantNotice, NO_GBIF_SENTENCE } from '$core/no-gbif';
   import { units } from '$lib/ui/units.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
@@ -195,7 +195,7 @@
     const n = habitat.night;
     const night = `coldest month's mean nightly low at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : '';
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : habitat.exStatus === 'lapse' ? "; the daily extremes were read at a weather cell whose ground is too far above or below the typical spot to correct for, and are not used, so no floor is read (the species page says why)" : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this space` };
     return { here: cond.floorC, text: `this space is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
@@ -598,7 +598,8 @@
 {#if a && dossier && noGbif(dossier) && a.taxonKey != null}
   <!-- The species page has no GBIF key (round seventy-nine), so this plant's key is compared with none: the species is the
        one of its name, and the line says so rather than leave the key unexplained. -->
-  <div class="notice" id="key-no-page">The reference holds {a.taxonName} without a GBIF key: {NO_GBIF_WHY}. This plant records GBIF key {a.taxonKey}, which no species page holds; the species shown here is the reference's page of that name.</div>
+  <!-- A page that reads GBIF's records under Kew's keys says so, and whether this plant's key is one (round eighty, A). -->
+  <div class="notice" id="key-no-page">{keylessPlantNotice(dossier, a.taxonName, a.taxonKey)}</div>
 {/if}
 {#if a && sharedWith.length}
   <!-- The other plant is a link by its identity: by number it opened whichever loaded first (round sixty). -->
@@ -698,7 +699,7 @@
 
   {#if editing}
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
-      <label class="wide"><span>Species</span><SpeciesPicker reserve bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
+      <label class="wide"><span>Species</span><SpeciesPicker reserve addLabel="Save" bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
       <!-- "this version of the app", not "this build", here and under Provenance (round fifty-eight; the accessibility review). -->
       <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
@@ -818,7 +819,7 @@
           {@const ph = row.ph}
           <button class="tlrow tlphoto" type="button" onclick={() => openPhoto(ph)}>
             <span class="d">{ph.d}</span>
-            <span class="t"><span class="thumb"><PhotoImg id={ph.id} alt="" loading="lazy" /></span>Photographed{#if ph.caption}<span class="x2"> · {ph.caption}</span>{/if}</span>
+            <span class="t"><span class="thumb"><PhotoImg id={ph.id} alt="" loading="lazy" /></span>Photographed{#if ph.caption}<span class="x2">{' · '}{ph.caption}</span>{/if}</span>
             <span class="x">{ph.dFrom === 'exif' ? 'camera date' : ''}</span>
           </button>
         {/if}
@@ -941,6 +942,10 @@
   .hero { margin-top: 14px; }
   /* Without a picture the card does not overlap a hero that is not there. */
   .idcard.flat { margin-top: 14px; }
+  /* With the photographs' strip between the hero and the card (two photographs or more), the card overlaps nothing: its
+     negative margin, for overlapping the hero, put it over the bottom 26 px of every thumbnail and its date on a phone, and
+     a tap there landed on the card (round eighty; the phone review's 2). */
+  :global(.ptl) + .idcard { margin-top: 14px; }
   .idcard.flat .who { flex-basis: 260px; }
   .vern .kind { font-family: var(--ui); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--cool); }
   .vern .place { font-weight: 600; color: var(--ink); }
@@ -1064,5 +1069,7 @@
   .chooser { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
   .chooser .azrow { grid-template-columns: minmax(0, 1fr); min-height: 56px; }
   .chooser .nm { overflow-wrap: break-word; word-break: normal; }
-  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: var(--fs-2xl); } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
+  /* The photograph fills the 260 px box on a phone: the theme's `.hero img { max-height: 150px }`, a species page's rule, made
+     it a 150 px slice over a 110 px band of black (round eighty; the phone review's 4). */
+  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; max-height: none; } .hero .spthumb { max-height: none; } :global(.ptl) + .idcard { margin-top: 10px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: var(--fs-2xl); } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

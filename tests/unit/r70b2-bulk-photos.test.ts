@@ -46,7 +46,8 @@ describe('a species the download was not asked for is asked of GBIF', () => {
   });
   it('the script passes the download\'s keys, and loads a species built under a name the download did not use by its key', () => {
     const src = readFileSync('scripts/build-dossiers.ts', 'utf8');
-    expect(src).toMatch(/bulkFetcher\(f, \{ wcvp: wcvp \?\? undefined, occ: loaded\?\.occ, media: loaded\?\.media \?\? undefined, apiPath, covered \}\)/);
+    // Round eighty (A): and the page's own Kew entry for a key (`entryOf`).
+    expect(src).toMatch(/bulkFetcher\(f, \{ wcvp: wcvp \?\? undefined, occ: loaded\?\.occ, media: loaded\?\.media \?\? undefined, apiPath, covered, entryOf \}\)/);
     expect(src).toMatch(/loadOccurrences\(bulkDir, 2000, wanted\)/);
   });
 });

@@ -20,6 +20,11 @@ export type Sheet = {
    * Absent for a page without one (round seventy-nine; `$core/no-gbif`): its climate is then not checked, for that reason.
    */
   gbif?: number;
+  /**
+   * A page without a GBIF key that reads GBIF's records under the keys Kew's synonymy gives it: those keys (round eighty,
+   * A), so a plant recording one of them is told its records are on this page. Absent on any other page.
+   */
+  keys?: number[];
   slug: string;
   name: { scientific: string; family?: string };
   thumb?: string;
@@ -40,6 +45,7 @@ export function sheetOf(d: Dossier, thumb?: string, credit?: string): Sheet {
   return {
     key: d.key,
     ...(d.ids.gbif != null ? { gbif: d.ids.gbif } : {}),
+    ...(d.ids.gbif == null && d.occurrences?.keys?.length ? { keys: d.occurrences.keys.map((k) => k.key) } : {}),
     slug: d.slug,
     name: { scientific: d.name.scientific, family: d.name.family },
     thumb,

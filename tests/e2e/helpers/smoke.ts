@@ -23,7 +23,7 @@ export async function addPlant(p: import('@playwright/test').Page) {
   // Either wording of the asked state: Add pressed before the name check answered ("press Add to keep exactly what you
   // typed"), or the check answered first ("Otherwise Add keeps exactly what you typed"). WebKit under load meets the
   // second, which the race did not know, and waited out the test (round seventy-one, the owner's run).
-  const asked = p.locator('.picker .hint', { hasText: /(?:press Add to keep|Add keeps) exactly what you typed/ });
+  const asked = p.locator('.picker .hint', { hasText: /(?:press (?:Add|“Add[^”]*”) to keep|Add keeps) exactly what you typed/ });
   await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
   if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
   await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);

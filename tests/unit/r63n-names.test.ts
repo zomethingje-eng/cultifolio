@@ -63,7 +63,7 @@ describe('N2: a bare genus word is the headline only when there is nothing fulle
   ];
   it('Aloe vera: "Barbados aloe", the best of the longer names; "Aloe" stays among the names', () => {
     // "Aloe vera", the species' own binomial, is set back after "Aloe" (round sixty-seven; triage-66 N3).
-    expect(names(ALOE_VERA, 'Aloe vera')).toEqual({ common: 'Barbados aloe', commons: ['True aloe', 'Curaçao aloe', 'West Indian aloe', 'Medicinal aloe', 'Aloe', 'Aloe vera'] }); // base: "Aloe"
+    expect(names(ALOE_VERA, 'Aloe vera')).toEqual({ common: 'Barbados aloe', commons: ['True aloe', 'Curaçao aloe', 'West Indian aloe', 'Medicinal aloe', 'Aloe'] }); // base: "Aloe"; round eighty (A): the own binomial is not shown
     // Without the corpus's genera (a caller with no index), the species' own genus is still known.
     expect(englishNames(ALOE_VERA, { genus: 'Aloe vera' }).common).toBe('Barbados aloe');
   });

@@ -1,0 +1,18 @@
+{
+ "asked": "iNaturalist species_counts, the wild filters, 2026-10-21",
+ "plantLeafTaxa": 102209,
+ "speciesOver24": 28292,
+ "list": {
+  "species": 48368,
+  "over24ByName": 19218,
+  "over24Estimated": 19620
+ },
+ "corpus": {
+  "pages": 8947,
+  "withId": 7870,
+  "overById": 3027,
+  "overByName": 2965,
+  "overByBoth": 2965
+ },
+ "byNameFindsOfById": 0.9795
+}

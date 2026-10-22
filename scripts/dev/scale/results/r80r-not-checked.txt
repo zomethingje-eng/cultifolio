@@ -1,0 +1,38 @@
+Round eighty (R): the 912 species without a GBIF key that read no key under scripts/extra-keys-kew.txt, and why.
+Made 2026-10-21 by scripts/dev/scale/r80r-why-unkeyed.ts (the rule traced) and scripts/kew-extra-keys.ts (noKeyFor),
+from scripts/species-list.txt, Kew's wcvp_names.csv of 2026-06-04 and GBIF's backbone export (round 75's simple.txt.gz).
+
+By noKeyFor (scripts/extra-keys-kew-none.txt), 912 pages:
+  lumped        647  GBIF files a name the rule would read as this plant under another page of the reference
+                     (638 of them the plant's own name or one of its type; 9 only names of another type)
+                     of the 647: 18 under a page with no Kew id (11 of those are the same plant twice: below)
+  none          211  the backbone holds no usage of any of Kew's names for the plant
+  other-type     45  only heterotypic names or taxa below (39), with pro parte synonyms (5) or a name read to two plants (1)
+  other-author    8  the words only by another author (6 of the 8 are filed by GBIF under another page anyway)
+  other           1  an autonym GBIF does not place (Dinteranthus wilmotianus subsp. wilmotianus)
+
+No class has an unambiguous route to records under the rule as decided:
+  - lumped: the records are already on the other page; giving them here too would put one record on two pages.
+  - none: there is no key; a name match is refused (rule 3).
+  - other-type, pro parte: refused by the owner's decision of round 73 and by GBIF's own word.
+  - other-author: only by an author equivalence Kew's file does not state; and 6 of 8 are lumped as well.
+
+The option not taken (an owner's decision): read a lumped page's own-type names' records here and leave them out of
+the other page (record by record, by the record's own taxon key, as `except` does). GBIF's count API, the download's
+filter, one request a second, 2026-10-21 (scripts/dev/scale/r79m-kew-key-counts.mjs on the 1,565 own-type keys):
+  keys 1,565 on 638 pages; 884 keys hold records; 2 hold more than 100,000
+  pages that would gain records: 509 (118 with 1,000 or more; 387 with 12 or more); median 33
+  records: 958,969 (union), of which 287,988 human observations with images
+  download growth: none. GBIF's taxonKey filter on the other page's key already holds them
+    (Echinocereus viridiflorus 3084127: 6,898; with E. canus's 11071043, 13 records, asked together: 6,898)
+  largest: Dactylorhiza fuchsii (k55291) under D. maculata, 311,790 records under "D. maculata subsp. fuchsii"
+    and 121,298 under "D. fuchsii (Druce) Soó"; Heracleum sibiricum (k2846150) under H. sphondylium, 48,828 + 22,919.
+
+Same plant twice in the list (a legacy page with no Kew id whose own range reads this keyless page's Kew entry):
+  11144626 Ceropegia ananthapuramensis / k533838; 9584756 Ceropegia hadramautica / k507335 Huernia hadhramautica;
+  7221866 Ceropegia linophylla / k502801; 9449818 Ceropegia marnierana / k507384 Huernia marnieriana;
+  3702919 Conophytum tomasii / k2734941 C. hanae; 4052359 Cyphostemma degraerii / k2752709 C. degraeri;
+  7515664 Dorstenia poinsettifolia / k2775831; 4092242 Handroanthus impetiginosum / k317146;
+  7410371 Harpephyllum caffrum / k2839757 H. afrum; 8005942 Monsonia lheritieri / k2588843 Sarcocaulon spinosum;
+  7876017 Tylecodon cacaliodes / k2434528 T. cacalioides. Likely too, not proven (no via in round 77's dossier):
+  7281739 Bisnaga hamatacantha / k2808164 Ferocactus hamatacanthus; 9263110 Ceropegia macrocarpa / k507376 Huernia macrocarpa.

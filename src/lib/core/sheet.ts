@@ -57,7 +57,7 @@ export interface SheetInput {
   p90?: Pick<Month, 'tmin' | 'dli'>[] | null;
   extremes?: Extremes | null;
   /** Why there are no extremes, when there are none: 'refused' (the source did not answer when the dossier was built) is said as not checked, never as none on file (round sixteen, 7). */
-  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null;
+  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | 'lapse' | null;
   /** Habitat latitude (the map marker's), for the hemisphere. */
   lat?: number | null;
   /** The grower's latitude, if known: the one-sentence shorts print months for that hemisphere. */
@@ -262,16 +262,16 @@ export interface ColdFloor {
 }
 /** Why there is no daily extremes series, as its own sentence: a refusal is "not checked", never an absence (rule 2). */
 const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
-  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : 'No daily extremes are on file.';
+  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : exStatus === 'lapse' ? "The daily extremes were read at a weather cell whose ground is too far above or below the typical spot to correct for, and are not used." : 'No daily extremes are on file.';
 /**
  * Why a page, compare or the share card has no floor to print, in the few words the glance row gives beside the mean
  * nightly low (rule 2: a refusal is "not checked", a skip "not asked for"). One wording for every surface (round
  * sixty-two; visitor-words 11: the card gave no reason at all).
  */
 export const extremesWhyTag = (exStatus?: string | null): string =>
-  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : 'no extremes series';
+  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : exStatus === 'lapse' ? "extremes not used (the weather cell's ground is too far off)" : 'no extremes series';
 const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
-  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : 'no daily extremes on file';
+  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'lapse' ? "the daily extremes were read at a weather cell whose ground is too far above or below the typical spot, and are not used" : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 /**
  * Why there is no habitat figure at all, by the dossier's climate status: a source that did not answer, or a build still to
@@ -374,7 +374,9 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
       // What the rule reads: the rain is spread, so no short rainy season; eight wet months can still be a long one (round sixty; the round forty-two review).
       s = `The rain rule reads no short rainy season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
       short = `Rain rule: rain spread over ${year.growMonths.length} months, so no short rainy season (${forYou}).`;
-      lead = `Rain spread over ${year.growMonths.length} months: no short rainy season; ${RAIN(year.annualMm)} in the median year.`;
+      // Not a second year's total beside the glance card's (round eighty; the desktop review's 12: "51.6 in" on the card and
+      // "51.9 in in the median year" here, and "12 months of 25 mm" against "spread over 8 months"): the months the rule counts, said as what they are.
+      lead = `Rain spread: 70% of the median year's rain takes ${year.growMonths.length} months, so no short rainy season.`;
     } else if (year.flat) {
       s = `The rain rule reads a sharp season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
       short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;

@@ -38,6 +38,10 @@
   "slug": "hesperocyparis-lusitanica",
   "name": "Hesperocyparis lusitanica",
   "family": "Cupressaceae",
+  "common": "Mexican cypress",
+  "commons": [
+   "Cedar of Goa"
+  ],
   "origin": [
    "Mexico Central",
    "Mexico Northeast",

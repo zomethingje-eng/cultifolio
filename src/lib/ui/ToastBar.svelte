@@ -77,7 +77,10 @@
 <style>
   .toastregion { margin: 0; padding: 0; }
   .toast.through { pointer-events: none; }
-  .toast { position: fixed; left: 50%; top: calc(52px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 80; background: var(--ink); color: var(--bg); font-family: var(--ui); font-size: var(--fs-md); font-weight: 600; padding: 9px 16px; border-radius: 18px; box-shadow: var(--sh2); animation: toastin 0.18s ease-out; max-width: min(560px, calc(100vw - 32px)); width: max-content; overflow-wrap: anywhere; line-height: 1.35; } /* wraps rather than cutting the sentence off (round fifty-eight) */
+  /* At the window's foot at every width: under the top bar it sat over the page's own heading, the plant's number and name
+     on a new plant's page and the backup line on the add form (round eighty; the desktop review's 9). Above the select bar
+     by its measured place, and above the compare tray when one is shown. */
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 80; background: var(--ink); color: var(--bg); font-family: var(--ui); font-size: var(--fs-md); font-weight: 600; padding: 9px 16px; border-radius: 18px; box-shadow: var(--sh2); animation: toastin 0.18s ease-out; max-width: min(560px, calc(100vw - 32px)); width: max-content; overflow-wrap: anywhere; line-height: 1.35; } /* wraps rather than cutting the sentence off (round fifty-eight) */
   .toast { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   /* Nothing to say: folded to nothing, its live region kept in the page for the next sentence (round sixty-one). */
   .toast.quiet { width: 0; height: 0; padding: 0; border: 0; box-shadow: none; animation: none; pointer-events: none; }
@@ -88,6 +91,8 @@
   /* On a phone the line sits just above the tab bar, where the thumb that pressed the button is, not over the heading (round forty-nine, 3). */
   /* On the add form, above its pinned bar by the bar's measured height, one row of buttons or two: at 60 px fixed it
      covered "Save and add another" once the buttons wrapped (round sixty; the grower review, 3). */
+  @media (min-width: 641px) { :global(body:has(.tray)) .toast { bottom: calc(84px + env(safe-area-inset-bottom)); } }
+  :global(body.grow-selecting) .toast { bottom: var(--sel-lift, calc(var(--sel-h, 120px) + 16px + env(safe-area-inset-bottom))); }
   @media (max-width: 640px) { .toast { top: auto; bottom: calc(66px + env(safe-area-inset-bottom)); } :global(body.stickyacts) .toast { bottom: calc(56px + var(--acts-h, 70px) + 10px + env(safe-area-inset-bottom)); } }
   /* Above select mode's bar by its measured height, as above the add form's: at 320 to 375 px the Undo toast covered the
      Archive button focus had just moved to (round sixty-two; the accessibility review, 3). By the bar's measured place
@@ -101,6 +106,6 @@
   /* Opaque from its first frame: the fade-in drew the toast see-through over the select bar for 0.18 s, its words over the
      bar's in forced colours (round sixty-two; the outside review's A40). */
   @media (forced-colors: active) { .toast { animation: none; opacity: 1; background: Canvas; } }
-  @keyframes toastin { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes toastin { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
   @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 </style>

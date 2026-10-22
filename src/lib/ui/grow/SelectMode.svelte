@@ -199,7 +199,7 @@
 {#if on}
   <ul class="selrows" aria-label="Plants to select">
     {#each plants as a (a.id)}
-      <li><label class="selrow"><input type="checkbox" checked={picked.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{accNo(a)}</span> <SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}{#if a.locationId}<span class="muted where"> · {collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</label></li>
+      <li><label class="selrow"><input type="checkbox" checked={picked.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{accNo(a)}</span> <SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}{#if a.locationId}<span class="muted where">{' · '}{collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</label></li>
     {/each}
   </ul>
   <!-- A group, not a toolbar: a toolbar promises the arrow keys, and each button here is its own Tab stop (round sixty-one; the accessibility review, 11). -->

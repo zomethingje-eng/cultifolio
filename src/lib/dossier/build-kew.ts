@@ -21,6 +21,9 @@
  * (rule 2), never "none"; the climate is `pending` with that reason, and the pages say it as not checked. Nor are GBIF's
  * species record, synonyms or common names asked: the names are Kew's.
  *
+ * Its English common names (round eighty, the owner's decision) are its Wikidata item's taxon common names (P1843), read
+ * from the item this route takes, by the rule of `wikidata-names.ts`, and said as Wikidata's (`upstream['wikidata.names']`).
+ *
  * Except (round seventy-nine; the owner's decision on K's offer): where Kew's synonymy gives the species GBIF keys of its
  * own (`scripts/extra-keys-kew.txt`, round seventy-three's rule: a GBIF usage whose name and author Kew's file holds as
  * this plant, of its entry's own type, and that no other page of the reference holds or is filed under), the records
@@ -37,19 +40,20 @@ import * as commons from './sources/commons';
 import { LITERATURE_OFF } from './sources/openalex';
 import { slugify } from '$core/names';
 import { kewPage } from '$core/page-id';
-import { NO_GBIF_WHY, NO_GBIF_CLIMATE } from '$core/no-gbif';
+import { NO_GBIF_WHY, NO_GBIF_CLIMATE, noKeyWhy, uncheckedClimate, type Unread } from '$core/no-gbif';
 import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, type OwnNames } from './own-names';
 import { canonicalOfKew } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, extraOccurrences, extraKeyWords, noClimate, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, defaultWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
-import type { ExtraKey } from './extra-keys';
+import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
 import { dedupePhotos } from './dedupe';
-import { DOSSIER_V, parseDossier, type Dossier, type Photo, type Upstream } from './schema';
+import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier, type Photo, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
 import type { KewInfra } from './kew-infra';
+import { statementsOfEntity, wikidataNames, wdNamesRecord, wdNamesNoItem, WD_NAMES, type WdNameStatement } from './wikidata-names';
 
 /** One species of Kew's file as this route reads it (`scripts/kew-species-load.ts` gives it). */
 export interface KewSpecies {
@@ -89,14 +93,34 @@ export interface KewBuildOptions {
   kewInfra?: KewInfra;
   /** The GBIF keys Kew's synonymy gives this species (`scripts/extra-keys-kew.txt`, round seventy-nine): their records are read. */
   extraKeys?: readonly ExtraKey[];
+  /**
+   * Why the species reads no key, when Kew's synonymy gives it none (round eighty; `scripts/extra-keys-kew-none.txt`), and
+   * the id here of each page GBIF files its names under: the page then says that reason, not the general one.
+   */
+  noKey?: { line: NoKeyLine; pageOf?: (gbifKey: number) => string | undefined };
   /** The habitat climate's grid, as `BuildOptions.climate`. */
   climate?: ClimateProvider;
   /** The botanic gardens, herbaria and zoos, as `BuildOptions.places`. */
   places?: PlaceIndex;
+  /** The default points (round eighty, A), as for a page with a GBIF key. */
+  defaults?: ReadonlySet<string>;
+  /** The regions' shapes (round eighty, A), as for a page with a GBIF key. */
+  regions?: import('./tdwg-shapes').RegionTester;
+  /** The reference's genera, in lower case (`generaOf`): a Wikidata name that is one of them alone is refused (round eighty). */
+  genera?: ReadonlySet<string>;
 }
 
 /** What a page without a GBIF key says of GBIF's records it read under the keys Kew's synonymy gives it. */
 export const KEW_KEYS_WORDS = "this species has no GBIF key of its own; its records are read under GBIF's keys for the names Kew's file holds as this plant, never by a name matched";
+
+/**
+ * What a page that reads no key records of why (round eighty): `occurrences.unread`, its words `noKeyWhy`'s, each page GBIF
+ * files its names under named by its name and its id here. Built and filled (`--fill kew-why`) alike.
+ */
+export function unreadOf(line: NoKeyLine, pageOf?: (gbifKey: number) => string | undefined): Unread {
+  const under = line.kind === 'lumped' ? (line.under ?? []).map((h) => { const page = pageOf?.(h.key); return { key: h.key, name: h.name ?? `GBIF key ${h.key}`, ...(page ? { page } : {}) }; }) : [];
+  return { kind: line.kind, why: noKeyWhy(line), ...(under.length ? { under } : {}) };
+}
 
 /** "Abelia parvifolia Hemsl.": the entry as a record cites it. */
 export const kewLabel = (k: Pick<KewSpecies, 'name' | 'authors'>) => `${k.name}${k.authors ? ` ${k.authors}` : ''}`;
@@ -110,7 +134,7 @@ export function kewOwnNames(k: Pick<KewSpecies, 'name' | 'synonyms'>, heldElsewh
  * The species' Wikidata item by Kew's identifiers: exactly one taxon item carrying its IPNI or POWO identifier, else
  * none (no item, or two: two is said). A refusal or failure is the answer, so the page says "not checked".
  */
-export async function kewItem(f: JsonFetcher, k: Pick<KewSpecies, 'ipni' | 'powo'>): Promise<SourceResult<wm.CrossIds> & { by?: string }> {
+export async function kewItem(f: JsonFetcher, k: Pick<KewSpecies, 'ipni' | 'powo'>): Promise<SourceResult<wm.CrossIds & { names?: WdNameStatement[] }> & { by?: string }> {
   const ids = { ipni: k.ipni || undefined, powo: k.powo || undefined };
   if (!kewAskable(ids)) return { status: 'none', detail: "Kew's file gives no IPNI or POWO identifier to ask Wikidata by" };
   const r = await f<{ results?: { bindings?: Array<{ v?: { value?: string }; u?: { value?: string }; item?: { value?: string } }> } }>(kewItemUrl(ids), { timeoutMs: 60_000, headers: { accept: 'application/sparql-results+json' } });
@@ -129,7 +153,8 @@ export async function kewItem(f: JsonFetcher, k: Pick<KewSpecies, 'ipni' | 'powo
   // The item's GBIF key is not read: the list found no one GBIF key for this species, and an item's is no better a match.
   const x = wm.crossOf(qs[0], ent);
   delete x.gbif;
-  return { status: 'ok', data: x, detail: `found by ${by}` };
+  // Its English common names (round eighty): the item's P1843 statements, with their ranks and references, from this read.
+  return { status: 'ok', data: { ...x, names: statementsOfEntity(ent as { claims?: Record<string, unknown> }) }, detail: `found by ${by}` };
 }
 
 /**
@@ -173,7 +198,10 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   // GBIF's own records of the species are not asked: there is no one key to ask them by.
   for (const s of ['gbif.species', 'gbif.synonyms', 'gbif.vernacular']) skipped(s, NO_GBIF_WHY);
   const keyList = o.extraKeys ?? [];
-  if (!keyList.length) skipped('gbif.occurrences', NO_GBIF_WHY);
+  // Round eighty: a species Kew's synonymy gives no key says why, for itself (`unreadOf`), else the general reason.
+  const unread = !keyList.length && o.noKey ? unreadOf(o.noKey.line, o.noKey.pageOf) : undefined;
+  const whyNot = unread?.why ?? NO_GBIF_WHY;
+  if (!keyList.length) skipped('gbif.occurrences', whyNot);
   const synonyms = [...new Set(k.synonyms.map((s) => `${canonicalOfKew(s.name)}${s.authors ? ` ${s.authors}` : ''}`))];
   const own = kewOwnNames(k, o.heldElsewhere);
 
@@ -187,8 +215,9 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   const verified = native.length > 0;
   let occurrences: Dossier['occurrences'] = { open: [], nOpenInRange: 0, nRestrictedInRange: 0, nOutsideRange: 0, nVague: 0, rangeTested: false, restrictedShiftKm: null, thin: true, datasets: [] };
   let centroid: Dossier['centroid'] | undefined;
-  let climate: Climate = { status: 'pending', detail: NO_GBIF_CLIMATE };
-  if (!keyList.length) upstream.climate = { status: 'skipped', at: now(), detail: NO_GBIF_CLIMATE };
+  let climate: Climate = { status: 'pending', detail: unread ? uncheckedClimate(whyNot) : NO_GBIF_CLIMATE };
+  if (unread) occurrences.unread = unread;
+  if (!keyList.length) upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else {
     const extra = await extraOccurrences(f, { status: 'none' }, keyList);
     const occ = extra.occ;
@@ -200,7 +229,11 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       upstream['gbif.occurrences'].detail = [KEW_KEYS_WORDS, ...(doi ? [`GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}`] : []), ...extra.keys.map(extraKeyWords)].join('; ');
       if (doi && day && extra.keys.every((x) => x.from === 'download')) upstream['gbif.occurrences'].asOf = day;
     }
-    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places);
+    // By the regions' shapes where the build has them (round eighty, A).
+    const inside = rangeTest(native, o.regions);
+    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places, inside?.test, o.defaults);
+    if (occ.status === 'ok' && r.nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(r.nDefault)].filter(Boolean).join('; ');
+    if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
     if (occ.status === 'ok') {
       const instSaid = o.places ? institutionWords(r.nInstitution, r.institutionKinds, o.places.radiusM) : 'records not tested against botanic gardens, herbaria and zoos: no list of them was given to this build';
       if (instSaid) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, instSaid].filter(Boolean).join('; ');
@@ -225,10 +258,12 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     else if (r.forClimate.length) climate = await (o.climate ?? noClimate).envelope(r.forClimate);
     else if (r.allPts.length) climate = { status: 'none', detail: `${r.allPts.length} in-range record${r.allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
     else climate = { status: 'none', detail: 'no georeferenced record inside the range' };
-    if (climate.status === 'ok' && climate.extremes && climate.landFraction != null && climate.landFraction < 0.5) climate = { ...climate, extremes: undefined, extremesSea: climate.extremes, extremesStatus: 'sea' };
+    // Extremes beyond a lapse correction's reach, or impossible, are set aside too, and the record says why (round eighty, A).
+    const lapseWhy = climate.status === 'ok' && !(climate.landFraction != null && climate.landFraction < 0.5) ? lapseSetAside(climate) : null;
+    climate = setAsideExtremes(climate);
     if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
     else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
-    if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: climate.src.extremes } : {}) };
+    if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' || climate.extremesStatus === 'lapse' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: `${climate.src.extremes}${lapseWhy ? `; not used: ${lapseWhy}` : ''}` } : {}) };
   }
 
   /* ---- 5. Identifiers and the summary ---- */
@@ -236,12 +271,19 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   const links: Record<string, string> = {};
   if (k.ipni) { ids.ipni = k.ipni; links.ipni = `https://www.ipni.org/n/${k.ipni}`; }
   if (k.powo) { ids.powo = `urn:lsid:ipni.org:names:${k.powo}`; links.powo = `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${k.powo}`; }
-  let x: SourceResult<wm.CrossIds> = { status: 'skipped', detail: '' };
+  let x: SourceResult<wm.CrossIds & { names?: WdNameStatement[] }> = { status: 'skipped', detail: '' };
   if (skip('wikidata')) skipped('wikidata');
   else {
     x = await kewItem(f, k);
     mark('wikidata', x);
   }
+  // Its English common names from the item (round eighty; `wikidata-names.ts`): none asked of GBIF, which holds no key for it.
+  let vernacular: Dossier['name']['vernacular'] = [];
+  if (x.status === 'ok') {
+    const r = wikidataNames(x.data.names ?? [], { scientific, synonyms, genera: o.genera, heldElsewhere: o.heldElsewhere });
+    vernacular = r.rows;
+    upstream[WD_NAMES] = wdNamesRecord(x.data.wikidata, r, now());
+  } else upstream[WD_NAMES] = wdNamesNoItem(upstream.wikidata, now());
   let enTitle = scientific;
   if (x.status === 'ok') {
     // Kew's IPNI and POWO numbers stand: they are the page's own, and the item was found by them.
@@ -264,10 +306,10 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   /* ---- 6. Photographs: iNaturalist, then Commons; GBIF's not asked ---- */
   const photos: Photo[] = [];
   if (skip('inat')) {
-    // The item's id is kept unchecked, as a page with a GBIF key keeps it, for `--fill inat` to read.
-    if (!ids.inat) skipped('inat.taxon');
-    skipped('inat.photos.wild');
-    skipped('inat.photos.cultivated');
+    // The item's id is kept unchecked, as a page with a GBIF key keeps it, for `--fill inat` to read; each row says why (round eighty).
+    skipped('inat.taxon', ids.inat ? `not asked: this build left iNaturalist to the daily fill (--fill inat), which checks taxon ${ids.inat}, as Wikidata gives it, by this species' own and Kew's names` : INAT_LEFT_TO_FILL);
+    skipped('inat.photos.wild', INAT_SETS_LEFT);
+    skipped('inat.photos.cultivated', INAT_SETS_LEFT);
   } else {
     const t = await kewInatTaxon(f, { scientific, own, id: ids.inat, heldElsewhere: o.heldElsewhere });
     mark('inat.taxon', t);
@@ -321,7 +363,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       ...(k.genus ? { genus: k.genus } : {}),
       classification: [...(k.family ? [{ rank: 'family', name: k.family }] : []), ...(k.genus ? [{ rank: 'genus', name: k.genus }] : [])],
       synonyms,
-      vernacular: [],
+      vernacular,
       // Kew's names, as `--fill kew-names` writes them: the entry is the page's own, its synonyms Kew's.
       // Its species-rank names, as `kewNames` lists them; none is accepted elsewhere, since Kew files each under this entry.
       kew: { entry: k.id, synonyms: [...new Set(k.synonyms.filter((s) => !s.rank || s.rank === 'Species').map((s) => s.name).filter((n) => canonicalOfKew(n).toLowerCase() !== scientific.toLowerCase()))].sort(), acceptedElsewhere: [], file: k.file ?? '' }
@@ -338,4 +380,42 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     upstream
   };
   return { ok: true, dossier: parseDossier(dossier, o.held) };
+}
+
+/**
+ * `--fill kew-why` (round eighty, R): every stored page without a GBIF key that reads no key says why, for itself, from
+ * `scripts/extra-keys-kew-none.txt` (`unreadOf`): `occurrences.unread`, the record of GBIF's records and the climate's
+ * detail. A page the file does not name says the general reason (`NO_GBIF_WHY`) again. Nothing is asked; a page that reads
+ * keys, or has a GBIF key, is passed by. The same words a build writes, so a rebuild changes nothing of them.
+ */
+export function fillKewWhy(store: { files(): string[]; read<T>(f: string): T; write(f: string, d: unknown): void }, lines: ReadonlyMap<string, NoKeyLine>, pageOf?: (gbifKey: number) => string | undefined): { read: number; changed: number; kinds: Map<string, number>; general: number } {
+  const kinds = new Map<string, number>();
+  let read = 0, changed = 0, general = 0;
+  for (const file of store.files()) {
+    if (!file.startsWith('k')) continue;
+    let d: Dossier;
+    try { d = store.read<Dossier>(file); } catch { continue; }
+    if (d.ids?.gbif != null || d.occurrences?.keys?.length) continue;
+    read++;
+    const line = lines.get(d.key ?? file.replace(/\.json$/, ''));
+    const unread = line ? unreadOf(line, pageOf) : undefined;
+    const why = unread?.why ?? NO_GBIF_WHY;
+    if (unread) kinds.set(unread.kind, (kinds.get(unread.kind) ?? 0) + 1);
+    else general++;
+    const before = JSON.stringify(d);
+    const occ = { ...d.occurrences };
+    if (unread) occ.unread = unread;
+    else delete occ.unread;
+    d.occurrences = occ;
+    const up = d.upstream['gbif.occurrences'];
+    if (up?.status === 'skipped') d.upstream['gbif.occurrences'] = { ...up, detail: why };
+    const climateWhy = unread ? uncheckedClimate(why) : NO_GBIF_CLIMATE;
+    if (d.climate?.status === 'pending') d.climate = { ...d.climate, detail: climateWhy };
+    if (d.upstream.climate?.status === 'skipped') d.upstream.climate = { ...d.upstream.climate, detail: climateWhy };
+    if (JSON.stringify(d) === before) continue;
+    parseDossier(d); // a dossier the schema refuses is not written
+    store.write(file, d);
+    changed++;
+  }
+  return { read, changed, kinds, general };
 }

@@ -37,8 +37,22 @@ const FILES = new Set(files.filter((f) => !dotFile(f)));
  * fetched by the browser only when a name needs them, and the fetch handler caches them then (improvements, 9). The
  * corpus is kept out of `files` by svelte.config.js.
  */
-const isLazyFont = (p: string) => /\.woff2$/.test(p) && !/-latin-(?!ext)/.test(p);
-const PRECACHE = [...build.filter((p) => !isLazyFont(p)), ...FILES, ...SHELLS, '/'];
+// And no `.woff`, in any subset: it is the fallback for browsers without WOFF2, which every browser the app supports has (round eighty).
+const isLazyFont = (p: string) => /\.woff$/.test(p) || (/\.woff2$/.test(p) && !/-latin-(?!ext)/.test(p));
+/**
+ * Only what the pages that work offline need, not the whole build (round eighty; the phone review's 10, the desktop
+ * review's 16: the install was about 170 requests a device, the share image among them). The build files are the ones
+ * the collection's pages, the front page, the offline page, the layout and the error page load, on demand or not, as
+ * the build works them out (scripts/offline-files.mjs, `__OFFLINE_BUILD__`); without that list (a dev server) the whole
+ * build, as before. Of the static files only the tab's icon, the web manifest and the small icon: the share image is for
+ * other sites' link previews, the large icons are read once at install to a home screen, and the maps are a species
+ * page's and the Origin grouping's. Every file left out is still kept the first time a page asks for it (the fetch
+ * handler below), so a species page read online has its scripts and its map offline after.
+ */
+declare const __OFFLINE_BUILD__: string[] | null;
+const OFFLINE_BUILD = typeof __OFFLINE_BUILD__ !== 'undefined' && Array.isArray(__OFFLINE_BUILD__) ? new Set(__OFFLINE_BUILD__) : null;
+const OFFLINE_FILES = new Set(['/favicon.svg', '/manifest.webmanifest', '/icon-192.png']);
+const PRECACHE = [...build.filter((p) => !isLazyFont(p) && (!OFFLINE_BUILD || OFFLINE_BUILD.has(p))), ...[...FILES].filter((f) => OFFLINE_FILES.has(f)), ...SHELLS, '/'];
 
 self.addEventListener('install', (e) => {
   // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the
@@ -242,6 +256,15 @@ self.addEventListener('fetch', (e) => {
           return kept;
         } catch {
           return kept ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
+        }
+      }
+      // Any other page (Compare, a redirect such as /privacy or /frost): the network, and offline the app's own page that
+      // says so, never the browser's error page (round eighty; the phone review's 5).
+      if (request.mode === 'navigate') {
+        try {
+          return await fetch(request);
+        } catch {
+          return (await cache.match('/offline')) ?? Response.error();
         }
       }
       return fetch(request);

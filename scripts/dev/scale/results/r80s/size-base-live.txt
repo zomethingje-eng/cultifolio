@@ -1,0 +1,5 @@
+{"file":"/tmp/claude-0/rev80r/D-s/raw/index.json","species":48361,"buildMs":190469,"files":57062,"totalMB":1829.8,"top":29170,"dirsMB":3.2,"dirMax":18769,"exact":{"n":13663,"MB":732.3,"median":4433,"p95":354906,"max":1057406},"near":{"n":39936,"MB":1068.3,"median":5454,"p95":131285,"max":875136},"answers":{"n":428,"MB":0.2,"median":581,"p95":613,"max":613},"counts":{"exactFiles":18418,"exactRows":2517536,"nearFiles":51706,"nearRows":3330878,"heavy":538,"nearHeavy":705}}
+
+real	3m12.294s
+user	2m1.431s
+sys	0m6.130s

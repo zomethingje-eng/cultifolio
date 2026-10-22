@@ -1,0 +1,26 @@
+cold, 40 ms a read, six at once
+rose                               wall   691 ms  cpu  172 ms  reads  52  waves  17  bytes  1076141  hits 60
+cactus                             wall   641 ms  cpu  108 ms  reads  59  waves  16  bytes   920513  hits 60
+echeveria                          wall   336 ms  cpu   16 ms  reads  18  waves   8  bytes   366446  hits 60
+x                                  wall   745 ms  cpu  258 ms  reads  22  waves  19  bytes  1289765  hits 60
+red flowers                        wall  1889 ms  cpu  200 ms  reads  61  waves  47  bytes  1106649  hits 35
+snake pl                           wall   434 ms  cpu   23 ms  reads  25  waves  11  bytes   505189  hits 8
+provinses                          wall   189 ms  cpu    8 ms  reads  10  waves   5  bytes   170965  hits narrow
+haworthiaa                         wall   672 ms  cpu   77 ms  reads  39  waves  17  bytes   655493  hits 60
+zzqqxw                             wall   127 ms  cpu    4 ms  reads   5  waves   3  bytes   131888  hits 0
+Echinocactus chrysacanthus         wall   673 ms  cpu   62 ms  reads  50  waves  17  bytes   654197  hits 0
+monstera                           wall   406 ms  cpu   30 ms  reads  25  waves  10  bytes   493653  hits 23
+lithops                            wall   388 ms  cpu   11 ms  reads  25  waves  10  bytes   489203  hits 43
+cape provinces                     wall    83 ms  cpu    3 ms  reads   4  waves   2  bytes   131866  hits narrow
+aloe vera                          wall   357 ms  cpu   13 ms  reads  23  waves   9  bytes   436537  hits 4
+e                                  wall   173 ms  cpu    4 ms  reads   8  waves   4  bytes   242203  hits 60
+ec                                 wall   166 ms  cpu    4 ms  reads   9  waves   4  bytes   247318  hits 60
+ech                                wall   488 ms  cpu   62 ms  reads  23  waves  12  bytes   701469  hits 60
+eche                               wall   359 ms  cpu   19 ms  reads  20  waves   9  bytes   388776  hits 60
+echev                              wall   361 ms  cpu   25 ms  reads  18  waves   9  bytes   366446  hits 60
+echeveria                          wall   347 ms  cpu   23 ms  reads  18  waves   9  bytes   366446  hits 60
+string of pearls                   wall   341 ms  cpu    7 ms  reads  17  waves   9  bytes   374906  hits 1
+Lavandula officinalis              wall   372 ms  cpu   18 ms  reads  20  waves   9  bytes   436430  hits 1
+Aloe amoena                        wall  1161 ms  cpu  164 ms  reads  97  waves  29  bytes  1521334  hits 60
+quercus                            wall   348 ms  cpu   21 ms  reads  18  waves   9  bytes   423675  hits 60
+haworthia cooperi                  wall   390 ms  cpu    8 ms  reads  20  waves  10  bytes   419608  hits 1

@@ -33,6 +33,8 @@ import type { JsonFetcher, FetchOptions, FetchResult } from './fetch';
 export const BATCH_CHUNK = 500;
 /** Keys a SPARQL query asks for: its address stays near 3 kB, inside every server's limit for a GET. */
 export const SPARQL_KEYS = 200;
+/** The smallest part of a query by GBIF keys that is asked again as two halves when it does not answer (round eighty, A). */
+export const RETRY_KEYS = 25;
 /**
  * Species a query by Kew's identifiers asks for (round seventy-nine): each is two quoted identifiers, so fifty keep the
  * address near 5 kB; two hundred (about 20 kB) were answered 503 by Wikidata's front end, measured 2026-10-20.
@@ -156,6 +158,8 @@ export interface BatchJob {
 
 export interface BatchStats {
   sparql: number;
+  /** Queries by GBIF keys that did not answer and were asked again as two halves (round eighty, A). */
+  retried?: number;
   /** Queries for the items of species without a GBIF key, by Kew's identifiers (round seventy-nine). */
   kewSparql?: number;
   entities: number;
@@ -177,14 +181,27 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
     stats.held++;
   };
 
-  /** The items carrying each key, any rank: the search's answer, two at most, held by key. */
+  /**
+   * The items carrying each key, any rank: the search's answer, two at most, held by key. A query that does not answer is
+   * asked again as its two halves, down to `RETRY_KEYS` keys (round eighty, A: 22 pages of the full build said Wikidata
+   * "not checked", their query of 100 or 200 keys having timed out or been answered 502 by the query service once); a
+   * part that still does not answer is held as that failure for each of its keys (rule 2).
+   */
   async function items(keys: readonly number[]): Promise<Map<number, string[]>> {
     const out = new Map<number, string[]>();
-    for (let i = 0; i < keys.length; i += SPARQL_KEYS) {
-      const part = keys.slice(i, i + SPARQL_KEYS);
+    const parts: Array<readonly number[]> = [];
+    for (let i = 0; i < keys.length; i += SPARQL_KEYS) parts.push(keys.slice(i, i + SPARQL_KEYS));
+    while (parts.length) {
+      const part = parts.shift()!;
       stats.sparql++;
       const r = await net<SparqlAnswer>(sparqlUrl(part), { timeoutMs: 60_000, headers: { accept: 'application/sparql-results+json' } });
       if (r.status !== 'ok' || !Array.isArray(r.data?.results?.bindings)) {
+        if (part.length > RETRY_KEYS && r.status !== 'refused' && r.status !== 'skipped') {
+          const half = Math.ceil(part.length / 2);
+          stats.retried = (stats.retried ?? 0) + 1;
+          parts.unshift(part.slice(0, half), part.slice(half));
+          continue;
+        }
         const no = failed(r.status === 'ok' ? { status: 'error', detail: 'no results in the answer' } : r, `Wikidata's query service, ${part.length} GBIF keys`);
         for (const k of part) hold(p846SearchUrl(k), no);
         continue;

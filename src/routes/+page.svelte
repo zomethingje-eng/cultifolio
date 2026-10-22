@@ -7,7 +7,7 @@
   import { accNo } from '$lib/db/types';
   import type { PageId } from '$core/page-id';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, type Found } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, type Found, type SearchRegion } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
@@ -21,7 +21,7 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, narrowSentence, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -200,7 +200,7 @@
     // chips or the letters above them, as after A–Z, nothing is fetched, and the view stays on them (round forty-nine, 2).
     const el = topSentinel;
     const near = () => el.getBoundingClientRect().bottom > -1600 && el.getBoundingClientRect().top < window.innerHeight + 1600;
-    const maybe = () => { if (near() && fillBefore(anchorTop(), pinnedEdge())) growBefore(); };
+    const maybe = () => { if (!restoring && near() && fillBefore(anchorTop(), pinnedEdge())) growBefore(); };
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) maybe(); }, { rootMargin: '1600px 0px' });
     io.observe(el);
     // The observer fires on a change of reach, not on every scroll: a sentinel already within reach while the reader was on the
@@ -210,7 +210,7 @@
   });
   /** Keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
   async function growWhileNear() {
-    while (sentinel && end < data.rowCount && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
+    while (!restoring && sentinel && end < data.rowCount && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
       if (!(await growOnce())) return;
       await tick();
     }
@@ -273,6 +273,88 @@
     window.scrollTo({ top: chips.getBoundingClientRect().top + window.scrollY - under });
     lettersEl.querySelector<HTMLElement>('a')?.focus({ preventScroll: true });
   }
+  /*
+   * Back to the catalogue puts the reader where they left it, by row, not by pixel (round eighty; the phone review's 1).
+   * The page that comes back holds the server's window of rows, not the rows the reader had loaded above and below it, so
+   * the browser's saved position (13,014 px on the phone review's iPhone) was past the end of a page a few thousand pixels
+   * long: it was clamped to the foot, the foot's sentinel was in reach, and as each chunk went in above the foot Chromium's
+   * scroll anchoring kept the foot in view, so the page ran to 206,123 px and kept asking for rows. Now the row (or the
+   * opened row's tile) at the top of the screen is kept with the page's history entry, and Back loads the rows around it
+   * if they are not there and puts it back where it was on the screen. Nothing is appended or prepended while that is
+   * done, and the sentinels and the footer take no part in scroll anchoring (the styles below).
+   */
+  type Place = { by: string; chip: string; count: number; open: string | null; row: string; rowAt: number; tile: number | null; top: number };
+  /** While Back puts the reader's row back, the sentinels fetch nothing. */
+  let restoring = false;
+  const openedTiles = () => [...document.querySelectorAll<HTMLElement>('.rows > .hgrid.opened > *')];
+  /** The row or opened tile at the top of the screen, under the pinned bar, and where it is. */
+  function placeNow(): Place | null {
+    if (typeof document === 'undefined' || flat) return null;
+    const edge = pinnedEdge();
+    const tiles = openedTiles();
+    for (const el of document.querySelectorAll<HTMLElement>('.rows > .grow, .rows > .hgrid.opened > *')) {
+      const b = el.getBoundingClientRect();
+      if (b.bottom <= edge) continue;
+      const isRow = el.classList.contains('grow');
+      const row = isRow ? el.id.slice(2) : data.open;
+      const i = row ? rows.findIndex((r) => r.id === row) : -1;
+      if (!row || i < 0) return null;
+      return { by: data.by, chip: data.chip, count: data.rowCount, open: data.open, row, rowAt: start + i, tile: isRow ? null : tiles.indexOf(el), top: b.top };
+    }
+    return null;
+  }
+  async function restorePlace(s: Place) {
+    if (s.by !== data.by || s.chip !== data.chip || s.count !== data.rowCount || s.open !== data.open) return;
+    restoring = true;
+    try {
+      if (!rows.some((r) => r.id === s.row)) {
+        // The row is outside the server's window (the reader had scrolled away from the opened row): its own window, the
+        // opened row's tiles kept from the server's rows if it is in it.
+        const at = Math.max(0, s.rowAt - 15);
+        const gen = rowsGen;
+        const got = await catalogueRows(data.by, data.chip, at, CHUNK);
+        if (gen !== rowsGen || !got || got.count !== data.rowCount || got.at !== at || !got.rows.some((r) => r.id === s.row)) return;
+        const served = new Map(data.rows.map((r) => [r.id, r]));
+        rows = got.rows.map((r) => served.get(r.id) ?? { ...r, items: undefined });
+        start = at;
+        rowsGen++;
+        tailPad = 0;
+      }
+      await tick();
+      const row = document.getElementById(`g-${s.row}`);
+      const el = (s.tile != null ? openedTiles()[s.tile] : null) ?? row;
+      if (!el) return;
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - s.top });
+      // Too few rows below to scroll that far: the list is padded by what was short, as a letter near the end is.
+      const short = el.getBoundingClientRect().top - s.top;
+      if (short > 2) { tailPad = short; await tick(); window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - s.top }); }
+      await holdPlace(el, s.top);
+    } finally {
+      restoring = false;
+    }
+    void growWhileNear();
+  }
+  /**
+   * What is drawn just after the rows (the tiles' last lines, the opened row's fold) moved the tile by up to 40 px after it
+   * was placed: it is held where it was for a moment, until the reader moves the page themselves.
+   */
+  function holdPlace(el: HTMLElement, top: number): Promise<void> {
+    return new Promise((done) => {
+      const until = performance.now() + 900;
+      let theirs = false;
+      const mine = () => { theirs = true; };
+      const kinds = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+      for (const k of kinds) addEventListener(k, mine, { passive: true });
+      const step = () => {
+        if (theirs || !el.isConnected || performance.now() > until) { for (const k of kinds) removeEventListener(k, mine); done(); return; }
+        const off = el.getBoundingClientRect().top - top;
+        if (Math.abs(off) > 1) window.scrollBy(0, off);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+  export const snapshot = { capture: (): Place | null => placeNow(), restore: (s: Place | null) => { if (s) void restorePlace(s); } };
   // A page opened at ?open=<row> (a link or a bookmark) starts at the row, not at the top of a thousand rows. Not on Back:
   // there the browser's own saved position is the grower's place in the genus, and placing the row over it sent them to the
   // top of a forty-species genus on every return from a species page (round sixty; visitor 6).
@@ -349,6 +431,14 @@
   // The search is the server's: the index never comes to the browser whole (round thirty-nine). Debounced a little,
   // and an answer is used only if it is still for the text in the box.
   let found = $state<Found[]>([]);
+  /**
+   * How many answer and how many the server can list (round eighty; review-w 2, review-p 3: the page said "60 matches"
+   * where 60 was the cap), and the regions of origin the query names (review-w 6).
+   */
+  let foundTotal = $state<number | undefined>(undefined);
+  let foundKept = $state<number | undefined>(undefined);
+  let foundRegions = $state<SearchRegion[]>([]);
+  let loadingMore = $state(false);
   let searching = $state(false);
   /** Why the last search gave nothing usable: not reached, rate-limited (with the wait in seconds), or offline. */
   // `unread` and `refused`: the server answered that it could not search just now, or refused (round sixty-nine; triage-68 W6, R46-7).
@@ -371,19 +461,46 @@
     const gen = ++searchGen;
     clearTimeout(searchTimer);
     // The catalogue is searched only on the catalogue view (round forty, R2-1), and never with text that is the collection's (`keepLocal`).
-    if (!text || keepLocal) { found = []; searching = false; searchFailed = null; relaxedFor = null; return; }
+    if (!text || keepLocal) { found = []; foundTotal = foundKept = undefined; foundRegions = []; searching = false; searchFailed = null; relaxedFor = null; return; }
     searching = true;
     searchTimer = setTimeout(() => {
-      pendingSearch = searchCatalogue(text).then((r) => {
+      pendingSearch = searchCatalogue(text, SEARCH_PAGE).then((r) => {
         if (gen !== searchGen) return;
         searching = false;
         if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; relaxedFor = null; return; }
         if (!Array.isArray(r) && 'limited' in r) { searchFailed = { kind: r.kind ?? 'limited', wait: r.limited }; found = []; relaxedFor = null; return; }
         searchFailed = null;
         found = hitsOf(r);
+        foundTotal = r.total;
+        foundKept = r.kept;
+        foundRegions = r.regions ?? [];
         relaxedFor = relaxedOf(r);
       });
     }, 150);
+  });
+  /** The next page of the same search's hits, after those loaded (round eighty): asked from where they end, and added once. */
+  async function showMore() {
+    const text = q.trim();
+    const gen = searchGen;
+    if (!text || loadingMore) return;
+    loadingMore = true;
+    const r = await searchCatalogue(text, SEARCH_MORE, found.length);
+    loadingMore = false;
+    if (gen !== searchGen || r === null || (!Array.isArray(r) && 'limited' in r)) return;
+    const have = new Set(found.map((f) => f.slug));
+    found = [...found, ...hitsOf(r).filter((f) => !have.has(f.slug))];
+    if (r.total !== undefined) foundTotal = r.total;
+    if (r.kept !== undefined) foundKept = r.kept;
+  }
+  const more = $derived(moreOf({ loaded: found.length, total: foundTotal, kept: foundKept }));
+  /**
+   * A genus typed alone, whose matches are more than the page holds: its row of the catalogue lists every one of its
+   * species in parts (round eighty; review-w 2: Echeveria has 220). The genus is the first hit's, typed in full.
+   */
+  const genusRow = $derived.by(() => {
+    const t = q.trim().toLowerCase();
+    const g = found[0] ? genusOf(found[0].name) : '';
+    return g && t === g.toLowerCase() && !relaxedFor?.relaxed && (foundTotal === undefined || foundTotal > found.length) ? g : null;
   });
   const retrySearch = () => { const t = q; q = ''; q = t; };
   const flat = $derived(!!q.trim());
@@ -584,6 +701,10 @@
   </a>
 {/snippet}
 
+{#snippet regionLinks()}
+  {#each foundRegions as r (r.name)}<p class="seccount regionline">{regionSentence(r)} <a href="/?by=origin&open={r.row.id}#g-{r.row.id}">{r.row.label}</a>.</p>{/each}
+{/snippet}
+
 {#snippet hit(c: Tile)}
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
   <a class="azrow hitrow" href="/species/{c.slug}">
@@ -766,14 +887,19 @@
     {:else if !found.length && relaxedFor?.narrow === true}
       <!-- Too common to list (round seventy-seven): the server answers no hits and says why, so the page never says "nothing matches". -->
       <p class="seccount" style="margin-top: 14px" role="status">{narrowSentence(q)}</p>
+      {@render regionLinks()}
     {:else if !shownFound.length}
       <!-- A way forward, not a dead end: what the reference is, and the record that works without it (round fifty-eight). -->
       <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(q.trim())}`)}>add it as a plant</a>; its record works without a species page.</p></div>
     {:else}
-      <p class="seccount" style="margin: 8px 0" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''} · Enter opens the first</p>
+      <p class="seccount" style="margin: 8px 0" role="status">{countSentence({ loaded: found.length, shown: shownFound.length, total: foundTotal, kept: foundKept, of: data.total, chip: chip !== 'all' })} · Enter opens the first</p>
+      {@render regionLinks()}
       <div class="rows hits">
         {#each shownFound as c (c.slug)}{@render hit(c)}{/each}
       </div>
+      <!-- The rest of the answer, a page at a time, or why it cannot be listed (round eighty; review-w 2, review-p 3). -->
+      {#if genusRow}<p class="seccount moresearch">Every species of <i>{genusRow}</i> is in <a href="/?by=genus&open={slugify(genusRow)}#g-{slugify(genusRow)}">its row of the catalogue</a>.</p>{/if}
+      {#if more.more}<p class="seccount moresearch"><button class="btn small" type="button" onclick={showMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : `Show ${fmtN(more.more)} more`}</button></p>{:else if more.narrow}<p class="seccount moresearch">{more.narrow}</p>{/if}
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
@@ -811,6 +937,8 @@
 
 <style>
   .plantsfound { margin: 12px 0 4px; }
+  .moresearch { margin: 12px 0 4px; }
+  .regionline { margin: 4px 0 8px; }
   .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .welcome { margin: 10px 0 0; font-size: var(--fs-md); color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   /* A little closer on a phone, where the line is four or five lines and the first row must still show (round sixty-three, V4). */
@@ -914,6 +1042,10 @@
   @media (max-width: 640px) { .hgrid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
+  /* Wider than a phone, the letters share the line evenly: wrapped by their own width, 26 letters left "Z" alone on a
+     second line at 1440 and 1280 px (round eighty; review-w 8). One line from 1000 px, rows of thirteen below it. */
+  @media (min-width: 641px) and (max-width: 999px) { .letters a { flex: 0 0 calc(100% / 13 - 2px); min-width: 0; } }
+  @media (min-width: 1000px) { .letters { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); } .letters a { min-width: 0; } }
   /* On a phone the letter index is one line that scrolls sideways: wrapped, the live corpus's 25 letters were four lines,
      176 px, between the chips and the first row (round sixty-two; outside review B1). */
   @media (max-width: 640px) { .letters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .letters::-webkit-scrollbar { display: none; } .letters a { flex: none; } }
@@ -923,7 +1055,9 @@
   .letter { font-family: var(--mono); font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */
   .rows { display: flex; flex-direction: column; gap: 6px; }
-  .more { display: flex; justify-content: center; padding: 18px 0 6px; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
+  /* Neither sentinel is a scroll anchor: anchored on the foot's, a page whose rows went in above it kept the foot in view
+     and asked for the next chunk, without end (round eighty; the phone review's 1). */
+  .more { display: flex; justify-content: center; padding: 18px 0 6px; overflow-anchor: none; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
   .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
   .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
   .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
@@ -943,5 +1077,8 @@
   .hgrid.opened { margin: 8px 0 18px; animation: fold 0.2s ease-out; transform-origin: top; }
   @keyframes fold { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 700px) { .grow { grid-template-columns: 48px minmax(0, 1fr) 24px; gap: 10px; } .grow .gthumb { width: 48px; height: 48px; } .grow .gmap { width: 48px; } }
+  /* The number's chip sits over the top of the tile: a placeholder under it starts below the chip, so the chip no longer
+     covers the genus letter (round eighty; the phone review's 9). */
+  .tile:has(.ownchip) .im :global(.ph) { padding-top: 30px; }
   .ownchip.following { background: var(--card); color: var(--ink2); border: 1px solid var(--rule); box-shadow: var(--sh); }
 </style>

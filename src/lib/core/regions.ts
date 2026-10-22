@@ -75,3 +75,41 @@ export function groupFor(origin: string[]): string {
   for (const u of origin) tally.set(broadRegion(u), (tally.get(broadRegion(u)) ?? 0) + 1);
   return [...tally.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'Origin not stated';
 }
+
+/** Damerau-Levenshtein distance of at most one: one letter more, less, changed or two swapped. */
+function oneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2));
+  return a.length < b.length ? a.slice(i) === b.slice(i + 1) : a.slice(i + 1) === b.slice(i);
+}
+const regionWords = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/['’‘`ʼ]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+/**
+ * The regions of origin a query names (round eighty; review-w 6: "cape provinces" and "provinses" gave no list and no way
+ * forward), at most three, in the order of `names` (the reference's level-3 units):
+ * - a query of several words: the regions of as many words, each typed word the start of the region's word in its place
+ *   ("cape prov" is Cape Provinces), the last of two letters or more; failing any, those one typing error from each word
+ *   of four letters or more, whole ("cape provinses");
+ * - a query of one word: a region of that one word ("Madagascar"), or one typing error from it; failing any, for a word
+ *   of five letters or more, the regions that have it, or a word one typing error from it, as a whole word ("provinces",
+ *   "provinses": Cape Provinces, Northern Provinces).
+ */
+export function regionsTyped(q: string, names: readonly string[]): string[] {
+  const qs = regionWords(q);
+  if (!qs.length || qs[qs.length - 1].length < 2) return [];
+  const all = names.map((n) => ({ n, ws: regionWords(n) }));
+  const near = (w: string, r: string) => (w.length >= 4 ? oneEdit(w, r) : w === r);
+  const first = (xs: typeof all) => xs.slice(0, 3).map((r) => r.n);
+  const of = all.filter((r) => r.ws.length === qs.length);
+  if (qs.length > 1) {
+    const begun = of.filter((r) => qs.every((w, i) => r.ws[i].startsWith(w)));
+    return first(begun.length ? begun : of.filter((r) => qs.every((w, i) => near(w, r.ws[i]))));
+  }
+  const w = qs[0];
+  const one = of.filter((r) => near(w, r.ws[0]));
+  if (one.length || w.length < 5) return first(one);
+  const has = all.filter((r) => r.ws.length > 1 && r.ws.includes(w));
+  return first(has.length ? has : all.filter((r) => r.ws.length > 1 && r.ws.some((x) => near(w, x))));
+}

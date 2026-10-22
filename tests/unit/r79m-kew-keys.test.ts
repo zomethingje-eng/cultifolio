@@ -57,11 +57,11 @@ describe('the rule, for a page without a GBIF key', () => {
 describe('the download asks for them', () => {
   const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
   const kew = parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8'));
-  it('scripts/extra-keys-kew.txt: 1,956 keys on 1,415 of the list\'s 2,335 pages without a GBIF key, none of them a list key', () => {
+  it('scripts/extra-keys-kew.txt: 1,956 keys on 1,415 of the list\'s 2,336 pages without a GBIF key (round eighty, A: Xanthoceras sorbifolium\'s key refused), none of them a list key', () => {
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     // Round eighty (X): 11 that a reference page holds through its range left out of the list, none of which read a key;
     // 19 whose key Kew's file reads as another species' name read none now, and no key of Kew's synonymy yet.
-    expect(keyless.size).toBe(2335);
+    expect(keyless.size).toBe(2336);
     expect(kew.length).toBe(1956);
     expect(kew.every((k) => k.pageId && keyless.has(k.pageId) && k.page === 0)).toBe(true);
     expect(new Set(kew.map((k) => k.pageId)).size).toBe(1415);
@@ -81,7 +81,7 @@ describe('the download asks for them', () => {
     const build = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(build).toMatch(/downloadShortOf\(bulkDir, \[\.\.\.new Set\(\[\.\.\.downloadKeysOf\(parseSpeciesList\(text\)\)\.keys, \.\.\.\[\.\.\.kewExtra\.values\(\)\]/);
     expect(build).toContain('for (const x of kewExtra.get(`k${id}`) ?? []) wanted.add(x.key);');
-    expect(build).toContain('extraKeys: kewExtra.get(`k${j.kew}`), climate, places');
+    expect(build).toContain('extraKeys: kewExtra.get(`k${j.kew}`), noKey: '); // round eighty: and why a page reads no key (r80r-no-key)
   });
 });
 
@@ -147,7 +147,7 @@ describe('the pages say it', () => {
   it('the species, plant, compare and label pages say "not checked" by the records, not by the key\'s absence', () => {
     const sp = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
     expect(sp).toContain('const unchecked = $derived(recordsUnchecked(d));');
-    expect(sp).toContain('<div class="mapcap">{unchecked ? `Records not checked: ${NO_GBIF_WHY}.`');
+    expect(sp).toContain('<div class="mapcap">{unchecked ? `Records not checked: ${noWhy}.`'); // round eighty: the page's own reason (r80r-no-key)
     expect(sp).toContain('<p class="small muted" id="kew-keys-records">{kewKeysSentence(d.occurrences.keys)}');
     expect(sp).not.toMatch(/\{#if gbifless\}<NotChecked what="Climate"/);
     expect(readFileSync('src/routes/plants/[acc]/+page.svelte', 'utf8')).toContain('{#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}');

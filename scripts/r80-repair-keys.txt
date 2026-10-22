@@ -1,0 +1,23 @@
+# Round eighty, agent A: the live pages round eighty's rules of the reference change by name, for
+#   npm run dossier -- --keys scripts/r80-repair-keys.txt --grid climate --bulk bulk --skip inat
+# (online: GBIF's species records, Wikidata, Wikipedia and Commons are asked; the records from the download; iNaturalist's
+# photographs carried as they are). docs/DEPLOY.md, "Round eighty: the reference's data (agent A)", says when and why.
+# A line is a page's id and name; "k<plant_name_id> -" builds that page from Kew's file, whatever GBIF key it has now.
+#
+# GBIF's key 9479204 refused (GBIF files it under Poaceae; scripts/species-list.txt now gives no key): from Kew's file.
+k2467608 -	Xanthoceras sorbifolium
+# Kew's accepted entry, not the row Kew files under Crocus mazziaricus (its id becomes k327378 at --index).
+g2747305 Crocus nudiflorus
+# The range of the page's own Kew entry, read by its id.
+k2593568 Sixalix atropurpurea
+k2489639 Sechium edule
+k2783667 Soehrensia tarijensis
+k3225681 Talinella grevei
+k2790112 Chamaenerion angustifolium
+k505020 Ceropegia angustilobulata
+k506525 Ceropegia juttae
+# Matched on Wikidata by its GBIF key and Kew's identifiers, never its label; IPNI and POWO from Kew's file.
+k2757799 Datura innoxia
+# The owner's merges: the kept pages read the leaving pages' keys and answer their old addresses (then --prune-followed).
+k505095 Echidnopsis cereiformis
+k2778991 Dudleya pulverulenta

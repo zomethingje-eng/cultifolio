@@ -23,7 +23,7 @@
   import { climateDetail } from '$lib/ui/ref/upstream';
   import { showable } from '$lib/ui/ref/photos';
   import { yearRain } from '$climate/year-rain';
-  import { recordsUnchecked, NO_GBIF_SENTENCE } from '$core/no-gbif';
+  import { recordsUnchecked, uncheckedSentence } from '$core/no-gbif';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   let { data } = $props();
   const u = $derived(units.current);
@@ -66,7 +66,7 @@
   /** A sentence ended once: the climate's words may end their own (round sixty-seven; triage-66 P5, S-F11). */
   const ended = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
   // A page without a GBIF key (round seventy-nine): not checked, and why, before "pending".
-  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : recordsUnchecked(d) ? `Climate not checked. ${NO_GBIF_SENTENCE}` : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
+  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : recordsUnchecked(d) ? `Climate not checked. ${uncheckedSentence(d)}` : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
   $effect(() => {
     setCrumb([{ label: 'Species', href: '/' }, { label: 'Compare' }]);
     return () => setCrumb([]);
@@ -171,7 +171,7 @@
   {#if tooMany && pq.trim().length >= 2}<p class="muted small" role="status">Too many species match “{pq.trim()}” to list them. Type another letter or word.</p>
   {:else}<p class="visually-hidden" role="status">{pq.trim().length >= 2 ? `${found.length} match${found.length === 1 ? '' : 'es'}` : ''}</p>{/if}
   {#if found.length}
-    <ul class="found">{#each found as f (f.slug)}<li><a href={withSlug(f.slug)} data-sveltekit-noscroll onclick={() => { pq = ''; }}><i>{f.name}</i></a>{#if cols.length >= 3}<span class="muted small"> replaces <i>{cols[0].d.name.scientific}</i></span>{/if}</li>{/each}</ul>
+    <ul class="found">{#each found as f (f.slug)}<li><a href={withSlug(f.slug)} data-sveltekit-noscroll onclick={() => { pq = ''; }}><i>{f.name}</i></a>{#if cols.length >= 3}<span class="muted small">{' '}replaces <i>{cols[0].d.name.scientific}</i></span>{/if}</li>{/each}</ul>
   {/if}
 </div>
 {#if !cols.length}

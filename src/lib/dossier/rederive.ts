@@ -61,3 +61,35 @@ export function carriedOrigin(u: { at?: string }, prevBuilt: string | undefined,
   const days = [u.at, prevBuilt].map((x) => x?.slice(0, 10)).filter((x): x is string => !!x && /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
   return `carried from build of ${days[0] ?? '?'}${note}`;
 }
+
+/**
+ * Whether a build that skipped iNaturalist keeps the previous build's iNaturalist id (round eighty, agent I), and if so
+ * sets it on the new dossier: where this build has no id, or the same one, or where the previous was checked (`inat.taxon`
+ * "ok") and this build's (an item's, unchecked) is another. Never when iNaturalist was asked: then the build's own check
+ * decides.
+ */
+export function keptInatId(prev: InatPage, d: InatPage, skipped: boolean): boolean {
+  const was = prev.ids?.inat;
+  if (!skipped || !was) return false;
+  if (d.ids.inat && d.ids.inat !== was && prev.upstream?.['inat.taxon']?.status !== 'ok') return false;
+  d.ids.inat = was;
+  d.links.inat = prev.links?.inat ?? `https://www.inaturalist.org/taxa/${was}`;
+  return true;
+}
+
+
+type InatPage = { ids: { inat?: number }; links: Record<string, string | undefined>; upstream: Record<string, Upstream>; built?: string };
+/**
+ * The rows that go with an id kept (`keptInatId`) and that the photographs' carry does not bring: the taxon row, and a set
+ * the previous build answered with none (no photograph to carry). Each says it is carried, from which build, and this
+ * build's reason.
+ */
+export function carryInatRows(prev: InatPage, d: InatPage): void {
+  for (const src of ['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated']) {
+    const was = prev.upstream?.[src];
+    if (d.upstream[src]?.status !== 'skipped' || !was || !['ok', 'none'].includes(was.status) || (src !== 'inat.taxon' && was.status === 'ok')) continue;
+    const chained = was.detail?.startsWith('carried from build of');
+    const origin = chained ? was.detail!.replace(/;.*$/, '') : carriedOrigin(was, prev.built);
+    d.upstream[src] = { ...was, detail: `${origin}${was.detail && !chained ? ` (that build: ${was.detail})` : ''}; this build: ${d.upstream[src].detail ?? 'skipped'}` };
+  }
+}

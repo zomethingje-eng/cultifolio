@@ -36,7 +36,7 @@ import { createInterface } from 'node:readline';
 import { writeAtomic } from './write-atomic';
 import { gbifLiving, inatCaptive, cacheDays, datasetFacetUrl, inatPageUrl, speciesFacetUrl, type Cache, type LivingDataset } from './select-species-sources';
 import {
-  DATASET_RULE, MIN_RECORDS, REFUSALS, backboneLine, classifyDataset, collectorSpecies, deviationsOf, formatSpeciesList, gbifKeyFor, kewLoader,
+  DATASET_RULE, MIN_RECORDS, REFUSALS, backboneLine, backboneHigher, backboneTaxa, classifyDataset, collectorSpecies, deviationsOf, formatSpeciesList, gbifKeyFor, kewLoader,
   matchInat, matchStrict, referenceSpecies, select, heldThroughRange, REASON_REFERENCE, type ReferencePage, words, type BackboneName, type DatasetFacts, type DatasetVerdict, type FrameworkRelationship, type Kew
 } from './select-species-lib';
 
@@ -126,9 +126,11 @@ async function main() {
   log(`Reading ${backbonePath} for ${n(wantKeys.size)} species keys…`);
   const byKey = new Map<string, BackboneName>();
   const byWords = new Map<string, BackboneName[]>();
+  // The backbone's accepted families and genera, for `familyRefuses` (round eighty, A).
+  const higher: Array<ReturnType<typeof backboneHigher>> = [];
   for await (const line of lines(backbonePath)) {
     const b = backboneLine(line);
-    if (!b) continue;
+    if (!b) { const h = backboneHigher(line); if (h) higher.push(h); continue; }
     if (wantKeys.has(b.key)) byKey.set(b.key, b);
     if (b.status === 'ACCEPTED' || b.status === 'DOUBTFUL') {
       const w = words(b.name);
@@ -139,6 +141,7 @@ async function main() {
     }
   }
 
+  const taxa = backboneTaxa(higher);
   const refused: string[] = [];
   const refusals: Record<string, Record<string, number>> = { inat: {}, gbif: {} };
   const bump = (src: 'inat' | 'gbif', why: string) => (refusals[src][why] = (refusals[src][why] ?? 0) + 1);
@@ -210,7 +213,7 @@ async function main() {
   const twoPages = [...reference.byKew.values()].filter((v) => v.length > 1).length;
   log(`  reference: ${n(pages.length)} pages, ${n(reference.byKew.size)} Kew species (${twoPages} held by two pages or more), ${reference.unmatched.length} matching none`);
 
-  const selected = select(kew, inatBy, gbifBy.counted, collector, (r) => gbifKeyFor(r, byWords, kew), MIN_RECORDS, reference);
+  const selected = select(kew, inatBy, gbifBy.counted, collector, (r) => gbifKeyFor(r, byWords, kew, taxa), MIN_RECORDS, reference);
   // A species without a GBIF key that a reference page holds through its range is that page (round eighty, X).
   const held = heldThroughRange(selected.map((x) => ({ kewId: x.id, name: x.name, author: x.author, gbifKey: x.gbifKey == null ? null : Number(x.gbifKey) })), pages);
   const list = selected.filter((x) => !x.id || !held.has(x.id));

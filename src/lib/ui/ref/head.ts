@@ -15,7 +15,7 @@ import { temp, rain, METRIC, type Units } from '$core/units';
 import { yearRain } from '$climate/year-rain';
 
 /**
- * The link-preview image's alt, on the front page and on a species page with no photograph: the words `static/og.png`
+ * The link-preview image's alt, on the front page and on a species page with no photograph: the words `static/app/og.png`
  * shows, as it shows them. The alt once described a wider line than the image holds, and the species page's fallback
  * a narrower one (round sixty-two; the words review's 2, outside review A2). The image is drawn by scripts/dev/og.mjs from
  * scripts/dev/og.html (round sixty-three); change the two together.

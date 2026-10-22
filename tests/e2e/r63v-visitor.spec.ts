@@ -158,7 +158,7 @@ test('r63v V2: "Add your first plant" leaves the example for the add form, and t
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await page.getByRole('button', { name: /^Add/ }).click();
-  const asked = page.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' });
+  const asked = page.locator('.picker .hint', { hasText: /press (?:Add|“Add[^”]*”) to keep exactly what you typed/ });
   await Promise.race([page.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
   if (await asked.isVisible()) await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-0001$/); // the own collection's first number, not the example's thirteenth

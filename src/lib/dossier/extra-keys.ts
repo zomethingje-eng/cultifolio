@@ -186,7 +186,7 @@ const statusWord = (r: KewRow) => (r.status === 'Accepted' ? 'accepted' : r.stat
  * (a page merged away is not one), `holders` maps a key to the reference pages GBIF files under it, `merged` a merged
  * page's key to its old address and `into` to the page it joins.
  */
-export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number> = new Map()): { keys: ExtraKey[]; refused: Refused[] } {
+export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map()): { keys: ExtraKey[]; refused: Refused[] } {
   const keys: ExtraKey[] = [], refused: Refused[] = [];
   if (!page.entry) return { keys, refused };
   const plant = plantOf(page.entry, idx);
@@ -228,7 +228,9 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     // The key of a page merged into this one (`into`, scripts/merged-pages.txt) is read whatever its type: the merge is the
     // owner's taxonomic claim that the two are one plant (round seventy-eight: six of the seven pairs that held one Kew entry
     // are Kew's heterotypic synonyms of it). What GBIF files under it is still judged name by name, below.
-    const other = into.get(u.key) === page.key ? null : mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
+    // The page joined is named by its GBIF key, or (round eighty) by its id where it has none.
+    const joins = into.get(u.key);
+    const other = joins !== undefined && (joins === page.key || joins === page.id) ? null : mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
     if (other) return { why: other };
     // What GBIF files under it that is another plant's (or a pro parte synonym), and what GBIF files under those: left out.
     const below = bb.under?.(u.key) ?? [];
@@ -247,8 +249,125 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
   }
 }
 
+/**
+ * What GBIF files under a merged key that Kew's file holds as another plant than the page joined, or as a pro parte
+ * synonym, and what GBIF files under those (round eighty, A): left out of the page's reading of the key, record by record,
+ * as `extraKeysFor` leaves them out of any key it takes.
+ */
+export function mergedExcept(key: number, entry: string, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'rowsOf'>, bb: Backbone): number[] {
+  const plant = plantOf(entry, idx);
+  const below = bb.under?.(key) ?? [];
+  const out = new Set<number>();
+  for (const c of below) {
+    if (proParte(c)) { out.add(c.key); continue; }
+    const r = kewReading(c, idx, (k) => bb.usage(k));
+    if (r.rows.some((x) => elsewhere(x, plant))) out.add(c.key);
+  }
+  for (const c of below) if (!out.has(c.key) && bb.lineage(c.key).slice(1).some((a) => out.has(a))) out.add(c.key);
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Why a page without a GBIF key read no key (round eighty, R): what the backbone holds of the names Kew's file gives the
+ * plant, and the rule's answer to each usage, read by the same steps as `extraKeysFor` and never another rule.
+ *
+ *   - `lumped`: GBIF files a usage the rule would read as this plant under another page of the reference (as its synonym,
+ *     or a taxon below it), so its records are that page's already, by GBIF's lumping of what Kew splits; `under` names
+ *     each such page by its GBIF key and the usages filed there, and `own` says one of them is of the entry's own type;
+ *   - `other-type`: the only usages Kew's file holds as this plant are of another type (heterotypic, or a taxon below);
+ *   - `pro-parte`: the only ones are pro parte synonyms, or read to this plant and another;
+ *   - `other-author`: the backbone holds the plant's words only by another author, or with none;
+ *   - `none`: the backbone holds no usage of any of the plant's names;
+ *   - `other`: none of those (an autonym GBIF does not place, a rank Kew's rows are not read at).
+ *
+ * The first that applies, in that order, is the page's; where the usages had several of the last four, `parts` holds each,
+ * so the page names every reason, never "only" one of them. `names` counts Kew's names of the plant (autonyms aside), and
+ * `usages` gives GBIF's names of the usages the answer rests on (at most six). Null when the rule gives the page a key.
+ */
+export type NoKeyKind = 'lumped' | 'other-type' | 'pro-parte' | 'other-author' | 'none' | 'other';
+export interface NoKeyReading {
+  pageId: string;
+  kind: NoKeyKind;
+  names: number;
+  usages: string[];
+  under?: Array<{ key: number; names: string[] }>;
+  own?: boolean;
+  /** When the usages had more than one of the other reasons: each, with its usages (the first is `kind`'s). */
+  parts?: Array<{ kind: Exclude<NoKeyKind, 'lumped' | 'none'>; usages: string[] }>;
+}
+export function noKeyFor(page: PageIn & { id: string }, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map()): NoKeyReading | null {
+  const r = extraKeysFor(page, idx, bb, reference, holders, merged, into);
+  if (r.keys.length || !page.entry) return null;
+  const refused = new Map(r.refused.map((x) => [x.key, x.why]));
+  const plant = plantOf(page.entry, idx);
+  const own = new Set<string>();
+  for (const id of plant) { const x = idx.byId.get(id); if (x) own.add(words(x.name)); for (const s of idx.under.get(id) ?? []) if (s.status !== 'Misapplied') own.add(words(s.name)); }
+  const names = new Set(own);
+  for (const n of [...own]) { const w = n.split(' '); if (w.length === 2) for (const m of ['subsp.', 'var.', 'f.']) names.add(`${w[0]} ${w[1]} ${m} ${w[1]}`); }
+  const seen = new Set<number>(page.key != null ? [page.key] : []);
+  const lumped: Array<{ u: Usage; at: number; own: boolean }> = [], otherType: Usage[] = [], proParte: Usage[] = [], author: Usage[] = [], other: Usage[] = [];
+  let any = false;
+  for (const n of [...names].sort()) for (const u of bb.usagesOf(n)) {
+    if (seen.has(u.key)) continue;
+    seen.add(u.key);
+    any = true;
+    const why = refused.get(u.key);
+    if (why === undefined) {
+      const read = kewReading(u, idx, (k) => bb.usage(k));
+      if (!read.rows.length && 'why' in read && /another author|no author/.test(read.why)) author.push(u);
+      else if (!read.rows.length && 'why' in read && /^an autonym|^a rank/.test(read.why)) other.push(u);
+      continue; // another plant's name by the same words: nothing of this plant's
+    }
+    if (/another page of this reference$/.test(why)) {
+      const at = why.startsWith('it is') ? u.key : bb.lineage(u.key).find((k) => k !== page.key && reference.has(k))!;
+      const row = kewReading(u, idx, (k) => bb.usage(k)).rows.find((x) => ofPlant(x, plant));
+      lumped.push({ u, at, own: !!row && !typeWhy(row, page.entry, idx) });
+    } else if (/^heterotypic|^another type below/.test(why)) otherType.push(u);
+    else if (/pro parte|another plant's$/.test(why)) proParte.push(u);
+    else other.push(u);
+  }
+  const labels = (us: Usage[]) => us.slice(0, 6).map((u) => u.label);
+  const base = { pageId: page.id, names: own.size };
+  if (lumped.length) {
+    const ordered = [...lumped.filter((x) => x.own), ...lumped.filter((x) => !x.own)];
+    const keys = [...new Set(ordered.map((x) => x.at))];
+    return { ...base, kind: 'lumped', usages: labels(ordered.map((x) => x.u)), under: keys.map((key) => ({ key, names: ordered.filter((x) => x.at === key).slice(0, 6).map((x) => x.u.label) })), own: lumped.some((x) => x.own) };
+  }
+  if (!any) return { ...base, kind: 'none', usages: [] };
+  // Otherwise each reason the usages had, in that order; the first is the page's kind, and the words name every one.
+  const parts = ([['other-type', otherType], ['pro-parte', proParte], ['other-author', author], ['other', other]] as const).filter(([, us]) => us.length).map(([kind, us]) => ({ kind, usages: labels(us) }));
+  if (!parts.length) return { ...base, kind: 'other', usages: [] };
+  return { ...base, kind: parts[0].kind, usages: parts[0].usages, ...(parts.length > 1 ? { parts } : {}) };
+}
+
+/** `scripts/extra-keys-kew-none.txt`: a line a page that reads no key, "<page id>\t<kind>\t<JSON of the rest>", the holders named. */
+export interface NoKeyLine extends NoKeyReading {
+  /** Each holder's name as the reference holds it, and whether Kew's file accepts it as a species (a list line with a Kew id). */
+  under?: Array<{ key: number; names: string[]; name?: string; kew?: boolean }>;
+}
+export function formatNoKeys(lines: readonly NoKeyLine[], head: string[] = []): string {
+  return [...head.map((h) => `# ${h}`), ...lines.map((l) => { const { pageId, kind, ...rest } = l; return [pageId, kind, JSON.stringify(rest)].join('\t'); })].join('\n') + '\n';
+}
+const NO_KEY_KINDS = new Set<string>(['lumped', 'other-type', 'pro-parte', 'other-author', 'none', 'other']);
+export function parseNoKeys(text: string): Map<string, NoKeyLine> {
+  const out = new Map<string, NoKeyLine>();
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.startsWith('#')) continue;
+    const [pageId, kind, json] = line.split('\t');
+    if (!/^k[1-9]\d*$/.test(pageId ?? '') || !NO_KEY_KINDS.has(kind ?? '')) continue;
+    try {
+      const rest = JSON.parse(json ?? '{}') as Omit<NoKeyLine, 'pageId' | 'kind'>;
+      if (typeof rest.names !== 'number' || !Array.isArray(rest.usages)) continue;
+      out.set(pageId, { pageId, kind: kind as NoKeyKind, ...rest });
+    } catch { /* a line that is not the file's is not read */ }
+  }
+  return out;
+}
+
 /** The words the build and the page say of an extra key's Kew reading. */
 export function extraWhy(x: Pick<ExtraKey, 'kewLabel' | 'how'>): string {
+  // A key read because the owner merged its page here (round eighty, A), not because Kew's file reads it so.
+  if (x.how === 'merged') return "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)";
   const how = x.how === 'abbreviation' ? ', its author read as an abbreviation of Kew\'s' : x.how === 'autonym' ? ', an autonym of that name' : '';
   return `Kew's file holds it as ${x.kewLabel}${how}`;
 }
@@ -288,31 +407,75 @@ export function byPage(keys: readonly ExtraKey[]): Map<number, ExtraKey[]> {
 
 /* ------------------------------------------------------------------ pages merged by the owner */
 
-/** One merge (`scripts/merged-pages.txt`): the page that leaves the reference, the page it joins, and the old page's name. */
-export interface Merge { from: number; into: number; name: string }
-/** "<from key>\t<into key>\t<from name>" a line; "#" starts a comment. */
+/**
+ * One merge (`scripts/merged-pages.txt`): the page that leaves the reference, the page it joins, and the old page's name.
+ * The page joined is a GBIF key, or (round eighty, A; the owner's decision on the duplicate pages: "each into the page
+ * under Kew's accepted name") a page without a GBIF key, by its id: Ceropegia cereiformis and Ceropegia nubica into
+ * Echidnopsis cereiformis, `k505095`. Then `into` is 0 and `intoPage` the id.
+ */
+export interface Merge {
+  from: number;
+  into: number;
+  name: string;
+  intoPage?: string;
+  /** The keys GBIF files under the leaving key whose records are not read (a fourth column, "except:<key>,<key>"; round eighty, A). */
+  except?: number[];
+}
+/** The page a merge joins, as a page reads it: its GBIF key, or its id where it has none. */
+export const mergeTarget = (m: Pick<Merge, 'into' | 'intoPage'>): number | string => m.intoPage ?? m.into;
+/** "<from key>\t<into key or k<plant_name_id>>\t<from name>" a line; "#" starts a comment. */
 export function parseMerges(text: string): Merge[] {
   const out: Merge[] = [];
   for (const line of text.split(/\r?\n/)) {
     const l = line.replace(/#.*$/, '').trim();
     if (!l) continue;
-    const [a, b, ...n] = l.split('\t');
-    if (/^\d+$/.test(a ?? '') && /^\d+$/.test(b ?? '') && n.join(' ').trim()) out.push({ from: Number(a), into: Number(b), name: n.join(' ').trim() });
+    const [a, b, ...rest] = l.split('\t');
+    const exceptCol = rest.find((x) => /^except:/.test(x.trim()));
+    const n = rest.filter((x) => x !== exceptCol);
+    const except = exceptCol ? exceptCol.trim().slice(7).split(',').map(Number).filter((x) => Number.isInteger(x) && x > 0) : [];
+    if (!/^\d+$/.test(a ?? '') || !n.join(' ').trim()) continue;
+    const ex = except.length ? { except } : {};
+    if (/^\d+$/.test(b ?? '')) out.push({ from: Number(a), into: Number(b), name: n.join(' ').trim(), ...ex });
+    else if (/^k[1-9]\d*$/.test(b ?? '')) out.push({ from: Number(a), into: 0, intoPage: b, name: n.join(' ').trim(), ...ex });
   }
   return out;
 }
 
-/** Which merged pages' dossiers may go: the page that leaves is on disk and the page it joins records its key with its old address. */
-export function mergedToPrune(all: Array<{ key: number; occurrences?: { keys?: Array<{ key: number; slug?: string }> } }>, list: readonly Merge[]): { prune: number[]; waiting: string[] } {
-  const byKey = new Map(all.map((d) => [d.key, d]));
+/**
+ * Which merged pages' dossiers may go: the page that leaves is on disk and the page it joins records its key with its old
+ * address. A page is found by its GBIF key, or (round eighty) by its id where it has none.
+ */
+export function mergedToPrune(all: Array<{ key: number | null; id?: string; occurrences?: { keys?: Array<{ key: number; slug?: string }> } }>, list: readonly Merge[]): { prune: number[]; waiting: string[] } {
+  const byKey = new Map(all.flatMap((d) => (d.key != null ? [[d.key, d] as const] : [])));
+  const byId = new Map(all.flatMap((d) => (d.id ? [[d.id, d] as const] : [])));
   const prune: number[] = [], waiting: string[] = [];
   for (const m of list) {
     if (!byKey.has(m.from)) continue;
-    const into = byKey.get(m.into);
+    const into = m.intoPage ? byId.get(m.intoPage) : byKey.get(m.into);
     if (into?.occurrences?.keys?.some((x) => x.key === m.from && !!x.slug)) prune.push(m.from);
-    else waiting.push(`${m.name} [${m.from}] into ${m.into}`);
+    else waiting.push(`${m.name} [${m.from}] into ${mergeTarget(m)}`);
   }
   return { prune, waiting };
+}
+
+/**
+ * The merged keys the rule gave no line (round eighty, A; agent X's need): a merge is the owner's claim that the two pages
+ * are one plant, so the page joined reads the leaving page's key whether or not Kew's file reads GBIF's name and author
+ * for it as that plant (Echeveria peacockii: GBIF's author "Croucher", Kew's "Croucher ex T.Moore & Mast.", which the
+ * author rule does not read as one, so 7530398 was never read by Dudleya pulverulenta and its page could never go). Each
+ * is a line of the list as the rule writes one, "merged here by the owner's decision", with what GBIF files under it that
+ * Kew holds as another plant left out (`except`, given by the caller from the backbone where it has one).
+ */
+export function mergeKeys(merges: readonly Merge[], have: readonly ExtraKey[], slugOf: (name: string) => string, usage?: (key: number) => Pick<Usage, 'label' | 'status'> | undefined, except?: (m: Merge) => number[]): ExtraKey[] {
+  const read = new Set(have.map((k) => `${k.pageId ?? k.page}:${k.key}`));
+  const out: ExtraKey[] = [];
+  for (const m of merges) {
+    if (read.has(`${mergeTarget(m)}:${m.from}`)) continue;
+    const u = usage?.(m.from);
+    const ex = [...new Set([...(except?.(m) ?? []), ...(m.except ?? [])])].sort((a, b) => a - b);
+    out.push({ page: m.intoPage ? 0 : m.into, ...(m.intoPage ? { pageId: m.intoPage } : {}), key: m.from, label: u?.label ?? m.name, status: u?.status ?? 'ACCEPTED', kew: '-', kewLabel: "the page merged here by the owner's decision (scripts/merged-pages.txt)", how: 'merged', merged: slugOf(m.name), ...(ex.length ? { except: ex } : {}) });
+  }
+  return out;
 }
 
 /**

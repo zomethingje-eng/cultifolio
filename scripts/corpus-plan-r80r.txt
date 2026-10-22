@@ -1,0 +1,12 @@
+# Round eighty (R): the pages without a GBIF key that read no key say why, for themselves. Run once round seventy-nine's
+# corpus is built and uploaded (docs/DEPLOY.md, "Round eighty: the not-checked pages and the institution references"):
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-r80r.txt
+# Nothing is asked of any source and no record is read: --fill kew-why writes scripts/extra-keys-kew-none.txt's reason
+# into each of its 909 pages (occurrences.unread, the record of GBIF's records, the climate's detail), then the index.
+# Round eighty (the merge): the owner's walk runs the fill alone between two days of the full plan's fill instead
+# (docs/DEPLOY.md, "Round eighty: the owner's walk"); this plan is for a corpus whose plan has finished.
+backup
+dossier --fill kew-why
+review In corpus-step.log the fill must say "921 pages without a GBIF key read no key; 909 changed: 643 lumped, 210 none, 46 other-type, 9 other-author, 1 other say why for themselves (scripts/extra-keys-kew-none.txt), 12 the general reason (not in the file)" (a page the build could not make is one fewer), then "index: <n> species" with n the same as before the fill. The review line must say about 909 dossiers differ from the backup, every one a k-page whose GBIF records are not checked, and nothing else. A rerun of the fill says "0 changed".
+upload
+live-check

@@ -23,7 +23,7 @@
   // name as received (round sixty-two; the grower review, 9).
   // `reserve`: keep the room the check's words take under the field, so what follows never moves when they arrive
   // (round sixty-seven; triage-66 P10).
-  let { reserve = false, value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { reserve?: boolean; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
+  let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
   // `similar`: found by a similar spelling (the server's near pass); `asCultivar`: the genus offered for a genus followed by
   // capitalised words, the rest kept as a cultivar; a key below 1 is a row with no key to file (round sixty-two; A7).
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string };
@@ -231,7 +231,10 @@
     await Promise.all([indexP, namesP]);
   }
 
+  /** The grower has typed in the field: the full room for the check's words is kept from then on. */
+  let typed = $state(false);
   function onInput() {
+    typed = true;
     // Read as the server reads a query, before anything: a full-width name or a pasted zero-width space (round sixty-two;
     // the verification review's search 12).
     const clean = cleanTyped(value);
@@ -340,6 +343,9 @@
     // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that.
     if (s.local && s.key <= 0 && !compared && sameName(s.name, parseName(value).scientific)) return s.far ? ' · has a species page, under another genus, with no GBIF key; no key filed' : ' · has a species page, with no GBIF key; no key filed';
     if (s.local) return keyed ? (s.far ? ' · has a species page, under another genus' : ' · has a species page') : compared ? ' · compared species is in the reference; no key filed' : ' · its species is in the reference; no key filed';
+    // GBIF's name service's row of a name whose reference page holds no GBIF key looked the same as that page's row
+    // (round eighty, A's need; the desktop review's 4): it says where it is from, and that the page holds no key.
+    if (s.key > 0 && suggestions.some((x) => x.local && x.key <= 0 && sameName(x.name, s.name))) return ` · GBIF's name service, key ${s.key}; the species page of this name holds no GBIF key${keyed ? '' : '; no key filed'}`;
     return keyed ? '' : ' · no key filed';
   }
   // The two services' silences, each in its own words: a refusal as "not asked", a failure as "did not answer" (rule 2).
@@ -406,7 +412,7 @@
   }
 </script>
 
-<div class="picker" class:reserve bind:this={root}>
+<div class="picker" class:reserve={reserve && !(linked && !typed)} class:reserveone={reserve && linked && !typed} bind:this={root}>
   <div class="inputrow">
   <input
     {id}
@@ -442,7 +448,7 @@
   <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
   {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
   {:else if readAsCultivar && armed}<p class="hint" id="{listId}-hint" role="status">No species of that name was found, so it is read as the genus <i>{readAsCultivar}</i> with a cultivar. Press Add to keep it, or change the name.</p>
-  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press Add to keep exactly what you typed.</p>
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press {addLabel === 'Add' ? 'Add' : `“${addLabel}”`} to keep exactly what you typed.</p><!-- the button's own words: it reads "Add as typed" by then (round eighty; the desktop review's 11) -->
   {:else if nameServiceDown && refDown}<p class="hint svc" role="status">{namesSaid}{refSaid}A name typed in full is kept as typed and checked later.</p>
   <!-- With a key found, or a pill that already says the name is kept as typed, the line does not say it again: it then fits the room kept for it (round sixty-seven; triage-66 P10). -->
   {:else if nameServiceDown}<p class="hint svc" role="status">{gbifRefused ? "GBIF refused this site's request for names, so only" : nameRefusal ? `The name service was not asked: ${nameRefusal}. Only` : 'The name service did not answer, so only'} the reference's own species are offered{taxonKey || resolved === 'no' || resolved === 'unreached' ? '' : '; a name typed in full is kept as typed and checked later'}.</p>
@@ -463,6 +469,10 @@
   /* Kept for them on a form whose buttons must not move (\`reserve\`): a pill row and two lines of words, the most the
      check says on a phone for a name it resolves or does not know; the space is there before the field is left. */
   .picker.reserve .status { min-height: calc(1.4em * 3 + 0.5em); margin-top: 0.35rem; } /* three lines, one of them with a pill's padding */
+  /* A name that came with its key from a species page: only the pill can change until the grower types, so one pill's line
+     is kept, not three; the three came back the moment they type. Three left about 70 px of nothing under "GBIF 7284333" on
+     a phone (round eighty; the phone review's 9). */
+  .picker.reserveone .status { min-height: calc(1.4em + 0.5em); margin-top: 0.35rem; }
   /* The line runs on after the pills, so a pill and its sentence take the fewest lines. */
   .hint { display: inline; margin: 0; font-size: var(--fs-md); color: var(--ink2); }
   .hint.svc { color: var(--ink3); }

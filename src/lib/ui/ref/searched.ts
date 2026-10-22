@@ -53,3 +53,52 @@ export function searchedSentence(typed: string, a: SearchedAnswer | null | undef
     : `Searched for “${q}”${left ? `, leaving out “${left}”` : ''}`;
   return near ? `${lead}; no name is spelt that way, so these are similar spellings.` : `${lead}.`;
 }
+
+const fmt = (n: number) => n.toLocaleString('en-GB');
+/**
+ * How many hits the front page's search asks for first, and how many each "Show more" asks for (round eighty). Each hit
+ * shown is one more read of the bucket for the server, six at a time (the Worker's limit on connections waiting at once),
+ * and a common word's hits lie all over the index: 60 hits were ten waves of reads, most of a cold search's two seconds.
+ * Thirty fill a desktop's screen twice and a phone's five times.
+ */
+export const SEARCH_PAGE = 30;
+export const SEARCH_MORE = 60;
+/**
+ * The count above a catalogue search's rows (round eighty; review-w 2, review-p 3): "60 matches of 48,361" was said
+ * where 60 was the server's cap and Echeveria alone has 220. `loaded` hits are on the page; `total` is how many species
+ * answer (undefined where the server did not say); `kept`, how many of them the server can list (undefined when all
+ * can); `shown`, the loaded hits a chip leaves (the chip filters what is loaded); `of`, the reference's size.
+ */
+export function countSentence(o: { loaded: number; shown: number; total?: number; kept?: number; of: number; chip: boolean }): string {
+  const { loaded, shown, total, of, chip } = o;
+  const word = (n: number) => (n === 1 ? 'match' : 'matches');
+  if (chip) {
+    const all = total !== undefined && total > loaded ? `, of the first ${fmt(loaded)} of ${fmt(total)} matches` : `, of ${fmt(loaded)} ${word(loaded)}`;
+    return `${fmt(shown)} with the chip on${shown === loaded ? '' : all}`;
+  }
+  if (total === undefined) return loaded >= SEARCH_PAGE ? `The first ${fmt(loaded)} matches of ${fmt(of)}` : `${fmt(loaded)} ${word(loaded)} of ${fmt(of)}`;
+  if (total <= loaded) return `${fmt(total)} ${word(total)} of ${fmt(of)}`;
+  return `${fmt(loaded)} of ${fmt(total)} matches`;
+}
+/**
+ * What follows the rows when more answer than are loaded: how many "Show more" brings (null when none can be listed),
+ * and what to say when the rest cannot be listed (`narrow`: the server keeps the first `kept` of a word too common to
+ * list all of; or the count is not known).
+ */
+export function moreOf(o: { loaded: number; total?: number; kept?: number }): { more: number | null; narrow: string | null } {
+  const { loaded, total, kept } = o;
+  const listable = kept ?? total;
+  const more = listable !== undefined && listable > loaded ? Math.min(SEARCH_MORE, listable - loaded) : null;
+  if (more) return { more, narrow: null };
+  if (total !== undefined && total <= loaded) return { more: null, narrow: null };
+  if (total !== undefined) return { more: null, narrow: `The first ${fmt(loaded)} of ${fmt(total)} are listed: type more of the name, or another word, to narrow it.` };
+  return loaded >= SEARCH_PAGE ? { more: null, narrow: 'More match: type more of the name, or another word, to narrow it.' } : { more: null, narrow: null };
+}
+/**
+ * A region of origin a query names (round eighty; review-w 6: "cape provinces" gave no list and no way forward), said
+ * before the link to the Origin grouping's row of the broad region it is part of. A species is grouped there by where
+ * most of its native regions fall, so the row is the way to the region's neighbours, not a list of the region alone.
+ */
+export function regionSentence(r: { name: string }): string {
+  return `“${r.name}” is a region of origin; in the Origin grouping it is part of`;
+}

@@ -2,7 +2,9 @@ import { json } from '@sveltejs/kit';
 import { forBuild } from '$lib/server/build';
 import { workerKey } from '$lib/server/worker-cache';
 import type { RequestHandler } from './$types';
-import { searchAnswer, corpusNow } from '$lib/server/dossiers';
+import { searchAnswer, corpusNow, searchRegions, warmSearch } from '$lib/server/dossiers';
+import { regionsTyped, broadRegion } from '$core/regions';
+import { slugify } from '$core/names';
 import { limited } from '$lib/server/sync';
 import { droppedLabel, nearAnswer, genusReading, genusOfReading, leftOut } from '$core/search';
 import { genusOf } from '$core/names';
@@ -45,6 +47,8 @@ import { genusOf } from '$core/names';
  */
 export const _clean = (q: string) => [...q.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/[^\p{L}\p{M}\p{N}().&'"‘’“”×-]+/gu, ' ').trim()].slice(0, 80).join('').trim();
 export const _MAX_HITS = 100;
+/** The furthest a page of hits may start (`at`, round eighty): past it a query is asked to narrow, never paged. */
+export const _MAX_AT = 2000;
 const DEFAULT_HITS = 60;
 const CACHE_S = 86_400;
 
@@ -52,6 +56,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const q = _clean([...(url.searchParams.get('q') ?? '')].slice(0, 200).join(''));
   if (!/[\p{L}\p{N}]/u.test(q)) return json(url.searchParams.get('shape') === '2' ? { hits: [] } : [], { headers: { 'cache-control': forBuild(url, `public, max-age=${CACHE_S}`) } });
   const n = Math.min(_MAX_HITS, Math.max(1, Number(url.searchParams.get('n')) || DEFAULT_HITS));
+  // Where the hits start among all that answer (round eighty; review-w 2, review-p 3): the page's "Show more".
+  const at = Math.min(_MAX_AT, Math.max(0, Math.floor(Number(url.searchParams.get('at'))) || 0));
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const c = await corpusNow(platform, fetch);
   // Kept only under the corpus and the build it was asked under (round sixty-seven; triage-66 S7: `forBuild`).
@@ -60,7 +66,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // The case kept: an author citation is read by its capitals. Keyed by the build too (round sixty-nine; triage-68 W3,
   // S-F6), so a change to the reading or the order is never answered from the last build's copies; the hand-bumped
   // `search6` prefix it replaces was not bumped for round sixty-eight's family rule.
-  const key = workerKey('search', { c: c.corpus, n, q });
+  const key = workerKey('search', { c: c.corpus, n, q, ...(at ? { at } : {}) });
   const shaped = url.searchParams.get('shape') === '2';
   // `near`: the hits came by a similar spelling, so the picker can say "similar spelling" (round sixty-two; A7, B2).
   // `relaxed.left`: the reading matched and left these typed words out (an author, a cultivar, "sp."), where a relaxed
@@ -68,15 +74,29 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // `narrow`: every word the answer must hold is too common to list from the key files, and the query is more than one
   // word (round seventy-seven; $core/search-files): no hits, and the page asks for another letter or word.
   type Relaxed = { query: string; left?: string };
-  const answer = (corpus: string, hits: unknown[], relaxed: Relaxed | undefined, near: boolean, narrow = false) =>
-    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}), ...(narrow ? { 'x-search-narrow': '1' } : {}) } });
+  // `total`: how many species answer, `kept`: how many of them can be listed, past which the page asks for another
+  // letter (round eighty; review-w 2, review-p 3: "60 matches" was the cap). `regions`: the regions of origin the query
+  // names, each with the Origin grouping's row it falls under (review-w 6).
+  type Region = { name: string; row: { id: string; label: string } };
+  type Counted = { total?: number; kept?: number; regions?: Region[] };
+  const answer = (corpus: string, hits: unknown[], relaxed: Relaxed | undefined, near: boolean, narrow = false, k: Counted = {}) =>
+    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...(k.total !== undefined ? { total: k.total } : {}), ...(k.kept !== undefined ? { kept: k.kept } : {}), ...(at ? { at } : {}), ...(k.regions?.length ? { regions: k.regions } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}), ...(narrow ? { 'x-search-narrow': '1' } : {}), ...(k.total !== undefined ? { 'x-search-total': String(k.total) } : {}), ...(k.kept !== undefined ? { 'x-search-kept': String(k.kept) } : {}), ...(k.regions?.length ? { 'x-search-regions': encodeURIComponent(JSON.stringify(k.regions)) } : {}) } });
+  const counted = (x: { total?: unknown; kept?: unknown; regions?: unknown }): Counted => ({
+    ...(Number.isInteger(x.total) ? { total: x.total as number } : {}),
+    ...(Number.isInteger(x.kept) ? { kept: x.kept as number } : {}),
+    ...(Array.isArray(x.regions) ? { regions: (x.regions as Region[]).filter((r) => r && typeof r.name === 'string' && r.row && typeof r.row.id === 'string' && typeof r.row.label === 'string') } : {})
+  });
   // A cache that fails to answer is a search, not a 500.
   const hit = edge ? await edge.match(key).catch(() => undefined) : undefined;
   if (hit) {
     // Kept as `{ hits, relaxed? }` whichever shape was asked, and answered in the shape this request asks for.
-    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown; narrow?: unknown } | null;
-    if (kept && Array.isArray(kept.hits)) return answer(c.corpus, kept.hits, typeof kept.relaxed?.query === 'string' ? { query: kept.relaxed.query, ...(typeof kept.relaxed.left === 'string' ? { left: kept.relaxed.left } : {}) } : undefined, kept.near === true, kept.narrow === true);
+    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown; narrow?: unknown; total?: unknown; kept?: unknown; regions?: unknown } | null;
+    if (kept && Array.isArray(kept.hits)) return answer(c.corpus, kept.hits, typeof kept.relaxed?.query === 'string' ? { query: kept.relaxed.query, ...(typeof kept.relaxed.left === 'string' ? { left: kept.relaxed.left } : {}) } : undefined, kept.near === true, kept.narrow === true, counted(kept));
   }
+  // The reads every search makes first (the directories of its words, the tables and blocks), started before the address's
+  // allowance is asked, so the two overlap (round eighty: a cold search waited on each in turn); nothing is ranked or
+  // answered before the allowance says yes.
+  warmSearch(c, platform, fetch, q);
   // The limit answers with a Retry-After the page turns into "try again in N minutes", not "could not be reached" (round forty, R1-3).
   const stop = await limited(platform, getClientAddress, 'search');
   if (stop) return stop;
@@ -84,7 +104,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // a manifest, the whole index prepared with the index. A posting file the bucket lacks leaves the whole index prepared
   // for the request, under a rate bucket of its own: that is a second's work at fifty thousand species (round fifty-five, 4).
   const miss = () => limited(platform, getClientAddress, 'searchmiss');
-  let a = await searchAnswer(platform, fetch, q, n, miss, c);
+  // The regions the query names, read beside the search (a small file, held once read).
+  const regionNames = searchRegions(c, platform, fetch);
+  let a = await searchAnswer(platform, fetch, q, n, miss, c, at);
   if ('stop' in a) return a.stop;
   // Last, a genus followed by capitalised words that nothing answered, not by a similar spelling of a whole epithet nor
   // by its first two words, is a cultivar of the genus ("Echeveria Lola", "Haworthia Big Band"): answered by the genus,
@@ -92,10 +114,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // never shrinks to its first word (round sixty-two; the verification review's search 1 and 2; A7, B2).
   const genus = !a.hits.length && !a.narrow ? genusReading(q) : null;
   if (genus) {
-    const g = await searchAnswer(platform, fetch, genus, n, miss, c);
+    const g = await searchAnswer(platform, fetch, genus, n, miss, c, at);
     if ('stop' in g) return g.stop;
     const own = g.hits.filter((h) => genusOfReading(genus, genusOf(h.name)));
-    if (own.length) a = { hits: own, corpus: g.corpus, relaxed: { query: genus } };
+    // Counted only when every hit is the genus's: then the genus's count is the answer's.
+    if (own.length) a = { hits: own, corpus: g.corpus, relaxed: { query: genus }, ...(own.length === g.hits.length && g.total !== undefined ? { total: g.total } : {}), ...(own.length === g.hits.length && g.kept !== undefined ? { kept: g.kept } : {}) };
     else if (g.narrow) a = { hits: [], corpus: g.corpus, relaxed: { query: genus }, narrow: true };
   }
   const { hits, corpus } = a;
@@ -106,11 +129,14 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const left = dropped ? leftOut(q) : null;
   const relaxed: Relaxed | undefined = a.relaxed ?? (dropped ? { query: dropped, ...(left ? { left } : {}) } : undefined);
   const near = nearAnswer(a.relaxed?.query ?? q, hits);
+  const names = await regionNames;
+  const regions = names ? regionsTyped(q, names).map((name) => { const label = broadRegion(name); return { name, row: { id: slugify(label), label } }; }) : [];
+  const k: Counted = { ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}), ...(regions.length ? { regions } : {}) };
   // Kept only under the corpus the answer is from (the key names the corpus loaded above, which is the one searched).
   if (edge && corpus === c.corpus) {
-    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}) }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => {});
+    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...k }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => {});
     if (platform?.context?.waitUntil) platform.context.waitUntil(put);
     else await put;
   }
-  return answer(corpus, hits, relaxed, near, narrow);
+  return answer(corpus, hits, relaxed, near, narrow, k);
 };

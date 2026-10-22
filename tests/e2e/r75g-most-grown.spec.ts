@@ -2,8 +2,9 @@
  * Round seventy-five, agent G (the owner's decisions): "Most grown" is a chip of the catalogue, off by default and the
  * same on a desktop and a phone, that shows the species of the most-grown genera, ranked by iNaturalist's observations
  * of plants marked captive or cultivated (scripts/most-grown-genera.txt). Its set is worked out here from the real file by
- * the app's own rule over the fixture's genera: Welwitschia (263 captive observations on 17 October 2026) holds over half
- * of the counted, Copiapoa (140) does not get in, Refusia is refused (iNaturalist has no genus of that name).
+ * the app's own rule over the fixture's genera: Hesperocyparis (16,980 captive observations on 22 October 2026, when the
+ * count was made over the full list's genera; it was not counted before, round eighty) holds over half of the counted,
+ * Welwitschia (267) and Copiapoa (140) do not get in, Refusia is refused (iNaturalist has no genus of that name).
  * On r75base there is no such chip, `?chip=grown` is read as no chip, and /about/how names no source for it.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test';
@@ -23,7 +24,7 @@ const rows = (page: Page) => page.locator('.rows a.grow:visible .gname').allText
 
 for (const [device, opts] of Object.entries(DEVICES)) {
   test(`r75g grown 1, ${device}: "Most grown" is a chip, off by default; on, it shows the most-grown genera by the rule on the real file`, async ({ browser, baseURL }) => {
-    expect(expected).toEqual(['Welwitschia']); // the file's counts, as of its day
+    expect(expected).toEqual(['Hesperocyparis']); // the file's counts, as of its day (Welwitschia until round eighty's count)
     const ctx = await browser.newContext({ ...opts, baseURL, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await page.goto('/'); await ready(page);
@@ -54,7 +55,7 @@ test('r75g grown 2: without JavaScript the chip is a link and its address draws 
   expect(await rows(page)).toEqual(expected);
   await expect(page.locator('.chiprow a[aria-current="page"]')).toHaveText('Most grown, 1');
   await page.goto('/?by=family&chip=grown');
-  expect(await rows(page)).toEqual(['Welwitschiaceae']);
+  expect(await rows(page)).toEqual(['Cupressaceae']);
   await ctx.close();
 });
 

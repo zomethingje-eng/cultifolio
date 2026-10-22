@@ -39,7 +39,7 @@
 import { error, json } from '@sveltejs/kit';
 import { tokenHash, sha256hex } from '$lib/sync/crypto';
 import { NET_FACTOR, UPSTREAM_ADDRESS_PART, MAX_LIST_PAGES, VAULT_WRITES_PER_HOUR } from './caps';
-import { type PhotoRef, refKey, genKey, photoRef, unnamedGenerations, receipt, repoint } from './photogen';
+import { type PhotoRef, refKey, genKey, photoRef, unnamedGenerations, receipt, repoint, RECEIPT_HELD_MS } from './photogen';
 export { MAX_BATCH_BYTES, MAX_PHOTO_BYTES } from '$lib/sync/limits';
 
 export interface VaultMeta {
@@ -121,7 +121,7 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
   // The look, the proof, the delete and the give back are one step for this name: a removal that looked at one upload
   // and then deleted the next one (a photograph revived on another device in between) lost it for good (round sixty;
   // the self-review, P3; two outside reviews, A12 and B5). An upload of the same name waits for it, and it for an upload.
-  const r = await withHold(quota, id, key, async (claimed, fence) => {
+  const r = await withHold(quota, id, key, async (claimed, fence, held) => {
     const { ref, left, o: existing } = await look();
     if (!existing) {
       // A pointer that could not be read is not a photograph already removed: the device is asked to wait and ask again,
@@ -135,6 +135,10 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
     if (left) {
       // The removal was already decided (the pointer holds its receipt, and nothing revived the name since, or the pointer
       // would have moved): only its bytes remain to go.
+      // Unheld (no counter object, the KV fallback), a receipt written within a hold's length is another removal's, which
+      // is between its receipt and its delete and takes the bytes off itself: this one waits, as for a held name. Both
+      // took them off before, so the KV total fell below the bucket's until the day's recount (round eighty; review C 6).
+      if (!held && ref.removed?.w != null && Math.abs(nowOf(quota) - ref.removed.w) < RECEIPT_HELD_MS) return new PhotoBusy(PHOTO_BUSY_S);
       if (!(await fence())) return new PhotoBusy(PHOTO_BUSY_S);
       if (!(await markUnnamed(quota, id, key))) return new PhotoBusy(PHOTO_BUSY_S); // the vault's sweep finishes it if this is cut off again (round sixty-three; S1)
       await takeOff(r2, id, meta, left, existing, quota);
@@ -154,7 +158,7 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
     // A pointer that moved to another removal's receipt is a removal already made: nothing more to do here.
     // The receipt names the generation it takes (`was`), so a removal cut off after this write is finished by the device
     // asking again (the server review, 2).
-    if (photo && !(await point(r2, key, ref, { g: null, drop: existing.customMetadata?.drop ?? '', at: since, was: genOf(key, ref.key) }))) {
+    if (photo && !(await point(r2, key, ref, { g: null, drop: existing.customMetadata?.drop ?? '', at: since, was: genOf(key, ref.key), w: nowOf(quota) }))) {
       const moved = await photoRef(r2, key);
       return moved.key ? 'newer' : moved.unreadable ? new PhotoBusy(PHOTO_BUSY_S) : false;
     }
@@ -242,7 +246,8 @@ async function takeOff(r2: R2Bucket, id: string, meta: VaultMeta, key: string, e
 /** A generation's suffix as a pointer names it: the first generation is 'bin' (round sixty-two; the server review, 1). */
 const genOf = (name: string, key: string) => (key === name ? 'bin' : key.slice(key.lastIndexOf('.') + 1));
 /** Move a photograph's pointer, only if it is still the one `ref` read (R2's conditional write): false when it moved. */
-async function point(r2: R2Bucket, name: string, ref: PhotoRef, to: { g: string | null; drop?: string; at?: number; was?: string }): Promise<boolean> {
+const nowOf = (quota?: Quota) => quota?.now ?? Date.now();
+async function point(r2: R2Bucket, name: string, ref: PhotoRef, to: { g: string | null; drop?: string; at?: number; was?: string; w?: number }): Promise<boolean> {
   // `n`: each write's own, so two pointers that say the same have different etags, and a condition read before one of
   // them never passes after it.
   const body = JSON.stringify({ ...to, n: crypto.randomUUID() });
@@ -348,10 +353,11 @@ export class PhotoBusy extends Error {
  * dev server) it runs as before. A hold the object cannot give is the name being busy: answered with a short
  * wait, never run unheld. `claims` says whether a result is an upload's claim on the name, recorded as the hold is freed.
  */
-async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn: (claimed: number | null, fence: () => Promise<boolean>) => Promise<T>, claims: (r: T) => boolean = () => false): Promise<T | PhotoBusy> {
+async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn: (claimed: number | null, fence: () => Promise<boolean>, held: boolean) => Promise<T>, claims: (r: T) => boolean = () => false): Promise<T | PhotoBusy> {
   const ns = quota?.counters;
   const o = ns ? ns.get(ns.idFromName(`bytes:${id}`)) : null;
-  if (!o?.hold || !o.unhold) return fn(null, async () => true);
+  // `held`: false here, so `fn` knows nothing keeps another request off the name (round eighty).
+  if (!o?.hold || !o.unhold) return fn(null, async () => true, false);
   const now = quota?.now ?? Date.now();
   let h: Awaited<ReturnType<NonNullable<typeof o.hold>>>;
   try {
@@ -367,7 +373,7 @@ async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn
   // A renewal that cannot be asked is a hold not known to be this request's: the step it guards is skipped.
   const fence = async () => (o.renew ? await o.renew(key, h.token, quota?.now ?? Date.now()).catch(() => false) : true);
   try {
-    const r = await fn(h.claimed ?? null, fence);
+    const r = await fn(h.claimed ?? null, fence, true);
     claimed = claims(r);
     return r;
   } finally {

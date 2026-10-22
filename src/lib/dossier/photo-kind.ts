@@ -717,13 +717,15 @@ export const placeholderPhoto = (u: string | undefined) => !!u && /\/attachment_
 export function creditWithoutMail(p: { src?: string; licence?: string; attribution: string }): string | null {
   if (!MAIL_IN.test(p.attribution)) return p.attribution;
   const needsAuthor = p.licence === 'by' || p.licence === 'by-sa';
-  const inat = /^\(c\)\s*(.*?)(,\s*(?:some|all|no) rights reserved.*)$/i.exec(p.attribution);
+  // A CC0 line names its observer without "(c)" (`cc0Credit`; round eighty), and is read the same way.
+  const inat = /^(?:\(c\)\s*)?(.*?)(,\s*(?:some|all|no) rights reserved.*)$/i.exec(p.attribution);
+  const c = /^\(c\)/i.test(p.attribution) ? '(c) ' : '';
   const gbif = /^(.*?)(,\s*(?:CC0|CC BY-SA|CC BY|Public domain)\b.*)$/i.exec(p.attribution);
   const m = p.src === 'inat' ? inat : p.src === 'gbif' ? gbif : (inat ?? gbif);
   if (!m) return needsAuthor ? null : p.attribution.replace(MAIL_ALL, ' ').replace(/\s+/g, ' ').trim();
   const who = withoutMail(m[1]);
-  if (!who) return needsAuthor ? null : `${m === inat ? '(c) author not stated' : 'author not stated'}${m[2]}`;
-  return `${m === inat ? '(c) ' : ''}${who}${m[2]}`;
+  if (!who) return needsAuthor ? null : `${m === inat ? `${c}author not stated` : 'author not stated'}${m[2]}`;
+  return `${m === inat ? c : ''}${who}${m[2]}`;
 }
 const MAIL_IN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
 const MAIL_ALL = /\s*[<(]?\s*(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*[>)]?/g;

@@ -357,6 +357,31 @@ export class WcvpIndex {
     const n = pick[0];
     return n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? n);
   }
+  /**
+   * The range of the page's own Kew entry, by its plant_name_id (round eighty, A; review-w: five pages had no Kew range
+   * because GBIF's name for their key, "Chamaenerion angustifolium (L.) Scop.", is not the name Kew accepts, "Epilobium
+   * angustifolium L.", the page's entry by the species list): the entry Kew accepts under that id, and its range, with
+   * where it comes from (the page's own row of GBIF's name and author filed under it, else the entry). Null when the
+   * index did not read that entry.
+   */
+  /** The name of the entry Kew accepts under an id, or undefined. */
+  entryName(id: string): string | undefined {
+    return (this.byId.get(id) ?? this.hybrids.get(id))?.name;
+  }
+  rangeById(id: string, name?: string, authorship?: string, family?: string): WcvpRange | null {
+    const entry = this.byId.get(id) ?? this.hybrids.get(id);
+    if (!entry) return null;
+    const range = this.rangeOf(entry);
+    if (!range) return null;
+    const at = { entry: entryLabel(entry), name: entry.name, ...(this.fileDay ? { file: this.fileDay } : {}) };
+    if (!name || wcvpKey(entry.name) === wcvpKey(name)) {
+      const own = name ? ownByAuthor(this.ownRows(name, authorship, family).rows, authorship, (r) => r.authors).some((r) => this.entryOf(r).id === entry.id) : true;
+      return { ...range, rangeVia: own || !authorKey(authorship) ? { kind: 'own', ...at } : { kind: 'kew-entry', ...at } };
+    }
+    const row = this.ownRows(name, authorship, family).rows.find((r) => r.status !== 'Accepted' && r.acceptedId === entry.id);
+    if (row) return { ...range, synonymOf: { row: entryLabel(row), status: row.status, entry: entryLabel(entry), entryName: entry.name }, rangeVia: { kind: 'synonym-of', ...at, row: entryLabel(row), status: row.status.toLowerCase() } };
+    return { ...range, rangeVia: { kind: 'kew-entry', ...at } };
+  }
   /** One accepted entry's range, read by its id (IND-9: never looked up again by name); null when this index did not read it. */
   rangeOf(entry: WcvpName): WcvpRange | null {
     if (!this.loaded.has(entry.id)) return null;
@@ -865,6 +890,13 @@ export interface BulkSources {
    * Talinella grevei and eight more lost their GBIF photographs).
    */
   covered?: ReadonlySet<number>;
+  /**
+   * The page's own Kew entry for a GBIF key (round eighty, A): the species list's plant_name_id for the key, or the id of
+   * the page on disk (`k<plant_name_id>`). Where it is known and Kew's file holds it, the range is that entry's, read by
+   * its id, whatever Kew makes of GBIF's name for the key; where GBIF's name reaches that same entry, the answer is the
+   * name's, as before.
+   */
+  entryOf?: (key: number) => string | undefined;
 }
 
 /**
@@ -902,6 +934,18 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         if (r.status === 'ok') names.set(key, (sp = { name: r.data.canonicalName ?? r.data.scientificName, authorship: r.data.authorship, family: r.data.family }));
       }
       const got = sp ? src.wcvp.distributions(sp.name, sp.authorship, sp.family) : null;
+      // The page's own Kew entry, where the name reaches another entry or none (round eighty, A): its range by its id.
+      const own = src.entryOf?.(key);
+      // A name that reaches the entry itself, or an entry below it (Orbea maculata subsp. rangeana for the list's Orbea
+      // maculata: the narrower range is the page's), keeps the name's answer.
+      const below = (g: WcvpRange, id: string) => g.entry.id === id || (() => { const e = src.wcvp!.entryName(id); return !!e && wcvpKey(g.entry.name).startsWith(`${wcvpKey(e)} `); })();
+      const byEntry = own && !(got && got !== 'ambiguous' && below(got, own)) ? src.wcvp.rangeById(own, sp?.name, sp?.authorship, sp?.family) : null;
+      if (byEntry) {
+        stats.wcvp++;
+        const syn = { ...(byEntry.synonymOf ? { synonymOf: byEntry.synonymOf } : {}), ...(byEntry.rangeVia ? { rangeVia: byEntry.rangeVia } : {}), ...(src.wcvp.fileDay ? { kewFile: src.wcvp.fileDay } : {}) };
+        if (!byEntry.rows.some((r) => r.establishmentMeans !== 'DOUBTFUL')) return { status: 'ok', data: { results: [], held: `${entryLabel(byEntry.entry)}${byEntry.entry.status === 'Artificial Hybrid' ? ', an artificial hybrid' : ''}`, kew: byEntry.kew, ...syn } as unknown as T };
+        return { status: 'ok', data: { results: byEntry.rows, kew: byEntry.kew, ...syn } as unknown as T };
+      }
       if (got === 'ambiguous') {
         // WCVP holds this name twice, under two entries, and the backbone's authorship does not tell them apart (round
         // seventy: by the publishing author, `ownRows`): no range, and the dossier says why.

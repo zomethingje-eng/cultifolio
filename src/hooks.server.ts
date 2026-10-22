@@ -209,6 +209,11 @@ export const handle: Handle = async ({ event, resolve }) => {
  * silence it asserts (round sixty-two, the first strict run on the author's PC). Never set in production.
  */
 export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
-  if (event.platform?.env?.E2E_OFFLINE === '1' && new URL(request.url).origin !== event.url.origin) throw new TypeError(`fetch failed: ${new URL(request.url).host} is not asked under E2E_OFFLINE`);
+  const url = new URL(request.url);
+  if (event.platform?.env?.E2E_OFFLINE === '1' && url.origin !== event.url.origin) throw new TypeError(`fetch failed: ${url.host} is not asked under E2E_OFFLINE`);
+  // Under `vite dev` only, the corpus on disk: since round eighty it is outside the app's own files (svelte.config.js's
+  // `files.assets`), so SvelteKit no longer takes /s/ for a file and would route the request to the app, a 404; it goes
+  // to the dev server, which serves static/s/ (vite.config.ts). `import.meta.env.DEV` is false in every build.
+  if (import.meta.env.DEV && url.origin === event.url.origin && url.pathname.startsWith('/s/')) return globalThis.fetch(request);
   return fetch(request);
 };

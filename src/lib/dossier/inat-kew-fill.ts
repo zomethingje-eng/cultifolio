@@ -27,12 +27,29 @@ export const kewMark = (day: string) => `descendants read against Kew's file of 
  */
 export const KEW_OVER_GBIF = "Kew's accepted species read over GBIF's older names";
 
+const ownOf = (d: InatKewDossier): KewOwn => ({ scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], kewSynonyms: d.name.kew?.synonyms ?? [], acceptedElsewhere: d.name.kew?.acceptedElsewhere ?? [], kewEntry: d.name.kew?.entry || null, ipni: d.ids.ipni ?? null });
+/** The mark a page read against Kew's file of `day` carries on its wild row. */
+const markOf = (kew: KewInfra, own: KewOwn, day: string) => (kew.widened(own) ? `${kewMark(day)}; ${KEW_OVER_GBIF}` : kewMark(day));
+
+/**
+ * Kew's reading for a page the main fill asks again (round eighty, agent I): for a page this step would read (one whose
+ * names Kew places a taxon below under another species), the filter `inat.photos` leaves such observations out by, the
+ * one this step's own asking uses, and the mark. A page whose every iNaturalist set the fill read with the filter carries
+ * the mark, so this step passes it by, rather than asking its taxon's children again (one request a page). Null for a page
+ * that is not a candidate.
+ */
+export function kewReading(d: InatKewDossier, kew: KewInfra, day: string): { filter: (taxonName: string) => string | null; mark: string } | null {
+  const own = ownOf(d);
+  if (!d.ids.inat || !kew.hasElsewhereUnder(own)) return null;
+  return { filter: (t) => kew.placedElsewhere(t, own), mark: markOf(kew, own, day) };
+}
+
 export async function inatKewFill(d: InatKewDossier, f: JsonFetcher, kew: KewInfra, day: string, now = () => new Date().toISOString()): Promise<InatKewResult> {
   const id = d.ids.inat;
-  const own: KewOwn = { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], kewSynonyms: d.name.kew?.synonyms ?? [], acceptedElsewhere: d.name.kew?.acceptedElsewhere ?? [], kewEntry: d.name.kew?.entry || null, ipni: d.ids.ipni ?? null };
+  const own = ownOf(d);
   if (!id || !kew.hasElsewhereUnder(own)) return { done: 'not a candidate' };
   const widened = kew.widened(own);
-  const mark = widened ? `${kewMark(day)}; ${KEW_OVER_GBIF}` : kewMark(day);
+  const mark = markOf(kew, own, day);
   const row = d.upstream['inat.photos.wild'];
   const had = row?.detail ?? '';
   if (had.includes(kewMark(day)) && (!widened || had.includes(KEW_OVER_GBIF))) return { done: 'read before' };
@@ -56,7 +73,8 @@ export async function inatKewFill(d: InatKewDossier, f: JsonFetcher, kew: KewInf
   const was = d.photos.filter((p) => p.src === 'inat').length;
   d.photos = [...fresh, ...d.photos.filter((p) => p.src !== 'inat' || (!wild && !p.captive) || (!cult && p.captive))];
   const t = now();
-  d.upstream['inat.photos.wild'] = wild ? { status: wild.status, at: t, detail: `filled ${t.slice(0, 10)}; ${mark}` } : stamp(row);
+  // Where the answer was read (the open data's words, or the API's most voted; round eighty) stays on the record.
+  d.upstream['inat.photos.wild'] = wild ? { status: wild.status, at: t, detail: ['detail' in wild ? wild.detail : undefined, `filled ${t.slice(0, 10)}`, mark].filter(Boolean).join('; ') } : stamp(row);
   if (cult) d.upstream['inat.photos.cultivated'] = { status: cult.status, at: t, detail: `${inat.CULTIVATED_RULE}; filled ${t.slice(0, 10)}` };
   return { done: 'asked again', placed, was, now: fresh.length };
 }

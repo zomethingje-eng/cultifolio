@@ -664,7 +664,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page.locator('.picker .pill.warn').or(page.getByRole('status').filter({ hasText: 'The name service did not answer' })).first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/new$/);
-  await expect(page.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' })).toBeVisible();
+  await expect(page.locator('.picker .hint', { hasText: /press (?:Add|“Add[^”]*”) to keep exactly what you typed/ })).toBeVisible();
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;

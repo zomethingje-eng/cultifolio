@@ -1,0 +1,14 @@
+300 dossiers on disk; 300 without iNaturalist's photographs (39 without an iNaturalist taxon, asked by name); at most 400 requests to iNaturalist today, 0 already made, one every 2 s, the observation searches several taxa a request…
+  first, the 247 iNaturalist ids no build or fill has checked, checked with iNaturalist (thirty a request), an inactive one followed to its current taxon by the build's rule…
+  247 ids checked: 0 inactive ids followed to their current taxon (or taxa given back), 0 whose taxon is not this species' (dropped, the name asked), 0 inactive with no single current taxon (asked by name)
+
+  300 filled; 15 batched searches answered 261 sets, 8 asked alone. Every dossier has been asked for its photographs.
+Reading Kew's names below species, for iNaturalist's descendant taxa…
+  58 pages hold a name below species that Kew places under another species and an iNaturalist taxon; 3 asked iNaturalist now, 53 read before; 0 took in such a taxon and were asked again.
+  page ids: 299 by Kew's plant_name_id, 1 by GBIF's key (ids-gbif.txt says why); 0 dossiers written under a new id
+  273 dossiers changed since their last stamp (or never stamped): the day each last changed written into the file, for the sitemap
+  nearest habitat climates for 194 species (0.1 s)
+  index: 300 species
+  photograph judgement: 112 Commons files on 300 pages read with the reference's names; 0 dossiers written anew
+  corpus 2781c3aa67c772d5: 300 species in 32 buckets, 64 posting files, 2128 search key files (5.7 MB) → static/s/v3/p/ (111 files written, 2403 already on disk under their hash, 0 of older corpora deleted); manifest.json names it
+  1 dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: Agave wendtii

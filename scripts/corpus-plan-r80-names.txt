@@ -1,0 +1,13 @@
+# Round eighty (agent N): English common names from Wikidata for the pages without a GBIF key, after round seventy-nine's
+# build and upload, with round eighty's Worker live (docs/DEPLOY.md, "Round eighty: common names from Wikidata"). Run with:
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-r80-names.txt
+# Before it: this round's Worker deployed (node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs &&
+# npm run deploy), so a page says its names are Wikidata's, and /about/how says how they are chosen.
+backup
+# Every page without a GBIF key (2,327) read, its Wikidata item's English names asked two hundred items a query (about 10
+# queries for the 1,868 items, about 15 seconds; measured here at 12.8 s), each page written with what was taken and why
+# anything was refused, then the index (10 to 30 minutes at 48,368 pages, agent Z's measure).
+dossier --fill wikidata-names
+review corpus-step.log: the fill's lines "<n> pages read: 2327 without a GBIF key; <about 1,868> Wikidata items asked in <about 10> queries", n being the index's count (about 48,360), then "<about 250> pages given English names from Wikidata (<about 243> of them now show one …); <about 1,620> whose item holds none the rule takes; <about 459> with no item taken, each saying why", and its list of each page given names: read the refused ones and anything odd (the round's measure is in docs/review-80/N.md). Had Wikidata not answered, the step would have stopped before this review with "a source did not answer", leaving those pages as they were: the same command an hour later takes them up. Then the --index step's "index: <n> species" (the same n as before) and the review line's count of dossiers that differ from the backup (up to 2,327: every page without a GBIF key gains its record of Wikidata's names).
+upload
+live-check

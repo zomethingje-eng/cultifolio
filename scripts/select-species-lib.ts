@@ -315,7 +315,15 @@ export function matchInat(kew: Kew, t: InatTaxon, deviations: Map<number, Deviat
 // 3. GBIF's backbone: a GBIF species key to its name and author, and Kew's species to one GBIF key.
 // ---------------------------------------------------------------------------------------------------------------------
 
-export interface BackboneName { key: string; name: string; author: string; status: string }
+export interface BackboneName {
+  key: string;
+  name: string;
+  author: string;
+  status: string;
+  /** The backbone's family and order of the usage, as keys (round eighty, A): what `familyRefuses` reads. */
+  familyKey?: string;
+  orderKey?: string;
+}
 
 /**
  * A line of GBIF's backbone export `simple.txt` (tab-separated, no header: id, parent, basionym, is_synonym, status,
@@ -334,7 +342,56 @@ export function backboneLine(line: string): BackboneName | null {
   // (round eighty, X): read without the sign, so a hybrid's author is read too.
   const bare = sci.startsWith(canonical) ? sci : sci.replace(/×\s*/g, '');
   const author = bare.startsWith(canonical) ? bare.slice(canonical.length).trim().replace(/,\s*\d{4}$/, '') : '';
-  return { key: x[0], name: canonical, author, status: x[4] };
+  const k = (v: string | undefined) => (v && v !== '\\N' ? v : undefined);
+  return { key: x[0], name: canonical, author, status: x[4], ...(k(x[14]) ? { familyKey: x[14] } : {}), ...(k(x[13]) ? { orderKey: x[13] } : {}) };
+}
+
+/**
+ * The backbone's families and genera (round eighty, A), from the same export: each accepted family's name to its order,
+ * and each accepted genus's name to its family. `familyRefuses` reads them.
+ */
+export interface BackboneTaxa {
+  /** Lower-case family name → the order keys of the backbone's accepted families of that name. */
+  familyOrders: Map<string, Set<string>>;
+  /** Lower-case genus name → the order keys of the backbone's accepted genera of that name (through their families). */
+  genusOrders: Map<string, Set<string>>;
+}
+/** A family or genus line of the export (kingdom 6), read for `BackboneTaxa`; null for any other. */
+export function backboneHigher(line: string): { rank: 'FAMILY' | 'GENUS'; key: string; name: string; status: string; orderKey?: string } | null {
+  const x = line.split('\t');
+  if (x.length < 20 || (x[5] !== 'FAMILY' && x[5] !== 'GENUS') || x[10] !== '6') return null;
+  const name = x[19] === '\\N' ? '' : x[19];
+  if (!name) return null;
+  return { rank: x[5] as 'FAMILY' | 'GENUS', key: x[0], name, status: x[4], ...(x[13] && x[13] !== '\\N' ? { orderKey: x[13] } : {}) };
+}
+/** `BackboneTaxa` from the export's family and genus lines, accepted ones only. */
+export function backboneTaxa(lines: Iterable<ReturnType<typeof backboneHigher>>): BackboneTaxa {
+  const t: BackboneTaxa = { familyOrders: new Map(), genusOrders: new Map() };
+  for (const h of lines) {
+    if (!h || h.status !== 'ACCEPTED' || !h.orderKey) continue;
+    const m = h.rank === 'FAMILY' ? t.familyOrders : t.genusOrders;
+    const n = h.name.toLowerCase();
+    m.set(n, (m.get(n) ?? new Set()).add(h.orderKey));
+  }
+  return t;
+}
+
+/**
+ * Whether GBIF's usage is another plant than Kew's species by where GBIF files it (round eighty, A; review-w 3): GBIF
+ * files the usage in another order than the one it gives Kew's family, while GBIF's own accepted genus of that name is in
+ * Kew's family's order. Xanthoceras sorbifolium Bunge (Kew, Sapindaceae) was given 9479204, GBIF's "Xanthoceras sorbifolium
+ * (A.Braun) Holub", which GBIF files under a doubtful genus Xanthoceras in Poaceae (Poales), while GBIF's accepted genus
+ * Xanthoceras Bunge is in Sapindaceae (Sapindales): the page showed Poaceae and three records of that name. A family GBIF
+ * places otherwise in the same order (Thesiaceae for Kew's Santalaceae, Onocleaceae for Aspleniaceae) is not this, nor is
+ * a genus GBIF itself files elsewhere (Bdallophytum: GBIF's genus and species both in Rafflesiaceae, Kew's in Cytinaceae).
+ * With nothing to read either way, nothing is refused. Of the list's 46,022 keyed lines, only Xanthoceras sorbifolium's is
+ * refused (measured on the live index's GBIF families with GBIF's orders for the 437 families, 2026-10-22).
+ */
+export function familyRefuses(row: Pick<KewRow, 'family' | 'genus'>, b: Pick<BackboneName, 'orderKey'>, taxa: BackboneTaxa): boolean {
+  const kewOrders = taxa.familyOrders.get(row.family.toLowerCase());
+  if (!b.orderKey || !kewOrders?.size || kewOrders.has(b.orderKey)) return false;
+  const genus = taxa.genusOrders.get(row.genus.replace(/^×\s*/, '').toLowerCase());
+  return !!genus && [...genus].some((o) => kewOrders.has(o));
 }
 
 /**
@@ -360,11 +417,13 @@ export function kewReadsElsewhere(kew: Kew, b: BackboneName, row: KewRow): boole
  * is the one GBIF files the species' occurrences under (Aloysia virgata: accepted 7297208 "(Ruiz & Pav.) Juss.", and a
  * doubtful 7775299 of Kew's author). With Kew's file (round eighty), a usage Kew reads as another species' name
  * (`kewReadsElsewhere`) is none of these: a homonym's key is never taken, and the species reads no key unless a usage of
- * its own author is one.
+ * its own author is one. With the backbone's families and genera (`taxa`, round eighty, A), a usage GBIF files outside
+ * Kew's genus's order is none of these either (`familyRefuses`).
  */
-export function gbifKeyFor(row: KewRow, backboneByWords: Map<string, BackboneName[]>, kew?: Kew): string | null {
-  // Round eighty (X): with Kew's file, a usage Kew reads as another species' name is not this species' key.
-  const all = (backboneByWords.get(words(row.name)) ?? []).filter((b) => !kew || !kewReadsElsewhere(kew, b, row));
+export function gbifKeyFor(row: KewRow, backboneByWords: Map<string, BackboneName[]>, kew?: Kew, taxa?: BackboneTaxa): string | null {
+  // Round eighty (X): with Kew's file, a usage Kew reads as another species' name is not this species' key. And (A) with the
+  // backbone's families and genera, a usage GBIF files in another order than Kew's genus is not either (`familyRefuses`).
+  const all = (backboneByWords.get(words(row.name)) ?? []).filter((b) => (!kew || !kewReadsElsewhere(kew, b, row)) && (!taxa || !familyRefuses(row, b, taxa)));
   for (const status of ['ACCEPTED', 'DOUBTFUL']) {
     const of = all.filter((b) => b.status === status);
     if (of.length === 1) return of[0].key;

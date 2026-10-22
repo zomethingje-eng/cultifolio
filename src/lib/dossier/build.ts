@@ -6,6 +6,7 @@
  * The builder never publishes a dossier if the taxonomy step failed; every
  * other section degrades independently and says so.
  */
+import { fromWikidata, WD_NAMES } from './wikidata-names';
 import { gbifThumb } from './md5';
 import { dedupePhotos } from './dedupe';
 export { dedupePhotos, inatPhotoId } from './dedupe';
@@ -22,11 +23,12 @@ import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
+import type { RegionTester } from './tdwg-shapes';
 import { ownNames, isOwnName, canonicalOf } from './own-names';
 import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
 import type { KewInfra } from './kew-infra';
-import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
+import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
 import { gbifPage, type PageId } from '../core/page-id';
 import { extraWhy, type ExtraKey } from './extra-keys';
@@ -58,7 +60,7 @@ export interface BuildOptions {
    * synonyms and vernaculars are carried, and the upstream records say so. Only honoured when the build is by key
    * and the key matches; a build by name always asks the backbone.
    */
-  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string; species?: Upstream };
+  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string; species?: Upstream; wdNames?: Upstream };
   /**
    * The previous build's identifiers for this key. When Wikidata does not answer (its maxlag, a failure), the build keeps
    * them, above all iNaturalist's taxon id, which the photographs are asked by: a Wikidata outage had cost 113 species
@@ -112,12 +114,39 @@ export interface BuildOptions {
    * gives it; without it no record is tested and the record of the occurrence source says so.
    */
   places?: PlaceIndex;
+  /**
+   * The regions' shapes (round eighty, A; `tdwg-shapes.ts`, `scripts/tdwg3-shapes.json`): a record is in the range when it
+   * lies in a native region's shape, or that region's box where it has none. The corpus script gives them; without them
+   * the boxes alone are read, as before.
+   */
+  regions?: RegionTester;
+  /** The default points (round eighty, A; `default-points.ts`, `scripts/default-points.txt`): a record at one is left out. */
+  defaults?: ReadonlySet<string>;
+  /** The page's own Kew entry for a GBIF key (the list's plant_name_id; round eighty, A): such a page is matched on Wikidata by its identifiers alone. */
+  kewEntryOf?: (gbifKey: number) => string | undefined;
+}
+/** The record's words for the records left out at default points (round eighty, A). */
+export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year: scripts/default-points.txt)`;
+/**
+ * The test of a record against a page's native range by the regions' shapes (round eighty, A; review-w 5), and the words
+ * the record of the occurrences says of it: how many of the native regions were tested by their shapes and how many by
+ * their boxes. Undefined without the shapes (a test, the Worker): the boxes, as before.
+ */
+export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number) => boolean; words: string } | undefined {
+  if (!regions) return undefined;
+  const coded = native.filter((r) => r.code || r.box);
+  const shaped = coded.filter((r) => r.code && regions.hasShape(r.code)).length;
+  const words = shaped === coded.length ? `records tested against the native regions' shapes (${regions.source})` : shaped ? `records tested against ${shaped} of the ${coded.length} native regions' shapes (${regions.source}) and the other ${coded.length - shaped} regions' bounding boxes` : "records tested against the native regions' bounding boxes (no region of this range has a shape here)";
+  return { test: (lat, lon) => coded.some((r) => (r.code ? regions.inRegion(lat, lon, r.code) : !!r.box && inBox(lat, lon, r.box))), words };
 }
 /** How long the previous build's identifiers may be carried through Wikidata not answering, in days (triage-68 M5). */
 export const CARRY_DAYS = 90;
 export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
 /** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
 export const NETWORK_EXTRAS: SkippableSource[] = ['wikidata', 'wikipedia', 'inat', 'commons', 'gbif.media', 'openalex'];
+/** Why a build that skips iNaturalist did not ask it (round eighty, agent I): the words its rows carry. */
+export const INAT_LEFT_TO_FILL = 'not asked: this build left iNaturalist to the daily fill (--fill inat), which asks the taxon by name';
+export const INAT_SETS_LEFT = "not asked: this build left iNaturalist to the daily fill (--fill inat), which asks for the photographs once the page's taxon is known";
 
 export type BuildResult = { ok: true; dossier: Dossier } | { ok: false; reason: 'name-unresolved' | 'higher-rank-only' | 'backbone-refused'; detail?: string };
 
@@ -295,9 +324,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // A re-derivation keeps what the build before it said of a homonym key.
     if (o.taxon?.species?.detail && KEW_NAME.test(o.taxon.species.detail)) upstream['gbif.species'] = { ...upstream['gbif.species'], detail: `${upstream['gbif.species'].detail}; that build: ${o.taxon.species.detail.replace(/^carried from build of [^;]*; that build: /, '')}` };
     syn = { status: 'ok', data: carried.name.synonyms };
-    vern = { status: 'ok', data: carried.name.vernacular };
+    // Names a `--fill wikidata-names --keyed` run took from Wikidata (round eighty) are carried with their record, or not at all.
+    vern = { status: 'ok', data: carried.wdNames ? carried.name.vernacular : carried.name.vernacular.filter((v) => !fromWikidata(v)) };
     upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: carriedFrom };
     upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: carriedFrom };
+    if (carried.wdNames) upstream[WD_NAMES] = { ...carried.wdNames, detail: [carried.wdNames.detail, carriedFrom].filter(Boolean).join('; ') };
   } else {
     [syn, vern] = await Promise.all([gbif.synonyms(f, key), gbif.vernacular(f, key)]);
     mark('gbif.synonyms', syn);
@@ -387,7 +418,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // A file's day only where every record set came from it.
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
-  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places);
+  const inside = rangeTest(native, o.regions);
+  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.test, o.defaults);
+  if (occ.status === 'ok' && nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(nDefault)].filter(Boolean).join('; ');
+  if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
   if (occ.status === 'ok') {
     // The record says what the institution rule left out, or that it was not applied (rule 2: not tested is not none).
     const instSaid = o.places ? institutionWords(nInstitution, institutionKinds, o.places.radiusM) : 'records not tested against botanic gardens, herbaria and zoos: no list of them was given to this build';
@@ -412,24 +446,27 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
   // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
   // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
-  if (climate.status === 'ok' && climate.extremes && climate.landFraction != null && climate.landFraction < 0.5) climate = { ...climate, extremes: undefined, extremesSea: climate.extremes, extremesStatus: 'sea' };
+  // Extremes beyond a lapse correction's reach, or impossible, are set aside too, and the record says why (round eighty, A).
+  const lapseWhy = climate.status === 'ok' && !(climate.landFraction != null && climate.landFraction < 0.5) ? lapseSetAside(climate) : null;
+  climate = setAsideExtremes(climate);
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
   // The daily extremes are their own upstream: a refusal here is a reason to build again, which `climate: ok` alone would hide (round sixteen, 7).
   // A failure is recorded as `error`, not `refused` (round sixty-nine; triage-68 W6, S-E7): the climate keeps one status for
   // both, which the page says as "not checked", and the provider's words say which it was ("did not answer" for a timeout
   // or a 5xx, "refused the request" for a refusal), so the record is read from them.
-  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: climate.src.extremes } : {}) };
+  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' || climate.extremesStatus === 'lapse' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: `${climate.src.extremes}${lapseWhy ? `; not used: ${lapseWhy}` : ''}` } : {}) };
 
   /* ---- 5. Identifiers, summary ---- */
   const ids: Dossier['ids'] = { gbif: key };
   const links: Record<string, string> = { gbif: `https://www.gbif.org/species/${key}` };
   const skip = (k: SkippableSource) => !!o.skip?.includes(k);
-  const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
+  const skipped = (k: string, detail?: string) => (upstream[k] = { status: 'skipped', at: now(), ...(detail ? { detail } : {}) });
   // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
   const sameType = synRows ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, synRows) : [];
   // Wikidata's lag is waited out in rounds by a corpus run, as the fills wait it (round seventy, the owner's run).
-  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk });
+  // A page with a Kew id is matched on Wikidata by its GBIF key and Kew's identifiers alone, never by its label (round eighty, A).
+  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk, kewPage: pageId.startsWith('k') || !!o.kewEntryOf?.(key) });
   const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
   // GBIF not answering while it checks the item Wikidata gave is recorded as GBIF's, after Wikidata's answer (round
@@ -459,13 +496,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   // No number from the item, or no item: Kew's number for the name and author is linked all the same (round
   // seventy-two, A: 138 pages Kew holds by their name and author linked neither POWO nor IPNI).
-  if ((x.status === 'ok' || x.status === 'none') && !ids.ipni && !ids.powo) {
+  // And with two items, or Wikidata not asked: IPNI and POWO are Kew's, from Kew's file, whatever Wikidata answered (round
+  // eighty, A: Datura innoxia, two items labelled with its name, linked no IPNI and no POWO though Kew holds Datura innoxia Mill.).
+  if (x.status !== 'refused' && x.status !== 'error' && !ids.ipni && !ids.powo) {
     kewAsk.r ??= await gbif.kewIpni(f, scientific, authorship, u(s.family));
     if (kewAsk.r.status === 'ok' && kewAsk.r.data.ids.length) {
       const k = gbif.kewLinks({}, kewAsk.r.data);
       if (k.ipni) { ids.ipni = k.ipni; links.ipni = `https://www.ipni.org/n/${k.ipni}`; }
       if (k.powo) { ids.powo = k.powo; links.powo = `https://powo.science.kew.org/taxon/${k.powo}`; }
-      if (k.changed) upstream.wikidata = { ...upstream.wikidata, detail: [upstream.wikidata?.detail, `IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''} (no item's number)`].filter(Boolean).join('; ') };
+      if (k.changed && upstream.wikidata) upstream.wikidata = { ...upstream.wikidata, detail: [upstream.wikidata?.detail, `IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''} (no item's number)`].filter(Boolean).join('; ') };
     }
   }
   // The name the page links is the name it cites (round seventy-two, A): Kew's row for the linked number, where it is
@@ -593,9 +632,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     return undefined;
   }
   if (skip('inat')) {
-    if (!inatId) skipped('inat.taxon'); // not asked either: a rederive carries the previous answer forward only for keys marked skipped
-    skipped('inat.photos.wild');
-    skipped('inat.photos.cultivated');
+    // Not asked either: a rederive carries the previous answer forward only for keys marked skipped. Each says why (round
+    // eighty, agent I: 7 of 36 sampled new pages said "not asked" with no reason): the build leaves iNaturalist to the
+    // daily fill, which asks the taxon by name, or checks the id an item gave, before any photograph.
+    skipped('inat.taxon', inatId ? `not asked: this build left iNaturalist to the daily fill (--fill inat), which checks taxon ${inatId}, ${inatFrom}, before its photographs` : INAT_LEFT_TO_FILL);
+    skipped('inat.photos.wild', INAT_SETS_LEFT);
+    skipped('inat.photos.cultivated', INAT_SETS_LEFT);
   } else if (inatId) {
     links.inat = `https://www.inaturalist.org/taxa/${inatId}`;
     const owner = { key: pageId, held: o.held, kew: o.kewInfra ? (t: string) => o.kewInfra!.placedElsewhere(t, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], ipni: ids.ipni }) : null };
@@ -695,7 +737,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
  * out, one record a three-decimal coordinate, each tested against the range's boxes, the open ones kept for the map, the
  * precise ones for the climate; then the map marker. Pure: the climate is read by the caller from `forClimate`.
  */
-export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex) {
+export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex, inside?: (lat: number, lon: number) => boolean, defaults?: ReadonlySet<string>) {
   const open: OccPoint[] = [];
   const restrictedInRange: Array<[number, number]> = [];
   /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated). */
@@ -705,6 +747,8 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
   const datasets = new Map<string, { title?: string; licence: string; n: number }>();
   // Records at a botanic garden, a herbarium or a zoo (round seventy-nine, Q; `clean.ts`), counted by the kind of place.
   let nInstitution = 0;
+  /** Records at a default point (round eighty, A). */
+  let nDefault = 0;
   const institutionKinds = new Map<InstitutionKind, number>();
   {
     // Same coordinate to three decimals is one place; when an open and a restricted record share it, the
@@ -724,6 +768,8 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
         continue;
       }
       const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
+      // A dataset's default point, not where the plant was found (round eighty, A; `default-points.ts`): left out, counted.
+      if (defaults?.has(dk)) { nDefault++; continue; }
       const held = byCoord.get(dk);
       // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
       // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
@@ -742,7 +788,8 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       datasets.set(dsKey, ds);
       // No boxes (the range source refused, or a country-level range): nothing is tested and every record is kept; the
       // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
-      const inRange = boxes.length ? boxes.some((b) => inBox(lat, lon, b)) : true;
+      // By the regions' shapes where the build has them (round eighty, A; `tdwg-shapes.ts`), else their boxes.
+      const inRange = boxes.length ? (inside ? inside(lat, lon) : boxes.some((b) => inBox(lat, lon, b))) : true;
       if (!inRange) {
         nOutside++;
         continue;
@@ -788,7 +835,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
-  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid };
+  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault };
 }
 
 /** The words a record of a species on a homonym key carries (`kewName`), by which a re-derivation keeps them. */

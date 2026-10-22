@@ -64,9 +64,32 @@ export function sitemapDays(index: IndexEntry[]): Array<number | null> {
   return out;
 }
 
-export function sitemapIndex(urls: string[] | number, lastmod: string | null = null): string {
+/**
+ * How long the edge and a crawler keep a sitemap answer (round eighty; review C 2). The index, `/sitemap.xml`, is the
+ * address robots.txt names and cannot change, so it is kept five minutes: kept a day, one data centre went on serving
+ * the previous corpus's one-file index for most of a day after an upload, and the 14,893 addresses of the new
+ * `sitemap-2.xml` were listed nowhere there. The files it names carry the corpus's id (`/sitemap-<id>-<n>.xml`), so a new
+ * corpus's files are new addresses that no copy holds, and they are kept a day. A file asked by its bare number
+ * (`/sitemap-<n>.xml`, the names before round eighty, which crawlers and the live check still have) or under another
+ * corpus's id is answered with the current corpus's file and kept five minutes.
+ */
+export const SITEMAP_INDEX_CACHE = 'public, max-age=300';
+export const SITEMAP_FILE_CACHE = 'public, max-age=86400';
+export const SITEMAP_OTHER_CACHE = 'public, max-age=300';
+/** A corpus id fit for an address: the manifest's (16 hex digits), or any hash of hex digits; else none (the fixture's 'fixture'). */
+export const sitemapCorpus = (corpus: string | null | undefined): string | null => (corpus && /^[0-9a-f]{8,64}$/.test(corpus) ? corpus : null);
+/** The address of the sitemap's file `n` under this corpus. */
+export const sitemapFileName = (n: number, corpus: string | null = null) => (corpus ? `sitemap-${corpus}-${n}.xml` : `sitemap-${n}.xml`);
+/** The route's parameter (`<n>` or `<id>-<n>`) read back: null when it is neither. */
+export function sitemapParam(param: string): { corpus: string | null; n: number } | null {
+  const m = /^(?:([0-9a-f]{8,64})-)?([1-9]\d{0,5})$/.exec(param);
+  return m ? { corpus: m[1] ?? null, n: Number(m[2]) } : null;
+}
+
+export function sitemapIndex(urls: string[] | number, lastmod: string | null = null, corpus: string | null = null): string {
   const files = typeof urls === 'number' ? urls : sitemapFiles(urls.length);
-  const entries = Array.from({ length: files }, (_, i) => `  <sitemap><loc>${BASE}/sitemap-${i + 1}.xml</loc>${mod(lastmod)}</sitemap>`);
+  const id = sitemapCorpus(corpus);
+  const entries = Array.from({ length: files }, (_, i) => `  <sitemap><loc>${BASE}/${sitemapFileName(i + 1, id)}</loc>${mod(lastmod)}</sitemap>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</sitemapindex>\n`;
 }
 

@@ -297,7 +297,7 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .maprow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
 .mapbox { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; display: flex; flex-direction: column; }
 .mapbox .map { border-radius: 0; }
-.mapcap { font-size: var(--fs-sm); color: var(--ink3); padding: 8px 12px; border-top: 1px solid var(--rule); margin-top: auto; }
+.mapcap { font-size: var(--fs-sm); color: var(--ink3); padding: 8px 12px; border-top: 1px solid var(--rule); flex: 1 0 auto; } /* fills the box under the map: pushed to its foot, the shorter caption left a band of the card's colour between map and caption, plain in dark (round eighty; the desktop review's 13) */
 .factgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; margin: 16px 0 4px; }
 .factgrid > div { padding: 12px 15px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-size: var(--fs-md); }
 .factgrid b { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 3px; }
@@ -396,7 +396,14 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .tlrow .x { font-size: var(--fs-md); color: var(--ink2); text-align: right; }
 
 /* tables of the month */
-table.wx { width: 100%; font-size: var(--fs-md); margin: 14px 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; border-collapse: separate; border-spacing: 0; }
+/* No `overflow: hidden` for the rounded corners: it made the table its first column's scroll container, so the row names'
+   `position: sticky` held them to a table that never scrolls and they went with the numbers when the region under it was
+   swiped (round eighty; the phone review's 6). The corner cells round themselves instead. */
+table.wx { width: 100%; font-size: var(--fs-md); margin: 14px 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); border-collapse: separate; border-spacing: 0; }
+table.wx > :first-child > tr:first-child > :first-child { border-top-left-radius: var(--r); }
+table.wx > :first-child > tr:first-child > :last-child { border-top-right-radius: var(--r); }
+table.wx > :last-child > tr:last-child > :first-child { border-bottom-left-radius: var(--r); }
+table.wx > :last-child > tr:last-child > :last-child { border-bottom-right-radius: var(--r); }
 table.wx th { text-align: right; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); border-bottom: 1px solid var(--rule); padding: 9px 10px; font-weight: 700; }
 table.wx th:first-child { text-align: left; }
 table.wx td { border-bottom: 1px solid var(--rule); padding: 8px 10px; font-family: var(--mono); font-size: var(--fs-sm); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -421,6 +428,8 @@ details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-h
 .field > label, .field > .lbl, .field > span:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
 .field input, .field textarea, .field select { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
 .field textarea { min-height: 84px; resize: vertical; line-height: 1.55; }
+/* A field is a tap target too: the add form's measured 41 to 43 px on a phone, against the 44 px token (round eighty; the phone review's 9). */
+.field input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), .field select { min-height: var(--tap); }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .field .help { font-size: var(--fs-sm); color: var(--ink3); margin-top: 4px; }
@@ -442,7 +451,9 @@ details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-h
   /* On a phone the section row is one line that scrolls sideways and sticks under the top bar: the page's own navigation. */
   nav.tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 0 6px; margin-inline: -16px; padding-inline: 16px; }
   nav.tabs::-webkit-scrollbar { display: none; }
-  nav.tabs { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+  /* The fade over the labels that run on to the right is drawn in the bar's own colour over them: a mask faded the bar's
+     background too, and the page showed through its right 40 px as it scrolled under (round eighty; the phone review's 7). */
+  nav.tabs::after { content: ''; position: sticky; right: -16px; flex: none; width: 40px; margin-right: -16px; align-self: stretch; background: linear-gradient(to right, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg)); pointer-events: none; }
   nav.tabs a { font-size: var(--fs-sm); padding: 0 11px; }
   table.wx td, table.wx th { padding: 6px 8px; }
   /* Fingers: the tap token on anything tappable (44 px under a coarse pointer; round fifty-eight). */

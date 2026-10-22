@@ -120,10 +120,14 @@ describe("the framework's session keys (the session storage part of the key list
     expect(named.length, list.where).toBe(n);
     expect(named).toEqual(written);
   });
-  it('"no page of this site asks it to keep anything": no page exports a snapshot', () => {
+  // Round eighty (U): the front page keeps the reader's place in the catalogue for Back (the phone review's 1), and the
+  // sentence says so; it is the one page that exports a snapshot, and what it keeps is the catalogue's, nothing of yours.
+  it('"the front page keeps which catalogue row or species tile was at the top of the screen": the one page that exports a snapshot', () => {
     const list = said('how', 'What the device keeps outside the collection, every key');
-    expect(list.text).toMatch(/no page of this site asks it to keep anything/);
-    expect(source.filter((f) => /export const snapshot\b/.test(raw(f)))).toEqual([]);
+    expect(list.text).toMatch(/the front page keeps which catalogue row or species tile was at the top of the screen and how far down, with the grouping and chip it was under, so Back returns to it; nothing of yours/);
+    expect(source.filter((f) => /export const snapshot\b/.test(raw(f)))).toEqual(['src/routes/+page.svelte']);
+    const page = raw('src/routes/+page.svelte');
+    expect(page).toMatch(/type Place = \{ by: string; chip: string; count: number; open: string \| null; row: string; rowAt: number; tile: number \| null; top: number \};/);
   });
 });
 
@@ -244,7 +248,7 @@ describe('Natural Earth (H64)', () => {
     const still = raw('src/lib/map/still.ts');
     expect(still).toMatch(/Natural Earth\s*\n?\s*\*?\s*coastlines \(public domain\)/);
     // "drawn from files this site serves itself": the map reads its own /maps/ files, and asks no tile server.
-    expect(readdirSync('static/maps').length).toBeGreaterThan(0);
+    expect(readdirSync('static/app/maps').length).toBeGreaterThan(0);
     expect(still).not.toMatch(/https?:\/\//);
   });
 });

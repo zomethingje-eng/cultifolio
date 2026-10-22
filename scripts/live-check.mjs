@@ -114,15 +114,18 @@ let species = process.env.LIVE_CHECK_SPECIES;
 const fresh = `check=${Date.now()}`;
 if (!species) {
   // The sitemap is an index of files since round forty; the first file names the species pages.
-  // Asked past the edge cache (a query the cache keys on): the day-old copy of the previous build's sitemap is what a
-  // plain request gets for up to a day after a deploy, which is fine for crawlers and wrong for a check of this build.
+  // Asked past the edge cache (a query the cache keys on): a plain request may get the edge's copy of the previous
+  // build's index for up to five minutes after a deploy (a day before round eighty), which is wrong for a check of this build.
   const idx = await get(`/sitemap.xml?${fresh}`);
   if (idx.status !== 200) fail('/sitemap.xml', idx);
-  if (!/<sitemapindex/.test(idx.text) || !/sitemap-1\.xml/.test(idx.text)) fail('/sitemap.xml should be a sitemap index naming /sitemap-1.xml', idx);
-  const sm = await get(`/sitemap-1.xml?${fresh}`);
-  if (sm.status !== 200) fail('/sitemap-1.xml', sm);
+  // Its first file is `/sitemap-<corpus id>-1.xml` since round eighty (the files turn over with the corpus), and
+  // `/sitemap-1.xml` from a Worker before it; either is read.
+  const first = /<loc>[^<]*\/(sitemap-(?:[0-9a-f]+-)?1\.xml)<\/loc>/.exec(idx.text)?.[1];
+  if (!/<sitemapindex/.test(idx.text) || !first) fail('/sitemap.xml should be a sitemap index naming its first file (/sitemap-<corpus>-1.xml, or /sitemap-1.xml)', idx);
+  const sm = await get(`/${first}?${fresh}`);
+  if (sm.status !== 200) fail(`/${first}`, sm);
   species = /<loc>[^<]*\/species\/([a-z0-9-]+)<\/loc>/.exec(sm.text)?.[1];
-  if (!species) fail('/sitemap-1.xml names no species page', sm);
+  if (!species) fail(`/${first} names no species page`, sm);
 }
 for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpus']) {
   let r = await get(path, { headers: { accept: 'text/html,*/*' } });
@@ -140,6 +143,9 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   // A deploy with no corpus in R2 falls back to the four fixture species and answers every check above; that is the most broken deploy there is, so it fails here unless a local run says the fixture is expected (round twenty-six, 9).
   if (path === '/api/corpus' && /"id":"fixture"/.test(r.text) && !process.env.LIVE_CHECK_FIXTURE_OK) fail(`${path} says the corpus is the fixture: R2 holds no index.json, or the Worker cannot read it (set LIVE_CHECK_FIXTURE_OK=1 only for a local wrangler dev)`, r);
   ok(`${path}: 200 with both headers`);
+  // Cloudflare's network error logging (round eighty; review C 5): a zone setting, not the code's. /about/how says the
+  // headers are on while the setting is; a note says which, so the owner knows when that sentence is to go.
+  if (path === '/about/how') console.log(r.h('nel') ? `  note  ${path}: Cloudflare adds its NEL and Report-To headers (network error logging is on for the site; /about/how says so; DEPLOY.md, round eighty, says how to turn it off)` : `  note  ${path}: no NEL header: network error logging is off for the site; /about/how's sentence about it is to go`);
 }
 
 // A species page rendered once is answered from the Worker's own cache for the next minute (round forty-three, 3): the

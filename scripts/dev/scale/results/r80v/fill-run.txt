@@ -1,0 +1,9 @@
+# The real fill (scripts/build-dossiers.ts --fill inat --inat-open <agent P's 50 taxa of the open data of 2026-09-27> --inat-budget 200), on round seventy-seven's dossiers of agent P's 50 sample species, rekeyed to version 3, their wild sets cleared and filled by --fill inat --wild from the same file first; 2026-10-21, one request to iNaturalist every 2.1 s.
+# First run:
+50 dossiers on disk; 50 without iNaturalist's photographs (20 of them for their 24 most-voted wild observations: the open data of 2026-09-27 holds more than 24 of their taxon); at most 200 requests to iNaturalist today, 0 already made; the wild set from the open data of 2026-09-27 where it holds the taxon and 24 observations of it or fewer, else the API's most voted…
+  50 filled; 0 wild sets read from iNaturalist's open data, 20 asked of its API for the 24 most voted (the open data holds more than 24). Every dossier has been asked for its photographs.
+# Its requests: 70 in all, 20 wild (the most voted), 50 cultivated.
+# Second run, the same command:
+50 dossiers on disk; 0 without iNaturalist's photographs; at most 200 requests to iNaturalist today, 70 already made; the wild set from the open data of 2026-09-27 where it holds the taxon and 24 observations of it or fewer, else the API's most voted…
+  0 filled; 0 wild sets read from iNaturalist's open data. Every dossier has been asked for its photographs.
+# Its requests: 0.

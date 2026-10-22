@@ -1,0 +1,422 @@
+{
+ "what": "the fill's most-voted wild sets against the API alone, asked again after the fill",
+ "ran": "2026-10-21T00:27:39.109Z",
+ "requests": 20,
+ "tally": {
+  "pages": 50,
+  "mostVoted": 20,
+  "recordSaysApi": 20,
+  "photosSame": 20,
+  "fieldsSame": 20,
+  "observationsSame": 20,
+  "sameAsDayBefore": 3,
+  "comparedDayBefore": 20,
+  "apiChosen": 480,
+  "apiChosenAlsoNewest": 211,
+  "apiChosenWithVotes": 78,
+  "photosBefore": 993,
+  "photosAfter": 1038
+ },
+ "rows": [
+  {
+   "page": "k2418831",
+   "name": "Rhododendron austrinum",
+   "taxon": 167810,
+   "openCount": 26,
+   "apiCount": 26,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 26, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 51,
+    "api": 51,
+    "before": 49
+   },
+   "withVotes": 1,
+   "sameAsDayBefore": true,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k2471233",
+   "name": "Viola banksii",
+   "taxon": 410980,
+   "openCount": 210,
+   "apiCount": 213,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 210, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 67,
+    "api": 67,
+    "before": 65
+   },
+   "withVotes": 5,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k248454",
+   "name": "Heliconia latispatha",
+   "taxon": 163640,
+   "openCount": 290,
+   "apiCount": 293,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 290, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 38,
+    "api": 38,
+    "before": 41
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 21
+  },
+  {
+   "page": "k2623293",
+   "name": "Adromischus marianiae",
+   "taxon": 579121,
+   "openCount": 25,
+   "apiCount": 25,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 25, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 45,
+    "api": 45,
+    "before": 43
+   },
+   "withVotes": 2,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k2650670",
+   "name": "Argyroderma fissum",
+   "taxon": 580173,
+   "openCount": 35,
+   "apiCount": 35,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 35, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 51,
+    "api": 51,
+    "before": 52
+   },
+   "withVotes": 1,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 23
+  },
+  {
+   "page": "k2733828",
+   "name": "Comptonia peregrina",
+   "taxon": 121031,
+   "openCount": 3021,
+   "apiCount": 3081,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 3021, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 52,
+    "api": 52,
+    "before": 51
+   },
+   "withVotes": 19,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 19
+  },
+  {
+   "page": "k291753",
+   "name": "Yucca faxoniana",
+   "taxon": 123902,
+   "openCount": 51,
+   "apiCount": 51,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 51, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 41,
+    "api": 41,
+    "before": 38
+   },
+   "withVotes": 4,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k2950658",
+   "name": "Malus fusca",
+   "taxon": 77948,
+   "openCount": 316,
+   "apiCount": 325,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 316, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 66,
+    "api": 66,
+    "before": 43
+   },
+   "withVotes": 3,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 23
+  },
+  {
+   "page": "k307906",
+   "name": "Gethyllis ciliaris",
+   "taxon": 568402,
+   "openCount": 41,
+   "apiCount": 41,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 41, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 56,
+    "api": 56,
+    "before": 52
+   },
+   "withVotes": 3,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k3099640",
+   "name": "Kalimeris indica",
+   "taxon": 933838,
+   "openCount": 30,
+   "apiCount": 30,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 30, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 56,
+    "api": 56,
+    "before": 47
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k3105380",
+   "name": "Erigeron karvinskianus",
+   "taxon": 76923,
+   "openCount": 3739,
+   "apiCount": 3792,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 3739, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 39,
+    "api": 39,
+    "before": 29
+   },
+   "withVotes": 24,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k3112707",
+   "name": "Leucanthemum maximum",
+   "taxon": 77719,
+   "openCount": 80,
+   "apiCount": 80,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 80, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 39,
+    "api": 39,
+    "before": 41
+   },
+   "withVotes": 1,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k3152850",
+   "name": "Nephrolepis cordifolia",
+   "taxon": 48233,
+   "openCount": 1314,
+   "apiCount": 1332,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 1314, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 44,
+    "api": 44,
+    "before": 49
+   },
+   "withVotes": 10,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 16
+  },
+  {
+   "page": "k327111",
+   "name": "Crocosmia paniculata",
+   "taxon": 243783,
+   "openCount": 35,
+   "apiCount": 34,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 35, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 57,
+    "api": 57,
+    "before": 51
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k327667",
+   "name": "Geissorhiza tenella",
+   "taxon": 569207,
+   "openCount": 37,
+   "apiCount": 39,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 37, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 59,
+    "api": 59,
+    "before": 66
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k346758",
+   "name": "Drosera rupicola",
+   "taxon": 780686,
+   "openCount": 25,
+   "apiCount": 25,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 25, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 54,
+    "api": 54,
+    "before": 57
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": true,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k456185",
+   "name": "Albuca seineri",
+   "taxon": 338726,
+   "openCount": 25,
+   "apiCount": 26,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 25, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 71,
+    "api": 71,
+    "before": 66
+   },
+   "withVotes": 0,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k45858",
+   "name": "Coleus barbatus",
+   "taxon": 157127,
+   "openCount": 365,
+   "apiCount": 374,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 365, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 56,
+    "api": 56,
+    "before": 56
+   },
+   "withVotes": 1,
+   "sameAsDayBefore": true,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k503275",
+   "name": "Cryptostegia grandiflora",
+   "taxon": 84815,
+   "openCount": 202,
+   "apiCount": 205,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 202, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 52,
+    "api": 52,
+    "before": 58
+   },
+   "withVotes": 3,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 24
+  },
+  {
+   "page": "k7103",
+   "name": "Alstonia scholaris",
+   "taxon": 189179,
+   "openCount": 177,
+   "apiCount": 178,
+   "record": "from iNaturalist's API: research-grade observations not marked captive with an open-licence photograph, the observations iNaturalist puts first by votes, 24 of them (the open data of 2026-09-27 holds 177, and no votes); filled 2026-10-21",
+   "beforeRecordWasOpenData": true,
+   "photosSame": true,
+   "fieldsSame": true,
+   "observationsSame": true,
+   "photos": {
+    "fill": 44,
+    "api": 44,
+    "before": 39
+   },
+   "withVotes": 1,
+   "sameAsDayBefore": false,
+   "dayBeforeOverlap": 22
+  }
+ ]
+}

@@ -1,4 +1,4 @@
-// Draws the link-preview image, static/og.png (1200 x 630), from scripts/dev/og.html in Chromium:
+// Draws the link-preview image, static/app/og.png (1200 x 630), from scripts/dev/og.html in Chromium:
 //   node scripts/dev/og.mjs            (Playwright's own Chromium; PW_CHROMIUM=<path> for another)
 // The page's fonts are the files the site serves, put in as data URLs (a file:// page may not load a font beside it).
 // Its words and OG_ALT (src/lib/ui/ref/head.ts) say the same thing: change both (round sixty-three; the review of round
@@ -26,6 +26,6 @@ const over = await page.evaluate(() => [...document.querySelectorAll('h1, p')].f
 if (over.length) throw new Error(`og.mjs: runs past the edge: ${over.join(', ')}`);
 const png = await page.screenshot({ type: 'png' });
 await browser.close();
-const out = root + 'static/og.png';
+const out = root + 'static/app/og.png';
 writeFileSync(out, png);
-console.log(`static/og.png: 1200 x 630, ${Math.round(statSync(out).size / 1024)} KB`);
+console.log(`static/app/og.png: 1200 x 630, ${Math.round(statSync(out).size / 1024)} KB`);

@@ -29,6 +29,8 @@
     // The reference's GBIF key, never its page id (round seventy-eight); none for a page without one (round seventy-nine).
     return s && s !== 'none' ? (s.gbif ?? null) : k;
   }
+  /** The name and its key came with the link, from a species page: the name check's room is one line until the grower types (round eighty). */
+  const linked = !!(page.url.searchParams.get('species') && Number(page.url.searchParams.get('key')));
   onMount(async () => {
     await collection.load();
     // Carried from the example by "Keep it as my own": the whole form, read once (round sixty-nine; triage-68 X3).
@@ -269,7 +271,7 @@
   <div class="cult sheet">
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
-  <label class="field"><span>Species</span><SpeciesPicker reserve bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
+  <label class="field"><span>Species</span><SpeciesPicker reserve {linked} addLabel={`Add${countN > 1 ? ` ${countN}` : ''} as typed`} bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
   <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Monstera deliciosa</i> 'Thai Constellation'); a hybrid as the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>

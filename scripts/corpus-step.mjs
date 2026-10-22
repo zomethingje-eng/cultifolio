@@ -72,6 +72,16 @@ export function parsePlan(text) {
   return steps;
 }
 
+/** Two spellings of one plan file: either slash, with or without a leading `./` (round eighty). */
+export const samePlanFile = (a, b) => { const n = (p) => String(p).replace(/\\/g, '/').replace(/^(\.\/)+/, ''); return n(a) === n(b); };
+/** Where an unfinished run of a plan is kept while another plan runs (round eighty): `corpus-step.plan-<its name>.json`, gitignored. */
+export const keptStateName = (planFile) => `corpus-step.plan-${String(planFile).replace(/\\/g, '/').split('/').pop().replace(/\.txt$/, '').replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
+
+/** Whether a run's state is of a plan with these steps, line for line, in this order (comments aside). */
+export function sameSteps(state, plan) {
+  return Array.isArray(state?.steps) && state.steps.length === plan.length && plan.every((s, i) => state.steps[i]?.line === s.line);
+}
+
 /**
  * What a builder step's run says: `unfinished` when a source did not answer (the builder's own "run --fill X again", "N
  * not answered", "(run again)"), `review` when the build lost something (exit 1 with drops.txt written), when the index
@@ -175,7 +185,10 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   const DEFAULT_PLAN = 'scripts/corpus-plan.txt';
   const prior = readJson(at('corpus-step.json'));
   const unfinished = (st) => Array.isArray(st?.steps) && st.steps.some((x) => x.status !== 'done' && x.status !== 'skipped');
-  const planRel = argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : typeof prior?.planFile === 'string' && prior.planFile !== DEFAULT_PLAN && unfinished(prior) ? prior.planFile : DEFAULT_PLAN;
+  // And a run kept aside while another plan ran (round eighty): with the last run's plan finished, the kept run is the
+  // one carried on, never the default plan started over.
+  const keptRun = () => { try { return readdirSync(root).filter((f) => /^corpus-step\.plan-.+\.json$/.test(f)).map((f) => readJson(at(f))).find((st) => typeof st?.planFile === 'string' && unfinished(st))?.planFile ?? null; } catch { return null; } };
+  const planRel = argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : typeof prior?.planFile === 'string' && prior.planFile !== DEFAULT_PLAN && unfinished(prior) ? prior.planFile : (!unfinished(prior) && keptRun()) || DEFAULT_PLAN;
   const cmd = `node scripts/corpus-step.mjs${planRel !== DEFAULT_PLAN ? ` --plan ${planRel}` : ''}`;
   if (!argv.includes('--plan') && planRel !== DEFAULT_PLAN) say(`  carrying on with ${planRel}, the plan the last run left unfinished (${cmd}).\n`);
   const planFile = at(planRel);
@@ -184,6 +197,30 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   const plan = parsePlan(planText);
   const stateFile = at('corpus-step.json');
   let state = readJson(stateFile);
+  // One run per plan file (round eighty, agent O): a run of another plan (a repair plan on an evening between two days of
+  // the full build's fill) put the full build's record aside under a dated name and started its own, and the full plan
+  // run again after it then found a record of the other plan and started again from its first step: its backup, the
+  // build with --renew, a review stop. Now an unfinished run of another plan is kept under its plan's name
+  // (`keptStateName`), and taken up again where it stopped when that plan is next run. The plan's file is compared by
+  // its path with either slash, so `--plan scripts\corpus-plan-full.txt` typed on Windows is the same plan.
+  if (state && typeof state.planFile === 'string' && !samePlanFile(state.planFile, planRel)) {
+    const keptAt = at(keptStateName(planRel));
+    const kept = readJson(keptAt);
+    if (unfinished(state)) {
+      writeAtomic(at(keptStateName(state.planFile)), JSON.stringify(state, null, 1));
+      say(`  the unfinished run of ${state.planFile} is kept in ${keptStateName(state.planFile)}; it carries on where it stopped when that plan is run again (node scripts/corpus-step.mjs --plan ${state.planFile}).\n`);
+    } else renameSync(stateFile, at(`corpus-step.${stamp().slice(0, 10)}.${Date.now()}.json`));
+    if (kept && typeof kept.planFile === 'string' && samePlanFile(kept.planFile, planRel)) {
+      writeAtomic(stateFile, JSON.stringify(kept, null, 1));
+      unlinkSync(keptAt);
+      state = kept;
+      say(`  carrying on with the run of ${planRel} that was kept in ${keptStateName(planRel)}.\n`);
+    } else state = null;
+  }
+  // A plan whose steps are the same, line for line, is the same plan (round eighty, agent V): a change to its comments
+  // alone, which a round's code delivered during a plan's days of fills brings, keeps where the run is. Any change to a
+  // step starts the plan again, as before.
+  if (state && state.plan !== sha1(planText) && sameSteps(state, plan)) state.plan = sha1(planText);
   if (!state || state.plan !== sha1(planText)) {
     if (state) renameSync(stateFile, at(`corpus-step.${stamp().slice(0, 10)}.${Date.now()}.json`));
     state = { plan: sha1(planText), started: now().toISOString(), steps: plan.map((s) => ({ line: s.line, status: 'to do' })) };

@@ -14,7 +14,7 @@
  * the removal's receipt, with the generation that removal took (`was`: 'bin' or a `g…` suffix; null in a receipt
  * written before it was recorded).
  */
-export type PhotoRef = { exists: boolean; etag: string | null; key: string | null; removed: { drop: string; at: number; was: string | null } | null; unreadable?: true; body?: Record<string, unknown> };
+export type PhotoRef = { exists: boolean; etag: string | null; key: string | null; removed: { drop: string; at: number; was: string | null; w?: number | null } | null; unreadable?: true; body?: Record<string, unknown> };
 /**
  * A pointer that is there and could not be read as one (its body read failed, or it has a shape this code does not
  * know): it is not known what it names, so nothing may be taken as unnamed by it (round sixty-three; the server review
@@ -36,7 +36,7 @@ export const genKey = (name: string, g: string) => name.replace(/\.bin$/, `.${g}
 export async function photoRef(r2: R2Bucket, name: string): Promise<PhotoRef> {
   const o = await r2.get(refKey(name));
   if (!o) return { exists: false, etag: null, key: name, removed: null };
-  type Ref = { g?: unknown; drop?: unknown; at?: unknown; was?: unknown };
+  type Ref = { g?: unknown; drop?: unknown; at?: unknown; was?: unknown; w?: unknown };
   const p = await o.json<Ref>().catch(() => null);
   // `body`: the pointer as read, so the sweep can write it back under its own etag (round sixty-seven; triage-66 S3).
   const body = p && typeof p === 'object' ? (p as Record<string, unknown>) : undefined;
@@ -49,8 +49,21 @@ export async function photoRef(r2: R2Bucket, name: string): Promise<PhotoRef> {
   // a store moves it (its write is conditional on this etag), but flagged, so nothing is removed on its word (round
   // sixty-three; R3 2).
   const receiptShape = !!p && p.g == null && typeof p.drop === 'string' && typeof p.at === 'number';
-  return { exists: true, etag: o.etag ?? null, key: null, removed: { drop: typeof p?.drop === 'string' ? p.drop : '', at: typeof p?.at === 'number' ? p.at : 0, was }, ...(receiptShape ? { body } : { unreadable: true as const }) };
+  // `w`: when the receipt was written (round eighty), so a removal without the counter object can tell a receipt another
+  // removal is still acting on from one a removal cut off left behind. A receipt from before round eighty has none.
+  const w = typeof p?.w === 'number' && Number.isFinite(p.w) ? p.w : null;
+  return { exists: true, etag: o.etag ?? null, key: null, removed: { drop: typeof p?.drop === 'string' ? p.drop : '', at: typeof p?.at === 'number' ? p.at : 0, was, w }, ...(receiptShape ? { body } : { unreadable: true as const }) };
 }
+
+/**
+ * How long a removal's receipt is taken as its writer's, still at work (round eighty; review C 6): the counter object's
+ * hold on a name (`HOLD_MS` in counters.ts, which this must equal; a test holds the two together). Without the object
+ * nothing holds a photograph's name, and a removal that found a receipt with its bytes still there could not tell a
+ * removal cut off (whose bytes it should take off) from one between its receipt and its delete (which takes them off
+ * itself): both took them off, and the vault's running total in KV fell below what the bucket holds until the day's
+ * recount. Now a receipt younger than this is left to its writer, as a held name is.
+ */
+export const RECEIPT_HELD_MS = 60_000;
 
 /**
  * Write a pointer back as it was read, with a fresh `n`, only if it is still the one read (R2's conditional write): true

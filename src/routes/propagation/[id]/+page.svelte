@@ -400,7 +400,7 @@
       <button class="btn" onclick={startEdit}>Edit</button>
       {#if s.status === 'active'}
         {#if confirmDone}
-          <span class="small" id="done-ask">{st.remaining} still in the pot: </span><button class="btn" id="done-yes" onclick={() => { confirmDone = false; setStatus('done'); }}>Mark done anyway</button><button class="btn" onclick={() => (confirmDone = false)}>Keep open</button>
+          <span class="small" id="done-ask">{st.remaining} still in the pot:{' '}</span><button class="btn" id="done-yes" onclick={() => { confirmDone = false; setStatus('done'); }}>Mark done anyway</button><button class="btn" onclick={() => (confirmDone = false)}>Keep open</button>
         {:else}
           <button class="btn" onclick={() => (st.remaining > 0 ? (confirmDone = true, void focusNext('#done-yes')) : setStatus('done'))}>Mark done</button>
         {/if}

@@ -100,11 +100,12 @@ describe('the same photographs as the API', () => {
       const a = [...fromApi.data].sort((x, y) => key(x).localeCompare(key(y)));
       const o = [...fromOpen.data].sort((x, y) => key(x).localeCompare(key(y)));
       expect(o.map(({ page, place, ...rest }) => rest)).toEqual(a.map(({ page, place, ...rest }) => rest));
-      // The page: the same observation, by its uuid (the open data has no observation number).
+      // The page: the same observation, by its uuid (the open data has no observation number), and since round eighty
+      // the API's wild photograph's page is by its uuid too, so the two are the same address.
       for (const p of o) {
         const twin = a.find((x) => x.id === p.id)!;
-        const obs = api.results.find((x) => `https://www.inaturalist.org/observations/${x.id}` === twin.page)!;
-        expect(p.page).toBe(`https://www.inaturalist.org/observations/${obs.uuid}`);
+        expect(api.results.some((x) => `https://www.inaturalist.org/observations/${x.uuid}` === p.page)).toBe(true);
+        expect(p.page).toBe(twin.page);
       }
     }
   });
@@ -181,10 +182,14 @@ describe('the fill', () => {
     const s = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(s).toContain('`${bulk}/inat-wild.jsonl`');
     expect(s).toContain("process.argv.indexOf('--inat-open')");
-    expect(s).toMatch(/return open \? heldWild\(upstreamApi\(\), open, inatOpenHeld\) : upstreamApi\(\);/);
+    // Round eighty (agent V): with the most-voted rule, on but for --cultivated (`r80v-most-voted.test.ts`).
+    expect(s).toMatch(/return open \? heldWild\(upstreamApi\(\), open, inatOpenHeld, \{ mostVoted \}\) : upstreamApi\(\);/);
     expect(s).toMatch(/const f = wildOnly \? heldWild\(\(async \(\) => \(\{ status: 'refused'/);
-    expect(s).toContain('wildToAsk({ held: !!open && open.holds(id)');
-    expect(s).toContain("const cult = !wildOnly && !inat.cultivatedSettled");
+    // Round eighty (agent I): the open data's answer is read where it holds the taxon as active; a set asked again
+    // (an API-era set, a CC0 credit naming no one) is not settled for this read.
+    expect(s).toContain('const held = !!open && open.holds(id) && open.active(id) !== false;');
+    expect(s).toContain('wildToAsk({ held, settled: settled(\'inat.photos.wild\') && !againWild');
+    expect(s).toContain("cult = !wildOnly && (!inat.cultivatedSettled");
     // No image is fetched: the reader reads the four metadata files only.
     const r = readFileSync('scripts/inat-open-load.ts', 'utf8') + readFileSync('src/lib/dossier/inat-open.ts', 'utf8');
     expect(r).not.toMatch(/fetch\(/);

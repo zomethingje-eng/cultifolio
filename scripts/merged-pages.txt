@@ -15,13 +15,25 @@
 # pulverulenta 2778991, Weingartia canigueralii 2465834, Drosera paleacea 64497, Ceropegia cereiformis (Kew's Echidnopsis
 # cereiformis, homotypic) 505095, Ceropegia nigra 502875, Copiapoa calderana 2735922, Echeveria pinetorum 2781299.
 #
-# A line: <key that leaves>	<key it joins>	<name that leaves>
+# Round eighty (A; the owner's decision on the duplicate pages, "each into the page under Kew's accepted name"): Ceropegia
+# cereiformis (9574874) and Ceropegia nubica (9592399, before into 9574874) into Echidnopsis cereiformis, Kew's accepted
+# name, whose page has no GBIF key and is named by its id, k505095: it reads both keys' records and answers both old
+# addresses, and the two pages leave at --prune-followed. Echeveria peacockii into Dudleya pulverulenta is read whether
+# or not the extra keys' rule reads GBIF's name and author for it (`mergeKeys`).
+#
+# A line: <key that leaves>	<key it joins, or k<plant_name_id> for a page without one>	<name that leaves>[	except:<keys>]
+# The fourth column (round eighty, A), where there is one, lists the keys GBIF files under the leaving key that Kew holds as
+# another plant than the page joined, whose records are not read (GBIF's species API of 2026-10-22 against Kew's file):
+# under Echeveria peacockii Croucher, Echeveria desmetiana and its subspecies, Cotyledon desmetiana and Echeveria
+# subsessilis (Kew's Echeveria desmetiana) and Cotyledon peacockii (a pro parte synonym); under Ceropegia nubica,
+# Echidnopsis uraiqatiana (a species of its own at Kew).
 3084426	11798439	Coryphantha macromeris
 7906297	7281301	Rebutia fidana
-7530398	2985894	Echeveria peacockii
+7530398	2985894	Echeveria peacockii	except:4198044,4202274,5688475,5690759,8531704,12287937,12349199
 3947359	3948341	Weingartia pulchra
 3190985	3190812	Drosera parvula
-9592399	9574874	Ceropegia nubica
+9592399	k505095	Ceropegia nubica	except:3577721
+9574874	k505095	Ceropegia cereiformis
 3574291	3574112	Ceropegia melanops
 3959296	7284393	Copiapoa boliviana
 7334118	4199517	Echeveria sessiliflora

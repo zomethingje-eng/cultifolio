@@ -14,6 +14,7 @@
 import { DOSSIER_FILE } from '../src/lib/dossier/rekey';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { writeAtomic } from './write-atomic';
+import { fromWikidata } from '../src/lib/dossier/wikidata-names';
 import { vernacular } from '../src/lib/dossier/sources/gbif';
 import type { JsonFetcher } from '../src/lib/dossier/fetch';
 
@@ -75,7 +76,9 @@ export async function refetchNames(dir: string, f: JsonFetcher, opts: { now?: ()
     if (r.status === 'error') { run.errors++; continue; }
     const at = now().toISOString();
     const truncated = r.status === 'ok' ? r.truncated : undefined;
-    d.name.vernacular = r.status === 'ok' ? r.data : [];
+    // The names a `--fill wikidata-names` run took from Wikidata stay (round eighty): GBIF's own are what is asked afresh.
+    const wd = (d.name.vernacular as Array<{ source?: string }>).filter(fromWikidata);
+    d.name.vernacular = [...(r.status === 'ok' ? r.data : []), ...wd];
     d.upstream = d.upstream ?? {};
     d.upstream['gbif.vernacular'] = { status: r.status, at, detail: `${NAMES_MARK} ${at.slice(0, 10)}${truncated ? `; truncated: the first ${truncated} rows only` : ''}` };
     writeAtomic(path, JSON.stringify(d));

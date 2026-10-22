@@ -26,6 +26,13 @@ export interface Searchable {
   /** Every other older name of species rank, past the six of `syn`, searched as they are (round sixty-seven; triage-66 N1). */
   older?: string[];
   /**
+   * Kew's older names for the plant (its dossier's `name.kew.synonyms`) that `syn` and `older` do not hold, never shown
+   * (round eighty; review-d 5: "Echinocactus chrysacanthus" and Aloe framesii's "Aloe amoena" found nothing, "Lavandula
+   * officinalis" only Salvia lavandulacea). Read only as a name typed (`kewTyped`): two words or more, the first the
+   * name's genus written in full. Absent in an index built before, and where there is none.
+   */
+  kew?: string[];
+  /**
    * The other spellings of the shown names, searched as a common name is and never shown (round sixty-nine; triage-68
    * N2): "Bluemink" pooled "Blue mink", and "blue mink" found nothing. Absent in an index built before.
    */
@@ -102,6 +109,11 @@ export interface Prepared<T> {
   synWords: string[][];
   /** How many of `synWords` are the shown older names (`syn`); the rest are search-only (`older`). */
   shownSyn: number;
+  /**
+   * Each of Kew's older names' words (`kew`), kept apart: read only by `kewTyped`, never as words of the entry, so a query
+   * reaches the species through one only when it types the whole name, the genus in full first (round eighty).
+   */
+  kewWords: string[][];
   /** The species' own epithet, folded: a species that keeps the epithet of an older name typed comes first (round sixty-nine; triage-68 N1). */
   epithet: string;
   sortKey: string;
@@ -466,6 +478,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
     const commonWords = commonNames.flat();
     const synWords = [...(item.syn ?? []), ...(item.older ?? [])].map((x) => words(x).filter((w) => !RANK_MARKERS.has(w)));
     const shownSyn = (item.syn ?? []).length;
+    const kewWords = (item.kew ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
     return {
       item,
       nameWords,
@@ -478,6 +491,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
       commonTexts: texts.map(typedText),
       synWords,
       shownSyn,
+      kewWords,
       epithet: nameWords[1] ?? '',
       wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
       sortKey: fold(item.name)
@@ -497,6 +511,27 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
  * name's "Vera-duthiea").
  */
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
+  // Or one of Kew's older names typed as a name (round eighty): the species is then a hit of the older names' group.
+  return rankWords(p, qs, match) ?? (kewTyped(p, qs).length ? 3 : null);
+}
+/**
+ * Kew's older names (their places in `kewWords`) a query types as a name (round eighty; review-d 5): two words or more,
+ * the first the name's genus in full, every word but the last a whole word of the name, the last the start of one ("Aloe
+ * amoena", "Lavandula offic"). As typed only, never by a similar spelling, and never by a word alone: a query of one word
+ * is no older name typed, as `olderTyped` says. So every name a query can reach this way has the query's first word as
+ * its genus, which is how the key files hold them (`$core/search-files`, the `@` keys).
+ */
+export function kewTyped(p: Pick<Prepared<unknown>, 'kewWords'>, qs: string[]): number[] {
+  const out: number[] = [];
+  if (qs.length < 2) return out;
+  p.kewWords.forEach((g, at) => {
+    if (g[0] !== qs[0]) return;
+    for (let i = 1; i < qs.length; i++) if (i < qs.length - 1 ? !g.includes(qs[i]) : !g.some((w) => w.startsWith(qs[i]))) return;
+    out.push(at);
+  });
+  return out;
+}
+function rankWords(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
   let inName = 0, genus = false;
   let left: string[] | null = null; // the words neither the name nor a place takes
   for (const q of qs) {
@@ -557,7 +592,7 @@ function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string,
   // A binomial at least, every word but the last written in full: "coco plum" is no older name "Cocos plumosa" typed,
   // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
   // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
-  if (olderTyped(p, qs, match).length) return Group.Older;
+  if (olderTyped(p, qs, match).length || kewTyped(p, qs).length) return Group.Older;
   for (const cn of p.commonNames) if (holds(cn, qs, match)) return Group.Common;
   return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
 }
@@ -593,7 +628,8 @@ function olderOrder(p: Prepared<unknown>, qs: string[], match: (q: string, w: st
   // stramonium, the tautonyms by their genus), as they should be. A name still being typed ("Opuntia longisp") is no
   // one's exactly; a shown name of the typed length counts as shown, a shown variety does not.
   const typedAt = olderTyped(p, qs, match);
-  const exact = typedAt.some((at) => same(p.synWords[at], qs));
+  // Kew's older names typed count as held exactly too (round eighty), and never as shown.
+  const exact = typedAt.some((at) => same(p.synWords[at], qs)) || kewTyped(p, qs).some((at) => same(p.kewWords[at], qs));
   const shown = typedAt.some((at) => at < p.shownSyn && p.synWords[at].length === qs.length);
   return (exact ? 0 : 4) + (keeps ? 0 : 2) + (shown ? 0 : 1);
 }
@@ -627,7 +663,7 @@ const genericAlone = (cn: string[]) => cn.length === 1 && (GENERIC_NOUNS.has(cn[
  */
 function closeness(p: Prepared<unknown>, qs: string[], g: number): number {
   const c = closenessOf(p, qs, g);
-  return c <= 1 && !same(p.nameWords, qs) && !p.synWords.some((s) => same(s, qs)) && p.commonNames.some((cn) => same(cn, qs)) && p.commonNames.filter((cn) => same(cn, qs)).every(genericAlone) ? 3.5 : c;
+  return c <= 1 && !same(p.nameWords, qs) && !p.synWords.some((s) => same(s, qs)) && !p.kewWords.some((s) => same(s, qs)) && p.commonNames.some((cn) => same(cn, qs)) && p.commonNames.filter((cn) => same(cn, qs)).every(genericAlone) ? 3.5 : c;
 }
 function closenessOf(p: Prepared<unknown>, qs: string[], g: number): number {
   const common = g === Group.Common;
@@ -635,6 +671,7 @@ function closenessOf(p: Prepared<unknown>, qs: string[], g: number): number {
   if (same(p.nameWords, qs)) return 1;
   for (const cn of p.commonNames) if (same(cn, qs)) return 1;
   for (const s of p.synWords) if (same(s, qs)) return 1;
+  for (const s of p.kewWords) if (same(s, qs)) return 1;
   let whole = true;
   for (const q of qs) if (!p.wordSet.has(q)) { whole = false; break; }
   if (whole) return 2;
@@ -707,7 +744,14 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   if (!hits.length && trailingMarker) hits = collect(prepared, qs.slice(0, -1), exact, false, typed);
   // A capitalised word after the first of a genus-shaped query is a similar spelling only of a whole word (`capitalWords`).
   const strict = capitalWords(q);
-  const near = strict ? (x: string, w: string) => (strict.has(x) ? w.startsWith(x) || (x.length >= 4 && edit1(x, w)) : nearPrefix(x, w)) : nearPrefix;
+  const loose = strict ? (x: string, w: string) => (strict.has(x) ? w.startsWith(x) || (x.length >= 4 && edit1(x, w)) : nearPrefix(x, w)) : nearPrefix;
+  // A word that is a genus of the reference, typed in full, is no typing error: matched as typed in the similar-spelling
+  // pass too (round eighty; review-w 11: "Aloe × nobilis", a hybrid the reference does not hold, answered Margaritaria
+  // nobilis by "alte-" of an older name and Alocasia sanderiana by "aloc-", each one letter from "aloe"; it now finds
+  // nothing as written and is answered by its first parent, Aloe, and says so).
+  const genera = prepared[0]?.genera;
+  const typedGenus = new Set(genera ? qs.filter((x) => genera.has(x)) : []);
+  const near = typedGenus.size ? (x: string, w: string) => (typedGenus.has(x) ? w.startsWith(x) : loose(x, w)) : loose;
   if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, near, true, typed);
   // The near match too without the marker: "copiapoa cinera var" found the species before the marker was a word (round thirty-eight, R1-10).
   if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), near, true, typed);

@@ -98,8 +98,10 @@
     // A new page starts with the tab bar in view (round fifty-eight; the grower review).
     tabAway = false;
     if (browser) lastY = scrollY;
+    // Back and Forward move by the history's own steps: a Forward counted as a Back left the count at none, and the bar's
+    // "‹" then went to the section's page, not the page before (round eighty; the phone review's 8).
     if (nav.from && nav.type !== 'popstate') hops++;
-    else if (nav.type === 'popstate' && hops > 0) hops--;
+    else if (nav.type === 'popstate') hops = Math.max(0, hops + (nav.delta ?? -1));
     // A new page: focus its content, not the top bar again (a same-page hash jump keeps the browser's own focus handling).
     // Not on the first load of the session (`from` is null): the browser's own start, the top of the document, is where a
     // screen reader expects to begin, and a page that moves focus on arrival reads as having done something (round twenty-eight, 11).
@@ -375,8 +377,12 @@
 </script>
 
 <svelte:head>
-  <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
-  <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
+  <!-- In the server's HTML only: a page drawn on the device (the collection's pages) added them after its styles had already
+       asked for the fonts, and the browser warned that the preloaded files went unused (round eighty; the phone review's 9). -->
+  {#if !browser}
+    <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
+    <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
+  {/if}
   <!-- No <title> here: every page sets its own, and this one won on the server, so every species page was served as
        "Cultifolio" to crawlers and link previews (round fifty-nine; the accessibility and words review). -->
 </svelte:head>
@@ -536,7 +542,7 @@
   #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
   @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
   main { padding-block: 0 3rem; max-width: 980px; }
-  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); }
+  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); overflow-anchor: none; } /* never a scroll anchor: what goes in above it must not carry the view down with it (round eighty; the phone review's 1) */
   @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }
   main:focus { outline: none; }
   /* Off the screen by its own height, whatever the text size: `top: -40px` left a strip of it showing at 200% text (round fifty-nine). */

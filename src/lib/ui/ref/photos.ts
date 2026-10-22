@@ -41,12 +41,16 @@ export function photoSourceGaps(upstream: Up, photos: number): { names: string[]
     const n = SOURCE_NAME[k], st = upstream[k]!.status;
     if ((rank[st] ?? 0) > (rank[by.get(n) ?? ''] ?? 0)) by.set(n, st);
   }
-  const group = (st: string) => [...by].filter(([, s]) => s === st).map(([n]) => n);
+  // iNaturalist skipped by a build that left it to the daily fill is said as that (round eighty, agent I's need): the rows'
+  // reason is the build's own words (`INAT_LEFT_TO_FILL`, `INAT_SETS_LEFT` in `$dossier/build`), read by their opening.
+  const leftToFill = by.get('iNaturalist') === 'skipped' && keys.some((k) => SOURCE_NAME[k] === 'iNaturalist' && (upstream[k]?.detail ?? '').startsWith('not asked: this build left iNaturalist to the daily fill'));
+  const group = (st: string) => [...by].filter(([n, s]) => s === st && !(leftToFill && n === 'iNaturalist')).map(([n]) => n);
   const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
   const parts = [
     group('refused').length ? `${list(group('refused'))} refused` : '',
     group('error').length ? `${list(group('error'))} did not answer` : '',
-    group('skipped').length ? `${list(group('skipped'))} ${group('skipped').length === 1 ? 'was' : 'were'} skipped (not asked)` : ''
+    group('skipped').length ? `${list(group('skipped'))} ${group('skipped').length === 1 ? 'was' : 'were'} skipped (not asked)` : '',
+    leftToFill ? 'iNaturalist was left to the daily photograph fill (not asked)' : ''
   ].filter(Boolean);
   return {
     names: [...by.keys()],

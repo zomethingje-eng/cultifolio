@@ -37,7 +37,7 @@ export function idWords(a: IdAnswer, entry?: string): string {
     case 'kew-not-read': return "Kew's file not read for this page (--fill kew-names)";
     case 'kew-undecided': return "Kew's rows do not decide which taxon this page is";
     case 'kew-shared': return `Kew's entry ${entry} is also the entry of GBIF's ${a.with!.join(', ')}: a merge decides which page is Kew's`;
-    case 'merged-away': return `merged into GBIF's ${a.with!.join(', ')} (scripts/merged-pages.txt), which takes the Kew id`;
+    case 'merged-away': return a.with?.[0] === 0 ? 'merged into the page of its Kew entry, which has no GBIF key (scripts/merged-pages.txt)' : `merged into GBIF's ${a.with!.join(', ')} (scripts/merged-pages.txt), which takes the Kew id`;
   }
 }
 
@@ -48,10 +48,14 @@ const kewish = (entry: string | undefined): entry is string => !!entry && /^[1-9
  * The id of every page, in the order given. `merges` are the owner's merges by GBIF key (`from` joins `into`): a merge
  * counts only while the page it joins is among `pages`.
  */
-export function pageIds(pages: readonly IdPage[], merges: ReadonlyArray<{ from: number; into: number }> = []): IdAnswer[] {
+export function pageIds(pages: readonly IdPage[], merges: ReadonlyArray<{ from: number; into: number; intoPage?: string }> = []): IdAnswer[] {
   const present = new Set(pages.flatMap((p) => (p.gbif != null ? [p.gbif] : [])));
+  // A page without a GBIF key that a merge joins (round eighty, A), by its id: `k<plant_name_id>` of its entry.
+  const presentKew = new Set(pages.flatMap((p) => (p.gbif == null && kewish(p.entry) ? [kewPage(p.entry)] : [])));
   const away = new Map<number, number>();
-  for (const m of merges) if (present.has(m.into) && m.from !== m.into) away.set(m.from, m.into);
+  for (const m of merges) {
+    if (m.intoPage ? presentKew.has(m.intoPage as PageId) : present.has(m.into) && m.from !== m.into) away.set(m.from, m.intoPage ? 0 : m.into);
+  }
   const holders = new Map<string, number[]>();
   pages.forEach((p, i) => {
     if (!kewish(p.entry) || (p.gbif != null && away.has(p.gbif))) return;

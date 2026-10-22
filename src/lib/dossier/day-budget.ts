@@ -18,8 +18,14 @@ export interface CountStore {
   write(day: string, n: number): void;
 }
 
-/** The day's allowance of iNaturalist requests the corpus script keeps to: under its ten thousand, with room for a person. */
-export const INAT_DAY_BUDGET = 9000;
+/**
+ * The day's allowance of iNaturalist requests the corpus script keeps to (round eighty, agent I): 4,000. Its practices say
+ * "around 10k API requests a day", but it throttled the owner's first fill (2026-10-22) after 5,273 requests in 97
+ * minutes, and again after about 350 pages more that day, so the tolerance it shows this address is nearer 5,500 a day
+ * than 10,000. With the observation searches batched (`inat-batch.ts`), 4,000 is about two and a half hours at 2 s and
+ * covers the pages that 9,000 single requests did. A run of 429s is a throttle, waited out, never this allowance.
+ */
+export const INAT_DAY_BUDGET = 4000;
 
 export function dayBudget(inner: JsonFetcher, host: string, budget: number, store: CountStore, today = () => new Date().toISOString().slice(0, 10)): JsonFetcher & { used: () => number } {
   // Read from the store at every request, so two fetchers of one run, or two runs, share one count.

@@ -7,7 +7,7 @@ import { plainName, synonymKey, type Card } from '$dossier/lookups';
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
-import { isPageId } from '$core/page-id';
+import { isPageId, type PageId } from '$core/page-id';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
@@ -67,9 +67,15 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     let unchecked = false;
     let heldBack = false; // the site held its call to GBIF back: not asked, never "did not answer" (round sixty-one)
     let gbifRefused = false; // GBIF refused this site's request: said as a refusal (round sixty-seven; S8)
+    // The reference's own nearest names (below), asked beside GBIF's name service rather than after it: the two do not
+    // depend on each other, and a missing address waited 4.4 s for one and then the other (round eighty; review-w 14).
+    const asked = nameFromSlug(params.slug);
+    let foundP: ReturnType<typeof searchAnswer> | null = null;
+    const nearest = () => (foundP ??= asked ? searchAnswer(platform, fetch, asked, 3, async () => new Response(null, { status: 429 }), c).catch(() => ({ hits: [], corpus: '' })) : Promise.resolve({ hits: [], corpus: '' }));
     if (!syn) {
       const stop = await limited(platform, getClientAddress, 'match');
       if (stop) error(429, { message: 'Too many unknown species addresses from this address; wait a few minutes and try again.' });
+      void nearest();
       // `synonymAsk` tells GBIF's own refusal of this site's request apart (round sixty-seven; triage-66 S8, R45-11).
       const asked = await synonymAsk(platform, fetch, params.slug, c, clientIp(getClientAddress)); // the reader's part of GBIF's share as well as the site's (round sixty-two; the server review's 3, outside review A29)
       unchecked = asked === 'unchecked' || asked === 'held' || asked === 'refused';
@@ -87,14 +93,13 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // What the 404 can say that helps: the name as asked, how many of its genus the reference holds, and whether the
     // genus is taken whole or only by the cultivated count (round forty-one, R15). An aloe grower's most common first
     // visit was a dead end that said nothing.
-    const asked = nameFromSlug(params.slug);
     // A genus only when the address is shaped as a name: "not-a-plant-zzz" is no genus "Not" (round seventy-two; triage F12).
     const genus = addressGenus(asked) ?? '';
     // And the reference's own nearest names, by the catalogue's search (the slips it forgives, and since round sixty the
     // way growers write names: a variety the reference files under its species is offered that species, as the search's
     // retry on the first two words finds it), so a misspelt address offers the page it meant (round fifty-eight). Only
     // from the postings: a miss of them is no suggestion, never a whole-index pass.
-    const found = asked ? await searchAnswer(platform, fetch, asked, 3, async () => new Response(null, { status: 429 }), c).catch(() => null) : null;
+    const found = asked ? await nearest() : null;
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
     const species = genus ? { name: asked, genus, inGenus: (await look.genera()).get(genus) ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
@@ -142,7 +147,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
-  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera) });
+  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera), older: [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])] });
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
   const allSiblings = (await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus))).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
@@ -198,8 +203,13 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // by its id (round seventy-eight).
   const viaKey = (d.distribution as { via?: { page?: string } }).via?.page;
   const viaEntry = isPageId(viaKey) && viaKey !== key ? await look.species(viaKey) : undefined;
+  // The pages GBIF files the names of a page that reads no key under (round eighty, `occurrences.unread`), by their ids.
+  const underIds = [...new Set((d.occurrences.unread?.under ?? []).map((u) => u.page).filter((x): x is PageId => isPageId(x) && x !== key))];
+  const heldUnder = (await Promise.all(underIds.map((id) => look.species(id)))).filter((e): e is NonNullable<typeof e> => !!e).map((e) => ({ slug: e.slug, name: e.name }));
   return {
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
+    /** The pages GBIF files this page's names under, when it reads no key for that reason (round eighty). */
+    heldUnder,
     /** English common names, the index's choice first (round sixty-one; decision 7). */
     commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */

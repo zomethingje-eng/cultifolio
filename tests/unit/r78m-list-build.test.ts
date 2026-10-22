@@ -21,8 +21,8 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
     const { byName, keys, none } = downloadKeysOf(list);
     expect(keys.length).toBe(new Set(list.flatMap((e) => (e.gbifKey ? [e.gbifKey] : []))).size);
     // Round eighty (X): 20 keys Kew's file reads as another species' name, by GBIF's author, not taken (19 lines read none).
-    expect(list.filter((e) => e.gbifKey != null).length).toBe(46022);
-    expect(none.length).toBe(48357 - 46022);
+    expect(list.filter((e) => e.gbifKey != null).length).toBe(46021); // round eighty (A): Xanthoceras sorbifolium's key refused (familyRefuses)
+    expect(none.length).toBe(48357 - 46021);
     expect(Object.values(byName).every((k) => keys.includes(k))).toBe(true);
   });
   it('builds no species by its name: a job has the GBIF key or none', () => {
@@ -31,7 +31,7 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
   });
   it('carries no GBIF key that leaves by a merge (the nine of scripts/merged-pages.txt since round seventy-nine)', () => {
     const leaving = new Set(parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')).map((m) => m.from));
-    expect(leaving.size).toBe(9);
+    expect(leaving.size).toBe(10); // round eighty (A): Ceropegia cereiformis joins k505095 too
     expect(list.filter((e) => e.gbifKey != null && leaving.has(e.gbifKey))).toEqual([]);
   });
 });
@@ -39,7 +39,8 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
 describe('the build reads the list as the merged code builds', () => {
   const src = readFileSync('scripts/build-dossiers.ts', 'utf8');
   it('takes the page on disk under the id where the list has no GBIF key, and builds a merged key as the page it went into', () => {
-    expect(src).toMatch(/const g = j\.gbifKey \?\? gbifOfLine\(j\.pageId\); return g == null \? \[\] : \[\{ name: j\.name, key: mergedInto\.get\(g\) \?\? g \}\]/);
+    // Round eighty (A): a key merged into a page without a GBIF key is not built; that page reads it.
+    expect(src).toMatch(/const g = j\.gbifKey \?\? gbifOfLine\(j\.pageId\); return g == null \|\| intoKew\.has\(g\) \? \[\] : \[\{ name: j\.name, key: mergedInto\.get\(g\) \?\? g \}\]/);
   });
   it('the bulk fetch takes the list\'s keys before any name match', () => {
     const bf = readFileSync('scripts/bulk-fetch.ts', 'utf8');

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { wordKeys, nearKeys, exactKey, buildPostings, queryPlan, candidates, postingFileOf, postingFilesFor } from '$core/postings';
-import { prepare, search, hasExact } from '$core/search';
+import { prepare, search, hasExact, searchGenera } from '$core/search';
 
 /** mulberry32 (round sixty; the corpus review, 12): the LCG before lost its low bits, and its "random" corpus was narrow. */
 let seed = 11;
@@ -66,12 +66,15 @@ describe('the candidates answer what the whole answers', () => {
   const files = postingFilesFor(idx.length);
   const P = buildPostings(idx, files);
   const posting = (k: string) => P.get(postingFileOf(k, files))?.[k];
+  const allGenera = searchGenera(idx);
   const answer = (q: string) => {
     const plan = queryPlan(q);
     if (!plan.exact.length) return [];
-    const pe = prepare(candidates(plan.exact, posting).map((i) => idx[i]));
+    // With the whole index's genera, as the server prepares its candidates (round seventy): since round eighty a genus
+    // typed in full is matched as typed in the similar-spelling pass, so the genera are the whole reference's here too.
+    const pe = prepare(candidates(plan.exact, posting).map((i) => idx[i]), allGenera);
     if (hasExact(pe, q)) return search(pe, q, 100);
-    return plan.near ? search(prepare(candidates(plan.near, posting).map((i) => idx[i])), q, 100) : [];
+    return plan.near ? search(prepare(candidates(plan.near, posting).map((i) => idx[i]), allGenera), q, 100) : [];
   };
   const whole = prepare(idx);
   const slip = (s: string) => {

@@ -97,7 +97,8 @@ describe("iNaturalist's names: the strict rule, then its POWO framework", () => 
 describe("GBIF's backbone", () => {
   const bb = fx('backbone-sample.txt').split('\n').map(backboneLine).filter((b): b is BackboneName => !!b);
   it('reads a species line: the key, the canonical name, the author less the year, the status', () => {
-    expect(bb.find((b) => b.key === '2777724')).toEqual({ key: '2777724', name: 'Aloe vera', author: '(L.) Burm.f.', status: 'ACCEPTED' });
+    // Round eighty (A): with the usage's family and order keys too (`familyRefuses`).
+    expect(bb.find((b) => b.key === '2777724')).toMatchObject({ key: '2777724', name: 'Aloe vera', author: '(L.) Burm.f.', status: 'ACCEPTED' });
     expect(bb.find((b) => b.key === '7473344')?.author).toBe('L.');
     expect(backboneLine('9995154\t7763\t\\N\tf\tDOUBTFUL\tGENUS\t{}\tx\tSOURCE\t1\t8')).toBeNull();
   });

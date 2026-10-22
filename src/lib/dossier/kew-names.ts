@@ -100,6 +100,11 @@ export function kewCitation(d: Page, rowOf: (n: string) => KewRow | undefined): 
 export function kewEntry(d: Page, idx: KewNamesIndex): string {
   const n = linkedNumber(d.ids);
   const r = n ? idx.byPowo.get(n) : undefined;
+  // A linked number Kew files under another species, where Kew also accepts these words by the same author, is not the
+  // plant: the accepted row is (round eighty, A; review-d 1: Crocus nudiflorus Sm. linked 436635-1, Kew's illegitimate
+  // row under Crocus mazziaricus, and took that species' entry and names).
+  const same = r && r.status !== 'Accepted' ? idx.rowsOf(r.name).filter((x) => x.status === 'Accepted' && x.rank === r.rank && x.authors.trim() === r.authors.trim()) : [];
+  if (same.length === 1) return same[0].id;
   if (r) return r.status === 'Accepted' ? r.id : r.accepted;
   const rows = idx.rowsOf(d.name.scientific).filter((x) => x.rank === 'Species' && x.status !== 'Misapplied');
   const own = ownByAuthor(rows, d.name.authorship ?? undefined, (x) => x.authors);

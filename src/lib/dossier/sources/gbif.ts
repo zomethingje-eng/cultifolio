@@ -288,16 +288,21 @@ export async function kewIpni(f: JsonFetcher, name: string, authorship?: string,
   // the owner's run: Parrycactus flavovirens is Kew's synonym of Ferocactus flavovirens; `kewEntryIpni`).
   const acceptedKeys = [...new Set(rows.flatMap((x) => (/synonym/i.test(x.taxonomicStatus ?? '') && x.acceptedKey ? [x.acceptedKey] : [])))];
   const acceptedId = plant.filter((x) => /^accepted$/i.test(x.taxonomicStatus ?? '')).flatMap((x) => ipni(x) ?? [])[0];
+  // Kew's numbers for this name and author that Kew files under another species, where Kew also accepts the name by
+  // this author (round eighty, A; review-d 1): "Crocus nudiflorus Sm." is Kew's accepted 327378 (IPNI 436634-1) and its
+  // illegitimate 327379 (436635-1), filed under Crocus mazziaricus. The accepted entry is the plant; the other number is
+  // never linked, whichever the item carries. A row filed under an entry of these very words is this plant (Fragaria).
+  const elsewhere = acceptedId ? [...new Set(plant.filter((x) => /synonym/i.test(x.taxonomicStatus ?? '') && x.accepted && x.accepted.split(/\s+/).slice(0, 2).join(' ').toLowerCase() !== name.toLowerCase()).flatMap((x) => ipni(x) ?? []))].filter((i) => i !== acceptedId) : [];
   // Each number's own name and author, so a page that links a number can cite the name it links (round seventy-two, A:
   // Ixora coccinea linked Kew's 753844-1, "Ixora coccinea L.", and cited the backbone's "Comm. ex Lam.").
   const labels = Object.fromEntries(plant.flatMap((x) => { const id = ipni(x); return id ? [[id, x.scientificName] as const] : []; }));
   // And each number's row in Kew's own file (GBIF's copy keeps WCVP's plant_name_id as its taxonID), for `name.cited`.
   const plantIds = Object.fromEntries(plant.flatMap((x) => { const id = ipni(x); return id && x.taxonID ? [[id, String(x.taxonID)] as const] : []; }));
-  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(ids.length ? { labels } : {}), ...(Object.keys(plantIds).length ? { plantIds } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}), ...(acceptedId ? { acceptedId } : {}) } };
+  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(ids.length ? { labels } : {}), ...(Object.keys(plantIds).length ? { plantIds } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}), ...(acceptedId ? { acceptedId } : {}), ...(elsewhere.length ? { elsewhere } : {}) } };
 }
 
 /** Kew's identifiers for a name and author, as `kewIpni` answers. */
-export type KewIds = { ids: string[]; label?: string; labels?: Record<string, string>; plantIds?: Record<string, string>; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[]; acceptedId?: string };
+export type KewIds = { ids: string[]; label?: string; labels?: Record<string, string>; plantIds?: Record<string, string>; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[]; acceptedId?: string; /** Of `ids`, the numbers Kew files under another species while it accepts the name by this author (round eighty): never linked. */ elsewhere?: string[] };
 
 /**
  * The IPNI and POWO numbers a page links (round seventy-one; self-review 70 S-B5, triage-70): Kew's number for the name
@@ -309,7 +314,9 @@ export type KewIds = { ids: string[]; label?: string; labels?: Record<string, st
  */
 export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds): { ipni?: string; powo?: string; changed: boolean } {
   const powoNum = item.powo?.replace(/^urn:lsid:ipni\.org:names:/, '');
-  const pick = (k.ids.length ? [item.ipni, powoNum, k.acceptedId, k.ids[0]].find((n) => !!n && k.ids.includes(n)) : undefined);
+  // A number Kew files under another species, where it accepts the name by this author, is never the pick (round eighty).
+  const away = new Set(k.elsewhere ?? []);
+  const pick = (k.ids.length ? [item.ipni, powoNum, k.acceptedId, k.ids[0]].find((n) => !!n && k.ids.includes(n) && !away.has(n)) : undefined);
   const other = new Set((k.others ?? []).map((o) => o.id));
   // A number ending "-4" is Kew's own, for a name IPNI does not hold: a POWO address, never an IPNI one (round
   // seventy-two, A: Echinocereus marksianus linked https://www.ipni.org/n/2782687-4 in place of its item's 87937-2).

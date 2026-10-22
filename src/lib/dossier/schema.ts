@@ -5,6 +5,7 @@
  * makes forgetting impossible: a dossier that does not parse is not served.
  */
 import { mendGbifThumb, mendCommonsThumb } from './md5';
+import { MAX_LAPSE_M, lapseSetAside } from '$core/lapse';
 import { dedupePhotos } from './dedupe';
 import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
 import * as v from 'valibot';
@@ -145,7 +146,13 @@ export const Occurrences = v.object({
    * name for it, how Kew's file holds it as this plant, the records it added, whether they came from the download or the
    * search API, and, for a page merged into this one, its old address. Absent: the page's own key alone.
    */
-  keys: v.optional(v.array(v.object({ key: v.number(), name: v.string(), kew: v.string(), n: v.number(), from: v.picklist(['download', 'api']), slug: v.optional(v.string()) })))
+  keys: v.optional(v.array(v.object({ key: v.number(), name: v.string(), kew: v.string(), n: v.number(), from: v.picklist(['download', 'api']), slug: v.optional(v.string()) }))),
+  /**
+   * A page without a GBIF key that read no key (round eighty): why, for that page (`noKeyWhy` in `$core/no-gbif`, from what
+   * GBIF's backbone holds of the names Kew's file gives it), and, where GBIF files those names under other pages of the
+   * reference, each such page by its GBIF key, its name and its id here. Absent on every other page.
+   */
+  unread: v.optional(v.object({ kind: v.picklist(['lumped', 'other-type', 'pro-parte', 'other-author', 'none', 'other']), why: v.string(), under: v.optional(v.array(v.object({ key: v.number(), name: v.string(), page: v.optional(v.string()) }))) }))
 });
 
 /** The map marker: where the records are densest. It is not where the climate is read (that is the envelope). */
@@ -215,8 +222,13 @@ export const Climate = v.variant('status', [
      * measurement (round thirty-five, R1-11). The notice under the cold floor still says what was read there.
      */
     extremesSea: v.optional(Extremes),
-    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7); 'sea' is read at a cell that is mostly sea and set aside. */
-    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped', 'sea'])),
+    /**
+     * The daily extremes read at a POWER cell whose ground is too far above or below the typical cell to correct
+     * (`lapseSetAside`; round eighty, A): set aside here by the parser and kept, as the sea's are.
+     */
+    extremesLapse: v.optional(Extremes),
+    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7); 'sea' is read at a cell that is mostly sea and set aside; 'lapse' is read at a cell whose correction is beyond `MAX_LAPSE_M`, or impossible, and set aside (round eighty). */
+    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped', 'sea', 'lapse'])),
     /**
      * Records on both sides of the equator in strength: the envelope is the larger side's cells alone, since a January
      * median over both would be a month no place has; the other side's count is kept so the page can say so (round thirty-one, 1).
@@ -365,8 +377,9 @@ export function unchain(detail: string | undefined): string | undefined {
  */
 export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
   // Extremes read at a POWER cell that is mostly sea are set aside (round thirty-five, R1-11): the cold floor then comes
-  // from the range's coldest mean night, and the page says what the sea cell gave.
-  const climate = d.climate.status === 'ok' && d.climate.extremes && d.climate.landFraction != null && d.climate.landFraction < 0.5 ? { ...d.climate, extremes: undefined, extremesSea: d.climate.extremes, extremesStatus: 'sea' as const } : d.climate;
+  // from the range's coldest mean night, and the page says what the sea cell gave. So are extremes whose lapse correction
+  // is beyond what a lapse rate can bridge, or that came out impossible (round eighty, A: `setAsideExtremes`).
+  const climate = setAsideExtremes(d.climate);
   return {
     ...d,
     climate,
@@ -380,6 +393,15 @@ export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
     upstream: Object.fromEntries(Object.entries(d.upstream).map(([k, u]) => [k, u.detail?.startsWith('carried from build of') ? { ...u, detail: unchain(u.detail) } : u]))
   };
 }
+
+/** The climate with its extremes set aside where they are the sea's (round thirty-five) or beyond a lapse correction (round eighty). */
+export function setAsideExtremes<C extends Dossier['climate']>(c: C): C {
+  if (c.status !== 'ok' || !c.extremes) return c;
+  if (c.landFraction != null && c.landFraction < 0.5) return { ...c, extremes: undefined, extremesSea: c.extremes, extremesStatus: 'sea' as const };
+  return lapseSetAside(c) ? { ...c, extremes: undefined, extremesLapse: c.extremes, extremesStatus: 'lapse' as const } : c;
+}
+
+export { MAX_LAPSE_M, lapseSetAside };
 
 export function parseDossier(json: unknown, held?: HeldNames | null): Dossier {
   return safeUrls(v.parse(Dossier, json), held);

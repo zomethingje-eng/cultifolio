@@ -228,7 +228,13 @@ const lastRefusal = (detail: string) => [...detail.matchAll(EARLIER_REFUSAL)].po
  * A refusal of iNaturalist or GBIF stops the fill; what was written stands, and a dossier is written only once all its
  * asks have answered, so the next run takes up where this one stopped.
  */
-export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString()): Promise<InatIdCounts> {
+/**
+ * `unchecked` (round eighty, agent I; `--fill inat` runs it first): only the ids no build or fill has checked (no
+ * `inat.taxon` row that is "ok"). A build that skips iNaturalist keeps the id its Wikidata item gives unchecked, and the
+ * open data's wild pass read 2 inactive ids of 86 sampled as "nothing to report" (Iris germanica's 57097, whose current
+ * taxon 709635 holds 196 such observations); each is checked here, thirty a request, before its photographs are asked.
+ */
+export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString(), opts: { unchecked?: boolean } = {}): Promise<InatIdCounts> {
   const c: InatIdCounts = { checked: 0, followed: 0, dropped: 0, refused: 0, kept: 0, lines: [] };
   const byName = new Map<string, number>();
   const entries: Array<{ key: number; name: string; family?: string }> = [];
@@ -242,6 +248,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
     if (d.name?.scientific) { byName.set(d.name.scientific.toLowerCase(), gbifKey); entries.push({ key: gbifKey, name: d.name.scientific, family: d.name.family }); }
     // A taxon an earlier rule of round seventy refused is judged again, and its id given back when the rule now takes it
     // (the owner's runs: Sprekelia formosissima's Zephyranthes formosissima and 34 more; Echinocereus chisosensis).
+    if (opts.unchecked && (!d.ids?.inat || d.upstream?.['inat.taxon']?.status === 'ok')) continue;
     const refusedBefore = !d.ids?.inat ? lastRefusal(d.upstream?.['inat.taxon']?.detail ?? '') : undefined;
     if (refusedBefore) { held.push({ file, id: Number(refusedBefore[1]), earlier: false, restore: true }); continue; }
     if (!d.ids?.inat) continue;
@@ -472,7 +479,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     if ('failed' in st) return stopped({ ...c, failed: st.failed });
     // Kew's numbers for the name and author, shared with the proof, as a build shares them (round seventy-two).
     const kewAsk: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {};
-    const x = await patiently(() => crossIds(f, d.name.scientific, d.ids.gbif, st.rows, { authorship: d.name.authorship, family: d.name.family, kew: kewAsk }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
+    const x = await patiently(() => crossIds(f, d.name.scientific, d.ids.gbif, st.rows, { authorship: d.name.authorship, family: d.name.family, kew: kewAsk, kewPage: String(d.key).startsWith('k') }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
     if (x.status === 'refused' || x.status === 'error' || x.status === 'skipped') return stopped({ ...c, failed: `${x.by === 'gbif' ? 'GBIF, checking an item' : 'Wikidata'}: ${x.detail}` });
     const was = d.ids.wikidata;
     const got = x.status === 'ok' ? x.data.wikidata : undefined;
@@ -522,6 +529,27 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
   }
 }
 
+/**
+ * `--list-wikidata-retry` (round eighty, A): the pages to build again for Wikidata, for `--keys`, offline and in seconds:
+ *   - every page whose Wikidata row says Wikidata did not answer the build (`error` or `refused`: 22 pages of the full
+ *     build, whose batched query of GBIF keys timed out or was answered 502 by the query service);
+ *   - every page with a Kew id whose item was refused by its label (two items labelled with its name: Datura innoxia),
+ *     which a build now matches by its GBIF key and Kew's identifiers alone.
+ * One line a page: its id and name, a tab, and why, as `--keys` reads it.
+ */
+export function wikidataRetryList(store: Pick<DossierStore, 'files' | 'read'>): string[] {
+  const out: string[] = [];
+  for (const file of store.files()) {
+    let d: WdDossier;
+    try { d = store.read<WdDossier>(file); } catch { continue; }
+    const row = d.upstream?.wikidata;
+    if (!row) continue;
+    if (row.status === 'error' || row.status === 'refused') out.push(`${d.key} ${d.name.scientific}\tWikidata ${row.status === 'error' ? 'did not answer' : 'refused'} (${row.detail ?? 'no detail'})`);
+    else if (String(d.key).startsWith('k') && d.ids?.gbif != null && REFUSED_BY_LABEL.test(row.detail ?? '')) out.push(`${d.key} ${d.name.scientific}\trefused by its label (${row.detail}); matched by its identifiers now`);
+  }
+  return out;
+}
+
 /** What a stopped `--fill wikidata` had read: items that carry their own key ("key:Q"), and the changes it had found. */
 export interface WikidataProgress {
   read?: string[];
@@ -541,7 +569,7 @@ export function keysMissing(file: string): string {
 }
 
 /** The same-type older names of a species from GBIF, as the build passes them to `crossIds`, and all its synonyms (`ownNames`). */
-async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Array<{ key: number; name: string }>; all: gbif.SynonymRow[]; authorship?: string } | { failed: string }> {
+export async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Array<{ key: number; name: string }>; all: gbif.SynonymRow[]; authorship?: string } | { failed: string }> {
   const sp = await gbif.species(f, key);
   if (sp.status !== 'ok' && sp.status !== 'none') return { failed: `GBIF: ${sp.detail}` };
   const syn = await gbif.synonyms(f, key);

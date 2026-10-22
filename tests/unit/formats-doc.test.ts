@@ -17,7 +17,7 @@ import { buildBackup } from '$lib/backup/backup';
 import { unzipSync } from 'fflate';
 import { KINDS, RESERVED_FIELDS } from '$core/log';
 import { EVENT_LABEL } from '$lib/db/types';
-import { BUCKETS, PER_BUCKET, bucketOf } from '$core/bucket';
+import { BUCKETS, PER_BUCKET, bucketOf, bucketsFor } from '$core/bucket';
 import { VaultFull, parseAfter, BEARER, listBatches, batchKey, photoKey } from '$lib/server/sync';
 import * as photoRoute from '../../src/routes/api/sync/photo/[id]/+server';
 import * as logRoute from '../../src/routes/api/sync/log/+server';
@@ -109,8 +109,11 @@ const doc = {
   idTimeDigits: Number(says(/wall time as exactly (\d+) base-(\d+) digits/)[1]),
   refused: says(/Different bytes under a held name without that match are refused \((\d+)\)/)[1],
   full: says(/a vault with no room left \((\d+) GB\) is (\d+) with/),
-  buckets: Number(says(/buckets of roughly three hundred species \((\d+) at the catalogue's present size/)[1]),
-  perBucket: Number(says(/never past a few hundred species a bucket/) ? 320 : 0),
+  // Round eighty (review C 3): the page gives the rule, not the count at one size (it said 32 while the reference had 256).
+  buckets: Number(says(/the count is a power of two from (\d+), the smallest that keeps a bucket at (\d+) species or fewer/)[1]),
+  bucketCap: Number(says(/the smallest that keeps a bucket at (\d+) species or fewer/)[1]),
+  perBucket: Number(says(/so a bucket never grows past (\d+) species/)[1]),
+  bucketFloor: says(/once the catalogue holds more than ([\d,]+) none holds fewer than about (\d+)\)/),
   example: says(/"t": "(\d{13})-([0-9a-f]{4})-([a-z0-9]+)", "kind": "accession", "id": "([a-z0-9]+)"/),
   nameLayout: says(/stored at vault\/<id>\/log\/(<hour>-0000-<device>-<fingerprint>)\.bin/)[1],
   storedAt: says(/stored at (vault\/<id>\/log\/<hour>-0000-<device>-<fingerprint>\.bin)/)[1],
@@ -133,7 +136,7 @@ const doc = {
   bearer: says(/All but creation take (Authorization): (Bearer) <token>/),
   fullBody: says(/is 507 with \{ error: "(vault full)", (bytes), (limit) \}/),
   refusalFields: says(/is JSON with an (\w+); one the framework makes [^)]*\) is JSON with a (\w+), and a fetch of a log batch or photograph that is not there is a plain-text (\d+)/),
-  hash: says(/the species slug is hashed \((FNV-1a)\) into one of a number of buckets of roughly three hundred species \((\d+) at the catalogue's present size/),
+  hash: says(/the species slug is hashed \((FNV-1a)\) into one of a number of buckets \(the count is a power of two from (\d+)/),
   bucketRoutes: says(/the device asks (\/api\/sheets)\?b= or (\/api\/entries)\?b= for the buckets/),
   corpusRoute: says(/carries it, from (\/api\/corpus)\)/)[1],
   dossierRoute: says(/served at (\/api\/dossier)\/<id>/)[1],
@@ -271,6 +274,12 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.full[2])).toBe(STATUS.full);
     expect(doc.buckets).toBe(BUCKETS); // the count at the present size; the rule that scales it is bucketsFor (round fifty-three, 2)
     expect(doc.perBucket).toBe(PER_BUCKET);
+    expect(doc.bucketCap).toBe(PER_BUCKET);
+    // the floor the page gives is the rule's: past BUCKETS x PER_BUCKET / 2 species, no corpus size gives a bucket under half the cap
+    expect(Number(doc.bucketFloor[1].replace(/,/g, ''))).toBe((BUCKETS * PER_BUCKET) / 2);
+    expect(Number(doc.bucketFloor[2])).toBe(PER_BUCKET / 2);
+    for (const n of [5121, 9000, 10241, 48361, 50000, 200000]) { const b = bucketsFor(n); expect(n / b).toBeLessThanOrEqual(PER_BUCKET); expect(n / b).toBeGreaterThan(PER_BUCKET / 2); }
+    expect(bucketsFor(48361)).toBe(256);
     expect(Number(doc.tooBig)).toBe(STATUS.tooBig);
     expect(Number(doc.rateLimited)).toBe(STATUS.rateLimited);
     expect(Number(doc.ceilings)).toBe(STATUS.ceilings);
