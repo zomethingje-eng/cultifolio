@@ -313,8 +313,9 @@ type GbifMatch = { usageKey?: number; matchType?: string; rank?: string; status?
  * (Psidium cattleyanum). Now the name is matched to GBIF's backbone (one request), and:
  *   - a name this reference holds as another species is refused;
  *   - one of the species' own names, in any spelling (`isOwnName`), is taken, and nothing is asked;
- *   - GBIF holding the name, exactly, as this species, as itself or as a synonym, or by a misspelling it corrects to this
- *     species, takes it: Mammillaria geminata is GBIF's synonym of Mammillaria karwinskiana;
+ *   - GBIF holding the name, exactly, as this species, as itself or as a synonym, takes it: Mammillaria geminata is GBIF's
+ *     synonym of Mammillaria karwinskiana (a FUZZY match, GBIF's guess at a misspelling, is no answer since round
+ *     eighty-two: a slip of one letter is the slip rule's below);
  *   - GBIF holding it, exactly, as another species of this reference refuses it (Pinguicula antarctica, Drimia physodes as
  *     Fusifilum physodes), and so does a name GBIF reads two ways, one of them another species here;
  *   - otherwise GBIF has no record of the name, or holds it as a species outside this reference: it is taken only as a
@@ -339,9 +340,11 @@ export async function judgeTaxon(f: JsonFetcher, name: string, s: JudgeFor, leni
   if (r.status !== 'ok' && r.status !== 'none') return r;
   const m: GbifMatch = r.status === 'ok' ? r.data : {};
   const exact = m.matchType === 'EXACT' && m.usageKey ? m.speciesKey : undefined;
-  const fuzzy = m.matchType === 'FUZZY' && m.usageKey ? m.speciesKey : undefined;
   const alts = (m.alternatives ?? []).filter((a) => a.matchType === 'EXACT' && (a.canonicalName ?? '').toLowerCase() === name.toLowerCase() && a.speciesKey);
-  if (exact === s.key || fuzzy === s.key) return ok(true, `GBIF holds ${name} as this species`);
+  // An EXACT match only (round eighty-two; the independent review's 5): GBIF's FUZZY match is its guess at a misspelling,
+  // and /about/how's rules take a name only where GBIF holds that very name as this species. A slip of one letter is
+  // decided below by the slip rule, which says so.
+  if (exact === s.key) return ok(true, `GBIF holds ${name} as this species`);
   if (exact && s.reference.isSpecies(exact)) return ok(false, `GBIF holds ${name} as ${m.species ?? `species ${exact}`}, another species of this reference`);
   const elsewhere = alts.filter((a) => a.speciesKey !== s.key && s.reference!.isSpecies(a.speciesKey!));
   if (!exact && elsewhere.length) return ok(false, `GBIF reads ${name} as ${[...new Set(alts.map((a) => a.species))].join(' or ')}, ${alts.some((a) => a.speciesKey === s.key) ? 'this species or another of this reference' : 'another species of this reference'}`);
