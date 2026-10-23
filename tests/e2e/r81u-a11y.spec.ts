@@ -30,7 +30,8 @@ test("r81u a11y 1: each × in a plant's log is named by its line @phone", async 
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await addPlant(page);
   await page.getByRole('button', { name: /^Water$/ }).first().click();
-  await expect(page.locator('.tl .tlrow .rm').first()).toBeVisible();
+  // The watering's own line, not only the plant's first: WebKit writes the log more slowly than Chromium (owner's PC, round 81).
+  await expect(page.locator('.tl .tlrow .rm[aria-label^="Remove this entry: Watered, "]')).toHaveCount(1);
   const names = await page.locator('.tl .tlrow .rm').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
   expect(names.length).toBeGreaterThan(0);
   for (const n of names) expect(n).toMatch(/^Remove this entry: .+, .+/);

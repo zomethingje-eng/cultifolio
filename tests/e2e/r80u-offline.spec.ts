@@ -71,7 +71,7 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   await ctx.close();
 });
 
-test('r80u offline 3: after the smaller install, with the network gone, every page of the collection opens, by address and by the tab bar, and a species page read online @phone', async ({ browser }) => {
+test('r80u offline 3: after the smaller install, with the network gone, every page of the collection opens, by address and by the tab bar, and a species page read online @phone', async ({ browser, browserName }) => {
   test.setTimeout(90_000);
   const { ctx, page } = await fresh(browser);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
@@ -91,8 +91,13 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
     await expect(page.locator('h1').first(), to).not.toContainText('No connection');
   }
   // By the app's own links: a move inside the app loads the next page's scripts from the worker's cache.
+  // What the page throws and leaves unhandled. WebKit also reports, as a page error, every request its service worker
+  // answers with an error (here the reference's buckets, asked offline and not kept), though the app catches each one: the
+  // owner's PC traced it in round 81, with no unhandled rejection in the page. That one message is WebKit's alone and is
+  // let pass there; an unhandled rejection is still caught in every engine by the listener below.
   const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('pageerror', (e) => { if (browserName === 'webkit' && e.message === 'Response served by service worker is an error') return; errors.push(e.message); });
+  await page.addInitScript(() => { const w = window as unknown as { __unhandled: string[] }; w.__unhandled = []; addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => w.__unhandled.push(String(ev.reason?.message ?? ev.reason))); });
   await page.goto('/plants'); await ready(page);
   for (const [to, h] of [['/today', /Today/], ['/propagation', /Propagation/], ['/places', /space/i], ['/plants', /plants/i]] as Array<[string, RegExp]>) {
     await page.locator(`a[href="${to}"]:visible`).first().click();
@@ -102,5 +107,6 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
   await page.locator(`a[href="/plants/${acc}"]`).first().click();
   await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
   expect(errors).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as { __unhandled?: string[] }).__unhandled ?? [])).toEqual([]);
   await ctx.close();
 });
