@@ -144,7 +144,10 @@
     if (head && io) io.observe(head);
     return () => { t.removeEventListener('scroll', onX); io?.disconnect(); };
   });
-  const withSlug = (slug: string) => `/compare?s=${[...new Set([...cols.map((c) => c.d.slug), slug])].slice(-3).join(',')}`;
+  // With no columns yet, the tray's species come first: the tray's own route here (its "pick one more", the phone's pill) has
+  // no `?s=`, and a species picked on this page dropped the one in the tray (round eighty-one; the desktop review's 2, the phone review's 5).
+  const shownSlugs = $derived(cols.length ? cols.map((c) => c.d.slug) : compare.picks.map((p) => p.slug));
+  const withSlug = (slug: string) => `/compare?s=${[...new Set([...shownSlugs, slug])].slice(-3).join(',')}`;
   /** A slug said as the name it was made from ("welwitschia-mirabilis" as "Welwitschia mirabilis"), for a species this page did not load. */
   const slugWords = (slug: string) => { const t = slug.replace('-', ' '); return t.charAt(0).toUpperCase() + t.slice(1); }; // the genus ends at the first hyphen; an epithet keeps its own ("ficus-indica")
   const without = (slug: string) => `/compare?s=${cols.map((c) => c.d.slug).filter((x) => x !== slug).join(',')}`;
@@ -287,6 +290,8 @@
   .rowlab .kinds { color: var(--ink3); font-weight: 500; }
   .btn.wrap { white-space: normal; height: auto; }
   .head .nm { display: block; padding: 10px 14px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-xl); font-weight: 600; color: var(--ink); }
+  /* The names and the chart's link under a finger (round eighty-one; the phone review's 10: 36 to 38 px and 16 px tall). */
+  @media (pointer: coarse) { .head .nm { min-height: var(--tap); } a.small[href*='#s-climate'] { display: inline-flex; align-items: center; min-height: var(--tap); } }
   .head .fam { padding: 3px 14px 0; font-size: var(--fs-sm); color: var(--ink2); }
   .head .hnote { padding: 6px 14px 0; }
   .fig b { display: block; font-family: var(--mono); font-size: var(--fs-2xl); font-weight: 500; letter-spacing: -0.02em; }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto, beforeNavigate, replaceState } from '$app/navigation';
+  import { goto, beforeNavigate, afterNavigate, replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
@@ -12,7 +12,7 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
+  import { parseName, slugify, type NameKind, speciesSlug, speciesOf, speciesName } from '$core/names';
   import { numberOrNull } from '$core/units';
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Accession, Provenance } from '$lib/db/types';
@@ -31,6 +31,13 @@
   }
   /** The name and its key came with the link, from a species page: the name check's room is one line until the grower types (round eighty). */
   const linked = !!(page.url.searchParams.get('species') && Number(page.url.searchParams.get('key')));
+  // On a desktop the species field takes focus as the page arrives, as the front page's search does: it was 13 Tabs from
+  // the top (round eighty-one; the desktop review's 7). After the layout's own move of focus to the page, and before
+  // anything is typed; not on a phone, where focus opens the keyboard over the form, nor with the name given by the link.
+  afterNavigate(() => {
+    if (page.url.searchParams.get('species') || name || !window.matchMedia('(min-width: 701px) and (pointer: fine)').matches) return;
+    if (document.activeElement === document.body || document.activeElement?.id === 'main') document.getElementById('species-name')?.focus({ preventScroll: true });
+  });
   onMount(async () => {
     await collection.load();
     // Carried from the example by "Keep it as my own": the whole form, read once (round sixty-nine; triage-68 X3).
@@ -204,7 +211,7 @@
       if (p.qualifier) taxonKey = null; // a key would say the plant is that species, which "cf." says it may not be
       // Keep a taxon record so the species has a home for your notes even before a dossier exists.
       const slug = speciesSlug(taxonName);
-      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
+      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesName(taxonName), gbifKey: taxonKey });
       // One commit for the whole batch: all the plants land with consecutive numbers, or none does (round sixteen, 14).
       const recs = await collection.addAccessions(wanted, {
         acc: useOwnNumber && ownNumber.trim() ? ownNumber.trim() : undefined,
@@ -271,7 +278,7 @@
   <div class="cult sheet">
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
-  <label class="field"><span>Species</span><SpeciesPicker reserve {linked} addLabel={`Add${countN > 1 ? ` ${countN}` : ''} as typed`} bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
+  <label class="field"><span id="f-species-lab">Species</span><SpeciesPicker reserve labelledby="f-species-lab" {linked} addLabel={`Add${countN > 1 ? ` ${countN}` : ''} as typed`} bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
   <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Monstera deliciosa</i> 'Thai Constellation'); a hybrid as the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>

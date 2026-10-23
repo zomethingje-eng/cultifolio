@@ -182,6 +182,10 @@ export async function addressOf(look: Lookup, address: string, resolve: (slug: s
   }
   const key = await resolve(address);
   if (key) return { kind: 'page', key };
+  // A hybrid's address written with its sign, as `slugify` writes "Mentha × piperita" (`mentha-x-piperita`) or a grower
+  // types it: the page's address is without it, as every hybrid's is (round eighty-one, H; review-w 3). Moved there.
+  const unsignedSlug = address.replace(/^x-(?=[a-z])/, '').replace(/-x-(?=[a-z])/, '-');
+  if (unsignedSlug !== address && (await resolve(unsignedSlug))) return { kind: 'move', slug: unsignedSlug };
   if (/^[a-z]+$/.test(address)) {
     const g = address[0].toUpperCase() + address.slice(1);
     if ((await look.genera()).get(g)) return { kind: 'genus', genus: g };

@@ -75,13 +75,15 @@
   // record's author (round seventy-one; S-F3).
   const wasAuthors = $derived((data.namedElsewhere ?? []).find((x) => x.name.toLowerCase() === (data.was ?? '').toLowerCase())?.authors ?? []);
   const elsewhere = $derived(new Set((data.namedElsewhere ?? []).map((x) => x.name)));
-  const allOlder = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))].filter((x) => !elsewhere.has(x)));
+  const allOlder = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x.replace(/×\s*/g, '') !== d.name.scientific.replace(/×\s*/g, '')))].filter((x) => !elsewhere.has(x))); // the page's own name, with Kew's sign or without, is no older name (round eighty-one, H)
   // Read from the dossier's structured fields when it has them, else from the sentences it was built with (round seventy-two; triage F13, A2).
   const older = $derived(olderNames(allOlder, d.name as never));
   const synonyms = $derived(older.older);
   const cited = $derived(citedNote(d.name as never, d.upstream));
+  /** A hybrid of the list (round eighty-one, H): Kew's parents for it, and whether its links are Kew's entry's. */
+  const hybrid = $derived(data.hybrid);
   // Its English names from Wikidata, with the item and the day, or why they were not checked (round eighty).
-  const wdNames = $derived(namesSource(d as never));
+  const wdNames = $derived(namesSource(d as never, common)); // the names shown, so a line over none says so (round eighty-one, D4)
   const viaNote = $derived(rangeNote(d.distribution as never, d.name));
   /*
    * The head says what only this page has: with a climate, the title names it and the description is the page's own
@@ -262,7 +264,7 @@
   }
   // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
   const readerLat = $derived(readerLatOf(data.hemiLat));
-  const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: unchecked ? ('unchecked' as const) : d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, annualP50: d.climate.status === 'ok' ? (d.climate.annualRain?.p50 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u });
+  const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: unchecked ? ('unchecked' as const) : d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, annualP50: d.climate.status === 'ok' ? (d.climate.annualRain?.p50 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u, kew: d.distribution.kew ?? null });
   const sheet = $derived(cultivationSheet(sheetIn));
   /** An upstream that refused or failed. Only 'none' is ever rendered as an absence; these get their own line. */
   /** Not answered: refused, failed, or not asked (a skipped source). Only 'none' is ever rendered as an absence. */
@@ -454,7 +456,8 @@
            seventy-one; S-F7: Euphorbia peplus, a weedy annual, read "· cactus or succulent"). -->
       <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null].filter(Boolean).join(' · ')}{#if sheet.arch}{' · '}<a class="grouped" id="group-chip" href="#s-cultivation">{groupLine(sheet.arch)}</a>{/if}</p>
       {#if cited}<p class="small muted" id="kew-cited">{cited}</p>{/if}
-      {#if wdNames && 'item' in wdNames}<p class="small muted" id="names-source">English names from Wikidata, <a href="https://www.wikidata.org/wiki/{wdNames.item}" rel="noopener">item {wdNames.item}</a>{#if wdNames.day}, read {wdNames.day}{/if} (CC0).</p>{:else if wdNames}<p class="small muted" id="names-source">English names not checked: {wdNames.unchecked}.</p>{/if}
+      {#if hybrid?.parents}<p class="small muted" id="hybrid-parents">A hybrid: <SpeciesName name={hybrid.parents} />, the parents Kew's World Checklist states for it (WCVP, RBG Kew).</p>{/if}
+      {#if wdNames && 'item' in wdNames && wdNames.hidden}<p class="small muted" id="names-source">Wikidata's <a href="https://www.wikidata.org/wiki/{wdNames.item}" rel="noopener">item {wdNames.item}</a> gives {wdNames.hidden.map((n) => `“${n}”`).join(', ')}{#if wdNames.day}, read {wdNames.day}{/if} (CC0), which the search finds and this page does not show as the species' English name.</p>{:else if wdNames && 'item' in wdNames}<p class="small muted" id="names-source">English names as Wikidata spells them, <a href="https://www.wikidata.org/wiki/{wdNames.item}" rel="noopener">item {wdNames.item}</a>{#if wdNames.day}, read {wdNames.day}{/if} (CC0), not corrected here.</p>{:else if wdNames}<p class="small muted" id="names-source">English names not checked: {wdNames.unchecked}.</p>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
       {#if d.climate.status !== 'ok' || (!photos.length && photoGaps)}
         <div class="pills">
@@ -577,9 +580,9 @@
       </div>
     {/each}
     {#if sheet.arch}
-      <!-- The group and, apart from every habitat figure, its convention, said as one with no source: it never raises or
-           replaces the cold floor (round sixty; self-review 3, words 1). -->
-      <p class="small archline">Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.{#if sheet.floor?.convention && d.climate.status === 'ok'}{' '}Not a habitat figure: {sheet.floor.convention.text}.{/if}</p>
+      <!-- The group, as the table lists it and Kew describes the species; no figure: the groups' indoor conventions were
+           removed in round eighty-one (the owner's decision on review D2). -->
+      <p class="small archline">Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.</p>
     {/if}
     <!-- Closed at rest, title only: the glance row above carries their figures, so a summary line under each title said
          them a second time (round sixty; visitor 2, self-review "the experience" 2). -->
@@ -598,7 +601,7 @@
       </details>
     {/each}
     {#if !sheetCards.length}
-      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(climDetail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if unchecked}Not checked. {noSentence} The habitat climate is read only from them, so no sheet is derived, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
+      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(climDetail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given.{:else if unchecked}Not checked. {noSentence} The habitat climate is read only from them, so no sheet is derived.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet.{:else}Nothing derived: no habitat climate for this species.{/if}</div></div>
     {/if}
     {#if sheetCards.length || sheet.arch}
       <!-- One account of the method per section, closed: the grey "by rule" lines under every block are gone (round sixty; visitor 2). -->
@@ -607,7 +610,7 @@
         <div class="whybody">
           <p class="whyline">Each card states this species' habitat figures with their sources, and what two fixed rules read from them; nothing here says what the plant does, wants or tolerates. <a href="/about/how#year">The rules</a> · <a href="/about/how#glossary">the terms</a>.</p>
           {#each sheetCards as c (c.title)}{#each c.rows as r}<p class="whyline"><b>{c.rows.length > 1 ? r.k : c.title}.</b> {r.why}</p>{/each}{/each}
-          {#if sheet.arch}<p class="whyline"><b>Group.</b> {sheet.arch.why.charAt(0).toUpperCase() + sheet.arch.why.slice(1)}. {sheet.arch.arch.minC != null ? 'The table gives one figure for this group, a convention for growing it indoors, with no source; it is shown apart and never changes the cold floor.' : 'The table gives no figure for this group, which spans too much for one; the cold floor is the habitat\'s alone.'} The table gives no prose.</p>{/if}
+          {#if sheet.arch}<p class="whyline"><b>Group.</b> {sheet.arch.why.charAt(0).toUpperCase() + sheet.arch.why.slice(1)}. A group is taken only where Kew's description of the species agrees with the table's listing. The table gives no figure and no prose; the cold floor is the habitat's alone.</p>{/if}
         </div>
       </details>
     {/if}
@@ -790,6 +793,7 @@
     {#each Object.entries(d.links) as [k, url]}
       <a href={url} rel="noopener">{k === 'gbif' ? 'GBIF' : k === 'powo' ? 'POWO' : k === 'ipni' ? 'IPNI' : k === 'wfo' ? 'WFO' : k === 'wikidata' ? 'Wikidata' : k === 'wikipedia' ? 'Wikipedia' : k === 'inat' ? 'iNaturalist' : k.toUpperCase()}</a>
     {/each}
+    {#if hybrid?.kewLinked}<span class="faint small" id="hybrid-links">POWO and IPNI by the numbers of Kew's entry for this hybrid</span>{/if}
   </div>
 
   </div>
@@ -912,6 +916,9 @@
   @media (max-width: 420px) { .idcard.nophoto { grid-template-columns: 48px minmax(0, 1fr); } .idcard.nophoto .phthumb { width: 48px; height: 48px; } }
   .hero.failed { position: relative; min-height: 150px; border-radius: var(--r); overflow: hidden; }
   .hero.failed .cred { position: absolute; left: 8px; top: 6px; right: auto; } /* at the top, clear of the name card (round sixty-one; visitor 2) */
+  /* The placeholder fills the photograph's box: the theme's 200 px placeholder sat in the top of the desktop's 300 px frame
+     with an empty band under it (round eighty-one; the desktop review's 9). */
+  .hero.failed :global(.ph) { position: absolute; inset: 0; height: auto; }
   /* At 320 px and 200% text the actions wrap rather than widen the page (round sixty; a11y 5). */
   .idcard .acts { flex-wrap: wrap; min-width: 0; }
   .idcard .acts :global(.btn) { white-space: normal; max-width: 100%; }

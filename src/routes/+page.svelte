@@ -14,14 +14,14 @@
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
-  import { slugify, speciesSlug, genusOf } from '$core/names';
+  import { slugify, speciesSlug, genusOf, withoutSign } from '$core/names';
   import { groupFor } from '$core/regions';
   import type { MySpecies } from '$lib/db/species-list';
   import Today from '$lib/ui/Today.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -29,12 +29,29 @@
   let { data } = $props();
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
+  /**
+   * The text sent to the catalogue on purpose (round eighty-one; review-w 1, review-p 1 and 4): a search opened by its
+   * address, which only the catalogue's view writes (a reload, a shared link, Back), or one taken there by "Search the
+   * whole catalogue". It is searched as it is, whatever the collection holds and before the collection has opened.
+   */
+  // svelte-ignore state_referenced_locally
+  let sent = $state(q.trim());
+  /**
+   * SvelteKit's router is up: the address is written only then (round eighty-one; review-w 1, review-p 4). Written at the
+   * first render, before hydration had finished, `replaceState` threw ("reading '$set'"), the page said nothing in the
+   * reference matched, and its effects never ran again: a reloaded or shared `/?q=` stopped the search until `/` was
+   * loaded fresh. `afterNavigate` runs once the router has the page, and the effect then runs after it.
+   */
+  let routerUp = $state(false);
   // Only on the catalogue view: on "Your species" the box searches your own plants and species, and what is typed there
   // (a number, a field number, a name as received) is the collection's, so it goes neither to the URL nor to the server (round forty, R2-1).
+  // While the collection is still opening the view is not known, and the address keeps what it has: it lost `?q=` there,
+  // so Back to a search came back to `/` (round eighty-one; review-p 1).
   $effect(() => {
-    if (!browser) return;
+    if (!browser || !routerUp) return;
     const u = new URL(location.href);
-    if (q.trim() && !keepLocal) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
+    if (q.trim() && !keepLocal) u.searchParams.set('q', q.trim());
+    else if (collection.ready) u.searchParams.delete('q');
     if (u.href !== location.href) replaceState(u, page.state);
   });
   /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
@@ -354,11 +371,16 @@
       requestAnimationFrame(step);
     });
   }
-  export const snapshot = { capture: (): Place | null => placeNow(), restore: (s: Place | null) => { if (s) void restorePlace(s); } };
+  // A search's place (round eighty-one; review-p 1), or the catalogue's row (round eighty).
+  export const snapshot = {
+    capture: (): Place | SearchPlace | null => (flat ? searchPlaceNow() : placeNow()),
+    restore: (s: Place | SearchPlace | null) => { if (!s) return; if ('kind' in s && s.kind === 'search') restoreSearch(s); else void restorePlace(s as Place); }
+  };
   // A page opened at ?open=<row> (a link or a bookmark) starts at the row, not at the top of a thousand rows. Not on Back:
   // there the browser's own saved position is the grower's place in the genus, and placing the row over it sent them to the
   // top of a forty-species genus on every return from a species page (round sixty; visitor 6).
   afterNavigate((nav) => {
+    routerUp = true;
     if (nav.type === 'popstate') return;
     if (nav.type === 'enter' && performance.getEntriesByType?.('navigation')?.[0] && (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type === 'back_forward') return;
     if (data.open && window.scrollY < 10) placeRow(data.open);
@@ -416,14 +438,16 @@
   // catalogue whatever the collection holds: a grower following `/?by=genus&open=copiapoa` got their own species
   // under a title that said Copiapoa (round thirty-four, 1).
   // svelte-ignore state_referenced_locally
-  let browsing = $state(data.browse);
+  // And a search opened by its address: `?q=` is the catalogue's, so the catalogue is the view (round eighty-one; review-p 1).
+  let browsing = $state(data.browse || !!sent);
   $effect(() => { if (data.browse) browsing = true; });
   const yourView = $derived(hasMine && !browsing);
   // And in three more cases the text stays here whichever view this is (round forty-nine, 3; round thirty-five, R1-2):
   // before the collection has opened (the view is not yet known, and a grower's first keystrokes were going to the
   // server), while the text matches one of the grower's plants, and when it is shaped like a plant number under the
   // collection's own scheme ("ACC-0013" went to the server; round sixty-two, the self-review's triage N4).
-  const keepLocal = $derived(yourView || !collection.ready || plantHits.length > 0 || plantNumberShaped(q, collection.scheme));
+  // Not the text sent on purpose (`sent`): that has been to the catalogue already, by its address or by the grower's step.
+  const keepLocal = $derived(yourView || (q.trim() !== sent && (!collection.ready || plantHits.length > 0 || plantNumberShaped(q, collection.scheme))));
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
   type Row = (typeof data.rows)[number];
@@ -461,12 +485,13 @@
     const gen = ++searchGen;
     clearTimeout(searchTimer);
     // The catalogue is searched only on the catalogue view (round forty, R2-1), and never with text that is the collection's (`keepLocal`).
-    if (!text || keepLocal) { found = []; foundTotal = foundKept = undefined; foundRegions = []; searching = false; searchFailed = null; relaxedFor = null; return; }
+    if (!text || keepLocal) { found = []; foundTotal = foundKept = undefined; foundRegions = []; searching = false; searchFailed = null; relaxedFor = null; answered = null; return; }
     searching = true;
     searchTimer = setTimeout(() => {
       pendingSearch = searchCatalogue(text, SEARCH_PAGE).then((r) => {
         if (gen !== searchGen) return;
         searching = false;
+        answered = text;
         if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; relaxedFor = null; return; }
         if (!Array.isArray(r) && 'limited' in r) { searchFailed = { kind: r.kind ?? 'limited', wait: r.limited }; found = []; relaxedFor = null; return; }
         searchFailed = null;
@@ -475,9 +500,56 @@
         foundKept = r.kept;
         foundRegions = r.regions ?? [];
         relaxedFor = relaxedOf(r);
+        if (backTo && backTo.q === text) void putBack(backTo, gen);
       });
     }, 150);
   });
+  /**
+   * The text the hits are the answer to: until the server has answered the text in the box, the page says "Searching…",
+   * never "Nothing in the reference matches" (round eighty-one; review-p 4, rule 2: the first render of a reloaded
+   * search said nothing matched before anything was asked).
+   */
+  let answered = $state<string | null>(null);
+  /*
+   * Back to a search puts the reader where they left it (round eighty-one; review-p 1): the same text, as many hits as were
+   * shown ("Show more" pressed again for them), and the hit at the top of the screen back where it was. The page that
+   * comes back is a new one, with the text from the address and its first page of hits; the place is kept with the page's
+   * history entry (`snapshot`), as the catalogue's row is.
+   */
+  type SearchPlace = { kind: 'search'; q: string; n: number; slug: string | null; top: number };
+  let backTo: SearchPlace | null = null;
+  function searchPlaceNow(): SearchPlace | null {
+    const text = q.trim();
+    if (!text || keepLocal || !found.length) return null;
+    const edge = pinnedEdge();
+    for (const el of document.querySelectorAll<HTMLAnchorElement>('.rows.hits > a.hitrow')) {
+      const b = el.getBoundingClientRect();
+      if (b.bottom <= edge) continue;
+      return { kind: 'search', q: text, n: found.length, slug: el.dataset.slug ?? null, top: b.top };
+    }
+    return { kind: 'search', q: text, n: found.length, slug: null, top: 0 };
+  }
+  async function putBack(s: SearchPlace, gen: number) {
+    backTo = null;
+    // The hits the reader had: their pages asked again as "Show more" asked them (the browser holds most of them).
+    while (gen === searchGen && found.length < s.n && more.more) {
+      const had = found.length;
+      await showMore();
+      if (found.length <= had) break;
+    }
+    if (gen !== searchGen || !s.slug) return;
+    await tick();
+    const el = [...document.querySelectorAll<HTMLAnchorElement>('.rows.hits > a.hitrow')].find((a) => a.dataset.slug === s.slug);
+    if (!el) return;
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - s.top });
+    await holdPlace(el, s.top);
+  }
+  function restoreSearch(s: SearchPlace) {
+    if (s.q !== q.trim()) return;
+    // Answered already (a fast answer, or one the browser held): put back now; otherwise when the answer comes.
+    if (answered === s.q && found.length) void putBack(s, searchGen);
+    else backTo = s;
+  }
   /** The next page of the same search's hits, after those loaded (round eighty): asked from where they end, and added once. */
   async function showMore() {
     const text = q.trim();
@@ -524,10 +596,13 @@
   const ownHits = $derived.by(() => {
     const needle = q.trim().toLowerCase();
     if (!needle || !yourView) return [];
-    return [...mineTiles.grow, ...mineTiles.follow].filter((t) => t.name.toLowerCase().includes(needle) || (t.common ?? '').toLowerCase().includes(needle) || (t.family ?? '').toLowerCase().includes(needle));
+    // A hybrid's name is read past its sign, typed as "×", as "x" or not at all (round eighty-one, H): "aloe nobilis" finds Aloe × nobilis.
+    const plainNeedle = withoutSign(needle.replace(/(^|\s)x(?=\s)/g, '$1'));
+    return [...mineTiles.grow, ...mineTiles.follow].filter((t) => t.name.toLowerCase().includes(needle) || withoutSign(t.name.toLowerCase()).includes(plainNeedle) || (t.common ?? '').toLowerCase().includes(needle) || (t.family ?? '').toLowerCase().includes(needle));
   });
   /** Take the typed text to the catalogue: the one deliberate step on which what was typed leaves the device. */
-  const searchTheCatalogue = () => { browsing = true; };
+  // The text goes with it, whether or not it also matches one of the grower's plants: the catalogue was asked for it (round eighty-one).
+  const searchTheCatalogue = () => { browsing = true; sent = q.trim(); };
   // A grower's own tiles come from a small request for their own species; the whole catalogue is fetched only for a search or a chip.
   let ownEntries = $state<Map<string, Item> | null>(null);
   let ownFailed = $state(false);
@@ -573,12 +648,16 @@
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
+  type Tile = { slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
-    const toTile = (s: { slug: string; name: string }): Tile => {
-      const e = bySlug?.get(s.slug) as Tile | undefined;
+    const toTile = (s: { slug: string; name: string; genus?: boolean }): Tile => {
+      // A genus is no species of the index: its tile links its row, which `/species/<genus>` opens (round eighty-one, H).
+      if (s.genus) return { slug: s.slug, name: s.name, genus: true };
+      const found = bySlug?.get(s.slug) as Tile | undefined;
+      // A hybrid's name with its sign, where the index entry has it without (an index made before round eighty-one).
+      const e = found && s.name.includes('×') && !found.name.includes('×') && withoutSign(s.name) === withoutSign(found.name) ? { ...found, name: s.name } : found;
       if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug };
       // From the whole index (after a search) the entry carries its photograph; an own tile shows it only when switched on.
       return e.thumb && !prefs.referencePhotos ? { ...e, thumb: undefined, alt: undefined, thumbOff: true } : e;
@@ -696,7 +775,7 @@
       <div class="fam">{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing ? 'not in the reference' : ''}</div>
     </div>
   </a>
 {/snippet}
@@ -705,15 +784,18 @@
   {#each foundRegions as r (r.name)}<p class="seccount regionline">{regionSentence(r)} <a href="/?by=origin&open={r.row.id}#g-{r.row.id}">{r.row.label}</a>.</p>{/each}
 {/snippet}
 
-{#snippet hit(c: Tile)}
+{#snippet hit(c: Tile, catalogue = false)}
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
-  <a class="azrow hitrow" href="/species/{c.slug}">
-    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
+  <!-- A catalogue hit found by an older name says so, and its page is opened as the older name's address opens it, with the line saying whose name it is (round eighty-one; review-w 5). -->
+  {@const older = catalogue ? olderNameOf(q, c as unknown as Found) : null}
+  <a class="azrow hitrow" href="/species/{c.slug}{older ? `?was=${encodeURIComponent(older)}` : ''}" data-slug={c.slug}>
+    <!-- The thumbnail's letter and the "›" are for the eye: the link's name is the species' (round eighty-one; the desktop review's 7). -->
+    <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[older ? `older name: ${older}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
-    <span class="fig">›</span>
+    <span class="fig" aria-hidden="true">›</span>
   </a>
 {/snippet}
 
@@ -882,8 +964,11 @@
     {#if q.trim()}{@render plantsFound()}{/if}
     {#if searchFailed}
       <p class="seccount" style="margin-top: 14px" role="status">{searchFailed.kind === 'offline' ? 'Offline: the catalogue search needs a connection; your own plants are under “Your species”.' : searchFailed.kind === 'limited' ? `Too many searches from this network; try again in ${Math.max(1, Math.ceil((searchFailed.wait ?? 60) / 60))} minute${(searchFailed.wait ?? 60) > 60 ? 's' : ''}.` : searchFailed.kind === 'unread' ? 'The catalogue search could not be read just now.' : searchFailed.kind === 'refused' ? 'The server refused this search just now.' : 'The catalogue could not be reached.'} <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
-    {:else if searching && !found.length}
-      <p class="seccount" style="margin-top: 14px">Searching…</p>
+    {:else if keepLocal && collection.ready}
+      <!-- Kept on this device: the text is one of the grower's plants' (round forty-nine, 3), so the catalogue was not asked, and the page says so rather than "nothing matches" (round eighty-one; rule 2). -->
+      <p class="seccount" style="margin-top: 14px" role="status" id="kept-local">The catalogue was not searched for “{q.trim()}”: it {plantHits.length ? 'matches your own plants' : 'is shaped like one of your plant numbers'}, so it stayed on this device. <button class="linkish" type="button" onclick={searchTheCatalogue}>Search the catalogue for it</button></p>
+    {:else if (searching || keepLocal || answered !== q.trim()) && !found.length}
+      <p class="seccount" style="margin-top: 14px" role="status">Searching…</p>
     {:else if !found.length && relaxedFor?.narrow === true}
       <!-- Too common to list (round seventy-seven): the server answers no hits and says why, so the page never says "nothing matches". -->
       <p class="seccount" style="margin-top: 14px" role="status">{narrowSentence(q)}</p>
@@ -895,7 +980,7 @@
       <p class="seccount" style="margin: 8px 0" role="status">{countSentence({ loaded: found.length, shown: shownFound.length, total: foundTotal, kept: foundKept, of: data.total, chip: chip !== 'all' })} · Enter opens the first</p>
       {@render regionLinks()}
       <div class="rows hits">
-        {#each shownFound as c (c.slug)}{@render hit(c)}{/each}
+        {#each shownFound as c (c.slug)}{@render hit(c, true)}{/each}
       </div>
       <!-- The rest of the answer, a page at a time, or why it cannot be listed (round eighty; review-w 2, review-p 3). -->
       {#if genusRow}<p class="seccount moresearch">Every species of <i>{genusRow}</i> is in <a href="/?by=genus&open={slugify(genusRow)}#g-{slugify(genusRow)}">its row of the catalogue</a>.</p>{/if}

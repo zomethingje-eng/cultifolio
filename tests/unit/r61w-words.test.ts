@@ -86,20 +86,15 @@ describe('the share card says whose months it draws (V6)', () => {
 });
 
 describe('a refused or pending climate is said as such (V4, rule 2)', () => {
-  for (const [st, said] of [['refused', 'not checked'], ['pending', 'pending']] as const) {
-    it(`${st}: the Warmth card and its method`, () => {
-      const r = cultivationSheet({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: st, months: null }).rows.find((x) => x.k === 'Temperature')!;
-      expect(r.s).toContain(`The habitat climate ${st === 'refused' ? 'was not checked' : 'is pending'}`);
-      expect(`${r.s} ${r.why} ${r.short} ${r.plain?.lead}`).not.toMatch(/on file/);
-      expect(r.short).toContain(`Habitat climate ${said}`);
+  // Since round eighty-one no group's convention stands in for a climate (the owner's decision), so there is no Warmth
+  // card to say it: the species page's own line under Cultivation says which kind of absence, as before.
+  for (const st of ['refused', 'pending', 'none'] as const) {
+    it(`${st}: no card stands in for the climate`, () => {
+      expect(cultivationSheet({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: st, months: null, kew: { lifeform: 'epiphyte' } }).rows).toEqual([]);
     });
   }
-  it("'none' keeps \"on file\"", () => {
-    const r = cultivationSheet({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: 'none', months: null }).rows.find((x) => x.k === 'Temperature')!;
-    expect(r.s).toContain('No habitat figure is on file');
-  });
-  it('the label line says the convention has no source (V7)', () => {
-    expect(careLine({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: 'none', months: null })).toBe('group min 10 °C (convention, no source)');
+  it('the label line prints no group minimum (V7, round eighty-one)', () => {
+    expect(careLine({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: 'none', months: null, kew: { lifeform: 'epiphyte' } })).toBe('');
   });
   it("a source's detail keeps its article and says when (V16)", () => {
     expect(detailSentence('occurrence source did not answer', 'x')).toBe('The occurrence source did not answer when this page was built.');

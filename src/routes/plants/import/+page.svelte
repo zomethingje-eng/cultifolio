@@ -257,10 +257,31 @@
   const statusOf = (r: ImportRow) => checks.get(checkKey(r.name));
   /** The summary counts each line by the verdict its row shows (`nameVerdict`), so the two never disagree. */
   const counts = $derived.by(() => {
-    const c = { found: 0, keyless: 0, near: 0, missing: 0, unchecked: 0, hybrid: 0, waiting: 0 };
-    for (const r of live) c[nameVerdict(statusOf(r), r.name)]++;
+    const c = { found: 0, keyless: 0, near: 0, older: 0, missing: 0, unchecked: 0, hybrid: 0, waiting: 0 };
+    for (const r of live) { const v = nameVerdict(statusOf(r), r.name); if (v === 'near' && statusOf(r)?.s === 'near' && (statusOf(r) as { why?: string }).why === 'older name') c.older++; else c[v]++; }
     return c;
   });
+  /**
+   * The lines under an older name, each with the reference's name for it (round eighty-one; review-w 4): said as an older
+   * name, never "ambiguous" (the reference holds the name under one species, as the species address does), and taken for
+   * every such line at once, or for every line of one name, as well as line by line.
+   */
+  const olderLines = $derived(live.filter((r) => { const c = statusOf(r); return c?.s === 'near' && c.why === 'older name'; }));
+  /** The live lines of the same name as `r`, as the reference is asked about it. */
+  const sameName = (r: ImportRow) => live.filter((x) => checkKey(x.name) === checkKey(r.name));
+  function useOn(lines: ImportRow[], species: string) {
+    const keys = new Set(lines.map((x) => x.key));
+    rows = rows.map((x) => (keys.has(x.key) ? { ...x, name: useSpecies(x.name, species) } : x));
+    void recheck();
+  }
+  function useOlderAll() {
+    const by = new Map<string, ImportRow[]>();
+    for (const r of olderLines) { const c = statusOf(r); if (c?.s === 'near') (by.get(c.suggestion) ?? by.set(c.suggestion, []).get(c.suggestion)!).push(r); }
+    const keys = new Map<string, string>();
+    for (const [sp, rs] of by) for (const r of rs) keys.set(r.key, sp);
+    rows = rows.map((x) => (keys.has(x.key) ? { ...x, name: useSpecies(x.name, keys.get(x.key)!) } : x));
+    void recheck();
+  }
   /** Lines whose number and name a plant here holds: dropped, and said, with "Add anyway" (round sixty-seven; triage-66 R3). */
   const alreadyRows = $derived(rows.filter((r) => r.already));
   /** Unnumbered lines that look already imported, changed since: said, and added unless dropped (round sixty-seven; triage-66 R3). */
@@ -457,8 +478,10 @@
     <div class="secrule"><h2 id="imp-review-h" tabindex="-1">Review</h2><div class="line"></div><span class="n">{plantsN} plant{plantsN === 1 ? '' : 's'}</span></div>
     <p class="small" id="imp-summary">
       {live.length} line{live.length === 1 ? '' : 's'}{rows.length - live.length ? ` (${rows.length - live.length} dropped)` : ''}, {plantsN} plant{plantsN === 1 ? '' : 's'}.
-      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.near ? ` · ambiguous, another name suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
+      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.older ? ` · an older name, the reference's name for it suggested: ${counts.older}` : ''}{counts.near ? ` · not under this name, a near spelling suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
       {#if counts.unchecked && !checking}<button class="linkish" type="button" onclick={recheck}>Check again</button>{/if}
+      <!-- One press for every line under an older name the reference holds under one species (round eighty-one; review-w 4: 24 lines of a 300-plant sheet, a press each). Each line keeps the sheet's name as received. -->
+      {#if olderLines.length}<button class="linkish" type="button" id="imp-use-older" onclick={useOlderAll}>Use the reference's name on {olderLines.length === 1 ? 'the line' : `all ${olderLines.length} lines`} with an older name</button>{/if}
       {#if noName}{noName} {mode === 'paste' ? 'line' : 'row'}{noName === 1 ? '' : 's'} with no name {noName === 1 ? 'was' : 'were'} left out.{/if}
       {#if repeatedHeader}{repeatedHeader === 1 ? 'A row repeating the header was' : `${repeatedHeader} rows repeating the header were`} left out.{/if}
       {#if doneN}<span id="imp-done-lines">{doneN === 1 ? 'One line was' : `${doneN} lines were`} imported before (every plant {doneN === 1 ? 'it makes is' : 'they make is'} here), so {doneN === 1 ? 'it is' : 'they are'} left out.</span>{/if}
@@ -506,7 +529,7 @@
                 {#if !c}<span class="muted">checking…</span>
                 {:else if c.s === 'found' && v === 'keyless'}<span class="ok">filed as written, with no reference key{qual === 'sp.' || qual === 'spp.' ? '' : `; the reference has ${c.refName}`}</span>
                 {:else if c.s === 'found'}<span class="ok">matched{c.refName.toLowerCase() !== checkKey(r.name).toLowerCase() ? ` as ${c.refName}` : ''}</span>
-                {:else if c.s === 'near'}<span class="warn">{qual ? 'filed as written, with no reference key; ' : ''}ambiguous: not under this name; {c.why === 'older name' ? 'an older name for' : 'did you mean'} <SpeciesName name={c.suggestion} />? <button class="linkish use" type="button" aria-label="Use {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button></span>
+                {:else if c.s === 'near'}{@const same = sameName(r)}<span class="warn">{qual ? 'filed as written, with no reference key; ' : ''}{#if c.why === 'older name'}an older name: the reference has this species as <SpeciesName name={c.suggestion} />.{:else}not under this name; did you mean <SpeciesName name={c.suggestion} />?{/if} <button class="linkish use" type="button" aria-label="Use {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button>{#if same.length > 1}{' · '}<button class="linkish useall" type="button" aria-label="Use {c.suggestion} on all {same.length} lines of {checkKey(r.name)}" onclick={() => useOn(same, c.suggestion)}>on all {same.length} lines of this name</button>{/if}</span>
                 {:else if qual}<span class="muted">filed as written, with no reference key</span>
                 {:else if c.s === 'missing'}<span class="warn">not in the reference; added as typed</span>
                 {:else if c.s === 'hybrid'}<span class="muted">a cross, filed under its genus</span>

@@ -15,7 +15,7 @@ import { updateMeta, type MetaCondition } from '$lib/db/vault';
 import { PAGE_IN_DEMO, SEED_MARK, exampleClosed, seedState } from '$lib/db/demo';
 import { localDate } from '$core/dates';
 import { nextAccession, type NumberingScheme } from '$core/accession';
-import { speciesOf, speciesSlug } from '$core/names';
+import { speciesName, speciesSlug } from '$core/names';
 import type { Accession, EventType, Location, PlantEvent, Sowing } from '$lib/db/types';
 
 export const SEEDED = 'demoSeeded';
@@ -64,7 +64,7 @@ export function sampleRecords(scheme: NumberingScheme, wall: number = Date.now()
   const made: Accession[] = [];
   for (const [name, key, cultivar, spot, days, price, , own] of SAMPLE) {
     const slug = speciesSlug(name);
-    if (!taxa.has(slug)) taxa.set(slug, { name: speciesOf(name), gbifKey: key });
+    if (!taxa.has(slug)) taxa.set(slug, { name: speciesName(name), gbifKey: key });
     const acquired = ago(days);
     const sourceFrom = days > 600 ? 'a club plant sale' : days < 200 ? 'a nursery' : null;
     const a: Accession = { id: id('r'), acc: number(acquired), taxonName: name, taxonKey: key, cultivar, nameKind: cultivar ? 'cultivar' : 'species', provenance: 'unknown', status: 'growing', acquired, sourceFrom, sourceForm: 'plant', price, locationId: where[spot], waterDays: own ?? null };

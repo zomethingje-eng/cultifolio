@@ -9,8 +9,8 @@ const ex = { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 4
 
 describe('the generated note', () => {
   it('condenses the sheet into one paragraph, shifted to the reader, every sentence traceable', () => {
-    const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex })!;
-    expect(n.text).toContain('Grouped as a cactus or succulent, listed under the genus Tylecodon in the archetype table.'); // round sixty-two: what the table lists (A4)
+    const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex, kew: { lifeform: 'succulent shrub', climate: 'desert or dry shrubland' } })!;
+    expect(n.text).toContain('Grouped as a cactus or succulent, listed under the genus Tylecodon in the archetype table, and Kew describes it as “succulent shrub”.'); // round sixty-two: what the table lists (A4); round eighty-one: and Kew's lifeform agreeing
     expect(n.text).toContain('Rain rule: a winter growing season, November to February in the northern hemisphere (May to August at the habitat, southern).');
     expect(n.text).toMatch(/Habitat rain 194 mm in the median year/);
     expect(n.text).toContain('Cold floor (1 night in 100) 4.1 °C, at a typical spot in the range (NASA POWER).'); // round sixty-two: named as the glance card names it
@@ -31,13 +31,8 @@ describe('the generated note', () => {
     const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30 }, { readerLat: -34 })!;
     expect(n.text).toContain('May to August in the southern hemisphere');
   });
-  it('with no climate it says so and gives the archetype figure only, credited', () => {
-    const n = generatedNote({ scientific: 'Monstera deliciosa', family: 'Araceae' })!;
-    expect(n.text).toContain('no habitat climate could be derived for this species');
-    // The convention, said as one with no source, never as a cold floor (round sixty; self-review 3).
-    expect(n.text).toContain('No habitat cold figure on file; the convention for tropical foliage plants grown indoors is 12 °C; no source is given for it (archetype table).');
-    expect(n.text).not.toContain('Cold floor 12');
-    expect(n.hab).toBe(false);
+  it('with no climate there is no note, whatever the group: the archetype figure is gone (round eighty-one)', () => {
+    expect(generatedNote({ scientific: 'Monstera deliciosa', family: 'Araceae', kew: { lifeform: 'climber', climate: 'wet tropical' } })).toBeNull();
     expect(generatedNote({ scientific: 'Stephania erecta', family: 'Menispermaceae' })).toBeNull();
   });
   it("every sentence of the note is a row's own short, so the note cannot contradict its card", () => {
@@ -65,7 +60,7 @@ describe('the label line', () => {
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' })).toBe('winter rain Nov–Feb · open sky 20–58 DLI (CHELSA)');
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex }, { readerLat: -34 })).toBe('winter rain May–Aug · floor 4.1 °C (1 in 100, NASA POWER) · open sky 20–58 DLI (CHELSA)');
     expect(careLine({ scientific: 'Aglaonema commutatum', family: 'Araceae', months: equatorial, lat: 1 })).toBe('rain Mar–May, Oct–Nov, flat T'); // no extremes: no night on the label (round thirty-eight, R1-2)
-    expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae' })).toBe('group min 12 °C (convention, no source)'); // said as a convention (round sixty-one; visitor 7)
+    expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae', kew: { lifeform: 'climber', climate: 'wet tropical' } })).toBe(''); // no group minimum since round eighty-one (the owner's decision)
     // The table's convention never stands beside or over a habitat night: no floor is raised (round sixty; self-review 3).
     expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae', months: namaqua, lat: -30, extremes: ex })).toBe('winter rain Nov–Feb · floor 4.1 °C (1 in 100, NASA POWER) · open sky 20–58 DLI (CHELSA)');
     expect(careLine({ scientific: 'Nobodia knowsii', family: 'Asparagaceae' })).toBe('');

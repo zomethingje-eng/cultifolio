@@ -14,7 +14,7 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
+  import { parseName, slugify, type NameKind, speciesSlug, speciesOf, speciesName } from '$core/names';
   import { sheetForName } from '$lib/ui/index.svelte';
   import { PROP_METHODS, kindOf, type Accession, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -198,7 +198,7 @@
       const p = parseName(name);
       const taxonName = p.scientific;
       const slug = speciesSlug(taxonName);
-      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
+      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesName(taxonName), gbifKey: taxonKey });
       const rec = await collection.addSowing({
         taxonName,
         taxonKey,
@@ -267,8 +267,8 @@
   {/if}
 
   <!-- `reserve`: the name check's words arrive in room kept for them, so "Start batch" below does not move under a press (round seventy; P's need 2, as the add form since round sixty-seven, triage-66 P10). -->
-  <label class="field"><span>Species</span><SpeciesPicker reserve addLabel="Start batch" bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
-    <span class="faint small">A species, a cultivar (<i>Monstera deliciosa</i> 'Thai Constellation'), or a hybrid: write the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
+  <label class="field"><span id="s-species-lab">Species</span><SpeciesPicker reserve addLabel="Start batch" labelledby="s-species-lab" describedby="s-species-help" bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
+    <span class="faint small" id="s-species-help">A species, a cultivar (<i>Monstera deliciosa</i> 'Thai Constellation'), or a hybrid: write the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="s-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
   {/if}

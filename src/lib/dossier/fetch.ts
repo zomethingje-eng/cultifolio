@@ -9,7 +9,11 @@ export type FetchResult<T> =
   | { status: 'ok'; data: T; detail?: string }
   | { status: 'none' }
   | { status: 'refused'; detail: string }
-  | { status: 'error'; detail: string }
+  /**
+   * `unreached` (round eighty-one, review B2): the request reached no server at all (the connection failed: a network
+   * down, a PC asleep, a dropped Wi-Fi), so no host answered and no host counted it; a day's allowance gives it back.
+   */
+  | { status: 'error'; detail: string; unreached?: true }
   /**
    * Not asked: the builder held the call back (an offline re-derivation), so nothing was refused and nothing is known
    * either way. Recorded as `skipped` and said "not asked"; it was `refused` before, and 44 pages said a source had
@@ -159,11 +163,14 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
     await pace(host);
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 20000);
+    // Whether the host answered at all (round eighty-one, review B2): an error before it did is `unreached`.
+    let answered = false;
     try {
       const res = await fetchImpl(url, {
         headers: { accept: 'application/json', 'user-agent': USER_AGENT, 'api-user-agent': USER_AGENT, ...opts.headers },
         signal: ctl.signal
       });
+      answered = true;
       if (res.status === 404 && opts.noneOn404 !== false) return { status: 'none' };
       if (res.status === 429 && hostTouchy(host)) {
         // Still throttled after a cooldown: back to cooling at once; --only-refused (or a key) is the way through.
@@ -235,7 +242,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         await new Promise((r) => setTimeout(r, 3000));
         return makeFetcher(fetchImpl)<T>(url, { ...opts, attempt: (opts.attempt ?? 0) + 1 });
       }
-      return { status: 'error', detail: `${host} ${msg}` };
+      return answered ? { status: 'error', detail: `${host} ${msg}` } : { status: 'error', detail: `${host} ${msg}`, unreached: true };
     } finally {
       clearTimeout(timer);
     }

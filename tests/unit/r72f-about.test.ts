@@ -19,7 +19,7 @@ describe('r72f /about/how', () => {
     expect(how).toMatch(/has a month whose mean nightly low is below 0 °C is read as no growing season/);
   });
   it('F9: a generic noun is no headline, and ranks after whole words', () => {
-    expect(how).toMatch(/which is not shown even then: a species no source gives a fuller name has no English name shown/);
+    expect(how).toMatch(/which is never shown, neither as the heading nor among the names: a species no source gives a fuller name has no English name shown/); // round eighty-one: nor among the names
     expect(how).toMatch(/a generic noun matched alone comes after every match of whole words/);
   });
   it('F6: an older-name title says its proof beside the quotation', () => {

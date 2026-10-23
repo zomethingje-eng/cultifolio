@@ -5,7 +5,7 @@
  * or a spelling one letter out. A name the reference does not hold can still be added as typed and is marked "not in the
  * reference"; a search that did not answer leaves the name "not checked", never "not in the reference" (rule 2).
  */
-import { parseName, speciesOf, speciesSlug } from '$core/names';
+import { parseName, speciesOf, speciesSlug, isNamedHybrid, withoutSign } from '$core/names';
 
 export type NameCheck =
   /**
@@ -18,7 +18,10 @@ export type NameCheck =
   | { s: 'missing' }
   /** The reference was not reached, or the search allowance was spent: not checked, which is not "missing". */
   | { s: 'unchecked' }
-  /** A cross is filed under its genus, as the add form files it; there is no species to check. */
+  /**
+   * A cross is filed under its genus, as the add form files it; there is no species to check. A named nothospecies
+   * ("Mentha × piperita", "× Gasteraloe beguinii") is not one: it is checked as a species is (round eighty-one, H to S).
+   */
   | { s: 'hybrid' };
 
 /** An entry as the check reads it: `gbif` is the page's GBIF key (round seventy-eight), what a plant files. */
@@ -56,8 +59,10 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
     const p = parseName(t);
     const k = p.scientific;
     if (!k || out.has(k) || todo.has(k)) continue;
-    if (p.kind === 'hybrid') { out.set(k, { s: 'hybrid' }); continue; }
-    todo.set(k, { scientific: k, slug: speciesSlug(k), rankSpecies: speciesOf(k) === k });
+    if (p.kind === 'hybrid' && !isNamedHybrid(p)) { out.set(k, { s: 'hybrid' }); continue; }
+    // A named hybrid's species rank is read past its sign: "Mentha × piperita" is at species rank, as its page is (round eighty-one, H to S).
+    const plain = withoutSign(k);
+    todo.set(k, { scientific: k, slug: speciesSlug(k), rankSpecies: speciesOf(plain) === plain });
   }
   if (!todo.size) return out;
   const got = await look.entries([...new Set([...todo.values()].map((x) => x.slug))]).catch(() => null);
@@ -90,14 +95,16 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
 /** What one search answer says about a name the hash group did not hold. */
 export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry[]): NameCheck {
   const want = speciesOf(scientific).toLowerCase();
-  const exact = hits.find((h) => h.name.toLowerCase() === want);
+  // The index names a hybrid with its sign (round eighty-one, H); the name asked is compared past it, as the slug is.
+  const plain = (n: string) => withoutSign(n).toLowerCase();
+  const exact = hits.find((h) => plain(h.name) === want);
   if (exact) return { s: 'found', slug: exact.slug, refName: exact.name, key: rankSpecies ? (exact.gbif ?? null) : null };
   // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
   // And Kew's older names, which the search reads too (round eighty; review-d 5).
   const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].some((n) => n.toLowerCase() === want));
   if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name' };
   const genus = want.split(' ')[0];
-  const close = hits.find((h) => h.name.toLowerCase().split(' ')[0] === genus && editDistance(h.name.toLowerCase(), want) <= 2);
+  const close = hits.find((h) => plain(h.name).split(' ')[0] === genus && editDistance(plain(h.name), want) <= 2);
   if (close) return { s: 'near', suggestion: close.name, key: close.gbif ?? null, why: 'spelling' };
   return { s: 'missing' };
 }

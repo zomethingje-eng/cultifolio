@@ -50,5 +50,9 @@
   }
   /* Under 480 px tall there is no tab bar: the pill sits at the bottom. */
   @media (max-width: 700px) and (max-height: 480px) { .cmppill, .cmppill.low { bottom: calc(12px + env(safe-area-inset-bottom)); transform: none; } }
+  /* A page's own pinned bar (the add and batch forms' Add, select mode's verbs) is the thumb's target while it is shown: the
+     pill steps aside for it, as the toast steps above it. It covered "Save and add another" and most of Add at 390 px
+     (round eighty-one; the phone review's 2). The tray is kept; it is back on the next page. */
+  :global(body.stickyacts) .cmppill, :global(body.grow-selecting) .cmppill { display: none; }
   @media (prefers-reduced-motion: reduce) { .cmppill { transition: none; } }
 </style>

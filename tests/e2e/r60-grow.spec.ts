@@ -130,7 +130,7 @@ test('r60 1: a pasted list is checked name by name, a number in use is renumbere
   // sixty-five; the all-engines rerun, r60 1 and r61h, both attempts). A check gives up at 10 s, so 15 s sees its end.
   await expect(summary).not.toContainText('still checking', { timeout: 15_000 });
   await expect(summary).toContainText('Matched in the reference: 2');
-  await expect(summary).toContainText('ambiguous');
+  await expect(summary).toContainText('not under this name, a near spelling suggested: 1'); // round eighty-one: "ambiguous" no longer (review-w 4)
   await expect(summary).toContainText('not in the reference, added as typed: 1');
   await expect(page.locator('#imp-dupes')).toContainText(`${y}-0001 → ${y}-0004`); // a number given twice in the sheet is said as that (round sixty-one)
   await expect(page.locator('#imp-add')).toHaveText('Add 4 plants');
@@ -147,7 +147,7 @@ test('r60 2: an ambiguous name offers the reference\'s spelling, and "Use it" re
   await page.fill('#imp-text', 'Copiapoa cinera');
   await page.click('#imp-check');
   const row = page.locator('.rvrow').first();
-  await expect(row).toContainText('ambiguous: not under this name; did you mean');
+  await expect(row).toContainText('not under this name; did you mean'); // round eighty-one: no longer "ambiguous" (review-w 4)
   await row.getByRole('button', { name: 'Use Copiapoa cinerea on line 1' }).click();
   await expect(row.locator('input.nm')).toHaveValue('Copiapoa cinerea');
   await expect(row.locator('.ok')).toHaveText('matched');

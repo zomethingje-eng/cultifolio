@@ -299,9 +299,7 @@
     ],
     "carnivore": [
       "Aldrovanda",
-      "Brocchinia",
       "Byblis",
-      "Catopsis",
       "Cephalotus",
       "Darlingtonia",
       "Dionaea",
@@ -481,7 +479,10 @@
     "pelargonium crithmifolium": "arid",
     "pelargonium gibbosum": "arid",
     "pelargonium tetragonum": "arid",
-    "nepenthes hamata": "carnivore"
+    "nepenthes hamata": "carnivore",
+    "brocchinia reducta": "carnivore",
+    "brocchinia hechtioides": "carnivore",
+    "catopsis berteroniana": "carnivore"
   },
   "none": [
     "Abromeitiella",

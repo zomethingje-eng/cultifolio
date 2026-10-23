@@ -100,7 +100,9 @@ export function copiapoa(): Record<string, unknown> {
     [`${GBIF}/species/match?strict=false&name=Copiapoa%20cinerea`]: { usageKey: key, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', matchType: 'EXACT' },
     [`${GBIF}/species/${key}/synonyms`]: { results: [{ scientificName: 'Echinocactus cinereus Phil.' }] },
     [`${GBIF}/species/${key}/vernacularNames`]: { results: [] },
-    [`${GBIF}/species/${key}/distributions`]: { results: [{ locationId: 'TDWG:CLN', locality: 'Chile North', establishmentMeans: 'NATIVE', source: 'World Checklist of Vascular Plants' }] },
+    // Kew's own words for the species (WCVP's lifeform_description and climate_description, wcvp_names.csv of 2026-06-04), as
+    // the bulk path carries them: the care group is taken only where they agree (round eighty-one, the owner's decision).
+    [`${GBIF}/species/${key}/distributions`]: { results: [{ locationId: 'TDWG:CLN', locality: 'Chile North', establishmentMeans: 'NATIVE', source: 'World Checklist of Vascular Plants' }], kew: { lifeform: 'succulent subshrub', climate: 'desert or dry shrubland' } },
     [`${GBIF}/species/${key}`]: { key, scientificName: 'Copiapoa cinerea (Phil.) Britton & Rose', canonicalName: 'Copiapoa cinerea', authorship: '(Phil.) Britton & Rose', rank: 'SPECIES', taxonomicStatus: 'ACCEPTED', kingdom: 'Plantae', phylum: 'Tracheophyta', class: 'Magnoliopsida', order: 'Caryophyllales', family: 'Cactaceae', genus: 'Copiapoa' },
     // 52 open records in habitat, 300 restricted records 400 km south (roadsides, gardens) — the README's clean case.
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&hasCoordinate`]: { count: 352, endOfRecords: true, results: [...pts(52, -24.9, -70.4, 0.4, BY, 21), ...pts(300, -28.6, -70.8, 0.5, NC, 22)] },

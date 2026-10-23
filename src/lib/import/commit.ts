@@ -10,7 +10,7 @@
  */
 import { collection } from '$lib/db/collection.svelte';
 import { accNo, type Accession, type Provenance } from '$lib/db/types';
-import { parseName, speciesOf, speciesSlug, tidyName } from '$core/names';
+import { parseName, speciesName, speciesSlug, tidyName } from '$core/names';
 import type { NameCheck } from './check';
 import { checkKey } from './check';
 import { resolvePlace, type ImportRow, type NumberPlan } from './plan';
@@ -170,7 +170,7 @@ async function commitNow(rows: ImportRow[], checks: Map<string, NameCheck>, plan
     for (const r of todo) {
       const rec = recordOf(r, checks.get(checkKey(r.name)), null);
       const slug = speciesSlug(rec.taxonName);
-      if (slug && !collection.taxon(slug) && !taxa.has(slug)) taxa.set(slug, { name: speciesOf(rec.taxonName), gbifKey: rec.taxonKey });
+      if (slug && !collection.taxon(slug) && !taxa.has(slug)) taxa.set(slug, { name: speciesName(rec.taxonName), gbifKey: rec.taxonKey });
     }
     if (taxa.size) {
       const [first, ...rest] = [...taxa.entries()];

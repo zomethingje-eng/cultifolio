@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { growingYear, cultivationSheet, span, runs, coldFloor, forReader } from '$core/sheet';
-import { archFor } from '$core/arch';
+import { listedFor } from '$core/arch';
 import { careLine } from '$core/note';
 
 const mk = (tmax: number[], tmin: number[], pr: number[], dli?: number[]) => tmax.map((t, i) => ({ tmax: t, tmin: tmin[i], tmean: (t + tmin[i]) / 2, precipMm: pr[i], dli: dli?.[i], rh: 55 }));
@@ -19,15 +19,15 @@ const FORBIDDEN = /\b(rests?|resting|wants?|tolerat\w*|will|won't|water it|feed|
 
 describe('archetypes', () => {
   it('resolve species, then genus, then family, and say which', () => {
-    expect(archFor('Copiapoa cinerea', 'Cactaceae')?.tier).toBe('genus');
-    expect(archFor('Euphorbia pulcherrima', 'Euphorbiaceae')?.arch.key).toBe('tropical');
-    expect(archFor('Euphorbia obesa', 'Euphorbiaceae')?.arch.key).toBe('arid');
-    expect(archFor('Xyzzy nobody', 'Cactaceae')?.tier).toBe('family');
-    expect(archFor('Xyzzy nobody', 'Asparagaceae')).toBeNull(); // a family that splits is not guessed
-    expect(archFor('Albuca spiralis', 'Asparagaceae')?.arch.key).toBe('geophyte');
+    expect(listedFor('Copiapoa cinerea', 'Cactaceae')?.tier).toBe('genus');
+    expect(listedFor('Euphorbia pulcherrima', 'Euphorbiaceae')?.arch.key).toBe('tropical');
+    expect(listedFor('Euphorbia obesa', 'Euphorbiaceae')?.arch.key).toBe('arid');
+    expect(listedFor('Xyzzy nobody', 'Cactaceae')?.tier).toBe('family');
+    expect(listedFor('Xyzzy nobody', 'Asparagaceae')).toBeNull(); // a family that splits is not guessed
+    expect(listedFor('Albuca spiralis', 'Asparagaceae')?.arch.key).toBe('geophyte');
   });
   it('supply a figure, not prose', () => {
-    for (const a of Object.values(archFor('Monstera deliciosa', 'Araceae')!.arch)) expect(typeof a === 'string' ? a.length : 0).toBeLessThan(40);
+    for (const a of Object.values(listedFor('Monstera deliciosa', 'Araceae')!.arch)) expect(typeof a === 'string' ? a.length : 0).toBeLessThan(40);
   });
 });
 
@@ -98,7 +98,7 @@ describe('the growing year', () => {
 
 describe('the sheet', () => {
   it('names its sources, marks habitat-derived rows, and prints months with their hemisphere and the shift', () => {
-    const { rows, arch } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 } });
+    const { rows, arch } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 }, kew: { lifeform: 'succulent shrub' } });
     expect(arch?.arch.key).toBe('arid');
     const year = rows.find((r) => r.k === 'Its year')!;
     expect(year.s).toContain('The rain rule reads a winter growing season: 70% of the median year\'s rain (136 mm of 194 mm) falls in May to August');
@@ -136,33 +136,28 @@ describe('the sheet', () => {
     const ex = { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 };
     // A tropical aroid whose habitat night is below the group's convention: the floor stays the habitat's, and the
     // convention is said apart, as one with no source (round sixty; self-review 3, words 1).
-    const fl = coldFloor(namaqua, ex, archFor('Monstera deliciosa', 'Araceae'))!;
+    const fl = coldFloor(namaqua, ex, listedFor('Monstera deliciosa', 'Araceae'))!;
     expect(fl).toMatchObject({ habitat: 4.1, kind: 'night' });
     expect(fl.s).toBe('Cold floor: 4.1 °C, which is the 1st-percentile night over 44 years at a typical spot in the range (NASA POWER).');
-    expect(fl.convention).toMatchObject({ minC: 12, text: 'the convention for tropical foliage plants grown indoors is 12 °C; no source is given for it' });
+    expect(JSON.stringify(fl)).not.toMatch(/convention/); // no group's figure since round eighty-one (the owner's decision)
     expect(fl.s + fl.short + fl.plain.lead).not.toMatch(/takes the higher|12 °C/);
     // Without extremes the quantity is the coldest month's mean night, named as such, and why there are none is its own sentence.
-    const fl2 = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'))!;
+    const fl2 = coldFloor(namaqua, null, listedFor('Tylecodon pearsonii', 'Crassulaceae'))!;
     expect(fl2.habitat).toBe(6);
     expect(fl2.s).toContain("the coldest month's mean nightly low, July, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. No daily extremes are on file.");
     // A refused extremes source is not an absence: the sentence says the extremes were not checked (round sixteen, 7), and
     // the plain line never says "no cold floor could be read" of a refusal (round sixty; words 2).
-    const fl2r = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'), undefined, 'refused')!;
+    const fl2r = coldFloor(namaqua, null, listedFor('Tylecodon pearsonii', 'Crassulaceae'), undefined, 'refused')!;
     expect(fl2r.habitat).toBe(6);
     expect(fl2r.s).toContain('The daily extremes were not checked: NASA POWER did not answer when this page was built.');
     expect(fl2r.s).not.toContain('No daily extremes are on file');
     expect(fl2r.plain.lead).toBe('Coldest month, mean nightly low 6.0 °C, not a cold floor: the daily extremes were not checked.'); // round sixty-two
-    // No climate at all: the convention alone, said as a convention, and no floor.
-    const fl3 = coldFloor(null, null, archFor('Monstera deliciosa', 'Araceae'))!;
-    expect(fl3.hab).toBe(false);
-    expect(fl3.habitat).toBeNull();
-    expect(fl3.s).toBe('No habitat figure is on file for this species, so no cold floor is read. Apart from the habitat, the convention for tropical foliage plants grown indoors is 12 °C; no source is given for it (listed under the genus Monstera in the archetype table).'); // round sixty-two: what the table lists (A4)
-    expect(coldFloor(null, null, archFor('Copiapoa cinerea', 'Cactaceae'))).toBeNull();
+    // No climate at all: nothing, since round eighty-one (the owner's decision); the group's convention stood in before.
+    expect(coldFloor(null, null, listedFor('Monstera deliciosa', 'Araceae'))).toBeNull();
+    expect(coldFloor(null, null, listedFor('Copiapoa cinerea', 'Cactaceae'))).toBeNull();
   });
-  it('with no climate, only the archetype figure appears, credited, and nothing else', () => {
-    const { rows } = cultivationSheet({ scientific: 'Monstera deliciosa', family: 'Araceae' });
-    expect(rows.map((r) => r.k)).toEqual(['Temperature']);
-    expect(rows[0].hab).toBe(false);
+  it('with no climate there is no row, whatever the group (round eighty-one: the archetype figure is gone)', () => {
+    expect(cultivationSheet({ scientific: 'Monstera deliciosa', family: 'Araceae', kew: { lifeform: 'climber', climate: 'wet tropical' } }).rows).toHaveLength(0);
     expect(cultivationSheet({ scientific: 'Stephania erecta', family: 'Menispermaceae' }).rows).toHaveLength(0);
   });
   it('with no archetype and no climate, there is nothing to say', () => {

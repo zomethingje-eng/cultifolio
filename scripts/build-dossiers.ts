@@ -115,10 +115,12 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync } from 'node:fs';
 import { loadKewNames, kewFileDay } from './kew-names-load';
+import { signEntries } from '../src/lib/core/hybrids';
 import { fillWikidataNames } from '../src/lib/dossier/wikidata-names';
 import { fillKewNames, KewNamesIndex } from '../src/lib/dossier/kew-names';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_SPECIES, MIN_UNDATED } from '../src/lib/dossier/default-points';
 import { regionTester, outsideShapes, SHAPES_FILE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
@@ -174,7 +176,7 @@ import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { referenceOf } from '../src/lib/dossier/reference';
 import { ownNames } from '../src/lib/dossier/own-names';
-import { offlineFetcher, carryRederivedRows, carriedOrigin, keptInatId, carryInatRows } from '../src/lib/dossier/rederive';
+import { offlineFetcher, carryRederivedRows, carriedOrigin, keptInatId, carryInatRows, keptInatSetRow, keepsInatSet, carryWdNames } from '../src/lib/dossier/rederive';
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
 import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, wikidataRetryList, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 import { proofByName } from '../src/lib/dossier/summary-proof';
@@ -184,6 +186,11 @@ import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/c
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
 import { gbifPage, isPageId, type PageId } from '../src/lib/core/page-id';
 import { rekey, DOSSIER_FILE, V2_FILE, idsGbifLines, type RekeyStore, type RekeyReport } from '../src/lib/dossier/rekey';
+import { upToDate, writeStamp, INDEX_STAMP } from '../src/lib/dossier/index-stamp';
+/** This checkout's folder: the builder's code, whose content the index's stamp holds (round eighty-one). */
+const CODE_ROOT = fileURLToPath(new URL('..', import.meta.url));
+// @ts-ignore a plain .mjs module, shared with scripts/corpus-step.mjs, with no declarations
+import { takeLock } from './run-lock.mjs';
 // Wikidata is read without maxlag since round seventy-two (its lag is its query service's, which no read waits on), so the
 // lag spell below no longer meets a lag from Wikidata; Commons' maxlag (its databases' own) is still waited out by `mwGet`.
 const lag = startCorpusRun();
@@ -712,6 +719,13 @@ async function fillPhotos(): Promise<void> {
   let n = { mostVoted: 0, apiEra: 0, cc0: 0, noTaxon: 0, unchecked: 0, kew: 0 };
   let votedUnanswered = 0;
   let againUnanswered = 0;
+  // Round eighty-one (review B2): a page whose request iNaturalist did not answer is left to be asked again, never
+  // written "error" and counted done; a run of them (the network gone) stops the day's run, which then exits unfinished.
+  const runStart = new Date().toISOString();
+  let unanswered = 0;
+  let noAnswerRun = 0;
+  let lastNoAnswer = '';
+  const NO_ANSWER_RUN = Number(process.env.CULTIFOLIO_NO_ANSWER_RUN) || 5;
   let entries: Array<{ key: number; name: string; family?: string }> = [];
   // The reference's species by name: iNaturalist's taxon filed under another species of it is never taken (round sixty-nine; triage-68 M6).
   let byName = new Map<string, number>();
@@ -827,6 +841,10 @@ async function fillPhotos(): Promise<void> {
     if (r0) { if (await waitOut(r0)) { aheadTo = i; i--; continue; } return stop(r0); }
     const { path, againWild, againCult } = todo[i];
     const d = read(path);
+    // The page as it was read, so a page left unanswered is not written again unchanged (round eighty-one, the merge: its
+    // file's time is what the index's stamp and the sitemap's day read).
+    const was = JSON.stringify(d);
+    const wasWild = d.upstream['inat.photos.wild'];
     // A page without a GBIF key (round seventy-nine): an id its Wikidata item gave, kept unchecked by a build that skipped
     // iNaturalist, is checked here by its own and Kew's names (`kewInatTaxon`), since `--fill inat-ids` passes it by.
     const unchecked = d.ids.gbif == null && !!d.ids.inat && d.upstream['inat.taxon']?.status !== 'ok';
@@ -845,11 +863,15 @@ async function fillPhotos(): Promise<void> {
       // What `--fill inat-ids` said of an id it dropped stays before the name search's answer (`inatTaxonRow`; round seventy, S-B7).
       d.upstream['inat.taxon'] = inatTaxonRow(d.upstream['inat.taxon'], t, new Date().toISOString());
       if (t.status === 'error') {
-        // Not "no taxon of this name": the lookup broke. Recorded; the next fill asks again.
-        d.upstream['inat.photos.wild'] = { status: 'error', at: new Date().toISOString(), detail: t.detail };
-        writeAtomic(path, JSON.stringify(d));
+        // Not "no taxon of this name": the lookup broke. Left for the next fill (round eighty-one); an answer the host gave
+        // as an error (a status, not a dropped connection) is recorded, so a second run that meets it again goes on.
+        const how = notAnswered(t, d.upstream['inat.photos.wild']);
+        if (how !== 'no answer') { d.upstream['inat.photos.wild'] = { status: 'error', at: new Date().toISOString(), detail: t.detail }; writeAtomic(path, JSON.stringify(d)); }
+        if (how === 'again') done++; else unanswered++;
+        if (noAnswerRun >= NO_ANSWER_RUN) return stop(noAnswerWhy());
         continue;
       }
+      answeredNow();
       if (t.status === 'ok') id = d.ids.inat = t.data.id;
       else if (d.ids.gbif == null) { delete d.ids.inat; delete d.links.inat; }
     }
@@ -890,6 +912,18 @@ async function fillPhotos(): Promise<void> {
     let cult = !wildOnly && (!inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) || againCult) ? await inat.photos(f, id, false, 12, owner) : null;
     if (cult?.status === 'refused') { if (await waitOut(cult.detail)) { i--; continue; } return stop(cult.detail); }
     if (againCult && inat.cultivatedSettled(d.upstream['inat.photos.cultivated']) && cult && cult.status !== 'ok' && cult.status !== 'none') { againUnanswered++; cult = null; }
+    // A set iNaturalist did not answer (round eighty-one, review B2): its row and photographs stay as they were, and the
+    // page is left for the next fill; an error the host answered is recorded, and taken as the page's answer only when an
+    // earlier run met it too (`notAnswered`), so one page iNaturalist cannot answer never holds the fill for ever.
+    let pageLeft = false, wildNoAnswer = false;
+    for (const [set, row] of [['wild', 'inat.photos.wild'], ['cult', 'inat.photos.cultivated']] as const) {
+      const r = set === 'wild' ? wild : cult;
+      if (r?.status !== 'error') { if (r) answeredNow(); continue; }
+      const how = notAnswered(r, d.upstream[row]);
+      if (how === 'again') continue;
+      pageLeft = true;
+      if (how === 'no answer') { if (set === 'wild') { wild = null; wildNoAnswer = true; } else cult = null; }
+    }
     const fresh = [...(wild?.status === 'ok' ? wild.data : []), ...(cult?.status === 'ok' ? cult.data : [])];
     // iNat photos lead; whatever Commons or GBIF media gave earlier stays behind them. A set not asked for this time keeps what it had.
     d.photos = [...fresh, ...d.photos.filter((p) => p.src !== 'inat' || (wild == null && !p.captive) || (cult == null && p.captive))];
@@ -898,16 +932,24 @@ async function fillPhotos(): Promise<void> {
     const kewDone = kr && wild && (cult || !d.photos.some((p) => p.src === 'inat' && p.captive)) ? `; ${kr.mark}` : '';
     // The open data's answer says so, and of which day (`openWildDetail`); the API's says the day it was filled.
     if (wild) d.upstream['inat.photos.wild'] = { status: wild.status, at: new Date().toISOString(), detail: `${'detail' in wild && wild.detail ? `${wild.detail}; ${stamp}` : stamp}${kewDone}` };
-    else if (!cultivatedOnly && !wildOnly && !settled('inat.photos.wild')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${wildFromGbif} wild photographs already from the GBIF download` };
+    else if (!cultivatedOnly && !wildOnly && !wildNoAnswer && !settled('inat.photos.wild')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${wildFromGbif} wild photographs already from the GBIF download` };
     if (cult) d.upstream['inat.photos.cultivated'] = { status: cult.status, at: new Date().toISOString(), detail: cult.status === 'ok' || cult.status === 'none' ? `${inat.CULTIVATED_RULE}; ${stamp}` : `${(cult as { detail?: string }).detail ?? cult.status}; ${stamp}` };
-    writeAtomic(path, JSON.stringify(d));
+    // A page left unanswered keeps its "not asked" wild row as it was, day included, and is not written when nothing else
+    // changed (round eighty-one, the merge, found on the copy made like the PC: a day with no network rewrote such pages
+    // with only that row's time changed, so the index was written again for nothing).
+    const nowWild = d.upstream['inat.photos.wild'];
+    if (pageLeft && wasWild && nowWild?.status === 'skipped' && wasWild.status === 'skipped' && nowWild.detail === wasWild.detail) d.upstream['inat.photos.wild'] = wasWild;
+    const text = JSON.stringify(d);
+    if (!pageLeft || text !== was) writeAtomic(path, text);
+    if (pageLeft) { unanswered++; if (noAnswerRun >= NO_ANSWER_RUN) return stop(noAnswerWhy()); continue; }
     done++;
     if (done % 25 === 0) process.stdout.write(`\r  ${done} of ${todo.length} (${((Date.now() - t0) / done / 1000).toFixed(1)} s each)…   `);
   }
-  console.log(`\n  ${done} filled${open ? `; ${inatOpenHeld.held} wild sets read from iNaturalist's open data${inatOpenHeld.mostVoted ? `, ${inatOpenHeld.mostVoted} asked of its API for the 24 most voted (the open data holds more than 24)` : ''}` : ''}${bf ? `; ${bf.stats.batches} batched searches answered ${bf.stats.served} sets, ${bf.stats.own} asked alone` : ''}. ${wildOnly ? `Every dossier with an iNaturalist taxon the open data holds has its wild photographs; now --fill inat --bulk ${bulkDir ?? '<dir>'} for the cultivated set and the rest.` : 'Every dossier has been asked for its photographs.'}`);
+  console.log(`\n  ${done} filled${open ? `; ${inatOpenHeld.held} wild sets read from iNaturalist's open data${inatOpenHeld.mostVoted ? `, ${inatOpenHeld.mostVoted} asked of its API for the 24 most voted (the open data holds more than 24)` : ''}` : ''}${bf ? `; ${bf.stats.batches} batched searches answered ${bf.stats.served} sets, ${bf.stats.own} asked alone` : ''}. ${wildOnly ? `Every dossier with an iNaturalist taxon the open data holds has its wild photographs; now --fill inat --bulk ${bulkDir ?? '<dir>'} for the cultivated set and the rest.` : unanswered || left || votedUnanswered || againUnanswered ? 'Not every dossier has its answer yet (below): the next fill asks those again.' : 'Every dossier has been asked for its photographs.'}`);
   if (votedUnanswered) { unfinished(); console.log(`  most-voted wild sets: ${votedUnanswered} not answered (asked again by the next fill); those pages keep the open data's set until then.`); }
   if (againUnanswered) { unfinished(); console.log(`  sets read again: ${againUnanswered} not answered (asked again by the next fill); those pages keep the set they had until then.`); }
   if (left) { unfinished(); console.log(`  ${left} pages whose iNaturalist id is not yet checked were left for the next fill, which checks it first.`); }
+  if (unanswered) { unfinished(); console.log(`  ${unanswered} not answered: iNaturalist did not answer for ${unanswered} page${unanswered === 1 ? '' : 's'} (the last: ${lastNoAnswer}); they are left as they were, to be asked again: run --fill inat again.`); }
   // Round seventy-two (C1): with Kew's file, the pages whose iNaturalist taxon takes in a taxon Kew places under another
   // species. It asks iNaturalist (a taxon's children), so not under --wild; the next fill reads them.
   if (bulkDir && !wildOnly) {
@@ -924,7 +966,8 @@ async function fillPhotos(): Promise<void> {
   /** A refusal of iNaturalist's, said as what it is: its throttle, the day's allowance, or another refusal. */
   function say(detail?: string): void {
     const left = `${done} filled; ${todo.length - done} still to do`;
-    if (/allowance/.test(detail ?? '')) console.log(`\n  The day's allowance is spent (${detail}): ${used()}; not a throttle. ${left}; run this again tomorrow (UTC), and it goes on from here.`);
+    if (/^iNaturalist did not answer \d+ pages in a row/.test(detail ?? '')) console.log(`\n  ${detail}: the connection may be down (a PC that went to sleep, a cable or Wi-Fi dropped). Those pages are left as they were, to be asked again, and no request that reached no server is counted in the day (${used()}). ${left}; run --fill inat again once the connection is back, and it goes on from here.`);
+    else if (/allowance/.test(detail ?? '')) console.log(`\n  The day's allowance is spent (${detail}): ${used()}; not a throttle. ${left}; run this again tomorrow (UTC), and it goes on from here.`);
     else if (isThrottle(detail)) console.log(`\n  iNaturalist is throttling this address (${detail}), and still was after waiting ${waits.waited()} minutes: this is iNaturalist's throttle, not the day's allowance (${used()}). ${left}; run this again tomorrow (UTC), and it goes on from here.`);
     else console.log(`\n  iNaturalist refused (${detail ?? ''}); ${used()}. ${left}; run this again tomorrow (UTC), and it goes on from here.`);
   }
@@ -934,6 +977,19 @@ async function fillPhotos(): Promise<void> {
     say(detail);
     writeIndexFromDisk();
   }
+  /**
+   * A request of a page iNaturalist did not answer (round eighty-one, review B2): `no answer` for a connection that failed
+   * or timed out (nothing is written; it counts towards a run of them), `left` for an error the host answered (written, and
+   * the page asked again next time), `again` for such an error the page's row already held from an earlier run (taken as
+   * the answer, as before round eighty-one, and counted at the review stop).
+   */
+  function notAnswered(r: { detail?: string; unreached?: true }, row: { status?: string; at?: string } | undefined): 'no answer' | 'left' | 'again' {
+    lastNoAnswer = r.detail ?? 'no detail';
+    if (r.unreached || /\bfetch failed\b|\btimeout\b/.test(r.detail ?? '')) { noAnswerRun++; return 'no answer'; }
+    return row?.status === 'error' && (row.at ?? '') < runStart ? 'again' : 'left';
+  }
+  function answeredNow(): void { noAnswerRun = 0; }
+  function noAnswerWhy(): string { return `iNaturalist did not answer ${noAnswerRun} pages in a row (${lastNoAnswer})`; }
   /** iNaturalist's throttle waited out (round eighty): true when the fill goes on, after the wait; false for the stop. */
   async function waitOut(detail?: string): Promise<boolean> {
     if (!isThrottle(detail)) return false;
@@ -1799,6 +1855,15 @@ function rekeyFromV2(): void {
 }
 
 function writeIndexFromDisk(): void {
+  // Round eighty-one (the owner's queued item): an index the same code would write from the same files is not written
+  // again (`index-stamp.ts`), as after a fill's run that changed nothing, or the plan's --index after the fill's last run.
+  const corpusDir = `${outDir}/s/v${DOSSIER_V}`;
+  const same = fixtures ? null : upToDate('.', corpusDir, CODE_ROOT);
+  if (same) {
+    console.log(`  index: ${same.species} species`);
+    console.log(`  the index, its products and the manifest are as written ${same.at.replace('T', ' ').slice(0, 16)} UTC: no dossier and none of the builder's code has changed since, so they are not written again (delete ${INDEX_STAMP} to write them anyway)`);
+    return;
+  }
   // Each page under the id the rule gives first (round seventy-eight): everything after reads the files by id.
   if (!fixtures && !rekeyDisk()) { console.error('  the index, its products and the manifest are left as they were.'); return; }
   markSharedPhotos(`${outDir}/s/v${DOSSIER_V}`);
@@ -1812,9 +1877,11 @@ function writeIndexFromDisk(): void {
   // they were until it is rebuilt or restored (round seventy-two).
   if (unreadable.length) { sayUnreadable(); console.error('  the index, its products and the manifest are left as they were.'); return; }
   nameEntries(index);
+  // Kew's hybrid sign on the hybrids' names (round eighty-one, H; `$core/hybrids`): in the index and its products, not in the photographs' judgement.
+  const shownIndex = signEntries(index);
   const idxDir = `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
-  const indexText = JSON.stringify(index, null, 1);
+  const indexText = JSON.stringify(shownIndex, null, 1);
   writeAtomic(`${idxDir}/index.json`, indexText);
   console.log(`  index: ${index.length} species`);
   // Old addresses of merged pages (round seventy-three): read from the kept pages' records, as `--prune-followed` reads them.
@@ -1822,7 +1889,7 @@ function writeIndexFromDisk(): void {
   // The photograph judgement with every name of the reference, stored in each dossier (round seventy-six), and each
   // record's older names for the name files: the Worker then reads a page without the index.
   const synonyms = judgeDossiers(idxDir, index);
-  writeProducts(index, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count, aliases).buckets, aliases, (key) => synonyms.get(key));
+  writeProducts(shownIndex, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count, aliases).buckets, aliases, (key) => synonyms.get(key));
   // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
   // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no
   // accepted name in its place), so the page stays under it and says so; listed for information, not for rebuilding.
@@ -1833,9 +1900,20 @@ function writeIndexFromDisk(): void {
     console.log(`  ${syn.length} dossiers are under a name the backbone holds as a synonym → not-accepted.txt (rebuild those names to follow them to the accepted species, then --prune-followed and --index)`);
   } else if (existsSync('not-accepted.txt')) unlinkSync('not-accepted.txt');
   if (doubtful.length) console.log(`  ${doubtful.length} dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: ${doubtful.map((x) => x.name).join(', ')}`);
+  // The stamp of what this index was written from, last, once every file it writes is written (`index-stamp.ts`).
+  if (!fixtures) writeStamp('.', corpusDir, index.length, CODE_ROOT);
 }
 
 async function main() {
+  // One run at a time in the project folder (round eighty-one, review B6; `scripts/run-lock.mjs`): a step typed by hand
+  // while the corpus step or another builder step runs refuses, saying which; the corpus step's own steps are its
+  // children, and run under its lock. `--fixtures` writes only fixtures/, and is not locked.
+  if (!fixtures) {
+    const lock = takeLock('.', `npm run dossier -- ${args.join(' ')}`, { parent: process.ppid }) as { ok: boolean; sentence?: string; took?: { pid?: number; what?: string } | null; release?: () => void };
+    if (!lock.ok) { console.error(lock.sentence); process.exitCode = 2; return; }
+    if (lock.took) console.log(`  corpus-step.lock was left by a run that has ended (process ${lock.took.pid ?? '?'}, "${lock.took.what ?? ''}"): taken for this run.`);
+    if (lock.release) process.on('exit', lock.release);
+  }
   mkdirSync(outDir, { recursive: true });
   if (args.includes('--prune-followed')) return pruneFollowed();
   if (args.includes('--prune-uncredited')) return pruneUncredited();
@@ -1935,7 +2013,20 @@ async function main() {
     jobs.push({ name: 'Copiapoa cinerea', fetcher: fixtureFetcher(copiapoa()) });
     jobs.push({ name: 'Refusia testii', fetcher: fixtureFetcher(refused()) });
   } else {
-    const file = keysFile ?? args.find((a) => !a.startsWith('--'));
+    let file = keysFile ?? args.find((a) => !a.startsWith('--'));
+    // Several files of lines at once (round eighty-one, review B8): `--keys a.txt,b.txt` builds the pages of both in one
+    // run, so the download is read once, not once a file (an hour each for a Darwin Core Archive). A file of the list
+    // that is not there names no page (`--list-wikidata-retry` writes none for 0 pages): said, and the others built.
+    let joined: string | null = null;
+    if (file && !existsSync(file) && file.includes(',')) {
+      const parts = file.split(',').filter(Boolean);
+      const there = parts.filter((p) => existsSync(p));
+      for (const p of parts.filter((x) => !existsSync(x))) console.log(`  ${p} is not there: it names no page, and the pages of ${there.join(', ') || 'no other file'} are built`);
+      if (!there.length) { console.error(keysMissing(parts[0])); process.exit(2); }
+      if (there.some((p) => p.endsWith('.json'))) { console.error('--keys a,b reads files of lines, not an index.json'); process.exit(2); }
+      joined = there.map((p) => readFileSync(p, 'utf8')).join('\n');
+      file = there[0]; // a file that is there; the lines are all of theirs (`joined`)
+    }
     if (file && !existsSync(file)) {
       // Said as it is (round seventy, the owner's run: `--keys rebuild-wd.txt`, which a stopped `--fill wikidata` had not
       // written, printed the usage line).
@@ -1957,7 +2048,7 @@ async function main() {
     // where the list gives none (the backbone has no one key for it), by the GBIF key of the page on disk under its id, if
     // there is one; else it is left out and said, never matched by its name (rule 3). A key the owner merged into another
     // page (`scripts/merged-pages.txt`) is built as the page it went into.
-    const text = file.endsWith('.json') ? '' : readFileSync(file, 'utf8');
+    const text = joined ?? (file.endsWith('.json') ? '' : readFileSync(file, 'utf8'));
     const listed = isSpeciesList(text) ? jobsFromList(parseSpeciesList(text)) : null;
     const mergedInto = new Map(merges().map((x) => [x.from, x.into]));
     // A key merged into a page without a GBIF key (round eighty, A) is not built: that page reads it, from Kew's file.
@@ -2222,6 +2313,9 @@ async function main() {
         const now = d.upstream[src]?.status, before = prev.upstream?.[src]?.status;
         // Skipped this build (a --skip source) counts the same as refused: what the last build had is kept.
         if ((now === 'refused' || now === 'error' || now === 'skipped') && (before === 'ok' || before === 'none') && copy()) {
+          // A set of iNaturalist's photographs keeps its record whole, the build that kept it said after it (round
+          // eighty-one, review B3: it stays settled, with the day it was filled and the mark of Kew's file).
+          if (keepsInatSet(src, prev.upstream[src])) { d.upstream[src] = keptInatSetRow(prev.upstream[src], d.upstream[src].detail ?? now, today()); return; }
           // A row already carried keeps the build that asked (round thirty-five, R1-10).
           const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? unchain(prev.upstream[src].detail)!.replace(/;.*$/, '') : carriedOrigin(prev.upstream[src], prev.built);
           d.upstream[src] = { ...prev.upstream[src], detail: `${origin}; this build: ${d.upstream[src].detail ?? now}` };
@@ -2304,6 +2398,9 @@ async function main() {
         // Never a row of the one derivation, and never "already from the GBIF download" without those photographs
         // (`carryRederivedRows`; round sixty-seven, triage-66 N4: 120 species carried it with none).
         carryRederivedRows(prev, d, carried);
+        // Wikidata's names go with their record (round eighty-one, review B1): a page without a GBIF key, built offline,
+        // asks no item, so its names would be lost under a record that says they were taken.
+        carryWdNames(prev, d);
       }
     }
     // The day the page last changed in substance: the previous file's when this build changed nothing it shows, else this
@@ -2341,7 +2438,7 @@ async function main() {
   nameEntries(index);
   const idxDir = fixtures ? outDir : `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
-  writeAtomic(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
+  writeAtomic(`${idxDir}/index.json`, JSON.stringify(signEntries(index), null, 1)); // with Kew's hybrid signs, as --index writes it (round eighty-one, H)
   writeFileSync(`${idxDir}/report.txt`, report.join('\n'));
   sayUnreadable();
   console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)`);

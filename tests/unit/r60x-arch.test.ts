@@ -3,7 +3,7 @@
  * the tropical groups, and the sheet's sentences the words review found broken (self-review 3; words 1, 2, 6 to 9, 20).
  */
 import { describe, it, expect } from 'vitest';
-import { archFor, aLabel, ARCH } from '$core/arch';
+import { listedFor, aLabel, ARCH } from '$core/arch';
 import { coldFloor, cultivationSheet } from '$core/sheet';
 import { careLine, generatedNote } from '$core/note';
 import { climateCardSvg } from '$lib/share/card';
@@ -17,21 +17,21 @@ const cold = { minAbs: -9, minP01: -3, maxP99: 24, frostDaysPerYear: 60, frostNi
 describe('the archetype table (round sixty; self-review 3)', () => {
   it('terrestrial bromeliads and terrestrial or temperate orchids are in no group, so no tropical minimum reaches them', () => {
     for (const [name, family] of [['Puya raimondii', 'Bromeliaceae'], ['Dyckia marnier-lapostollei', 'Bromeliaceae'], ['Hechtia texensis', 'Bromeliaceae'], ['Deuterocohnia brevifolia', 'Bromeliaceae'], ['Fascicularia bicolor', 'Bromeliaceae'], ['Encholirium spectabile', 'Bromeliaceae'], ['Orthophytum gurkenii', 'Bromeliaceae'], ['Bletilla striata', 'Orchidaceae'], ['Pleione formosana', 'Orchidaceae'], ['Cypripedium calceolus', 'Orchidaceae'], ['Dactylorhiza maculata', 'Orchidaceae'], ['Ophrys apifera', 'Orchidaceae'], ['Disa uniflora', 'Orchidaceae'], ['Habenaria radiata', 'Orchidaceae'], ['Spiranthes spiralis', 'Orchidaceae'], ['Calanthe discolor', 'Orchidaceae']] as const) {
-      expect(archFor(name, family), name).toBeNull();
-      const fl = coldFloor(andes, cold, archFor(name, family));
-      expect(fl?.convention, name).toBeNull();
+      expect(listedFor(name, family), name).toBeNull();
+      const fl = coldFloor(andes, cold, listedFor(name, family));
+      expect(fl?.habitat, name).toBe(-3); // and no group's figure anywhere: removed in round eighty-one (the owner's decision)
     }
   });
   it('a family that splits between groups assigns none by family', () => {
-    expect(archFor('Unlisted bromeliad', 'Bromeliaceae')).toBeNull();
-    expect(archFor('Unlisted orchid', 'Orchidaceae')).toBeNull();
-    expect(archFor('Arisaema triphyllum', 'Araceae')).toBeNull();
+    expect(listedFor('Unlisted bromeliad', 'Bromeliaceae')).toBeNull();
+    expect(listedFor('Unlisted orchid', 'Orchidaceae')).toBeNull();
+    expect(listedFor('Arisaema triphyllum', 'Araceae')).toBeNull();
     // A genus on the table still answers for itself.
-    expect(archFor('Tillandsia ionantha', 'Bromeliaceae')?.arch.key).toBe('epiphyte');
-    expect(archFor('Phalaenopsis amabilis', 'Orchidaceae')?.arch.key).toBe('orchid');
+    expect(listedFor('Tillandsia ionantha', 'Bromeliaceae')?.arch.key).toBe('epiphyte');
+    expect(listedFor('Phalaenopsis amabilis', 'Orchidaceae')?.arch.key).toBe('orchid');
   });
   it('a habitat floor of -3 °C is never shown as 10 °C, even for a genus the table groups', () => {
-    const guess = archFor('Tillandsia ionantha', 'Bromeliaceae');
+    const guess = listedFor('Tillandsia ionantha', 'Bromeliaceae');
     const fl = coldFloor(andes, cold, guess)!;
     expect(fl.habitat).toBe(-3);
     expect(fl.s).toContain('Cold floor: -3.0 °C');
@@ -39,8 +39,8 @@ describe('the archetype table (round sixty; self-review 3)', () => {
       expect(t).not.toMatch(/10 °C/);
       expect(t).not.toMatch(/takes the higher|archetype minimum|group minimum/);
     }
-    // The convention is said apart, as one with no source.
-    expect(fl.convention?.text).toBe('the convention for epiphytes grown indoors is 10 °C; no source is given for it');
+    // No group's figure at all since round eighty-one (the owner's decision): before, the convention was said apart.
+    expect(JSON.stringify(fl)).not.toMatch(/convention|10 °C/);
     // The sheet, the note and the label say the habitat's figure only.
     const { rows } = cultivationSheet({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', months: andes, lat: -15, extremes: cold });
     const t = rows.find((r) => r.k === 'Temperature')!;

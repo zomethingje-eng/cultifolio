@@ -81,15 +81,25 @@ export function registersNotChecked(upstream: Up): string | null {
  * Where a page's English names come from when GBIF's are not asked or gave none (round eighty): Wikidata's item and the
  * day it was read, where names were taken from it; for a page without a GBIF key, why its names were not checked
  * (rule 2: never said as "none"). Null where Wikidata answered and holds none the rule takes, and for any other page.
+ * `shown`, the English names the page shows (round eighty-one, review D4): where Wikidata's names are none of them (its only
+ * name a word the page does not show as a species' name, "Cactus" for Ferocactus tiburonensis), the line says Wikidata
+ * gave those and that they are searched, not shown (`hidden`), never "English names from Wikidata" over no name.
  */
+const plainName = (x: string) => x.toLowerCase().normalize('NFKD').replace(/[^a-z]+/g, '');
 export function namesSource(d: {
   ids: { gbif?: number | null; wikidata?: string };
-  name: { vernacular: ReadonlyArray<{ source?: string }> };
+  name: { vernacular: ReadonlyArray<{ source?: string; name?: string }> };
   upstream: Record<string, { status: string; at?: string; detail?: string } | undefined>;
-}): { item: string; day: string } | { unchecked: string } | null {
+}, shown?: readonly string[]): { item: string; day: string; hidden?: string[] } | { unchecked: string } | null {
   const rec = d.upstream['wikidata.names'];
   const item = /\b(Q\d+)\b/.exec(rec?.detail ?? '')?.[1] ?? d.ids.wikidata;
-  if (rec?.status === 'ok' && item && d.name.vernacular.some((v) => v.source === 'Wikidata')) return { item, day: (rec.at ?? '').slice(0, 10) };
+  const wd = d.name.vernacular.filter((v) => v.source === 'Wikidata');
+  if (rec?.status === 'ok' && item && wd.length) {
+    const day = (rec.at ?? '').slice(0, 10);
+    if (!shown) return { item, day };
+    const own = new Set(wd.flatMap((v) => String(v.name ?? '').split(/[;,]/)).map(plainName).filter(Boolean));
+    return shown.some((n) => own.has(plainName(n))) ? { item, day } : { item, day, hidden: [...new Set(wd.map((v) => String(v.name ?? '')).filter(Boolean))] };
+  }
   if (d.ids.gbif != null || rec?.status === 'none' || rec?.status === 'ok') return null;
   if (!rec) return { unchecked: "Wikidata's common names were not read for this page" };
   return { unchecked: (rec.detail ?? `Wikidata ${notAnswered(rec.status)}`).replace(/^not (?:checked|asked): /, '') };

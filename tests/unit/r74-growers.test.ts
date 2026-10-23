@@ -23,9 +23,11 @@ const ALLOWED: Array<[string, RegExp]> = [
   // the care groups, a table of convention the species page and the about page name as such
   ['src/lib/core/arch.ts', /Cactus or succulent|cacti and succulents|Bulb, tuber or caudex|bulbs, tubers and caudiciforms/],
   ['src/routes/about/how/+page.svelte', /care groups \(cactus or succulent; bulb, tuber or caudex;/],
+  // the groups' agreement with Kew's lifeform, and Kew's own words quoted (round eighty-one, the owner's decision on D2)
+  ['src/routes/about/how/+page.svelte', /agrees: "succulent" or "semisucculent" for a cactus or succulent; a geophyte, bulb, corm, tuber or caudex for a bulb, tuber or caudex;|groundsel was "a cactus or succulent" by its genus, Senecio, and bitter melon "a bulb, tuber or caudex"|Kew describes it as “succulent subshrub”/],
   // the search's generic nouns, listed
   ['src/lib/core/search.ts', /^(bulb|cactus|succulent)$/],
-  ['src/routes/about/how/+page.svelte', /generic nouns \(bulb, buttercup, cactus,|shrub, succulent, tree|lily, daisy, palm, fern, cactus or orchid|"Pariette Cactus"|so "cactus" is the named cacti first/],
+  ['src/routes/about/how/+page.svelte', /one-word names for a whole genus or family \(bulb, buttercup, cactus,|shrub, snowdrop, succulent, sumac|lily, daisy, palm, fern, cactus or orchid|"Pariette Cactus"|so "cactus" is the named cacti first/],
   // a caudex's diameter, a measurement a grower records
   ['src/lib/db/types.ts', /caudex|Caudex/],
   ['src/routes/plants/[acc]/+page.svelte', /^caudex$/],

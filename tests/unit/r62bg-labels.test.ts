@@ -49,16 +49,12 @@ describe('a cross in the code (triage-self N10)', () => {
   });
 });
 
-describe('the labels page says what a convention line is (triage-self N10)', () => {
-  it('counts the care lines that print a group\'s convention, as careLine writes them', async () => {
+describe('the labels page has no convention line to explain (round eighty-one; before, triage-self N10)', () => {
+  it('no care line prints a group minimum, and the page carries no notice for one', async () => {
     const { careLine } = await import('$core/note');
-    const { conventionLines } = await import('$lib/ui/label-sheet');
-    const orchid = careLine({ scientific: 'Phalaenopsis amabilis', family: null, climateStatus: 'none', months: null, extremes: null } as never);
-    expect(orchid).toContain('(convention, no source)');
-    expect(conventionLines([orchid, 'dry rain Jun–Aug · floor 4.5 °C (1 in 100, NASA POWER)', 'climate pending', null, undefined, orchid])).toBe(2);
-  });
-  it('the page says it, once, with the glossary link', () => {
+    const orchid = careLine({ scientific: 'Phalaenopsis amabilis', family: null, climateStatus: 'none', months: null, extremes: null, kew: { lifeform: 'epiphyte' } } as never);
+    expect(orchid).toBe('');
     const src = readFileSync('src/routes/labels/+page.svelte', 'utf8');
-    expect(src).toMatch(/id="lb-convention">.*a group's minimum, marked "convention, no source": the lowest temperature growers conventionally keep that group at indoors, not a figure read from the species' habitat/);
+    expect(src).not.toContain('id="lb-convention"');
   });
 });

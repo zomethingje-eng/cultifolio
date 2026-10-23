@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { backLayer } from '$lib/ui/back-layer.svelte';
   import '@fontsource-variable/public-sans';
   import '@fontsource-variable/newsreader';
   // The two faces every page paints with, preloaded so the title and the body do not reflow when they arrive.
@@ -74,6 +75,7 @@
   onMount(() => { demoTab = PAGE_IN_DEMO; }); // the page's collection, read as it loaded (round sixty-seven; triage-66 V3)
   async function menuExample() {
     menuOpen = false;
+    await menuLayer.settle(); // the menu's history entry gone first, so the step back cannot land after the move into the example
     const r = await openExample('/today');
     if (r === 'busy' || r === 'refused') toast.show(notEnteredWords(r), 10000);
   }
@@ -116,6 +118,8 @@
     menuOpen = false;
     menuBtn?.focus();
   };
+  // Back closes the menu and stays on the page; a link in it replaces the menu's entry (round eighty-one; the phone review's 8).
+  const menuLayer = backLayer('menu', () => menuOpen, () => { const inside = !!menuEl?.contains(document.activeElement); menuOpen = false; if (inside) menuBtn?.focus(); });
   // Open: focus goes to the first item and Tab stays inside until Escape or a choice; closed: it returns to the mark.
   let menuEl = $state<HTMLElement | null>(null);
   $effect(() => {
@@ -511,7 +515,10 @@
   .iconbtn.sync.err { color: var(--bad); }
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. */
-  #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px 16px; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
+  #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px max(16px, env(safe-area-inset-right)) 2px max(16px, env(safe-area-inset-left)); margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
+  /* Padded as the body is, by the safe area where there is one: in landscape on a notched iPhone the menu button sat under
+     the notch and "Add a plant" under the rounded corner, the bar padded 16 px inside a 47 px margin (round eighty-one;
+     the phone review's 7). */
   .crumb { font-size: var(--fs-xs); line-height: max(40px, var(--tap)); letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   /* A finger's hit area (40 px) around an 11 px word: the line box, not the glyph, is the target. */
   .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
@@ -531,6 +538,10 @@
   .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
   .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
   #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
+  /* No taller than the window, and scrolled by a finger on it, not the page under it: a phone in landscape is over 700 px
+     wide and 342 to 380 px tall, and the 656 px drop-down put Labels, Settings, Backup, Sync and the about links below the
+     screen, out of reach (round eighty-one; the phone review's 6). */
+  #menu { max-height: calc(100vh - 48px - 8px - env(safe-area-inset-bottom)); max-height: calc(100dvh - 48px - 8px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
   /* A thumb's height, 44 px, as the touch token: the items were 41 px (round sixty-seven; triage-66 P6, R45-25). */
   #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 44px; }
   #menu a:hover { background: var(--sunk); text-decoration: none; }
@@ -540,7 +551,7 @@
   #menu a.on { color: var(--accent); }
   #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }
   #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
-  @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
+  @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; max-height: none; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
   main { padding-block: 0 3rem; max-width: 980px; }
   footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); overflow-anchor: none; } /* never a scroll anchor: what goes in above it must not carry the view down with it (round eighty; the phone review's 1) */
   @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }

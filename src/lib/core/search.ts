@@ -50,6 +50,33 @@ const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 export const APOSTROPHES = /['’‘`ʼ]/g;
 const words = (s: string) => fold(s).replace(APOSTROPHES, '').split(/[^a-z0-9]+/).filter(Boolean);
 
+/** A word read from its start, as the exact pass reads every word. */
+const EXACT = (q: string, w: string) => w.startsWith(q);
+/**
+ * A typed word's singular, as the start of a word, when it reads as an English plural (round eighty-one; review-c 2:
+ * "hens and chicks", the usual American name of Sempervivum, answered two Echeverias and no Sempervivum, whose names are
+ * "Hen-and-chicks"): "hens" is "hen", "bushes" "bush", "lilies" "lil" (lily); never a word of under four letters or one
+ * ending in -ss, -us or -is ("moss", "cactus", "iris"). Always a start of the word typed, so whatever the word typed
+ * begins, its singular begins too, and the key files' candidates for the singular hold every hit
+ * (`$core/search-files`). Null when the word reads as no plural.
+ */
+export function singularStart(w: string): string | null {
+  if (w.length < 4 || !w.endsWith('s') || /(?:ss|us|is)$/.test(w)) return null;
+  const s = w.endsWith('ies') ? w.slice(0, -3) : /(?:sh|ch|x|z|ss|o)es$/.test(w) ? w.slice(0, -2) : w.slice(0, -1);
+  return s.length >= 3 ? s : null;
+}
+/**
+ * The exact pass's reading of a common name's words for a query of two words or more: a typed plural also begins its
+ * singular ("hens and chicks" holds "Hen-and-chicks"). Only for common names, never a scientific name ("Lithops" is no
+ * "lithop-"), and only where the query is a phrase: one word alone is answered as typed, as a heavy word's kept answers
+ * are (`$core/search-files`).
+ */
+const EXACT_PLURAL = (q: string, w: string) => { if (w.startsWith(q)) return true; const s = singularStart(q); return !!s && w.startsWith(s); };
+/** How a common name's words are matched: as `match`, and in the exact pass of a phrase, plurals as their singular too. */
+const commonMatch = (match: (q: string, w: string) => boolean, qs: readonly string[]) => (match === EXACT && qs.length > 1 ? EXACT_PLURAL : match);
+/** The start a query word's key files are read under (round eighty-one): its singular in a phrase (`commonMatch`), else the word. */
+export const readStart = (w: string, qs: readonly string[]): string => (qs.length > 1 ? (singularStart(w) ?? w) : w);
+
 /** Damerau–Levenshtein distance capped at 2, on a prefix of `w` the length of `q` (plus or minus one). */
 function nearPrefix(q: string, w: string): boolean {
   if (w.startsWith(q)) return true;
@@ -293,7 +320,7 @@ export function wholeReading(q: string): string[] | null {
   return all.length && all.some((w) => !used.has(w)) ? all : null;
 }
 /** Whether one common name holds every word, each beginning a word of it (round sixty-seven; triage-66 N2: never words of two names). */
-const inCommon = (p: Prepared<unknown>, ws: string[], match: (q: string, w: string) => boolean = (x, w) => w.startsWith(x)) => p.commonNames.some((cn) => ws.every((x) => cn.some((w) => match(x, w))));
+const inCommon = (p: Prepared<unknown>, ws: string[], match: (q: string, w: string) => boolean = commonMatch(EXACT, ws)) => p.commonNames.some((cn) => ws.every((x) => cn.some((w) => match(x, w))));
 
 /**
  * The shape of a genus followed by capitalised words: an unquoted cultivar ("Haworthia Big Band", "Crassula Gollum",
@@ -376,7 +403,7 @@ export function leftOut(q: string): string | null {
 export function wholeHits<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] | null {
   const whole = wholeReading(q);
   if (!whole) return null;
-  return collect(prepared.filter((p) => inCommon(p, whole)), whole, (x, w) => w.startsWith(x), false, typedText(q)).slice(0, limit).map((h) => h.p.item);
+  return collect(prepared.filter((p) => inCommon(p, whole)), whole, EXACT, false, typedText(q)).slice(0, limit).map((h) => h.p.item);
 }
 /**
  * The hits of `search`'s first two readings alone (round seventy-seven): the whole query as one common name, then the
@@ -386,7 +413,7 @@ export function wholeHits<T extends Searchable>(prepared: Prepared<T>[], q: stri
 export function readingHits<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
   const qs = rankedWords(q);
   if (!qs.length) return [];
-  const exact = (x: string, w: string) => w.startsWith(x);
+  const exact = EXACT;
   const typed = typedText(q);
   const whole = wholeReading(q);
   if (whole) {
@@ -494,7 +521,8 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
       kewWords,
       epithet: nameWords[1] ?? '',
       wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
-      sortKey: fold(item.name)
+      // A nothogenus sorts under its genus, past its sign, as the rows do (`withoutSign` of `$core/names`; round eighty-one, H to S).
+      sortKey: fold(item.name.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim())
     };
   });
 }
@@ -532,6 +560,7 @@ export function kewTyped(p: Pick<Prepared<unknown>, 'kewWords'>, qs: string[]): 
   return out;
 }
 function rankWords(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
+  const cm = commonMatch(match, qs);
   let inName = 0, genus = false;
   let left: string[] | null = null; // the words neither the name nor a place takes
   for (const q of qs) {
@@ -551,7 +580,7 @@ function rankWords(p: Prepared<unknown>, qs: string[], match: (q: string, w: str
     else for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
     if (place) continue;
     // No word of the entry can take q: stop here (round fifty-eight).
-    if (!someWord(p.commonWords, q, match) && !p.synWords.some((g) => someWord(g, q, match))) return null;
+    if (!someWord(p.commonWords, q, cm) && !p.synWords.some((g) => someWord(g, q, match))) return null;
     (left ??= []).push(q);
   }
   const found = inName === qs.length ? (genus ? 0 : 1) : inName ? 2 : 3;
@@ -559,7 +588,7 @@ function rankWords(p: Prepared<unknown>, qs: string[], match: (q: string, w: str
   // The words the common names take, all from one of them; what is left, from one older name.
   if (oneOlder(p, left, match)) return found;
   for (const cn of p.commonNames) {
-    const rest = left.filter((q) => !someWord(cn, q, match));
+    const rest = left.filter((q) => !someWord(cn, q, cm));
     if (!rest.length || oneOlder(p, rest, match)) return found;
   }
   return null;
@@ -593,7 +622,8 @@ function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string,
   // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
   // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
   if (olderTyped(p, qs, match).length || kewTyped(p, qs).length) return Group.Older;
-  for (const cn of p.commonNames) if (holds(cn, qs, match)) return Group.Common;
+  const cm = commonMatch(match, qs);
+  for (const cn of p.commonNames) if (holds(cn, qs, cm)) return Group.Common;
   return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
 }
 /** The older names (their places in `synWords`) a query of two words or more is typed as: every word but the last in full, the genus first. */
@@ -650,10 +680,14 @@ const prefix = (q: string, w: string) => w.startsWith(q);
  * common name ("c" is Conophytum before Copiapoa, whatever their headlines).
  */
 /**
- * The generic nouns a species is never headed by (`englishNames`), as the search reads a word: "bulb", "cactus", "lily" and
- * the rest, a plural "s" allowed. Written once, here; /about/how lists them.
+ * The generic nouns a species is never named by (`englishNames`), as the search reads a word: "bulb", "cactus", "lily" and
+ * the rest, a plural "s" allowed; and since round eighty-one the one-word names of a whole genus or family that GBIF's
+ * and Wikidata's lists give single species ("Cycad" headed 39 pages of six genera, "Snowdrop" 7 of Galanthus; Wikidata's
+ * "Sumac", "Pipevine" and "Flameflower": reviews D5 and the owner's queue). Searched, never shown. "Fig" is not among
+ * them: it is Ficus carica's own English name, and "fig" finds it first.
+ * Written once, here; /about/how lists them.
  */
-export const GENERIC_NOUNS: ReadonlySet<string> = new Set(['bulb', 'buttercup', 'cactus', 'cherry', 'daisy', 'fern', 'flower', 'grass', 'herb', 'lily', 'orchid', 'palm', 'plant', 'poppy', 'primrose', 'shrub', 'succulent', 'tree', 'vine', 'weed']);
+export const GENERIC_NOUNS: ReadonlySet<string> = new Set(['bulb', 'buttercup', 'cactus', 'cherry', 'cycad', 'daisy', 'fern', 'flameflower', 'flower', 'grass', 'herb', 'lily', 'orchid', 'palm', 'pipevine', 'plant', 'poppy', 'primrose', 'shrub', 'snowdrop', 'succulent', 'sumac', 'sumach', 'tree', 'vine', 'weed']);
 /** A common name that is one generic noun alone, as words (`words`). */
 const genericAlone = (cn: string[]) => cn.length === 1 && (GENERIC_NOUNS.has(cn[0]) || (cn[0].endsWith('s') && GENERIC_NOUNS.has(cn[0].slice(0, -1))));
 /**
@@ -673,7 +707,8 @@ function closenessOf(p: Prepared<unknown>, qs: string[], g: number): number {
   for (const s of p.synWords) if (same(s, qs)) return 1;
   for (const s of p.kewWords) if (same(s, qs)) return 1;
   let whole = true;
-  for (const q of qs) if (!p.wordSet.has(q)) { whole = false; break; }
+  // A plural in a phrase is whole as its singular too (round eighty-one; `commonMatch`): "hens" is the "Hen" of "Hen-and-chicks".
+  for (const q of qs) { const s = qs.length > 1 ? singularStart(q) : null; if (!p.wordSet.has(q) && !(s && p.wordSet.has(s))) { whole = false; break; } }
   if (whole) return 2;
   if (common && p.headed && holds(p.commonNames[0], qs, prefix)) return 3;
   return 4;
@@ -711,7 +746,7 @@ export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: strin
   if (!qs.length) return false;
   const whole = wholeReading(q);
   if (whole && prepared.some((p) => inCommon(p, whole))) return true;
-  const exact = (x: string, w: string) => w.startsWith(x);
+  const exact = EXACT;
   for (const p of prepared) if (rank(p, qs, exact) != null) return true;
   if (qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1])) for (const p of prepared) if (rank(p, qs.slice(0, -1), exact) != null) return true;
   return false;
@@ -729,7 +764,7 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // finds the name the words before it find).
   const qs = rankedWords(q);
   if (!qs.length) return [];
-  const exact = (x: string, w: string) => w.startsWith(x);
+  const exact = EXACT;
   // The whole query against each common name, when the botanical reading would drop words (round sixty-two; B2): every
   // entry it finds has every typed word in one of its common names (round sixty-seven; triage-66 N2). Otherwise the
   // common names are read whole within the one reading, after a name typed as a name (`group`).
@@ -768,7 +803,7 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
  */
 function commonTie(p: Prepared<unknown>, qs: string[], typed: string): [number, number, number] {
   let at = p.commonNames.findIndex((cn) => same(cn, qs));
-  if (at < 0) at = p.commonNames.findIndex((cn) => holds(cn, qs, prefix));
+  if (at < 0) at = p.commonNames.findIndex((cn) => holds(cn, qs, commonMatch(EXACT, qs)));
   if (at < 0) at = p.commonNames.length;
   const asTyped = p.commonTexts.includes(typed) ? 0 : 1;
   const photos = (p.item as Searchable).photos;
@@ -788,6 +823,23 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
   // and so do words typed in another order ("Stramonium datura" is Datura stramonium, round seventy's decision).
   if (!near && qs.length > 1 && hits.some((h) => h.g === Group.Older && h.o < 4)) {
     for (const h of hits) if (h.g === Group.Name && h.p.nameWords[0] !== qs[0] && h.p.nameWords[0].startsWith(qs[0])) h.g = Group.Older + 0.5;
+  }
+  // A word typed whole that is a whole word of a common name comes before a genus that merely begins with it (round
+  // eighty-one; review-c 2: "rose" answered Rosenbergiodendron, Roseodendron and Rosettea first, and Rosa canina, the dog
+  // rose, was not in the first thirty). A name typed as a name keeps its place where its genus is typed whole ("aloe ver"
+  // is Aloe vera) or every word typed is a whole word of it; a genus still being typed with no such common name ("echev")
+  // is untouched.
+  if (!near && hits.some((h) => h.g === Group.Common && h.p.commonNames.some((cn) => qs.every((q) => cn.includes(q))))) {
+    for (const h of hits) if (h.g === Group.Name && h.p.nameWords[0] !== qs[0] && !qs.every((q) => h.p.nameWords.includes(q))) h.g = Group.Common + 0.5;
+  }
+  // A common name of one word, the query itself, that species of two genera or more are called is no evidence of which
+  // was meant, as a generic noun is not (`genericAlone`; round eighty-one, review-c 2: a source calls two Cotoneasters
+  // "Rose"): matched exactly, it comes after the whole-word and headline matches.
+  if (qs.length === 1) {
+    const genera = new Set<string>();
+    const alone = (p: Prepared<unknown>) => p.commonNames.some((cn) => cn.length === 1 && cn[0] === qs[0]);
+    for (const h of hits) if (alone(h.p)) genera.add(h.p.nameWords[0]);
+    if (genera.size > 1) for (const h of hits) if (h.c <= 1 && alone(h.p) && !same(h.p.nameWords, qs) && !h.p.synWords.some((x) => same(x, qs)) && !h.p.kewWords.some((x) => same(x, qs))) h.c = 3.5;
   }
   return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.o - b.o || a.c - b.c || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.t[2] - b.t[2] || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
 }

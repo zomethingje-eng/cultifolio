@@ -1,7 +1,7 @@
 import type { IndexEntry } from '$dossier/index-entry';
 import type { PageId } from '$core/page-id';
 import { groupFor, unitName } from '$core/regions';
-import { slugify, genusOf } from '$core/names';
+import { slugify, genusOf, nameOrder } from '$core/names';
 import { worldSvg } from '$lib/map/still';
 import tdwg from '$dossier/tdwg3.json';
 
@@ -130,7 +130,7 @@ export function rowGroupsOf(index: IndexEntry[], by: By, chip: Chip, grown?: Rea
       const xs = groups.get(g);
       if (xs) xs.push(c); else groups.set(g, [c]);
     }
-    for (const xs of groups.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
+    for (const xs of groups.values()) xs.sort((a, b) => nameOrder(a.name, b.name)); // past a hybrid's sign (round eighty-one, H)
     byIndex.set(k, groups);
   }
   return groups;
@@ -191,7 +191,7 @@ export function catalogueFrom(shown: Item[], by: By, total: number, withClimate:
   };
   const sortedById = new Map<string, Item[]>();
   const rows: Row[] = [...groups.entries()].map(([label, items]) => {
-    const sorted = items.sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = items.sort((a, b) => nameOrder(a.name, b.name)); // past a hybrid's sign (round eighty-one, H)
     const id = slugify(label);
     sortedById.set(id, sorted);
     const hero = sorted.find((c) => c.thumb && c.climate === 'ok') ?? sorted.find((c) => c.thumb);

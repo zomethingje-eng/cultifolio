@@ -121,6 +121,21 @@ const moved = (path: string): string | null => {
   for (const [from, to] of MOVED) if (from.test(path)) return path.replace(from, to);
   return null;
 };
+/**
+ * A page's data kept from a move inside the app, for the same page asked for again with the network gone: the framework's
+ * own `x-sveltekit-invalidated` says which of the page's parts it wants afresh, and a page opened offline from the offline
+ * page (src/routes/offline) may ask with other bits than the move that kept it. Every other part of the query must match
+ * (round eighty-one; the phone review's 3).
+ */
+const dataQuery = (u: URL) => { const q = new URLSearchParams(u.search); q.delete('x-sveltekit-invalidated'); q.sort(); return q.toString(); };
+async function dataCopy(cache: Cache, url: URL): Promise<Response | undefined> {
+  if (!url.pathname.endsWith('/__data.json')) return undefined;
+  const want = dataQuery(url);
+  for (const k of await cache.keys(url.origin + url.pathname, { ignoreSearch: true, ignoreVary: true })) {
+    if (dataQuery(new URL(k.url)) === want) return (await cache.match(k, { ignoreVary: true })) ?? undefined;
+  }
+  return undefined;
+}
 /** Only our own server's HTML goes in the cache: a captive portal's 200 must not become the app shell until the next build. */
 const cacheableHtml = (r: Response) => r.ok && r.type === 'basic' && (r.headers.get('content-type') ?? '').startsWith('text/html');
 /** How long a page already in the cache waits on the network before the held copy answers. */
@@ -255,7 +270,9 @@ self.addEventListener('fetch', (e) => {
           e.waitUntil(live.then((x) => x.written).catch(() => {}));
           return kept;
         } catch {
-          return kept ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
+          if (kept) return kept;
+          if (request.mode === 'navigate') return (await cache.match('/offline')) ?? Response.error();
+          return (await dataCopy(cache, url)) ?? Response.error();
         }
       }
       // Any other page (Compare, a redirect such as /privacy or /frost): the network, and offline the app's own page that

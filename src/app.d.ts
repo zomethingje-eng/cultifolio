@@ -8,6 +8,10 @@ declare global {
       /** The page exists but its data could not be read just now (a 503): not a statement that it does not exist (round sixty). */
       unreadable?: boolean;
     }
+    interface PageState {
+      /** What is open on the page and closes on Back, in the order opened: the photo viewer, the menu, the Record form (round eighty-one; src/lib/ui/back-layer.svelte.ts). */
+      layers?: string[];
+    }
     interface Locals {
       /** The corpus this request reads, loaded once by the hook for a page it may hold, so the cache key, the page's query and the page itself are one corpus (round fifty-nine). */
       corpus?: import('$lib/server/dossiers').Loaded;

@@ -9,6 +9,8 @@
  *     `cache/day-budget/<day>.json`, beside the day cache, never uploaded).
  *   - What happens at the allowance: the host is not asked, and the answer is a refusal that says so, never "none": the
  *     builder records the source as not checked and keeps what the previous build had, and a fill stops (rule 2).
+ *   - What is given back (round eighty-one): a request that reached no server (`unreached`: the connection failed), so a
+ *     fill that lost its network has not spent the day on it.
  *   - Rule 6: deleting the count changes no page; the next run may then ask up to a day's allowance again that day.
  */
 import type { JsonFetcher, FetchResult } from './fetch';
@@ -35,7 +37,11 @@ export function dayBudget(inner: JsonFetcher, host: string, budget: number, stor
     const n = store.read(day);
     if (n >= budget) return { status: 'refused', detail: `${host}: today's allowance of ${budget} requests is spent (UTC ${day}); asked again tomorrow` };
     store.write(day, n + 1);
-    return inner<T>(url, opts);
+    const r = await inner<T>(url, opts);
+    // A request that reached no server (round eighty-one, review B2: a fill that lost its network was charged 32 of the
+    // day for 60 calls that all failed) is given back: no host counted it. A timeout, or any answer, stays counted.
+    if (r.status === 'error' && r.unreached) store.write(day, Math.max(0, store.read(day) - 1));
+    return r;
   }) as JsonFetcher & { used: () => number };
   f.used = () => store.read(today());
   return f;

@@ -6,7 +6,7 @@
  * page. Both are printed on the label anyway, so the fragment tells nobody anything the label does not.
  */
 import { kindOf, type Accession } from '$lib/db/types';
-import { parseName, speciesSlug } from '$core/names';
+import { parseName, speciesSlug, isNamedHybrid } from '$core/names';
 import { crossName } from '$lib/ui/plant-label';
 
 /** The name in the fragment is cut here: a longer code needs more modules, and a small label prints them too fine to scan. */
@@ -52,7 +52,8 @@ export function plantQrUrl(origin: string, a: Pick<Accession, 'id' | 'taxonName'
   const taxonName = a.taxonName.replace(INVISIBLE, '');
   // A cross is filed under its genus, which has no species page: its name only, then; and so is an "sp." plant, which
   // names no species (round sixty-two; the records review, 13).
-  const slug = kindOf(a) === 'hybrid' || !parseName(taxonName).epithet ? '' : speciesSlug(taxonName);
+  // A named nothospecies (Mentha × piperita) names its species as a species does: the reference may hold it (round eighty-one, H).
+  const slug = (kindOf(a) === 'hybrid' && !isNamedHybrid(taxonName)) || !parseName(taxonName).epithet ? '' : speciesSlug(taxonName);
   // A cross is named by its parents when they are known, as its label and the plants list name it: the code carried
   // only "Astrophytum" for every Astrophytum cross (round sixty-two; triage-self N10, the self-review's grower 11).
   const sci = crossName({ ...a, taxonName }) ?? taxonName;

@@ -94,6 +94,10 @@
   @media (min-width: 641px) { :global(body:has(.tray)) .toast { bottom: calc(84px + env(safe-area-inset-bottom)); } }
   :global(body.grow-selecting) .toast { bottom: var(--sel-lift, calc(var(--sel-h, 120px) + 16px + env(safe-area-inset-bottom))); }
   @media (max-width: 640px) { .toast { top: auto; bottom: calc(66px + env(safe-area-inset-bottom)); } :global(body.stickyacts) .toast { bottom: calc(56px + var(--acts-h, 70px) + 10px + env(safe-area-inset-bottom)); } }
+  /* Above the compare pill while it is shown, as above the tab bar: "Watered 1 plant. Undo" landed on the pill (round
+     eighty-one; the phone review's 2). Up to 700 px, where the pill is drawn; not on a page whose pinned bar the pill
+     steps aside for, where the rule above places the toast. */
+  @media (max-width: 700px) { :global(body:has(.cmppill):not(.stickyacts):not(.grow-selecting)) .toast { bottom: calc(66px + 44px + 10px + env(safe-area-inset-bottom)); } }
   /* Above select mode's bar by its measured height, as above the add form's: at 320 to 375 px the Undo toast covered the
      Archive button focus had just moved to (round sixty-two; the accessibility review, 3). By the bar's measured place
      (`--sel-lift`, safe area included), since on a short list the bar is not at the foot (the verification review's grower 3). */

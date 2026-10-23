@@ -5,7 +5,7 @@
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { site, readerLat } from '$lib/ui/site.svelte';
-  import { conventionLines, defaultSheet } from '$lib/ui/label-sheet';
+  import { defaultSheet, fitClauses } from '$lib/ui/label-sheet';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
@@ -201,8 +201,6 @@
   // Reactive sets mutated in place: a copy of the set per answer was quadratic over a thousand plants (round fifty-two, 5).
   const nightOff = new SvelteSet<string>();
   const nightOffCount = $derived(picked.filter((a) => nightOff.has(a.id)).length);
-  /** Care lines that print a group's convention, which has no source: said once above the sheet (round sixty-two, second pass; triage-self N10, the visitor-words review's V7). */
-  const conventionCount = $derived(conventionLines(picked.map((a) => care[a.id])));
   /** Plants whose sheet has been asked for and not yet answered: its own set, since an answer can be an empty line (a species with no climate) and must count as answered (round fourteen, 3). */
   const asking = new SvelteSet<string>();
   const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
@@ -303,9 +301,6 @@
         <!-- "so not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
         <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and so not used); the coldest month's mean nightly low is a different, warmer figure, so it is left off rather than printed in its place.</p>
       {/if}
-      {#if withCare && conventionCount}
-        <p class="small muted" role="status" id="lb-convention">{conventionCount === 1 ? 'One care line gives' : `${conventionCount} care lines give`} a group's minimum, marked "convention, no source": the lowest temperature growers conventionally keep that group at indoors, not a figure read from the species' habitat, which has none on file. <a href="/about/how#glossary">Convention</a> is in the glossary.</p>
-      {/if}
       {#if withCare && unchecked.length}
         <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why={`${careClause[0].toUpperCase()}${careClause.slice(1)}.`} />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare} aria-disabled={careWait > 0}>{againWords(careWhy, nowMs).replace('Check again', 'Try again')}</button> before printing.</div>
       {/if}
@@ -368,7 +363,7 @@
               <div class="no">{a.no}{#if a.fieldNumber}{' '}<span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
-              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: {careCell}</div>{/if}
+              {#if withCare && care[a.id]}{@const cls = care[a.id]!.split(' · ')}<!-- careLine's clauses, joined by " · " (careParts): shown whole or dropped whole, never cut mid-figure (round eighty-one; review W6) --><div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'} use:fitClauses={`${sheetK} ${care[a.id]}`}>{#each cls as c, ci}{#if ci}{' '}{/if}<span class="cl">{c}{#if ci < cls.length - 1}<span class="sep">{' ·'}</span>{/if}</span>{/each}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: {careCell}</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}
@@ -420,7 +415,10 @@
   .sci .cv { font-style: normal; font-weight: 500; }
   .care.unchecked { font-style: italic; color: #666; }
   @media print { .care.unchecked { display: none; } } /* on paper the line is simply blank: a label lives in a pot for years, and the notice belongs on the screen, not in the pot */
-  .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
+  .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; overflow: hidden; line-height: 1.2; max-height: 2.4em; }
+  /* Two lines of whole clauses: a clause that does not end within them is dropped whole by fitClauses, with the
+     separator before it, never cut to "…" mid-figure (round eighty-one; review W6). */
+  .care :global([hidden]) { display: none; } /* set by fitClauses, after the markup: :global so the compiler keeps it */
   .src { font-family: var(--ui); font-size: 6pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page.tiny .label { padding: 0.8mm 1.5mm; }
   .page.tiny .no { font-size: 6pt; }

@@ -12,7 +12,7 @@
  * come from the sheet's own `runs()`, so a label and a sheet agree.
  */
 import { cultivationSheet, runs, forReader, coldFloor, type SheetInput } from './sheet';
-import { archFor, aLabel, type ArchGuess } from './arch';
+import { aLabel, type ArchGuess } from './arch';
 import { temp, METRIC } from './units';
 
 /** "Nov–Feb" style span for a label; wraps the year and lists a bimodal season as two runs. */
@@ -59,12 +59,20 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
 
 /** One line for a label: the rain rule's season in the reader's hemisphere, the cold floor, the open-sky light. Empty when nothing is known. */
 export function careLine(input: SheetInput, o: NoteOpts = {}): string {
+  return careParts(input, o).join(' · ');
+}
+
+/**
+ * The label's line as its clauses, each a whole figure with its source: a label too small for them all drops the last
+ * ones whole rather than cutting one mid-figure ("open sky 30–…" was printed on Avery 5160: round eighty-one, review W6).
+ */
+export function careParts(input: SheetInput, o: NoteOpts = {}): string[] {
   // A climate that was not checked (the source refused when the page was built) is said so, never printed as the blank a
   // species with no climate gets: the label follows the same refusal rule as the pages (round fifteen, 5).
-  if (input.climateStatus === 'refused' || input.climateStatus === 'unchecked') return 'climate not checked';
-  if (input.climateStatus === 'pending') return 'climate pending'; // a build still to run is not a refusal (round fifty-two, 6)
+  if (input.climateStatus === 'refused' || input.climateStatus === 'unchecked') return ['climate not checked'];
+  if (input.climateStatus === 'pending') return ['climate pending']; // a build still to run is not a refusal (round fifty-two, 6)
   const { rows, year } = cultivationSheet(input);
-  if (!rows.length) return '';
+  if (!rows.length) return [];
   const bits: string[] = [];
   if (year) {
     // Months the shift rule cannot move (a flat curve, or within 10° of the equator) are the habitat's own whichever side of
@@ -79,10 +87,9 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     else bits.push(`${year.grow} rain ${months}`);
   }
   const m = input.months && input.months.length === 12 ? input.months : null;
-  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC, input.extremesStatus, input.climateStatus);
+  const fl = coldFloor(m, input.extremes ?? null, null, input.units ?? METRIC, input.extremesStatus);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
-  // The archetype table's convention is printed only for a species with no habitat figure at all, and as the group's, never
-  // as a night the habitat had or a floor it raised (round sixty; self-review 3).
+  // No group's figure is printed: the care groups' indoor conventions were removed in round eighty-one (the owner's decision).
   if (fl) {
     // With the extremes source refused, the habitat figure is the CHELSA mean night, a warmer and different quantity: it is
     // not printed as the night on a label that cannot say so; the labels page counts these (round seventeen, 7).
@@ -93,13 +100,11 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     // Named as the pages name it, with its rate and source: "hab. night" read as a typical habitat night (round sixty-two;
     // visitor-words 4, outside review A3).
     if (fl.habitat != null && !nightUnchecked) bits.push(`floor ${temp(fl.habitat, input.units ?? METRIC, 1)} (1 in 100, NASA POWER)`);
-    // Said as what it is, as everywhere else it is shown: a convention with no source, not a figure (round sixty-one; visitor 7).
-    if (fl.convention && fl.habitat == null) bits.push(`group min ${temp(fl.convention.minC, input.units ?? METRIC, 0)} (convention, no source)`);
   }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   // With its source, as the floor has its own (round sixty-two, second pass; the words review's 27, rule 1).
   if (dlis.length) bits.push(`open sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI (CHELSA)`);
-  return bits.join(' · ');
+  return bits;
 }
 
 export type { ArchGuess };

@@ -23,7 +23,7 @@
   // name as received (round sixty-two; the grower review, 9).
   // `reserve`: keep the room the check's words take under the field, so what follows never moves when they arrive
   // (round sixty-seven; triage-66 P10).
-  let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
+  let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', labelledby = undefined, describedby = undefined, unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { /** The field's name, by id: the label around the field also holds the check's pills and lines, which a screen reader read as its name (round eighty-one; the desktop review's 7). */ labelledby?: string; /** The form's own hint under the field, by id. */ describedby?: string; reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
   // `similar`: found by a similar spelling (the server's near pass); `asCultivar`: the genus offered for a genus followed by
   // capitalised words, the rest kept as a cultivar; a key below 1 is a row with no key to file (round sixty-two; A7).
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string };
@@ -425,7 +425,8 @@
     aria-expanded={menuOpen}
     aria-controls={listId}
     aria-activedescendant={menuOpen && hi >= 0 ? optionId(hi) : undefined}
-    aria-describedby={armed ? `${listId}-hint` : undefined}
+    aria-labelledby={labelledby}
+    aria-describedby={[armed ? `${listId}-hint` : '', describedby ?? ''].filter(Boolean).join(' ') || undefined}
     bind:value
     oninput={onInput}
     onkeydown={onKey}

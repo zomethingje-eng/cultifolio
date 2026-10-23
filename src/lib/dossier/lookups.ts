@@ -25,7 +25,7 @@
  * alike by construction, and the proof (tests/unit/r76w-lookups.test.ts; scripts/dev/scale/r76-proof.ts on the real
  * corpus) checks every key.
  */
-import { genusOf, slugify, canonicalSynonym } from '$core/names';
+import { genusOf, slugify, canonicalSynonym, nameOrder } from '$core/names';
 import { prepare, search } from '$core/search';
 import type { IndexEntry } from './index-entry';
 import { gbifAlias, type PageId } from '$core/page-id';
@@ -63,7 +63,7 @@ export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
   for (const e of index) {
     byKey.set(e.key, e);
     if (e.gbif != null) byGbif.set(e.gbif, e);
-    byName.set(e.name.toLowerCase(), e);
+    byName.set(e.name.toLowerCase().replace(/×\s*/g, ''), e); // without Kew's hybrid sign, which a hybrid's entry shows and no name asked carries (round eighty-one, H)
     const g = genusOf(e.name);
     const xs = byGenus.get(g);
     if (xs) xs.push(e); else byGenus.set(g, [e]);
@@ -86,7 +86,7 @@ export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
     ambiguous.set(k, by.map((x) => x.entry));
     sharedName.set(k, by[0].matched);
   }
-  for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
+  for (const xs of byGenus.values()) xs.sort((a, b) => nameOrder(a.name, b.name)); // past a hybrid's sign (round eighty-one, H)
   maps.set(index, (m = { byKey, byGbif, byName, byGenus, bySynonym, ambiguous, sharedName }));
   return m;
 }
@@ -102,7 +102,7 @@ export function sharedOrder<E extends IndexEntry>(holders: E[], shared: string):
   return [...order, ...holders.filter((e) => !order.includes(e))];
 }
 /** A name as the species page compares older names: lower case, without rank markers ("var.", "subsp."), spaces closed up. */
-export const plainName = (x: string) => x.toLowerCase().replace(/\b(var|subsp|ssp|f)\.? /g, '').replace(/\s+/g, ' ').trim();
+export const plainName = (x: string) => x.toLowerCase().replace(/×\s*/g, '').replace(/\b(var|subsp|ssp|f)\.? /g, '').replace(/\s+/g, ' ').trim(); // and without a hybrid sign (round eighty-one, H)
 
 /* ---------- the products ---------- */
 
@@ -176,7 +176,7 @@ export function buildCardFiles(index: readonly IndexEntry[], synonymsOf?: (key: 
   index.forEach((e, i) => {
     if (m.byKey.get(e.key) !== e) return; // a key twice: the map kept the last
     const x: Record<string, Ref> = {};
-    for (const n of new Set((synonymsOf?.(e.key) ?? []).map(canonicalSynonym).filter((y): y is string => !!y && y !== e.name))) {
+    for (const n of new Set((synonymsOf?.(e.key) ?? []).map(canonicalSynonym).filter((y): y is string => !!y && y !== e.name.replace(/×\s*/g, '')))) {
       const o = m.byName.get(plainName(n));
       if (o && o.key !== e.key) x[plainName(n)] = ref(o);
     }

@@ -347,9 +347,10 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
   named.sort((a, b) => a.tier - b.tier || b.sources - a.sources || Number(b.preferred) - Number(a.preferred) || a.at - b.at);
   let names = named.map((n) => firstUp(n.spelling));
   // A generic noun is never a headline (round seventy-two; triage F9: Copiapoa cinerascens and C. serpentisulcata were
-  // "Cactus", and led the search for "cactus"). Where nothing fuller is given, no English name is shown; the noun stays
-  // searchable as a spelling (`indexNames`), ranked after every fuller name (`$core/search`).
-  if (names.length && genericNoun(names[0])) names = names.filter((n) => !genericNoun(n));
+  // "Cactus", and led the search for "cactus"), and since round eighty-one never one of the names shown either: "Cycad"
+  // stood beside "Pago sago" as Cycas bougainvilleana's name (review D5). Where nothing fuller is given, no English name
+  // is shown; the noun stays searchable as a spelling (`indexNames`), ranked after every fuller name (`$core/search`).
+  names = names.filter((n) => !genericNoun(n));
   if (!names.length) return {};
   return names.length > 1 ? { common: names[0], commons: names.slice(1) } : { common: names[0] };
 }

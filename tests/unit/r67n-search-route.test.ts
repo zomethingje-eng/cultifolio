@@ -19,8 +19,13 @@ import { _forgetIndex } from '$lib/server/dossiers';
 import { resetRateLimits } from '$lib/server/sync';
 import { GET as searchGET } from '../../src/routes/api/search/+server';
 
-const C = '/tmp/rev66/corpus/v2';
-const have = existsSync(`${C}/index.json`);
+// Round eighty-one (review C3): the corpus is found, not assumed. `CULTIFOLIO_TEST_CORPUS` names one (a folder of version 2's
+// dossiers by GBIF key with its index.json); else round sixty-six's review copy, or the project's own static/s/v2, the
+// round seventy-seven corpus round seventy-eight's rekey reads and never changes (on the owner's PC). Skipped only where
+// none is there, and it says so.
+const C = [process.env.CULTIFOLIO_TEST_CORPUS, '/tmp/rev66/corpus/v2', 'static/s/v2'].find((c): c is string => !!c && existsSync(`${c}/index.json`)) ?? '';
+const have = !!C;
+if (!have) console.warn('r67n-search-route: no corpus of version 2 found (CULTIFOLIO_TEST_CORPUS, /tmp/rev66/corpus/v2 or static/s/v2): its seven tests are skipped');
 
 let index: IndexEntry[] = [];
 let text = '';

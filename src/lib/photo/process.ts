@@ -43,13 +43,27 @@ export async function processImage(file: Blob, opts: { fullEdge?: number; thumbE
   } catch {
     taken = null;
   }
-  const img = await decode(file);
+  const img = await decode(file).catch((e: Error) => { throw new Error(unreadableWords(file, e.message)); });
   const full = fit(img.naturalWidth, img.naturalHeight, fullEdge);
   const blob = await draw(img, full.w, full.h);
   const t = fit(full.w, full.h, thumbEdge);
   const thumb = await draw(img, t.w, t.h);
   const sha = await sha256(blob);
   return { blob, thumb, w: full.w, h: full.h, bytes: blob.size, taken, sha };
+}
+
+/**
+ * What is said of a file the browser could not draw, with its name, and for a HEIC photograph the way forward (round
+ * eighty-one; the phone review's 9): an iPhone's own picker hands a HEIC over as a JPEG, so this meets a grower choosing an
+ * iPhone's photograph on Android or a computer, where "That file is not an image this browser can read." said neither which
+ * file nor what to do.
+ */
+export function unreadableWords(file: Blob & { name?: string }, said = 'That file is not an image this browser can read.'): string {
+  const name = typeof file.name === 'string' && file.name.trim() ? file.name.trim() : null;
+  const heic = /^image\/hei[cf](-sequence)?$/i.test(file.type) || (!!name && /\.hei[cf]$/i.test(name));
+  if (heic) return `${name ?? 'That photograph'} is a HEIC photograph, which this browser cannot read. On an iPhone, choose it from Photos, which hands it over as a JPEG; elsewhere, save it as a JPEG first and choose that.`;
+  if (!name) return said;
+  return said.replace(/^That file/, name);
 }
 
 function decode(file: Blob): Promise<HTMLImageElement> {

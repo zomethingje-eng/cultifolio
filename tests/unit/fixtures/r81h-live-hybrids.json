@@ -1,0 +1,480 @@
+{
+"k518576": {
+"key": "k518576",
+"name": "Utricularia neglecta",
+"ids": {
+"gbif": 4088311
+},
+"links": {
+"gbif": "https://www.gbif.org/species/4088311"
+}
+},
+"k3035604": {
+"key": "k3035604",
+"name": "Sarracenia farnhamii",
+"ids": {
+"gbif": 9688204
+},
+"links": {
+"gbif": "https://www.gbif.org/species/9688204"
+}
+},
+"k64383": {
+"key": "k64383",
+"name": "Drosera hybrida",
+"ids": {
+"gbif": 9047733
+},
+"links": {
+"gbif": "https://www.gbif.org/species/9047733"
+}
+},
+"k2724178": {
+"key": "k2724178",
+"name": "Citrus limon",
+"ids": {
+"gbif": 7647136,
+"powo": "urn:lsid:ipni.org:names:60454758-2",
+"ipni": "60454758-2",
+"inat": 331124,
+"wikidata": "Q500",
+"wfo": "wfo-0001133139",
+"wikipedia": "Lemon"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7647136",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:60454758-2",
+"ipni": "https://www.ipni.org/n/60454758-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001133139",
+"wikidata": "https://www.wikidata.org/wiki/Q500",
+"wikipedia": "https://en.wikipedia.org/wiki/Lemon",
+"inat": "https://www.inaturalist.org/taxa/331124"
+}
+},
+"k2483449": {
+"key": "k2483449",
+"name": "Sedum luteoviride",
+"ids": {
+"gbif": 5690841,
+"powo": "urn:lsid:ipni.org:names:231777-2",
+"ipni": "231777-2",
+"inat": 276070,
+"wikidata": "Q17773635",
+"wfo": "wfo-0000437298"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/5690841",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:231777-2",
+"ipni": "https://www.ipni.org/n/231777-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000437298",
+"wikidata": "https://www.wikidata.org/wiki/Q17773635",
+"inat": "https://www.inaturalist.org/taxa/276070"
+}
+},
+"k519321": {
+"key": "k519321",
+"name": "Paeonia suffruticosa",
+"ids": {
+"gbif": 7155259,
+"powo": "urn:lsid:ipni.org:names:711877-1",
+"ipni": "711877-1",
+"inat": 125432,
+"wikidata": "Q163018",
+"wfo": "wfo-0001129246",
+"wikipedia": "Paeonia × suffruticosa"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7155259",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:711877-1",
+"ipni": "https://www.ipni.org/n/711877-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001129246",
+"wikidata": "https://www.wikidata.org/wiki/Q163018",
+"wikipedia": "https://en.wikipedia.org/wiki/Paeonia_%C3%97_suffruticosa",
+"inat": "https://www.inaturalist.org/taxa/125432"
+}
+},
+"k321867": {
+"key": "k321867",
+"name": "Iris germanica",
+"ids": {
+"gbif": 5298069,
+"powo": "urn:lsid:ipni.org:names:438637-1",
+"ipni": "438637-1",
+"inat": 57097,
+"wikidata": "Q161734",
+"wikipedia": "Iris × germanica"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/5298069",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:438637-1",
+"ipni": "https://www.ipni.org/n/438637-1",
+"wikidata": "https://www.wikidata.org/wiki/Q161734",
+"wikipedia": "https://en.wikipedia.org/wiki/Iris_%C3%97_germanica",
+"inat": "https://www.inaturalist.org/taxa/57097"
+}
+},
+"k3144456": {
+"key": "k3144456",
+"name": "Adiantum meishanianum",
+"ids": {
+"gbif": 8243562,
+"powo": "urn:lsid:ipni.org:names:77100319-1",
+"ipni": "77100319-1",
+"inat": 707214,
+"wikidata": "Q17117818",
+"wfo": "wfo-0001033039"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/8243562",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:77100319-1",
+"ipni": "https://www.ipni.org/n/77100319-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001033039",
+"wikidata": "https://www.wikidata.org/wiki/Q17117818",
+"inat": "https://www.inaturalist.org/taxa/707214"
+}
+},
+"k117840": {
+"key": "k117840",
+"name": "Magnolia soulangeana",
+"ids": {
+"gbif": 7925303,
+"powo": "urn:lsid:ipni.org:names:60468302-2",
+"ipni": "60468302-2",
+"inat": 204586,
+"wikidata": "Q731443",
+"wfo": "wfo-0001076095",
+"wikipedia": "Magnolia × soulangeana"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7925303",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:60468302-2",
+"ipni": "https://www.ipni.org/n/60468302-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001076095",
+"wikidata": "https://www.wikidata.org/wiki/Q731443",
+"wikipedia": "https://en.wikipedia.org/wiki/Magnolia_%C3%97_soulangeana",
+"inat": "https://www.inaturalist.org/taxa/204586"
+}
+},
+"k143834": {
+"key": "k143834",
+"name": "Origanum intercedens",
+"ids": {
+"gbif": 3894580,
+"powo": "urn:lsid:ipni.org:names:453284-1",
+"ipni": "453284-1",
+"wikidata": "Q15347714",
+"wfo": "wfo-0000260638"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/3894580",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:453284-1",
+"ipni": "https://www.ipni.org/n/453284-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000260638",
+"wikidata": "https://www.wikidata.org/wiki/Q15347714"
+}
+},
+"k2623609": {
+"key": "k2623609",
+"name": "Aeonium mascaense",
+"ids": {
+"gbif": 4197820,
+"powo": "urn:lsid:ipni.org:names:903461-1",
+"ipni": "903461-1",
+"wikidata": "Q15482269",
+"wfo": "wfo-0000521681"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/4197820",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:903461-1",
+"ipni": "https://www.ipni.org/n/903461-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000521681",
+"wikidata": "https://www.wikidata.org/wiki/Q15482269"
+}
+},
+"k2410070": {
+"key": "k2410070",
+"name": "Phyllodoce intermedia",
+"ids": {
+"gbif": 5333377,
+"powo": "urn:lsid:ipni.org:names:195250-2",
+"ipni": "195250-2",
+"inat": 361339,
+"wikidata": "Q17245137",
+"wfo": "wfo-0001046895"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/5333377",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:195250-2",
+"ipni": "https://www.ipni.org/n/195250-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001046895",
+"wikidata": "https://www.wikidata.org/wiki/Q17245137",
+"inat": "https://www.inaturalist.org/taxa/361339"
+}
+},
+"k193270": {
+"key": "k193270",
+"name": "Spathoglottis parsonsii",
+"ids": {
+"gbif": 2816484,
+"ipni": "77176699-1",
+"inat": 357855,
+"wikidata": "Q15448469",
+"wfo": "wfo-0000312115"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/2816484",
+"ipni": "https://www.ipni.org/n/77176699-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000312115",
+"wikidata": "https://www.wikidata.org/wiki/Q15448469",
+"inat": "https://www.inaturalist.org/taxa/357855"
+}
+},
+"k2948609": {
+"key": "k2948609",
+"name": "Fragaria ananassa",
+"ids": {
+"gbif": 3029912,
+"wikipedia": "Strawberry"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/3029912",
+"wikipedia": "https://en.wikipedia.org/wiki/Strawberry"
+}
+},
+"k2618485": {
+"key": "k2618485",
+"name": "Aconitum cammarum",
+"ids": {
+"gbif": 7967494,
+"powo": "urn:lsid:ipni.org:names:707233-1",
+"ipni": "707233-1",
+"wikidata": "Q4093614",
+"wfo": "wfo-0000517029"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7967494",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:707233-1",
+"ipni": "https://www.ipni.org/n/707233-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000517029",
+"wikidata": "https://www.wikidata.org/wiki/Q4093614"
+}
+},
+"k54419": {
+"key": "k54419",
+"name": "Cypripedium ventricosum",
+"ids": {
+"gbif": 2820405,
+"powo": "urn:lsid:ipni.org:names:626003-1",
+"ipni": "626003-1",
+"wikidata": "Q3008899",
+"wfo": "wfo-0000935721"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/2820405",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:626003-1",
+"ipni": "https://www.ipni.org/n/626003-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000935721",
+"wikidata": "https://www.wikidata.org/wiki/Q3008899"
+}
+},
+"k2647165": {
+"key": "k2647165",
+"name": "Arctostaphylos coloradensis",
+"ids": {
+"gbif": 2882487,
+"ipni": "17763-2",
+"inat": 170497,
+"wikidata": "Q17241882"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/2882487",
+"ipni": "https://www.ipni.org/n/17763-2",
+"wikidata": "https://www.wikidata.org/wiki/Q17241882",
+"inat": "https://www.inaturalist.org/taxa/170497"
+}
+},
+"k382229": {
+"key": "k382229",
+"name": "Athrotaxis laxifolia",
+"ids": {
+"gbif": 2684868,
+"powo": "urn:lsid:ipni.org:names:261717-1",
+"ipni": "261717-1",
+"inat": 136277,
+"wikidata": "Q145640",
+"wikipedia": "Athrotaxis laxifolia"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/2684868",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:261717-1",
+"ipni": "https://www.ipni.org/n/261717-1",
+"wikidata": "https://www.wikidata.org/wiki/Q145640",
+"wikipedia": "https://en.wikipedia.org/wiki/Athrotaxis_laxifolia",
+"inat": "https://www.inaturalist.org/taxa/136277"
+}
+},
+"k2734853": {
+"key": "k2734853",
+"name": "Conophytum cupreiflorum",
+"ids": {
+"gbif": 3706081,
+"powo": "urn:lsid:ipni.org:names:361112-1",
+"ipni": "361112-1",
+"inat": 582675,
+"wikidata": "Q15563078"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/3706081",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:361112-1",
+"ipni": "https://www.ipni.org/n/361112-1",
+"wikidata": "https://www.wikidata.org/wiki/Q15563078",
+"inat": "https://www.inaturalist.org/taxa/582675"
+}
+},
+"k3212685": {
+"key": "k3212685",
+"name": "Solidago lutea",
+"ids": {
+"gbif": 7714396
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7714396"
+}
+},
+"k3145096": {
+"key": "k3145096",
+"name": "Adiantum tracyi",
+"ids": {
+"gbif": 7955955
+},
+"links": {
+"gbif": "https://www.gbif.org/species/7955955"
+}
+},
+"k2912661": {
+"key": "k2912661",
+"name": "Sarracenia flavopurpurea",
+"ids": {
+"gbif": 10890180
+},
+"links": {
+"gbif": "https://www.gbif.org/species/10890180"
+}
+},
+"k125188": {
+"key": "k125188",
+"name": "Mentha piperita",
+"ids": {
+"gbif": 8707933,
+"powo": "urn:lsid:ipni.org:names:450969-1",
+"ipni": "450969-1",
+"inat": 361371,
+"wikidata": "Q156037",
+"wfo": "wfo-0000241184",
+"wikipedia": "Peppermint"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/8707933",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:450969-1",
+"ipni": "https://www.ipni.org/n/450969-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000241184",
+"wikidata": "https://www.wikidata.org/wiki/Q156037",
+"wikipedia": "https://en.wikipedia.org/wiki/Peppermint",
+"inat": "https://www.inaturalist.org/taxa/361371"
+}
+},
+"k2453495": {
+"key": "k2453495",
+"name": "Verbascum ramigerum",
+"ids": {
+"gbif": 3736671,
+"powo": "urn:lsid:ipni.org:names:770085-1",
+"ipni": "770085-1",
+"wikidata": "Q17748875",
+"wfo": "wfo-0000419289"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/3736671",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:770085-1",
+"ipni": "https://www.ipni.org/n/770085-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000419289",
+"wikidata": "https://www.wikidata.org/wiki/Q17748875"
+}
+},
+"k2623552": {
+"key": "k2623552",
+"name": "Aeonium burchardii",
+"ids": {
+"gbif": 4198509,
+"powo": "urn:lsid:ipni.org:names:272203-1",
+"ipni": "272203-1",
+"wikidata": "Q17759653",
+"wfo": "wfo-0000521622"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/4198509",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:272203-1",
+"ipni": "https://www.ipni.org/n/272203-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000521622",
+"wikidata": "https://www.wikidata.org/wiki/Q17759653"
+}
+},
+"k347186": {
+"key": "k347186",
+"name": "Lantana strigocamara",
+"ids": {
+"gbif": 4084229,
+"powo": "urn:lsid:ipni.org:names:60444377-2",
+"ipni": "60444377-2",
+"inat": 370492,
+"wikidata": "Q15431779",
+"wfo": "wfo-0000808948"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/4084229",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:60444377-2",
+"ipni": "https://www.ipni.org/n/60444377-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000808948",
+"wikidata": "https://www.wikidata.org/wiki/Q15431779",
+"inat": "https://www.inaturalist.org/taxa/370492"
+}
+},
+"k2991319": {
+"key": "k2991319",
+"name": "Sorbaronia arsenii",
+"ids": {
+"gbif": 2987867,
+"powo": "urn:lsid:ipni.org:names:287709-2",
+"ipni": "287709-2",
+"wikidata": "Q15527618",
+"wfo": "wfo-0000987520"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/2987867",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:287709-2",
+"ipni": "https://www.ipni.org/n/287709-2",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0000987520",
+"wikidata": "https://www.wikidata.org/wiki/Q15527618"
+}
+},
+"k2414187": {
+"key": "k2414187",
+"name": "Parodia erubescens",
+"ids": {
+"gbif": 3950131,
+"powo": "urn:lsid:ipni.org:names:1001459-1",
+"ipni": "1001459-1",
+"inat": 1264578,
+"wikidata": "Q2053802",
+"wfo": "wfo-0001252384"
+},
+"links": {
+"gbif": "https://www.gbif.org/species/3950131",
+"powo": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:1001459-1",
+"ipni": "https://www.ipni.org/n/1001459-1",
+"wfo": "https://www.worldfloraonline.org/taxon/wfo-0001252384",
+"wikidata": "https://www.wikidata.org/wiki/Q2053802",
+"inat": "https://www.inaturalist.org/taxa/1264578"
+}
+}
+}

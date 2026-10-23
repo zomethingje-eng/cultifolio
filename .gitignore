@@ -1,4 +1,5 @@
 *.cultifolio.zip
+!/tests/unit/fixtures/r81h-backup-r80-300.cultifolio.zip
 *.local
 .env
 .svelte-kit
@@ -41,3 +42,4 @@ live-search.txt
 /cache/
 /bucket-unlisted.txt
 extra-keys-kew-refused.txt
+/corpus-step.lock

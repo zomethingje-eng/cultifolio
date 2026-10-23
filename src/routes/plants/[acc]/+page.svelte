@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { backLayer } from '$lib/ui/back-layer.svelte';
   import { climateReason } from '$dossier/range-via';
   import { noGbif, recordsUnchecked, keylessPlantNotice, NO_GBIF_SENTENCE } from '$core/no-gbif';
   import { units } from '$lib/ui/units.svelte';
@@ -21,7 +22,7 @@
   import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance, PlantEvent } from '$lib/db/types';
-  import { slugify, speciesOf, speciesSlug, parseName } from '$core/names';
+  import { slugify, speciesOf, speciesSlug, parseName, isNamedHybrid } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { entriesFor, sheetForNameOr, isUnreached, type Unreached } from '$lib/ui/index.svelte';
@@ -116,6 +117,8 @@
   /** The reason as a sentence's start, or null for no answer at all, which keeps its own words. */
   const refused = $derived(refWhy && refWhy.kind !== 'unreachable' ? (() => { const c = unreachedClause(refWhy, 'the species reference'); return c.charAt(0).toUpperCase() + c.slice(1); })() : null);
   const kind = $derived(a ? kindOf(a) : 'species');
+  /** A named nothospecies is asked of the reference as a species is: the reference holds some (Mentha × piperita), and its page is the plant's species page (round eighty-one, H). A cross written out, or a cultivar of a genus, is not. */
+  const asSpecies = $derived(kind !== 'hybrid' || (!!a && isNamedHybrid(a.taxonName)));
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
   $effect(() => {
@@ -286,7 +289,7 @@
    * name the reference does not hold or could not be asked for, a picture that does not load), the held box goes and the
    * card takes the small tile: the card and the bar move up by the hero's height, the rarer move.
    */
-  const heroHeld = $derived(!hasHero && !cover && prefs.referencePhotos && ref === 'loading' && kind !== 'hybrid');
+  const heroHeld = $derived(!hasHero && !cover && prefs.referencePhotos && ref === 'loading' && asSpecies);
   /** The first screen is laid out for a hero: one shown, or one's room held. */
   const heroRoom = $derived(hasHero || heroHeld);
   const offerWhat = $derived(compared ? 'the reference’s photograph of the species it is compared with' : 'the reference’s photograph of this species');
@@ -339,6 +342,8 @@
     deathUndo = null;
     setTimeout(() => document.querySelector<HTMLElement>('.quickbar button')?.focus(), 0);
   }
+  // Back closes the Record form, as Cancel does, and stays on the plant (round eighty-one; the phone review's 8).
+  backLayer('record', () => logOpen, () => closeLog());
   const propagations = $derived(collection.propagationsOf(id));
 
   let et = $state<EventType>('water');
@@ -666,14 +671,14 @@
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
-        {#if !a.taxonKey && kind !== 'hybrid' && ref === 'none'}{' · '}<span id="name-not-in-reference">Name not in the reference</span>{:else if !a.taxonKey && kind !== 'hybrid' && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
+        {#if !a.taxonKey && asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
       <!-- While the sheet is asked the offer's line is held, so its arrival does not move the verb bar below (round seventy-eight). A species without a photograph gives the room back: the rarer move. -->
-      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what={offerWhat} />{:else if !hasHero && ref === 'loading' && kind !== 'hybrid' && !prefs.referencePhotos}<RefPhotoOffer hold what={offerWhat} />{/if}
+      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what={offerWhat} />{:else if !hasHero && ref === 'loading' && asSpecies && !prefs.referencePhotos}<RefPhotoOffer hold what={offerWhat} />{/if}
       {#if a.status !== 'growing' || collection.isDue(a)}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
@@ -682,7 +687,7 @@
       {/if}
     </div>
     <div class="acts">
-      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{speciesHref}" id="species-link">{#if compared}Compare: <SpeciesName name={compared} />{:else}Species page{/if}</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
+      {#if asSpecies && ref === 'ok'}<a class="btn" href="/species/{speciesHref}" id="species-link">{#if compared}Compare: <SpeciesName name={compared} />{:else}Species page{/if}</a>{:else if asSpecies && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
       <div class="cardmenu">
         <button class="btn dots" type="button" bind:this={cardMenuBtn} aria-haspopup="menu" aria-expanded={cardMenu} aria-controls="card-menu" aria-label="More for this plant: edit, label, propagate" title="Edit, label, propagate" onclick={() => (cardMenu = !cardMenu)}>···</button>
         {#if cardMenu}
@@ -810,10 +815,11 @@
       {#each shownTimeline as row (row.k + row.id)}
         {#if row.k === 'e'}
           {@const e = row.e}
+          {@const which = `${e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}, ${lineDates.get(e.id) ?? e.d}`}
           <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a space-wide action, not an observation of this plant' : undefined}>
             <span class="d">{lineDates.get(e.id) ?? e.d}</span>
             <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
+            <!-- each × named by its line, not five "Remove this entry" in a row (round eighty-one; the desktop review's 7) -->{#if confirmEvent === e.id}<button class="rm confirm" type="button" aria-label="Remove? {which}: press again to remove it" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry: {which}" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}
           {@const ph = row.ph}

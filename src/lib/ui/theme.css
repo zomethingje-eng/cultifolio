@@ -498,6 +498,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 /* The button contract: one height (the tap token), the pill shape, three weights (plain, .pri, .danger). */
 .btn { min-height: var(--tap); }
+/* Under a finger at every width, not only under 640 px: the iPad both ways and every phone in landscape are wider, and
+   there the search boxes were 41 px, "Follow" 42 px wide, "Show all 26" 17 px tall, the photograph's credit 23 px and a
+   plant's number chip 25 px (round eighty-one; the phone review's 10). The chips keep their look and take the finger's
+   height as an invisible margin around them, over what is the same link or nothing to press. */
+@media (pointer: coarse) {
+  .btn, .chipbtn, .linkish, .searchbar { min-height: var(--tap); }
+  .btn { min-width: var(--tap); justify-content: center; }
+  a.accno { position: relative; } /* the credit is placed already, absolute or relative, which holds its margin too */
+  a.accno::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: var(--tap); transform: translateY(-50%); }
+  .hero .cred::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; min-height: 100%; height: var(--tap); transform: translateY(-50%); }
+}
 .seg > a, .seg > button { min-height: var(--tap); display: inline-flex; align-items: center; }
 /* Disclosures: one summary, whatever the card around it. */
 details > summary { cursor: pointer; min-height: var(--tap); }

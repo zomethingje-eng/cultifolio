@@ -82,6 +82,8 @@ describe('the day a dossier last changed in substance', () => {
     const s = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(s).toContain('d.changed = stampOnBuild(d, prevFile, sha1);');
     expect(s).toContain('const changed = dayNumber(d.changed?.on);');
-    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n(?: {2}\/\/[^\n]*\n {2}if \(!fixtures && !rekeyDisk\(\)\)[^\n]*\n)?(?: {2}markSharedPhotos\([^\n]*\);\n)? {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
+    // Round eighty-one: the index's stamp may return first, when nothing it is made from has changed (index-stamp.ts);
+    // whatever the function does first, the index it writes is read with the stamping scan, in the function's own body.
+    expect(s).toMatch(/function writeIndexFromDisk\(\): void \{\n(?:(?!\n\}\n)[\s\S])*?\n {2}const index = uniqueSlugs\(scanDossiers\(true\)/);
   });
 });

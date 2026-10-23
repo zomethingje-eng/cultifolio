@@ -535,7 +535,7 @@
         <div class="tlrow">
           <span class="d">{lineDates.get(e.id) ?? e.d}</span>
           <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href={plantHref(pl)}>{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
+          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" aria-label="Remove? {eventLabel(e.t)}, {lineDates.get(e.id) ?? e.d}: press again to remove it" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry: {eventLabel(e.t)}, {lineDates.get(e.id) ?? e.d}" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}
     </div>
@@ -545,7 +545,7 @@
   <div class="factgrid">
     <div><b>Medium</b>{s.medium ?? 'not stated'}</div>
     <div><b>Container</b>{s.container ?? 'not stated'}</div>
-    <div><b>Pre-treatment</b>{s.treatment ?? 'none'}</div>
+    <div><b>Pre-treatment</b>{s.treatment ?? 'not stated'}</div><!-- a blank box is not "none": the grower never said the seed was untreated (round eighty-one; review W8) -->
     <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${temp(s.bottomHeatC, units.current, 1)}` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
     {#if s.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{s.notes}</span></div>{/if}
     <div class="wide"><ReplacedNotes kind="sowing" id={s.id} /></div>

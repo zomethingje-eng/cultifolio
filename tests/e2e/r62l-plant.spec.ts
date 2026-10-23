@@ -38,7 +38,7 @@ test('a name the reference answered it does not hold is "Name not in the referen
   await page.goto('/plants'); await ready(page);
   await inject(page, plant('r-x', Date.now() - 3_600_000, { acc: '2026-0002', taxonName: 'Notaplantia fakeus', status: 'growing' }));
   await page.goto('/plants/2026-0002'); await ready(page);
-  await expect(page.locator('#name-not-in-reference')).toHaveText('Name not in the reference');
+  await expect(page.locator('#name-not-in-reference')).toHaveText('No species page under this name');
   await expect(page.locator('.idcard .nc')).toHaveCount(0);
 });
 

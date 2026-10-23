@@ -16,7 +16,7 @@
 import { NO_GBIF_CLIMATE } from './no-gbif';
 import { frostWording } from './extremes';
 import { MON3 } from './months';
-import { archFor, conventionOf, type ArchGuess } from './arch';
+import { archFor, type ArchGuess, type KewWords } from './arch';
 import { temp, deltaT, rain, ruleRain, ruleDeltaT, METRIC, type Units } from './units';
 
 export interface Month {
@@ -50,6 +50,11 @@ export interface SheetInput {
   /** The median of the per-cell annual rain totals, when the dossier carries it (round sixty-three). */
   annualP50?: number | null;
   family?: string | null;
+  /**
+   * Kew's own description of the species (the dossier's `distribution.kew`): a care group is taken only where its
+   * lifeform agrees (`archFor`; round eighty-one, the owner's decision on review D2). Left out, no group is taken.
+   */
+  kew?: KewWords | null;
   /** The median year across the grid cells of the range. */
   months?: Month[] | null;
   /** The 10th and 90th percentile years, when the dossier carries them: the range the species is recorded in. */
@@ -247,14 +252,12 @@ const RAIN = (mm: number) => rain(mm, U);
 /**
  * The cold figure a page leads with, with its provenance. `habitat` is the 1st-percentile night when the daily extremes
  * are on file (`kind: 'night'`, a cold floor), else the coldest month's mean night from CHELSA (`kind: 'mean'`, named
- * as what it is and never as a floor), else null. `convention` is the archetype table's figure for the group, which has
- * no source: it is said apart, as a convention, and never raises or replaces the habitat figure (round sixty;
- * self-review 3, words 1: "the floor rule takes the higher" put 10 °C over a -3 °C Puya night).
+ * as what it is and never as a floor). Nothing else stands in: the care groups' indoor conventions, which had no source,
+ * were removed in round eighty-one (the owner's decision), so a species with no habitat figure has no cold figure.
  */
 export interface ColdFloor {
-  habitat: number | null;
-  kind: 'night' | 'mean' | null;
-  convention: { minC: number; group: string; why: string; text: string } | null;
+  habitat: number;
+  kind: 'night' | 'mean';
   s: string;
   short: string;
   hab: boolean;
@@ -273,25 +276,13 @@ export const extremesWhyTag = (exStatus?: string | null): string =>
 const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
   exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'lapse' ? "the daily extremes were read at a weather cell whose ground is too far above or below the typical spot, and are not used" : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-/**
- * Why there is no habitat figure at all, by the dossier's climate status: a source that did not answer, or a build still to
- * run, is said as that and never as "on file", which is said of a species with none derivable (round sixty-one; visitor 4,
- * rule 2: an epiphyte whose climate source refused was told "No habitat figure is on file").
- */
-const noHabitat = (st?: SheetInput['climateStatus']) =>
-  st === 'unchecked'
-    ? { s: `The habitat climate was not checked: ${NO_GBIF_CLIMATE}, so no cold floor is read.`, short: 'Habitat climate not checked', lead: "Habitat climate not checked (GBIF's records were not asked), so no cold floor is read." }
-    : st === 'refused'
-    ? { s: 'The habitat climate was not checked: a source refused or did not answer when this page was built, so no cold floor is read.', short: 'Habitat climate not checked', lead: 'Habitat climate not checked, so no cold floor is read.' }
-    : st === 'pending'
-      ? { s: 'The habitat climate is pending: it has not been derived yet, so no cold floor is read.', short: 'Habitat climate pending', lead: 'Habitat climate pending, so no cold floor is read.' }
-      : { s: 'No habitat figure is on file for this species, so no cold floor is read.', short: 'No habitat cold figure on file', lead: 'No habitat cold figure on file.' };
-export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus'], climateStatus?: SheetInput['climateStatus']): ColdFloor | null {
+// The third and sixth places (the group, the climate status) are kept for callers written before round eighty-one: a
+// care group gives no figure since then, so neither changes the answer.
+export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus'], _climateStatus?: SheetInput['climateStatus']): ColdFloor | null {
   U = units;
-  const conv = guess && guess.arch.minC != null ? { minC: guess.arch.minC, group: guess.arch.many ?? guess.arch.lab.toLowerCase(), why: guess.why, text: conventionOf(guess.arch, T)! } : null;
   if (ex) {
     const f = ex.minP01;
-    return { habitat: f, kind: 'night', convention: conv, s: `Cold floor: ${T1(f)}, which is the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER).`, short: `Cold floor (1 night in 100) ${T1(f)}, at a typical spot in the range (NASA POWER).`, hab: true, plain: { lead: `Cold floor ${T1(f)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
+    return { habitat: f, kind: 'night', s: `Cold floor: ${T1(f)}, which is the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER).`, short: `Cold floor (1 night in 100) ${T1(f)}, at a typical spot in the range (NASA POWER).`, hab: true, plain: { lead: `Cold floor ${T1(f)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
   }
   if (m) {
     // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
@@ -302,12 +293,9 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
     const f = m[i].tmin;
     // Every month that ties for the coldest night, as printed (round sixty-one; visitor 5).
     const at = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
-    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
+    return { habitat: f, kind: 'mean', s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
   }
-  if (!conv) return null;
-  // No habitat figure at all: the convention alone, said as a convention with no source, and no floor (round sixty).
-  const none = noHabitat(climateStatus);
-  return { habitat: null, kind: null, convention: conv, s: `${none.s} Apart from the habitat, ${conv.text} (${conv.why}).`, short: `${none.short}; ${conv.text} (archetype table).`, hab: false, plain: { lead: `${none.lead} ${cap(conv.text)}.`, rule: 'archetype table' } };
+  return null;
 }
 
 /**
@@ -325,7 +313,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
   U = input.units ?? METRIC;
   const rows: Row[] = [];
   const add = (card: string, k: string, s: string, why: string, hab = false, short?: string, plain?: Row['plain']) => rows.push({ card, k, s, why, hab, short, plain });
-  const guess = archFor(input.scientific, input.family);
+  const guess = archFor(input.scientific, input.family, input.kew);
   let floorOut: ColdFloor | null = null;
   const m = input.months && input.months.length === 12 ? input.months : null;
   const p10 = input.p10 && input.p10.length === 12 ? input.p10 : null;
@@ -439,7 +427,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, T1));
     // Named as the labels name them, "mean nightly low" and "mean daily high" (round sixty-two; the words review's 5).
     bits.push(`Monthly means: the coldest month's mean nightly low ${T1(m[coldI].tmin)} in ${coldAt}${spread10}, the warmest month's mean daily high ${T1(m[hotI].tmax)} in ${hotAt} (${ENV}).`);
-    floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
+    floorOut = coldFloor(m, ex, null, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
     // The series' own length, never a fixed "1981–2024" (round sixty; words 20); the convention is never part of the floor (round sixty).
@@ -449,13 +437,9 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima over ${ex.years} years at a typical spot in the range${lapse}; ` : ''}CHELSA monthly means, ${ENV.replace(', CHELSA', '')}. ${ex ? 'The cold floor is the 1st-percentile night named in its sentence.' : "No cold floor is read without a daily extremes series; the coldest month's mean nightly low named in its sentence is not one."} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
-  } else {
-    floorOut = coldFloor(null, ex, guess, U, undefined, input.climateStatus);
-    const floor = floorOut;
-    // Which kind of absence, said as the sentence says it: not checked, pending, or none on file (round sixty-one; visitor 4).
-    const absent = input.climateStatus === 'unchecked' ? "the habitat climate was not checked (GBIF's records were not asked for this name)" : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
-    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; ${absent}, so no cold floor is read.`, false, floor.short, floor.plain);
   }
+  // Without the monthly means there is no habitat figure, and nothing stands in for one: the care groups' indoor
+  // conventions, which had no source, were removed in round eighty-one (the owner's decision).
 
   return { rows, arch: guess, year, floor: floorOut };
 }

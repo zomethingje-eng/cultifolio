@@ -4,16 +4,23 @@
  * is reliably one kind of plant" and "the family usually is" are different
  * strengths of claim.
  *
- * The table supplies one figure: a conventional minimum for growing the group
- * indoors, for groups with no dormancy to meet the cold in. No source is given
- * for it, so it is shown as a convention, apart from the habitat's figures, and
- * it never changes the cold floor (round sixty; self-review 3, words 1). It
- * supplies no prose. What a group "wants" is practice, and the sheet does not
- * say it. The genus and family lists are data (arch-tables.json) so they can
- * grow without touching code. A family that splits between groups (Bromeliaceae,
- * Orchidaceae, Araceae and the like) is not on the family list, and the genera
- * under `none` (terrestrial bromeliads, terrestrial or temperate orchids) are
- * never grouped at all, whatever their family.
+ * A listing is taken for a page only where Kew's own description of the species
+ * agrees with it (round eighty-one, the owner's decision on review D2): the table
+ * listed most groups by genus, so every species of a mixed genus took the genus's
+ * group, and groundsel was "a cactus or succulent" and bitter melon "a bulb, tuber
+ * or caudex". Kew's lifeform (WCVP's `lifeform_description`, carried on the
+ * dossier as `distribution.kew.lifeform`) must be on file and say what the group
+ * says (`AGREE`); otherwise the page states no group.
+ *
+ * The table supplies no figure and no prose. Until round eighty-one it held a
+ * conventional indoor minimum for four groups (tropical foliage plant 12 °C,
+ * orchid 13 °C, epiphyte 10 °C, fern or moss 5 °C), with no source; the owner
+ * removed them. What a group "wants" is practice, and the sheet does not say it.
+ * The genus and family lists are data (arch-tables.json) so they can grow without
+ * touching code. A family that splits between groups (Bromeliaceae, Orchidaceae,
+ * Araceae and the like) is not on the family list, and the genera under `none`
+ * (terrestrial bromeliads, terrestrial or temperate orchids) are never grouped at
+ * all, whatever their family.
  */
 import tables from './arch-tables.json';
 
@@ -22,22 +29,20 @@ export type ArchKey = 'arid' | 'tropical' | 'orchid' | 'epiphyte' | 'moist' | 'c
 export interface Archetype {
   key: ArchKey;
   lab: string;
-  /** The group in the plural, for "the convention for orchids grown indoors" (optional for older callers that build one by hand). */
+  /** The group in the plural: "cacti and succulents" (optional for older callers that build one by hand). */
   many?: string;
-  /** Conventional minimum for growing the group indoors, °C, with no source; null when the group spans too much for one figure. */
-  minC: number | null;
 }
 
 export const ARCH: Record<ArchKey, Archetype> = {
-  arid: { key: 'arid', lab: 'Cactus or succulent', many: 'cacti and succulents', minC: null },
-  tropical: { key: 'tropical', lab: 'Tropical foliage plant', many: 'tropical foliage plants', minC: 12 },
-  orchid: { key: 'orchid', lab: 'Orchid', many: 'orchids', minC: 13 },
+  arid: { key: 'arid', lab: 'Cactus or succulent', many: 'cacti and succulents' },
+  tropical: { key: 'tropical', lab: 'Tropical foliage plant', many: 'tropical foliage plants' },
+  orchid: { key: 'orchid', lab: 'Orchid', many: 'orchids' },
   // "Epiphyte", not "Other epiphyte": "an other epiphyte" was printed (round sixty; words 6).
-  epiphyte: { key: 'epiphyte', lab: 'Epiphyte', many: 'epiphytes', minC: 10 },
-  moist: { key: 'moist', lab: 'Fern or moss', many: 'ferns and mosses', minC: 5 },
-  carnivore: { key: 'carnivore', lab: 'Carnivorous plant', many: 'carnivorous plants', minC: null },
-  geophyte: { key: 'geophyte', lab: 'Bulb, tuber or caudex', many: 'bulbs, tubers and caudiciforms', minC: null },
-  temperate: { key: 'temperate', lab: 'Temperate garden plant', many: 'temperate garden plants', minC: null }
+  epiphyte: { key: 'epiphyte', lab: 'Epiphyte', many: 'epiphytes' },
+  moist: { key: 'moist', lab: 'Fern or moss', many: 'ferns and mosses' },
+  carnivore: { key: 'carnivore', lab: 'Carnivorous plant', many: 'carnivorous plants' },
+  geophyte: { key: 'geophyte', lab: 'Bulb, tuber or caudex', many: 'bulbs, tubers and caudiciforms' },
+  temperate: { key: 'temperate', lab: 'Temperate garden plant', many: 'temperate garden plants' }
 };
 
 const byGenus = new Map<string, ArchKey>();
@@ -57,11 +62,41 @@ export interface ArchGuess {
   arch: Archetype;
   tier: 'species' | 'genus' | 'family';
   of: string;
-  /** Where the table lists it, as a phrase: "listed under the genus Copiapoa in the archetype table" (round sixty-two). */
+  /**
+   * Where the table lists it and what Kew says, as a phrase: "listed under the genus Copiapoa in the archetype table, and
+   * Kew describes it as “succulent subshrub”" (round sixty-two; round eighty-one).
+   */
   why: string;
 }
 
-export function archFor(scientific: string, family?: string | null): ArchGuess | null {
+/** Kew's own one-line description of a species, as the dossier carries it (`distribution.kew`). */
+export interface KewWords {
+  lifeform?: string;
+  climate?: string;
+}
+
+/**
+ * What Kew's description must say for a listing to stand (round eighty-one, the owner's decision on review D2). Kew's
+ * lifeforms name succulence, geophytes (bulbs, corms, tubers, rhizomes, caudices) and epiphytes, so those groups need
+ * the word ("semisucculent" counts: Kew so calls Adenium obesum), and an orchid needs an epiphyte, lithophyte or climber, since the
+ * table's terrestrial orchids are ungrouped already (`none`). "Tropical foliage plant" and "temperate garden plant" name
+ * a climate, which Kew's climate words say ("wet tropical", "seasonally dry tropical" and "montane tropical";
+ * "temperate" and "subalpine or subarctic"; "subtropical" is neither). No lifeform names a fern or a carnivorous plant:
+ * those two groups need a lifeform on file and nothing more. Read in any case.
+ */
+export const AGREE: Record<ArchKey, { life: RegExp; climate?: RegExp }> = {
+  arid: { life: /succulent/i },
+  geophyte: { life: /geophyte|(?<!pseudo)bulb|tuber|corm|caudex/i },
+  epiphyte: { life: /epiphyt/i },
+  orchid: { life: /epiphyt|lithophyt|climb/i },
+  tropical: { life: /\S/, climate: /(?<!sub)tropical/i },
+  temperate: { life: /\S/, climate: /temperate|subalpine|subarctic/i },
+  moist: { life: /\S/ },
+  carnivore: { life: /\S/ }
+};
+
+/** The table's listing alone, before Kew's description is read: what the table says, for its own tests and audits. */
+export function listedFor(scientific: string, family?: string | null): ArchGuess | null {
   const name = scientific.trim().toLowerCase();
   const genus = name.split(/\s+/)[0];
   const sp = bySpecies.get(name.split(/\s+/).slice(0, 2).join(' '));
@@ -76,8 +111,20 @@ export function archFor(scientific: string, family?: string | null): ArchGuess |
   return null;
 }
 
+/**
+ * The page's group: the table's listing, where Kew's description of the species agrees with it (`AGREE`), else null.
+ * Without Kew's description (none on file, or not passed) there is no group: a listing alone is a genus-wide guess.
+ */
+export function archFor(scientific: string, family: string | null | undefined, kew: KewWords | null | undefined): ArchGuess | null {
+  const g = listedFor(scientific, family);
+  if (!g) return null;
+  const life = kew?.lifeform?.trim() ?? '';
+  const climate = kew?.climate?.trim() ?? '';
+  const rule = AGREE[g.arch.key];
+  if (!life || !rule.life.test(life)) return null;
+  if (rule.climate && !(climate && rule.climate.test(climate))) return null;
+  return { ...g, why: `${g.why}, and Kew describes it as “${life}”${rule.climate ? `, “${climate}”` : ''}` };
+}
+
 /** The label with its article, lower-cased: "a cactus or succulent", "an orchid" ("a other epiphyte" was live: round thirty-three, R3-7; "an other epiphyte", round sixty). */
 export const aLabel = (lab: string): string => (/^other\b/i.test(lab) ? `another${lab.slice(5).toLowerCase()}` : `${/^[aeiou]/i.test(lab) ? 'an' : 'a'} ${lab.toLowerCase()}`);
-
-/** The convention as a sentence of its own, apart from any habitat figure: "the convention for orchids grown indoors is 13 °C; no source is given for it". */
-export const conventionOf = (a: Archetype, t: (c: number) => string): string | null => (a.minC == null ? null : `the convention for ${a.many ?? `${a.lab.toLowerCase()}s`} grown indoors is ${t(a.minC)}; no source is given for it`);

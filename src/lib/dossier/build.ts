@@ -22,6 +22,7 @@ import { LITERATURE_OFF } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
+import { hybridLinks } from '$core/hybrids';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
 import type { RegionTester } from './tdwg-shapes';
 import { ownNames, isOwnName, canonicalOf } from './own-names';
@@ -506,6 +507,14 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       if (k.powo) { ids.powo = k.powo; links.powo = `https://powo.science.kew.org/taxon/${k.powo}`; }
       if (k.changed && upstream.wikidata) upstream.wikidata = { ...upstream.wikidata, detail: [upstream.wikidata?.detail, `IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''} (no item's number)`].filter(Boolean).join('; ') };
     }
+  }
+  // A hybrid of the list (round eighty-one, H; review-d 3): Kew's copy at GBIF writes its own row with the sign, which the
+  // name asked above has not, so the row is never found by it (Fragaria × ananassa, Sarracenia × farnhamii linked neither).
+  // Linked by the numbers of its Kew entry, the page's own id, as `$core/hybrids` holds them from Kew's file.
+  if (!ids.ipni && !ids.powo) {
+    const h = hybridLinks(pageId);
+    if (h.ipni) { ids.ipni = h.ipni; links.ipni = `https://www.ipni.org/n/${h.ipni}`; }
+    if (h.powo) { ids.powo = h.powo; links.powo = `https://powo.science.kew.org/taxon/${h.powo}`; }
   }
   // The name the page links is the name it cites (round seventy-two, A): Kew's row for the linked number, where it is
   // this species' words by another citation (Ixora coccinea L., not the backbone's "Comm. ex Lam.").

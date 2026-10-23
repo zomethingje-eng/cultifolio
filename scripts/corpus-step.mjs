@@ -2,7 +2,17 @@
 //
 //   node scripts/corpus-step.mjs              run the round's plan (scripts/corpus-plan.txt), or carry on where it stopped
 //   node scripts/corpus-step.mjs --go-on      carry on past the review stop it last made, once you have read what it asked
-//   node scripts/corpus-step.mjs --status     say which steps are done and which is next, and change nothing
+//   node scripts/corpus-step.mjs --status     say which steps are done and which is next, and change nothing (round
+//                                             eighty-one: nothing at all, the record and the log included)
+//   node scripts/corpus-step.mjs --backup <label>
+//                                             copy the corpus on disk to backups/v<N>-<its id>-<label> (round eighty-one;
+//                                             the plan's record is not touched): DEPLOY's (d) keeps the filled corpus so
+//   node scripts/corpus-step.mjs --compare <folder>
+//                                             say what differs between the corpus on disk and that copy, as a review stop
+//                                             says it, rows left "error" among it; changes nothing
+//
+// One run at a time (round eighty-one): every run but --status and --compare takes corpus-step.lock in the project folder
+// (`run-lock.mjs`), and a second refuses, saying which run holds it; so does a builder step typed by hand meanwhile.
 //   node scripts/corpus-step.mjs --prune      the bucket's prune (DEPLOY.md section 5): a dry run, a review stop, then
 //                                             `--prune --go-on` deletes
 //
@@ -30,6 +40,7 @@ import { appendFileSync, cpSync, existsSync, readFileSync, readdirSync, renameSy
 import { join } from 'node:path';
 import { totalmem } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { takeLock, LOCK } from './run-lock.mjs';
 
 export const EXIT = { done: 0, failed: 1, review: 2, blocked: 2, unfinished: 3, interrupted: 130 };
 /** The dossier version (src/lib/dossier/schema.ts): the corpus is `static/s/v<N>` and the bucket's `s/v<N>`, as the Worker reads it. */
@@ -126,7 +137,12 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
       if (result.why === 'deploy first') return `Stopped at "${step.line}": the corpus on disk holds ${result.keyless} page${result.keyless === 1 ? '' : 's'} without a GBIF key, and the live Worker ${result.live ? 'does not say it reads one (round seventy-eight\'s answers 503 for such a page)' : 'could not be asked whether it reads one'}. Nothing was uploaded. Deploy this round's Worker first, on the corpus live now (node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs && npm run deploy), then run: ${cmd}`;
       if (/^index/.test(result.why)) return `Stopped at "${step.line}": the index now holds fewer species than before (${result.why.replace('index ', '').replace(' < ', ', was ')}). Do not upload. Paste the end of corpus-step.log back.`;
       return `Review: ${result.why}. When it is as expected, carry on with: ${cmd} --go-on`;
-    case 'failed': return `Stopped at "${step.line}": it failed (${result.why}). Paste the last forty lines of corpus-step.log back. To try that step again: ${cmd}`;
+    // The upload (round eighty-one, review B7): the dossiers are overwritten in place, and the site reads each species
+    // page's own; the index, search and manifest stay the old corpus's until the manifest goes up, last. So a stopped
+    // upload leaves the site half new until it is run again: said, and the same command at once.
+    case 'failed': return step.kind === 'upload'
+      ? `Stopped at "${step.line}": it failed (${result.why}). The site now serves the dossiers copied so far under the old corpus's index, search and manifest (each species page whole, but the catalogue and the search the old corpus's) until the upload finishes: run the same command again now, and it copies only what is not up yet, then the manifest: ${cmd}. If it fails again, paste the last forty lines of corpus-step.log back.`
+      : `Stopped at "${step.line}": it failed (${result.why}). Paste the last forty lines of corpus-step.log back. To try that step again: ${cmd}`;
     default: return '';
   }
 }
@@ -178,18 +194,19 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   };
   const flush = () => { if (pending) appendFileSync(logFile, collapse(pending) + '\n'); pending = ''; };
   const stamp = () => now().toISOString().replace('T', ' ').slice(0, 19);
+  // Round eighty-one (review B5): --status reads, and writes nothing: no record renamed or put aside, no line in the log.
+  if (argv.includes('--status')) return status({ root, argv, log });
+  // And --compare, which reads the corpus and a copy of it.
+  if (argv.includes('--compare')) { log(`${compareSentence(root, argv[argv.indexOf('--compare') + 1])}\n`); return EXIT.done; }
+  // One run at a time (round eighty-one, review B6): the lock, released however the run ends.
+  const lock = takeLock(root, `node scripts/corpus-step.mjs ${argv.join(' ')}`.trim());
+  if (!lock.ok) { say(`\n${lock.sentence}\n`); flush(); return EXIT.blocked; }
+  if (lock.took) say(`  ${LOCK} was left by a run that has ended (process ${lock.took.pid ?? '?'}, "${lock.took.what ?? ''}"): taken for this run.\n`);
+  process.on('exit', lock.release);
+  try {
+  if (argv.includes('--backup')) { try { return backupAs(root, argv[argv.indexOf('--backup') + 1], say); } finally { flush(); } }
   if (argv.includes('--prune')) { try { return await prune({ root, argv, exec, say, fetchCorpus }); } finally { flush(); } }
-  // Round seventy-nine (M): the plan a run carries on with. Given no --plan, a run carries on with the plan the last run
-  // left unfinished (corpus-step.json names it), and every stop names the command with its --plan, so a "--go-on" typed
-  // after a stop of the full build's plan never starts round seventy-eight's plan (its backup and --rekey) in its place.
-  const DEFAULT_PLAN = 'scripts/corpus-plan.txt';
-  const prior = readJson(at('corpus-step.json'));
-  const unfinished = (st) => Array.isArray(st?.steps) && st.steps.some((x) => x.status !== 'done' && x.status !== 'skipped');
-  // And a run kept aside while another plan ran (round eighty): with the last run's plan finished, the kept run is the
-  // one carried on, never the default plan started over.
-  const keptRun = () => { try { return readdirSync(root).filter((f) => /^corpus-step\.plan-.+\.json$/.test(f)).map((f) => readJson(at(f))).find((st) => typeof st?.planFile === 'string' && unfinished(st))?.planFile ?? null; } catch { return null; } };
-  const planRel = argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : typeof prior?.planFile === 'string' && prior.planFile !== DEFAULT_PLAN && unfinished(prior) ? prior.planFile : (!unfinished(prior) && keptRun()) || DEFAULT_PLAN;
-  const cmd = `node scripts/corpus-step.mjs${planRel !== DEFAULT_PLAN ? ` --plan ${planRel}` : ''}`;
+  const { DEFAULT_PLAN, planRel, cmd } = choosePlan(root, argv);
   if (!argv.includes('--plan') && planRel !== DEFAULT_PLAN) say(`  carrying on with ${planRel}, the plan the last run left unfinished (${cmd}).\n`);
   const planFile = at(planRel);
   if (!existsSync(planFile)) { say(`No plan at ${planFile}: nothing to run.\n`); return EXIT.failed; }
@@ -206,7 +223,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   if (state && typeof state.planFile === 'string' && !samePlanFile(state.planFile, planRel)) {
     const keptAt = at(keptStateName(planRel));
     const kept = readJson(keptAt);
-    if (unfinished(state)) {
+    if (unfinishedRun(state)) {
       writeAtomic(at(keptStateName(state.planFile)), JSON.stringify(state, null, 1));
       say(`  the unfinished run of ${state.planFile} is kept in ${keptStateName(state.planFile)}; it carries on where it stopped when that plan is run again (node scripts/corpus-step.mjs --plan ${state.planFile}).\n`);
     } else renameSync(stateFile, at(`corpus-step.${stamp().slice(0, 10)}.${Date.now()}.json`));
@@ -227,10 +244,6 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   }
   state.planFile = planRel;
   const save = () => writeAtomic(stateFile, JSON.stringify(state, null, 1));
-  if (argv.includes('--status')) {
-    for (const [i, s] of state.steps.entries()) log(`${String(i + 1).padStart(2)}. ${s.status.padEnd(11)} ${s.line}${s.note ? `  (${s.note})` : ''}\n`);
-    return EXIT.done;
-  }
   const goOn = argv.includes('--go-on');
   const once = { synced: false };
   let interrupted = false;
@@ -306,6 +319,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
           if (live?.keyless !== true) result = { status: 'blocked', why: 'deploy first', keyless, live: !!live };
           else say(`  the live Worker reads pages without a GBIF key (${keyless} in this corpus): uploading.\n`);
         }
+        if (result.status === 'done') say(`  the dossiers go up first and the manifest last: until the manifest is up, the site serves each new dossier as it arrives under the old corpus's index and search. Leave it to finish; if it stops, run the same command again at once.\n`);
         for (const [cmd, args] of result.status === 'done' ? uploadCommands() : []) {
           say(`  ${cmd} ${args.join(' ')}\n`);
           const code = await exec(cmd, args, say, { cwd: root, env: process.env });
@@ -343,6 +357,86 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
     flush();
     process.off('SIGINT', onInt);
   }
+  } finally {
+    lock.release();
+    process.off('exit', lock.release);
+  }
+}
+
+/**
+ * The plan a run carries on with (round seventy-nine, M), as `run` and `--status` both read it. Given no --plan, a run
+ * carries on with the plan the last run left unfinished (corpus-step.json names it), and every stop names the command with
+ * its --plan, so a "--go-on" typed after a stop of the full build's plan never starts round seventy-eight's plan (its
+ * backup and --rekey) in its place. And a run kept aside while another plan ran (round eighty): with the last run's plan
+ * finished, the kept run is the one carried on, never the default plan started over.
+ */
+export function choosePlan(root, argv) {
+  const at = (p) => join(root, p);
+  const DEFAULT_PLAN = 'scripts/corpus-plan.txt';
+  const prior = readJson(at('corpus-step.json'));
+  const keptRun = () => { try { return readdirSync(root).filter((f) => /^corpus-step\.plan-.+\.json$/.test(f)).map((f) => readJson(at(f))).find((st) => typeof st?.planFile === 'string' && unfinishedRun(st))?.planFile ?? null; } catch { return null; } };
+  const planRel = argv.includes('--plan') ? argv[argv.indexOf('--plan') + 1] : typeof prior?.planFile === 'string' && prior.planFile !== DEFAULT_PLAN && unfinishedRun(prior) ? prior.planFile : (!unfinishedRun(prior) && keptRun()) || DEFAULT_PLAN;
+  const cmd = `node scripts/corpus-step.mjs${planRel !== DEFAULT_PLAN ? ` --plan ${planRel}` : ''}`;
+  return { DEFAULT_PLAN, prior, planRel, cmd };
+}
+/** Whether a run's record has a step not yet done (or skipped). */
+const unfinishedRun = (st) => Array.isArray(st?.steps) && st.steps.some((x) => x.status !== 'done' && x.status !== 'skipped');
+
+/**
+ * `--status` (round eighty-one, review B5): what a run would carry on with, read and never written. Before, it ran after
+ * the plan's record was put aside for a changed plan (renamed to corpus-step.<day>.<n>.json), so a --status typed to check
+ * a delivery could itself start the plan again from step 1 at the next run. Now the record, the kept runs and the log are
+ * read only; where a run would start the plan again or take up another plan's record, it says so.
+ */
+export function status({ root, argv, log }) {
+  const at = (p) => join(root, p);
+  const { DEFAULT_PLAN, planRel, cmd } = choosePlan(root, argv);
+  const planFile = at(planRel);
+  if (!existsSync(planFile)) { log(`No plan at ${planFile}: nothing to run.\n`); return EXIT.failed; }
+  const planText = readFileSync(planFile, 'utf8');
+  const plan = parsePlan(planText);
+  let state = readJson(at('corpus-step.json'));
+  const notes = [];
+  if (!argv.includes('--plan') && planRel !== DEFAULT_PLAN) notes.push(`the plan the last run left unfinished is ${planRel} (${cmd})`);
+  if (state && typeof state.planFile === 'string' && !samePlanFile(state.planFile, planRel)) {
+    const kept = readJson(at(keptStateName(planRel)));
+    notes.push(`corpus-step.json is the record of ${state.planFile}; a run of ${planRel} would ${unfinishedRun(state) ? `keep it in ${keptStateName(state.planFile)}` : 'put it aside'}${kept && samePlanFile(kept.planFile ?? '', planRel) ? ` and carry on with the run kept in ${keptStateName(planRel)}` : ' and start this plan at step 1'}`);
+    state = kept && samePlanFile(kept.planFile ?? '', planRel) ? kept : null;
+  }
+  if (state && state.plan !== sha1(planText) && !sameSteps(state, plan)) {
+    notes.push(`the steps of ${planRel} are not those of the run recorded (a step line changed, or one added or taken out): a run now would put the record aside and start the plan again at step 1. If that is not meant, put the plan file back as it was`);
+    state = null;
+  }
+  const steps = state?.steps ?? plan.map((p) => ({ line: p.line, status: 'to do' }));
+  for (const [i, s] of steps.entries()) log(`${String(i + 1).padStart(2)}. ${s.status.padEnd(11)} ${s.line}${s.note ? `  (${s.note})` : ''}\n`);
+  for (const n of notes) log(`  Note: ${n}. --status changed nothing.\n`);
+  return EXIT.done;
+}
+
+/**
+ * `--backup <label>` (round eighty-one, review B4): the corpus on disk copied whole to backups/v<N>-<its id>-<label>, the
+ * plan's record untouched. DEPLOY's (d) copies the filled corpus so before the repair, so the repair's changes can be read
+ * (`--compare`) and undone without five days of fill again; step 1's backup is of the corpus before the full build.
+ */
+export function backupAs(root, label, say) {
+  if (!label || label.startsWith('--') || !/^[A-Za-z0-9._-]+$/.test(label)) { say('  --backup needs a label of letters, digits, "-", "_" or ".": node scripts/corpus-step.mjs --backup filled\n'); return EXIT.failed; }
+  const at = (p) => join(root, p);
+  if (!existsSync(at(CORPUS))) { say(`  ${CORPUS} is not there: nothing to copy.\n`); return EXIT.failed; }
+  const id = readJson(at(`${CORPUS}/manifest.json`))?.id ?? 'no-manifest';
+  const rel = `backups/v${VERSION}-${id}-${label}`;
+  if (existsSync(at(rel))) { say(`  ${rel} is there already: the copy made before is kept, and nothing is copied. To compare the corpus with it: node scripts/corpus-step.mjs --compare ${rel}\n`); return EXIT.done; }
+  say(`  copying ${CORPUS} (corpus ${id}) to ${rel}…\n`);
+  cpSync(at(CORPUS), at(`${rel}.tmp`), { recursive: true });
+  renameSync(at(`${rel}.tmp`), at(rel));
+  say(`  done: ${rel}. To see what changed since: node scripts/corpus-step.mjs --compare ${rel}. To go back: delete ${CORPUS} and copy ${rel} in its place. Delete the copy once the site serves the corpus after it.\n`);
+  return EXIT.done;
+}
+
+/** `--compare <folder>` (round eighty-one, review B4): the corpus on disk against a copy, as a review stop says it. */
+export function compareSentence(root, folder) {
+  if (!folder || !existsSync(join(root, folder))) return `No copy at ${folder ?? '(none named)'}: node scripts/corpus-step.mjs --compare backups/v${VERSION}-<id>-<label>`;
+  const id = readJson(join(root, folder, 'manifest.json'))?.id ?? folder;
+  return `The corpus on disk against ${folder}${facts(root, id, folder)}`;
 }
 
 /**
@@ -403,6 +497,9 @@ export function facts(root, before, backupDir) {
   const back = backupDir ? join(root, backupDir) : before ? join(root, 'backups', `v${VERSION}-${before}`) : null;
   let changed = null;
   let acrossIds = false;
+  // Rows a source did not answer ("error"), by source, and the pages that hold one (round eighty-one, review B2): the review
+  // before an upload counts them, so a fill that ended with pages left unanswered is seen there, not only in its own lines.
+  const errors = errorRows(root);
   if (back && existsSync(back) && existsSync(join(root, CORPUS))) {
     changed = [];
     acrossIds = !readdirSync(back).some((x) => DOSSIER_FILE.test(x)) && readdirSync(back).some((x) => V2_FILE.test(x));
@@ -417,7 +514,29 @@ export function facts(root, before, backupDir) {
     }
   }
   const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${acrossIds ? ' apart from their ids' : ''}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
-  return ` (corpus on disk ${m?.id ?? 'none'}, was ${before ?? 'not recorded'}; ${idx?.length ?? '?'} species${ch}; drops.txt ${drops ? `${drops} lines` : 'not there'}).`;
+  const er = errors.pages ? `; ${errors.pages} page${errors.pages === 1 ? ' holds' : 's hold'} a row a source did not answer ("error": ${[...errors.by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ')}; ${errors.sample.join(', ')}${errors.pages > errors.sample.length ? ', …' : ''}), each said "did not answer" on its page until a fill or a build asks it again` : '';
+  return ` (corpus on disk ${m?.id ?? 'none'}, was ${before ?? 'not recorded'}; ${idx?.length ?? '?'} species${ch}${er}; drops.txt ${drops ? `${drops} lines` : 'not there'}).`;
+}
+
+/** Every dossier's rows whose status is "error", by source (round eighty-one, review B2), read whole from the corpus on disk. */
+export function errorRows(root) {
+  const dir = join(root, CORPUS);
+  const by = new Map();
+  const sample = [];
+  let pages = 0;
+  if (!existsSync(dir)) return { pages, by, sample };
+  for (const f of readdirSync(dir).filter((x) => DOSSIER_FILE.test(x))) {
+    const text = readFileSync(join(dir, f), 'utf8');
+    if (!/"status"\s*:\s*"error"/.test(text)) continue;
+    let d;
+    try { d = JSON.parse(text); } catch { continue; }
+    const srcs = Object.entries(d?.upstream ?? {}).filter(([, u]) => u?.status === 'error').map(([k]) => k);
+    if (!srcs.length) continue;
+    pages++;
+    if (sample.length < 8) sample.push(f.slice(0, -5));
+    for (const k of srcs) by.set(k, (by.get(k) ?? 0) + 1);
+  }
+  return { pages, by, sample };
 }
 
 /**

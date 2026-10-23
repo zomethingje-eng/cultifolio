@@ -551,7 +551,161 @@ The second form only when the first refuses. It says `written into src/routes/ab
 
 **Nothing to run for the pages.** With the reference's photographs switched on, a plant page now keeps the species photograph's room while it asks for the sheet, so the photograph's arrival moves neither the card nor the buttons under a finger; a species page keeps "Your notes: none yet"'s line while the collection opens, so the cultivation cards do not move. In the owner's WebKit runs a press made in that moment was lost (r69p P5, and r73p keys 1 on the front page, whose test now waits for the collection).
 
-### Round eighty: the owner's walk
+### Round eighty-one: the owner's walk
+
+This replaces "Round eighty: the owner's walk" below, from where your PC is now: round eighty's delivery is deployed (Worker `00830b85`), its one-off steps (b) 1 to 3 are done (`--fill inat-restore`, `--fill wikidata-names`, `--fill kew-why`), and the full plan (`scripts\corpus-plan-full.txt`) is at step 11 of 15, the cultivated fill, with day 1 of round eighty's code done (6,820 pages filled, 39,528 to do). It is the whole of round eighty-one for you, in order. The sections after it are each agent's notes, for reference; where one says otherwise about when to run something, this walk is the one to follow.
+
+**The rule for every step: never while `node scripts\corpus-step.mjs` is running.** Each step goes on an evening after a day's run has ended (it ends "Run the same command again tomorrow", exit 3) and before the next day's run starts after 00:00 UTC, or on a day you run nothing. This round's code also keeps the rule for you (review B6): every `corpus-step.mjs` run but `--status` and `--compare`, and every `npm run dossier -- …` typed by hand, takes `corpus-step.lock` in the project folder, and a second one refuses with `Another run holds corpus-step.lock in this folder: "…" (process …, since …). Nothing was run.` (exit 2). If that ever appears with no other window running a script, delete `corpus-step.lock` and type the command again. `npm run deploy` and `node scripts\predeploy.mjs` take no lock: keeping them off fill hours is yours.
+
+**(a) The delivery and the deploy** (one evening between two fill days, before the fill's last day; about two hours, most of it the tests).
+
+1. **The delivery.** Let the day's run end. Extract the round's zip over the project folder, replacing files when asked. It holds every file added or changed since your head `0349d13` (the list is in `docs/REVIEW-ROUND-81.md`, section 5); this round deletes and renames nothing, so there is nothing to delete by hand. It does not hold `scripts\corpus-plan-full.txt`, so your plan file stays the one your run started with, nor anything the plan wrote (`corpus-step.json`, the corpus, `backups\`, `cache\`). A few seconds.
+2. **The plan's record, read only:**
+
+   ```
+   node scripts\corpus-step.mjs --plan scripts\corpus-plan-full.txt --status
+   ```
+
+   Good: lines 1 to 10 `done`, line 11 `unfinished`, `dossier --fill inat --bulk bulk`, lines 12 to 15 `to do`, and **no line starting `Note:`**. It now writes nothing (review B5): no record renamed, no line in the log. A `Note:` means the plan file is not the one the run started with: put it back from your last delivery before anything else, and paste the note back. Seconds.
+3. **Optional, the hybrids' table against your copy of Kew's file** (ten seconds, no requests):
+
+   ```
+   npx tsx scripts/hybrid-names.ts --bulk bulk --check
+   ```
+
+   Good: `… is the list's and Kew's: 485 hybrids`.
+4. **The tests, every engine, strict:**
+
+   ```
+   node scripts\predeploy.mjs --tier=app
+   ```
+
+   About as long as your last `--tier=app` run (it passed 1,622 tests first time); this round adds 8 browser spec files, run in WebKit, its phone and Firefox too (one P7 test is Chromium's alone, by its tag). Good: it ends with every step passed and no test passed only on its retry. If a test fails, paste the end back and do not deploy. The seven search-route tests (review C3) run when `static\s\v2\index.json` is on the PC (your round seventy-seven corpus); without it they are skipped and say why, which is not a failure.
+5. **The deploy:**
+
+   ```
+   node scripts\corpus-ready.mjs && npm run deploy
+   ```
+
+   The release gate runs svelte-check and the unit tests again (about ten minutes), then the build and `wrangler deploy` (a few minutes), then the live check. Good: `corpus-ready: the bucket holds corpus a27e34d376199544 …`, the build's `offline-files: the service worker caches 140 build files at install`, and the live check's lines all passing.
+6. **After the deploy, the checks** (a few minutes, about a dozen requests; each is in its agent's section below):
+
+   ```
+   curl -sI "https://cultifolio.com/species/mentha-x-piperita" | findstr /i "location"
+   curl -s "https://cultifolio.com/species/mentha-piperita" | findstr /c:"hybrid-parents"
+   curl -s "https://cultifolio.com/species/fragaria-ananassa" | findstr /c:"hybrid-links"
+   curl -s "https://cultifolio.com/api/search?q=hens%20and%20chicks&shape=2&n=10" | findstr /c:"Sempervivum"
+   curl -s "https://cultifolio.com/api/search?q=rose&shape=2&n=3"
+   ```
+
+   Good: `location: /species/mentha-piperita`; the "A hybrid: M. aquatica × M. spicata" line; the "POWO and IPNI by the numbers of Kew's entry for this hybrid" line; Sempervivum tectorum; three roses (Rosa) first. Then in a browser: `https://cultifolio.com/?q=echeveria` opened in a new tab lists "30 of 259 matches" (or near it), not "Nothing in the reference matches"; `/species/senecio-vulgaris` shows no care group under its name; `/species/copiapoa-cinerea` says "… listed under the genus Copiapoa in the archetype table, and Kew describes it as “succulent subshrub”"; no page says "grown indoors is"; on a phone, with one species in the compare tray, "Add a plant" shows its Add button uncovered.
+
+What the deploy changes at once, with no rebuild: the hybrids' sign on their species pages, Kew's links and the "x" addresses (H); the care groups by Kew's lifeform, the four temperatures gone, the labels' whole clauses, the one-word names on the species pages, the Wikidata line (A, B); a reloaded or shared search, Back to a search, older names on hits and in the import, plurals and "rose", the searches that hung (S); the compare tray, the pill, offline pages read by a link, the share card, the menu in landscape, the notch, Back closing what is open, HEIC, tap targets, names for screen readers (U); the `/about/how` sentences on what reaches the live pages with the upload (B). What waits for the plan's own `--index` and upload at the end of the fill: the sign and the one-word rule in the search's rows and the tiles, the new order of a very common word's kept hundred, and Kew's older names in the search.
+
+**(b) The one-off steps left: the Wikidata retry** (nothing to type now). Round eighty's walk (b) 4, A's retry of the Wikidata batches that timed out at the build, is the one-off step not yet run. With this round's code it goes into (d)'s first online line (`--keys scripts/r80-repair-keys.txt,rebuild-wd-retry.txt …`, review B8), which reads the GBIF download once for both: typed now on its own it reads the download an extra time, about an hour on your Darwin Core Archive, for the same pages. If you would rather see its count now, this reads the dossiers and asks nothing (a minute or two; between two fill days):
+
+```
+npm run dossier -- --list-wikidata-retry
+```
+
+Good: `… N pages … rebuild-wd-retry.txt`, or `0 pages`, which writes no file. (d) lists it again in any case.
+
+**(c) The daily fill, to its end** (about four more days, about two and a half hours a day). Once a day after 00:00 UTC, as now:
+
+```
+node scripts\corpus-step.mjs --plan scripts\corpus-plan-full.txt
+```
+
+Day 1 spent about 1,300 of its 4,000 requests checking every iNaturalist id, so each day now fills about 10,000 pages: 39,528 left is about four days, the last a day either way by iNaturalist. Good: a day ends `The day's allowance is spent (…); not a throttle. … filled; … still to do; run this again tomorrow (UTC)` (exit 3), then its index (written, about 12 minutes, since the day changed pages). Keep the PC from sleeping while it runs (Settings, System, Power: when plugged in, sleep after "Never"). If it loses its network anyway, the run now stops within five pages, charges nothing to the day, leaves those pages to be asked again and ends `a source did not answer … Run the same command again in an hour or so` (review B2): type the same command once the connection is back, that day or the next. Lines `iNaturalist is throttling this address (…): waiting 30 minutes, then going on` are the fill waiting out a throttle: leave it running. If iNaturalist throttles before 4,000 on several days, type `set CULTIFOLIO_INAT_BUDGET=3000` before the command; never edit the plan file.
+
+On the last day the fill's last line is `… Every dossier has been asked for its photographs.`, then the same run goes on to step 12, `--index`: it says `not written again` and takes seconds (the day's own index already holds every page; your queued item), and stops at step 13's review (exit 2). Read the review line: the count of dossiers that differ from the backup (nearly every one), and any rows a source did not answer (`… pages hold a row a source did not answer ("error": …)`): a few is normal; hundreds means a day lost its network, so paste the line back before (d).
+
+**(d) At the review stop: the copy, the repair, then the upload** (one fill-free evening; about four and a half hours before the upload, five to six with it, on your Darwin Core Archive; about four with an SQL download). Type each line alone, in order, in the project folder; wait for each to end before the next:
+
+```
+node scripts\corpus-step.mjs --backup filled
+npm run dossier -- --list-default-points
+npm run dossier -- --list-range-shapes
+npm run dossier -- --list-wikidata-retry
+npm run dossier -- --keys scripts/r80-repair-keys.txt,rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat
+npm run dossier -- --keys rebuild-shapes.txt --offline --grid climate --bulk bulk
+npm run dossier -- --prune-followed
+npm run dossier -- --index
+node scripts\corpus-step.mjs --compare backups\v3-<the id the first line named>-filled
+node scripts\corpus-step.mjs --plan scripts\corpus-plan-full.txt --go-on
+```
+
+| Line | What it does, and good output | Time |
+|---|---|---|
+| `--backup filled` | first, a copy of the filled corpus (review B4): `static\s\v3` (about 48,000 files, 2.0 GB; 87 GB free) to `backups\v3-<id>-filled`; says `done: backups/v3-<id>-filled`. It keeps a copy already there and does not touch the plan's record | 5 to 15 minutes (an estimate) |
+| the three listings | read the dossiers and ask nothing. `--list-range-shapes` writes `rebuild-shapes.txt`, about 12,000 pages; `--list-wikidata-retry` says how many it wrote (`0 pages` writes no file, and the next line then says `rebuild-wd-retry.txt is not there: it names no page` and goes on) | a minute or two each |
+| `--keys scripts/r80-repair-keys.txt,rebuild-wd-retry.txt …` | A's 13 repair pages (round eighty's section "the reference's data": Xanthoceras sorbifolium from Kew's file, Crocus nudiflorus, seven ranges, Datura innoxia, the merges' kept pages) and the Wikidata retry's pages, online (GBIF, Wikidata, Wikipedia, Commons; iNaturalist's sets carried): one read of the download for both (B8). Good: `13 built` plus the retry's pages, `1 species without a GBIF key read from Kew's file` | about an hour for the download, about 2 s a page, then its index (up to about 17 minutes) |
+| `--keys rebuild-shapes.txt --offline …` | re-derives the records, marker and climate of about 12,000 pages from the download and the climate grid (NASA POWER only for a cell not yet cached); keeps each keyless page's Wikidata names with their record (B1) and each filled iNaturalist set settled, with its own day (B3). drops.txt, if written, lists a page that lost photographs, an identifier or its range: paste it back | about an hour for the download, about 80 minutes for the pages, then its index |
+| `--prune-followed` | `3 dossiers of pages merged into another deleted (9574874, 9592399, 7530398)`, then the index (three species fewer, about 48,358, which the corpus step expects) | seconds, then 12 to 17 minutes |
+| `--index` | `not written again` (the index the line before wrote stands); if it writes, let it | seconds |
+| `--compare backups\v3-<id>-filled` | what the repair changed against the filled copy: about 12,000 dossiers differ, and any rows "error"; changes nothing, takes no lock | 5 to 10 minutes (an estimate) |
+| `--go-on` | passes the review, uploads (the dossiers first, the manifest last: it now says so as it starts, review B7), then the live check. Good: `the site serves corpus <id>, the one on disk` and `every step is done`. If the upload stops, type the same line again at once: until the manifest is up the site serves the new dossiers under the old index and search | half an hour to an hour, then a few minutes |
+
+If `--compare` shows something you did not expect (pages that lost photographs or names), stop before `--go-on` and paste it back: `backups\v3-<id>-filled` is the corpus as the fill left it, and copying it back over `static\s\v3` undoes the repair. Round eighty's extra `--fill wikidata-names` line (review B1) is not needed with this round's code on the PC.
+
+Then on the site (a few minutes): Crocus nudiflorus at `k327378`; `/species/ceropegia-cereiformis` leads to the kept page; Dracaena trifasciata's marker is not at Nairobi; the tomato's page has no cold floor and says why; an Echinocactus chrysacanthus search finds Ferocactus chrysacanthus; `/species/echinocereus-canus` names and links Echinocereus viridiflorus; Allium porrum still shows "Garden leek" with its Wikidata line; `https://cultifolio.com/api/search?q=mentha%20piperita&n=1` names Mentha × piperita with its sign; no tile is headed "Cycad". Delete `backups\v3-<id>-filled` once the live check has passed and the site looks right.
+
+**(e) After the upload** (four short evenings; nothing here runs while a `corpus-step.mjs` run does, though the plan has finished by now).
+
+1. **The dependency delivery** (review C4; the owner's decision: after the upload). A second, small zip holding `package-lock.json` alone, with the versions in "Round eighty-one: the dependency delivery" below. Extract it, then `npm ci` (a few minutes; it reinstalls `node_modules` from the lock), `node scripts\predeploy.mjs --tier=app` (as in (a) 4), and `node scripts\corpus-ready.mjs && npm run deploy` (as in (a) 5). Good: the same passes as in (a), and `npm audit --omit=dev` reports no high advisory.
+2. **The prune, a day after (d)'s upload** (minutes): `node scripts\corpus-step.mjs --prune`, a dry run naming what it would delete (round seventy-eight's products, about 0.35 GB), then `node scripts\corpus-step.mjs --prune --go-on`.
+3. **The `s/v2` purge, on or after 26 October** (a minute): `rclone purge r2:cultifolio/s/v2`. It ends the way back to round seventy-seven's Worker and nothing else.
+4. **The WebKit walk** (about ten minutes, about 240 requests to the site), with the file handed over with this round (agent U's `webkit-walk.mjs`), from the project folder:
+
+   ```
+   node <path>\webkit-walk.mjs --budget 260
+   ```
+
+   Good: each step prints `ok`, among them A10 "Back closed the viewer", C03 "the species page read by links opened offline", A16 "two side by side" and "Add uncovered", A17 "menu fits" and "Back closed the menu". A verdict in capitals ("LEFT THE PLANT", "NOT KEPT", "ADD COVERED", "MENU RUNS OFF THE SCREEN") is a fault. Send back its console lines and `webkit-walk-<date>\webkit-walk.json` with its PNGs.
+
+**The calendar, if the zip is extracted on the evening of Friday 23 October** (before 00:00 UTC): (a) that evening; fill days 24 to 27 October, the last ending at the review stop (a day either way); (d) the evening of 27 or 28 October; then (e): the dependency delivery, the `s/v2` purge (from 26 October), the prune a day after the upload, and the WebKit walk. Extracted a day later, everything moves a day; it must come before the fill's last day, so that the fill's last run, step 12 and (d) run this round's code.
+
+**Proved before delivery** (round eighty-one's merge, `docs/REVIEW-ROUND-81.md` section 4): on a copy made like your PC at step 11 (your code, your plan file, 40 real pages, the record of day 1), this delivery extracted over it, then `--status`, a fill day with the network gone, a fill day with iNaturalist answered by a stub, and the review stop, all with `scripts\corpus-step.mjs` run for real.
+
+### Round eighty-one: the dependency delivery, after the upload (review C4)
+
+The owner's decision: the advisories review C found in `package-lock.json` are fixed in a separate small delivery **after the fill's upload**, not in round eighty-one, so nothing the fill, the index or the upload runs changes mid-plan. That delivery is `package-lock.json` alone: `package.json` does not change, since every version below is within the range it already names. Read by agent B from the lock, review C's `npm audit` and the registry on 2026-10-23:
+
+| Package | In the lock now | Brought by | Needs | Take |
+|---|---|---|---|---|
+| devalue | 5.9.2 | `@sveltejs/kit` and `svelte` (both `^5.8.1`); shipped in the Worker | above 5.9.2 (seven advisories, GHSA-mcm9-63f2-9j32 high) | 5.9.4 (2026-09-18) |
+| vite | 8.3.0 | devDependency `^8.3.0` | 8.3.3 or later | 8.3.5 (2026-10-21) |
+| vitest, @vitest/mocker | 5.0.0 | devDependency `^5.0.0` | 5.0.3 or later | 5.0.5 (2026-10-15) |
+| wrangler (and its miniflare, which pins undici and sharp exactly) | 4.143.0 (miniflare 5.20260926.0-alpha, undici 7.29.0, sharp 0.35.4) | devDependency `^4.143.0` | wrangler 4.149.0 or later (miniflare 5.20261006.1-alpha: undici 7.29.1, sharp 0.35.5) | 4.149.0 (2026-10-08) |
+| source-map-js | 1.2.1 | postcss `^1.2.1` | 1.2.2 or later | 1.2.2 (2026-09-30) |
+| cookie | 0.6.0 | `@sveltejs/kit` 2.x (`^0.6.0`) | 0.7.0 or later (low) | not in this delivery: it needs SvelteKit 3 (3.1.0 takes cookie `^2.0.1`), a major version |
+
+- **A Wrangler bump is needed** (4.143.0 to 4.149.0): undici and sharp move only with it. **No SvelteKit bump is needed** for devalue; only cookie's low advisory waits for SvelteKit 3.
+- The lock is made with one command and no `package.json` change: `npm update devalue vite vitest @vitest/mocker wrangler source-map-js`. It is checked to hold devalue 5.9.4, vite 8.3.3 or later, vitest 5.0.5, wrangler 4.149.0 or later, undici 7.29.1, sharp 0.35.5 and source-map-js 1.2.2, and then the whole unit suite and the browser suite in every engine are run on it before it is handed over.
+- On the PC: walk (e) 1 above (`npm ci`, `node scripts\predeploy.mjs --tier=app`, `node scripts\corpus-ready.mjs && npm run deploy`).
+
+### Round eighty-one: the build
+
+Its owner's steps are in "Round eighty-one: the owner's walk" above, whose (c) and (d) are this section's walk (c) and (d) as they were written here; this section says what changed and why. Your PC is at step 11 of `scripts/corpus-plan-full.txt`, the cultivated fill, and this round's build changes reach it as one delivery between two fill days, never while `node scripts\corpus-step.mjs` runs. **Take this round's delivery before the fill's last day**: its three fixes of the repair (B1 to B3 below) must be on the PC before (d), and the fill and the plan's `--index` then use them too.
+
+**What changes, and whether it is safe to take mid-fill** (each is; none changes `scripts\corpus-plan-full.txt`, the dossiers' form or `corpus-step.json`, so the next day's command goes on at step 11 where the last one stopped):
+
+1. **A rebuild that asks no source keeps a keyless page's Wikidata names** (review B1). (d)'s `--offline` line rebuilt a page without a GBIF key from Kew's file with no names, under a record still saying "2 English names taken". The names now go with their record. Only builds run this; the fill does not.
+2. **A fill that loses its network** (review B2). A request that reached no server (a PC asleep, Wi-Fi or a cable dropped) is not charged to the day's 4,000. A page iNaturalist did not answer is left as it was, to be asked again, never written "error" and counted done. Five such pages in a row stop the day's run: `iNaturalist did not answer 5 pages in a row (api.inaturalist.org fetch failed): the connection may be down …; run --fill inat again once the connection is back` (exit 3), and the corpus step says `a source did not answer … Run the same command again in an hour or so`. An error iNaturalist itself answers (a 500) is recorded; met again on a later day, it is taken as that page's answer, so one page cannot hold the fill for ever. The fill's last line says `Every dossier has been asked for its photographs.` only when every page has its answer. Safe mid-fill: the fill reads the rows on disk as before, and any row day 1 left "error" is asked again.
+3. **A rebuild that skips iNaturalist keeps a filled set settled** (review B3). The cultivated and wild rows keep their words, the day they were filled and the mark of Kew's file, with `; kept by the build of <day> (this build: …)` after them; before, every page (d) rebuilt would have been asked again by the next fill or refresh, and its Provenance named a build that never read the set. Builds only.
+4. **No index written again for nothing** (your queued item). The index, its products and the manifest leave a stamp, `cache\index-stamp.json`. An index asked for when no dossier and none of the builder's code has changed since is not written again: `index: <n> species`, then `… are as written <time> UTC: no dossier and none of the builder's code has changed since, so they are not written again`. A fill day that stopped at once at the allowance, and the plan's step 12 after the fill's last run, now take seconds where each took about 12 to 15 minutes. Any change writes it as before (so a fix this round makes at index time still reaches the index); deleting the stamp writes the next one whatever. Measured here on round seventy-seven's 8,947 pages: 105 s the first time, 0.6 s the second.
+5. **One run at a time** (review B6). Every run of `corpus-step.mjs` but `--status` and `--compare` takes `corpus-step.lock` in the project folder, and so does every builder step typed by hand. A second window then says `Another run holds corpus-step.lock in this folder: "…" (process …, since …). Nothing was run.` (exit 2). A lock left by a run that ended (a window closed, the PC switched off or restarted) is taken by the next run, which says so. If one is ever refused with no other window running, delete `corpus-step.lock` and type the command again.
+6. **`--status` changes nothing** (review B5): no record renamed, no line in the log. Where the plan's steps are not those of the record, it says so: `Note: the steps of … are not those of the run recorded …: a run now would put the record aside and start the plan again at step 1.` Put the plan file back if you see it.
+7. **A stopped upload** (review B7). The dossiers go up first, the manifest last; until the manifest is up, the site serves each new dossier under the old corpus's index and search. Each species page stays whole (it reads its own dossier), but the catalogue and the search are the old corpus's. The upload now says so as it starts, and a stop says: run the same command again now, and it copies only what is not up yet, then the manifest.
+8. **The copy of the filled corpus, and what the repair changed** (review B4): `node scripts\corpus-step.mjs --backup filled` and `node scripts\corpus-step.mjs --compare backups\v3-<id>-filled`, below. Neither touches the plan's record.
+9. **`--keys a.txt,b.txt`** (review B8): both files' pages in one build, so the download is read once. A file of the list that is not there names no page, and is said.
+10. **The review stop counts the rows a source did not answer**: `…; <n> pages hold a row a source did not answer ("error": inat.photos.cultivated <n>, …; k…, …), each said "did not answer" on its page until a fill or a build asks it again`. Nothing is said when there are none.
+
+**The walk.** Walk (c), the daily fill, and walk (d), the repair at the review stop with its table of times, are in "Round eighty-one: the owner's walk" above.
+
+### Round eighty: the owner's walk (superseded)
+
+**Superseded by "Round eighty-one: the owner's walk" above**, from where your PC is now (round eighty's delivery deployed, (b) 1 to 3 done, the fill at step 11). Kept for reference.
 
 Your PC is at step 11 of `scripts/corpus-plan-full.txt`, the cultivated fill, about 5,176 of 48,361 pages done. This is the whole of round eighty for you, in the order to do it. The sections after this one are each agent's notes, for reference; where one of them says otherwise about when to run something, this walk is the one to follow.
 
@@ -606,7 +760,7 @@ What the deploy changes at once, with no rebuild: the search's count, paging, re
 
    The first says how many pages Wikidata did not answer (the full build's 22, and the pages with a Kew id whose item a label refused); skip the second if it says `0 pages`. The rebuilt pages keep their iNaturalist ids and photographs (agent I's carry), so the fill goes on with them as before.
 
-**(c) The daily fill, until it ends (about five more days, about three hours a day).** Once a day after midnight UTC, as now:
+**(c) The daily fill, until it ends (about five more days, about three hours a day).** (Superseded: "Round eighty-one: the owner's walk" above gives (c) and (d) as this round's code runs them.) Once a day after midnight UTC, as now:
 
 ```
 node scripts\corpus-step.mjs --plan scripts\corpus-plan-full.txt
@@ -819,6 +973,27 @@ curl -s "https://cultifolio.com/api/search?q=cape%20provinces&shape=2&n=3"
 The first answers Ferocactus chrysacanthus; the second three species with `"total":` about 4,800 and a `regions` entry for Cape Provinces. The `--index` line `… search key files (N MB) …` should say about 1,840 MB at the full size.
 
 **Running the count again** (only when the list's genera change; about ten minutes, about 230 requests at one every two seconds): `npx tsx scripts/most-grown-genera.ts --index static\s\v3\index.json`, then deploy. It writes the day and the genera it counted into the file, and `/about/how` names them; its test (`tests/unit/r75g-opening-rule.test.ts`) then says which sentence to change.
+### Round eighty-one: search and names typed (agent S)
+
+**What changes, and why.**
+
+- **A search opened by its address** (`/?q=…`, a reload, a shared or bookmarked link, a tab Safari reopens) lists its matches. The front page wrote the address before SvelteKit's router was up, threw, said "Nothing in the reference matches", and sent no search again until `/` was loaded fresh. Until an answer comes the page says "Searching…", never "nothing matches".
+- **Back from a species page** returns to the search as it was: as many hits as "Show more" had shown, the hit left where it was on the screen; a grower's "Search the whole catalogue" keeps `?q=` in the address, so Back is the catalogue's answer, not the own-plants view.
+- **Older names.** A hit found by an older name says "older name: Sansevieria trifasciata" and opens its page with `?was=`. The import says an older name is one ("an older name: the reference has this species as Aristaloe aristata"), never "ambiguous", and takes the reference's name on every such line with one press, or on every line of one name; each plant keeps the sheet's name as received. A plant filed under a name with no page says "No species page under this name".
+- **Names typed.** In a phrase, a plural is read as its singular in the common names ("hens and chicks" finds the Sempervivums); a word typed whole that is a whole word of a common name comes before a genus that only begins with it ("rose" lists roses, not Rosenbergiodendron, first); a one-word name that two genera share ("Rose" on two Cotoneasters) no longer puts them first.
+- **Searches that hung** (review-d 6): the Worker shared every bucket read in flight between requests. A read belongs to the request that began it and is cancelled when that request ends first, so a later request waiting on it was never answered. Reads in flight are now shared only within a request, the search's early reads are kept to their end (`waitUntil`), and the corpus load is held to the same rule.
+
+**When it can be delivered.** Any day, between two fill days: an app deploy (`npm run deploy`). Nothing the fill, the index or the plan's remaining steps run is changed in a way that matters to them: `src/lib/core/search.ts` and `search-files.ts` are read by `--index` only for the best hundred answers it keeps for a word too common to list, whose order the new rules change; delivered before the fill's last day, step 12 writes them in the new order, at no extra cost. No live page needs a repair; `scripts/corpus-plan-full.txt` is not changed.
+
+**After the deploy, a check** (three requests, and the front page in a browser):
+
+```
+curl -s "https://cultifolio.com/api/search?q=hens%20and%20chicks&shape=2&n=10" | findstr /c:"Sempervivum"
+curl -s "https://cultifolio.com/api/search?q=rose&shape=2&n=3"
+```
+
+The first finds Sempervivum tectorum; the second's first three hits are roses (Rosa), not Rosenbergiodendron. Then open `https://cultifolio.com/?q=echeveria` in a new tab: it says "30 of 259 matches" (or near it), not "Nothing in the reference matches".
+
 ### Round eighty: the app's pages and the phone (agent U)
 
 **What changes.** The app's pages only: Back from a species page to an opened catalogue row returns to the row or tile you left (it ran to the end of the list and kept loading rows); the plant page's card no longer covers its photograph strip, and its photograph fills its box on a phone; Compare, `/privacy` and `/frost` offline open the app's "No connection" page; the top bar's "‹" counts a browser Forward; notices sit at the window's foot on a desktop; the month table's row names stay put; and smaller layout and wording faults. The service worker's install now fetches only what the pages that work offline use: 146 requests where it was 170, about 550 kB compressed where it was about 900 kB (2.1 MB to 1.3 MB as files), with no share image, large icons, maps or WOFF fallbacks (each is kept the first time a page asks for it). The 12 pages it fetches from the Worker are unchanged.
@@ -826,6 +1001,16 @@ The first answers Ferocactus chrysacanthus; the second three species with `"tota
 **What you run.** Nothing of its own: it reaches the site with the next `npm run deploy` (section 3). It changes no dossier, no corpus file and nothing the plan's steps run (`scripts/build-dossiers.ts`, `src/lib/dossier/`, `scripts/corpus-step.mjs` and the plan files are untouched), so it can be delivered between two fill days, or mid-step, and the fill carries on where it stopped.
 
 **What good looks like.** The build prints `offline-files: the service worker caches N build files at install` (138 on this round's code). If it prints `offline-files: no client manifest or no server build to hand the list to; the service worker caches the whole build` instead, the site still works offline, and each new device fetches the whole build again, as before this round: say so in the next round's notes. After the deploy, a device's next page loads the new worker; nothing is asked of you.
+### Round eighty-one: the app's pages and the phone (agent U)
+
+**What changes.** The app's pages and its service worker only. With one species in the compare tray, a species picked on the compare page joins it (the tray's species first) instead of replacing it. On a phone the tray's pill steps aside while the add form, the batch form or select mode shows its pinned bar, and the toast stands above the pill. Offline, a species page read by a link inside the app opens again by its address (a reload, Back after the installed app was closed, Safari reopening its tabs): the "No connection" page opens it from the copy of its data the device holds, once. "Share card" on a page left open across a deploy says, in words, that a newer version is out and offers a reload, instead of the browser's message with a file's address. In landscape the menu is no taller than the screen and scrolls itself; the top bar is padded by the notch's safe area. Back closes the photo viewer, the menu and the Record form and stays on the page. A HEIC photograph that cannot be read is named, with the way forward. Under a finger, at every width, Follow, the search boxes, "Show all", the photograph's credit, a plant's number chip and Compare's names take 44 px. A failed photograph's placeholder fills its frame. The plant log's "×" are named by their lines, the search results by their species, and the batch form's species field by "Species"; on a desktop the add form puts focus in the species field. `/about/how` says the species pages read by a link are kept too, until the app next updates itself.
+
+**What you run.** Nothing of its own: it reaches the site with the next `npm run deploy` (section 3), any day, between two fill days or mid-step. It changes no dossier, no corpus file and nothing the plan's steps run (`scripts/build-dossiers.ts`, `src/lib/dossier/`, `scripts/corpus-step.mjs`, `scripts/export-corpus*.ts` and the plan files are untouched), so the fill carries on where it stopped.
+
+**What good looks like.** After the deploy, on a phone: put one species in the compare tray and open "Add a plant": the Add button is uncovered and the pill is gone until you leave the form. Open a species page by a link, turn on flight mode and reload it: the page opens, not "No connection". Open a plant's photograph and press Back: the viewer closes and the plant stays. The share card's words need a page of this round's code left open across a later deploy, so they are first seen after the next one: a page left open across this deploy still runs round eighty's code and can still print the browser's message once.
+
+**The WebKit walk, after the deploy** (the owner's walk runs it in (e) 4, after the upload). From the project's folder: `node <path>\webkit-walk.mjs --budget 260` (the file is handed over with this round; about ten minutes). The walk now counts the service worker's own install, about 93 requests that no page sees, which the reviewer's copy left out when the worker installed after its second step; so a cold run is about 240 requests to the site, and at the old 200 its last steps are skipped, each saying so. Send back its console lines and `webkit-walk-<date>\webkit-walk.json` with its PNGs. Each step prints `ok` or `FAILED`; these say round eighty-one's fixes in words: A10 "Back closed the viewer", C03 "the species page read by links opened offline", A16 "two side by side" and "Add uncovered", A17 "menu fits" and "Back closed the menu". A verdict in capitals ("LEFT THE PLANT", "NOT KEPT", "ADD COVERED", "MENU RUNS OFF THE SCREEN") is a fault to report, or the deploy not yet live. The notch (round eighty-one's P7) cannot be seen in headless WebKit: if an iPhone is at hand, turn it on its side on any page and check that the ✳ menu button and "+" are clear of the notch and the rounded corners.
+
 ### Round eighty: common names from Wikidata
 
 **Your decision.** The 2,327 pages without a GBIF key had no common name: GBIF's vernacular names are read by the page's GBIF key, and they have none. They now take English names from their own Wikidata item, the one round seventy-nine's route took by Kew's IPNI or POWO identifier: its "taxon common name" statements (P1843) in English. `en` and every regional English (`en-gb`, `en-us`, `en-ca` and the others) are read as English; no other language is read. Refused, and listed with why in each page's record: a statement Wikidata ranks deprecated, a name with a letter outside the Latin script, the scientific name or one of Kew's names for it, a genus named on its own, and a scientific name the reference holds as another species. The rest go through the same common-name rule as GBIF's names (comma lists, pooled spellings, no generic noun as the headline, another genus set back). The headline is the name more references give (each reference naming a source outside Wikimedia counted once, Wikidata itself as one; "imported from English Wikipedia" or Wikispecies counts nothing), then a statement ranked preferred, then the alphabet. The page says under the name "English names from Wikidata, item Q…, read <day> (CC0)", and "not checked", with why, where Wikidata did not answer or no one item was taken.
@@ -876,6 +1061,38 @@ No page gains records by it, and GBIF's download does not grow.
 **Later builds** write the same words themselves: the build reads `scripts/extra-keys-kew-none.txt` (`--kew-no-keys <file>` names another). A second run of the fill says "0 changed". If you refresh the keys from a newer backbone (`npx tsx scripts/kew-extra-keys.ts --bulk bulk --backbone bulk\backbone\simple.txt.gz`), commit both files, then run the fill again.
 
 **The institution references: nothing to run.** No list that is CC0, CC BY or public domain holds herbaria with coordinates of their own, so `scripts/institutions.txt` is unchanged. GBIF's GRSciColl states no licence, and Index Herbariorum (NYBG) is under NYBG's site terms, which forbid reuse without consent. BGCI's GardenSearch forbids commercial use and redistribution. Round eighty's report has two letters for you to send, asking GRSciColl and Index Herbariorum for a licence. GeoNames (CC BY 4.0) was measured: it would add 258 points at zoos, 2,059 at what it calls gardens and 3,457 at universities beyond Wikidata's. None of these is a herbarium, and many are wild records, so none is used.
+
+### Round eighty-one: the reference's data (agent A)
+
+**What changes.** A species page takes its care group only where Kew's own description of the species agrees (the owner's decision on review D2): the table's listing stands where Kew's lifeform says succulent or semisucculent (cactus or succulent), a geophyte, bulb, corm, tuber or caudex (bulb, tuber or caudex), an epiphyte (epiphyte), an epiphyte, lithophyte or climber (orchid), or, for the two groups that name a climate, where Kew's climate is tropical or temperate; ferns and carnivorous plants need a lifeform on file. Brocchinia and Catopsis are listed by their carnivorous species alone. The four group temperatures are gone from the code, the sheet, the labels and `/about/how`. A label's care line is printed in whole clauses, the last left off where the label is too small. A one-word name for a whole genus or family ("Cycad", "Snowdrop", "Sumac", "Pipevine", "Flameflower") and every other generic noun is searched but never shown as a species' name. Wikidata's names are said to be spelt as Wikidata spells them. A blank pre-treatment reads "not stated".
+
+**Safe to take mid-fill, any day.** Nothing here touches `scripts/corpus-plan-full.txt`, `scripts/build-dossiers.ts` or what the fill writes. The care groups, the temperatures, the labels, the batch page and the Wikidata line are the app's, read from the dossiers already live (`distribution.kew` is on every page whose range is Kew's): they change with `npm run deploy`. The name rule (`englishNames`, `src/lib/dossier/index-entry.ts`) is read by the species page when it is served, so a page's heading changes with the deploy, and by `--index`, so the tiles, the search's names and the front page change with the next index: the one each fill day ends with, or the plan's step 12, and reach the site with the plan's own upload. No page is rebuilt.
+
+**What good output looks like after the deploy.** `/species/senecio-vulgaris`, `/species/momordica-charantia` and `/species/ficus-carica` show no group under the name; `/species/copiapoa-cinerea` says "Grouped as a cactus or succulent, listed under the genus Copiapoa in the archetype table, and Kew describes it as “succulent subshrub”."; no page says "grown indoors is"; `/species/cycas-bougainvilleana` is headed "Pago sago" with no "Cycad" beside it. `/api/search?q=cycad` puts the cycads with fuller names before the 39 a source calls only "Cycad" at once (the search reads the list when it ranks); after the next `--index` and its upload their tiles carry no "Cycad" either, nor does Ceratozamia becerrae's, whose name is Wikidata's.
+
+### Round eighty-one: hybrids (agent H)
+
+**What changes, and why.** The 485 hybrids of the species list (473 such as Mentha × piperita, 12 such as × Astrolista bicarinata) were shown without their sign, as wild species, in their heading, title, tile and search, and some linked neither POWO nor IPNI (reviews W 3 and D 3). And a grower's own tiles named a hybrid "Aloe nobilis" for plants of Aloe × nobilis, and a plant filed under its genus ("Echeveria 'Perle von Nurnberg'") "Echeveria · not in the reference".
+
+- `src/lib/core/hybrids.json` holds Kew's name, with its sign, for each of the 485, by Kew's plant_name_id (the page id without its `k`), with its Kew entry's IPNI and POWO numbers and its parents. `scripts/hybrid-names.ts` makes it from `scripts/species-list.txt` and Kew's `wcvp_names.csv`.
+- **The app** (the Worker) shows a hybrid's page with the sign, says the parents Kew's file states, links its Kew entry's numbers where its record links neither, and moves an address written with an "x" (`/species/mentha-x-piperita`) to the page's own. The grower's tiles show the sign, a genus tile links the genus's row, and a plant of a named hybrid (Mentha × piperita) links its species page.
+- **`--index`** writes the sign into the hybrids' index entries, so the search, the catalogue's tiles and the "your species" tiles name them so. Nothing else in the index changes; the photographs are judged with the names as before, and no dossier is written by it.
+- **A rebuilt page** (section (d)'s rebuilds, and any build after) links its Kew entry's numbers by its id. No page needs rebuilding for any of this.
+- **The device's database.** A species record keeps its id, which is the species' name without the sign as every hybrid page's address is. A record an older version named without the sign is read as its plants' name, and is not written again; nothing in your log changes (proved on a real backup of 300 plants made by the round-eighty app, `tests/unit/r81h-your-species.test.ts`).
+
+**When it can be delivered.** Any day, the fill included: an app deploy (`npm run deploy`). In what the plan runs, only `--index` (step 12, and (d)'s `--index`) writes anything new, the sign on 485 entries; the fill does not read these files, and `scripts/corpus-plan-full.txt` and `corpus-step.json` are not touched. Delivered before the fill's last day, the plan's own `--index` and upload carry the sign into the index; the pages show it from the deploy on.
+
+**After the deploy, a check** (three requests):
+
+```
+curl -sI "https://cultifolio.com/species/mentha-x-piperita" | findstr /i "location"
+curl -s "https://cultifolio.com/species/mentha-piperita" | findstr /c:"hybrid-parents"
+curl -s "https://cultifolio.com/species/fragaria-ananassa" | findstr /c:"hybrid-links"
+```
+
+The first prints `location: /species/mentha-piperita`; the second finds the line "A hybrid: M. aquatica × M. spicata, the parents Kew's World Checklist states for it", and the page's heading reads Mentha × piperita; the third finds "POWO and IPNI by the numbers of Kew's entry for this hybrid". After the plan's `--index` and upload, `https://cultifolio.com/api/search?q=mentha%20piperita&n=1` names "Mentha × piperita", and the `--index` lines are as before but for the corpus id.
+
+**When the species list changes.** Make the file again, then deploy: `npx tsx scripts/hybrid-names.ts --bulk bulk` (ten seconds, no requests). `--check` says whether the file on disk is the list's and Kew's. `tests/unit/r81h-hybrids.test.ts` fails while it is not.
 
 ### Round seventy-seven's corpus step: the search from key files, and a species page's card files
 

@@ -4,6 +4,7 @@
  * and carried "not asked: N photographs already from the GBIF download" onto dossiers that no longer had them.
  */
 import type { JsonFetcher, FetchOptions, FetchResult } from './fetch';
+import { fromWikidata, WD_NAMES } from './wikidata-names';
 
 type Upstream = { status: string; at?: string; detail?: string };
 
@@ -92,4 +93,37 @@ export function carryInatRows(prev: InatPage, d: InatPage): void {
     const origin = chained ? was.detail!.replace(/;.*$/, '') : carriedOrigin(was, prev.built);
     d.upstream[src] = { ...was, detail: `${origin}${was.detail && !chained ? ` (that build: ${was.detail})` : ''}; this build: ${d.upstream[src].detail ?? 'skipped'}` };
   }
+}
+
+/**
+ * A set of iNaturalist's photographs a fill or a build read (`ok`), kept by a build that did not ask iNaturalist (round
+ * eighty-one, review B3). Its record is kept whole: the rule's words, which `cultivatedSettled` and the fill read, the day
+ * it was filled (`filled <day>`, its `at`) and the mark of Kew's file, with the build that kept it said after them. Before,
+ * the detail became "carried from build of <the earlier of the read's day and the page's last build>; this build: …": the
+ * set was no longer settled, so the next fill asked it again, and the page's Provenance named a build that never read it.
+ * A row kept again names the latest build that kept it, once.
+ */
+export const KEPT_BY = '; kept by the build of ';
+export function keptInatSetRow(was: Upstream, thisBuild: string | undefined, day: string): Upstream {
+  const base = (was.detail ?? '').replace(/; kept by the build of \d{4}-\d{2}-\d{2} \(this build: .*\)$/s, '');
+  return { ...was, detail: `${base}${KEPT_BY}${day} (this build: ${thisBuild ?? 'not asked'})` };
+}
+/** Whether a carried row is a set to keep whole (`keptInatSetRow`): a photograph set answered, not a row already carried. */
+export const keepsInatSet = (src: string, was: Upstream | undefined): boolean => /^inat\.photos\./.test(src) && was?.status === 'ok' && !(was.detail ?? '').startsWith('carried from build of');
+
+type Names = { name?: { vernacular?: Array<{ source?: string }> }; upstream?: Record<string, Upstream> };
+/**
+ * Wikidata's English names, carried with their record by a re-derivation (round eighty-one, review B1). A page without a
+ * GBIF key takes its names from the Wikidata item its build asks (`buildKewDossier`); an offline re-derivation asks none,
+ * so it built the page with no names while `carryRederivedRows` carried the record that says they were taken ("1 English
+ * name taken: "jade plant""), and the page lost them. Where the page's `wikidata.names` row is the previous build's,
+ * carried, and this build has no Wikidata name, the previous build's Wikidata names come with it. True when carried.
+ */
+export function carryWdNames(prev: Names, d: { name: { vernacular: Array<{ source?: string }> }; upstream: Record<string, Upstream> }): boolean {
+  const was = prev.upstream?.[WD_NAMES], row = d.upstream[WD_NAMES];
+  if (!was || !row || row.status !== was.status || !(row.detail ?? '').startsWith('carried from build of')) return false;
+  const theirs = (prev.name?.vernacular ?? []).filter((v) => fromWikidata(v as { source: string }));
+  if (!theirs.length || d.name.vernacular.some((v) => fromWikidata(v as { source: string }))) return false;
+  d.name.vernacular = [...d.name.vernacular, ...theirs];
+  return true;
 }

@@ -13,10 +13,12 @@ describe('r72f F9: generic headlines', () => {
     expect(englishNames(v, { genus: 'Copiapoa cinerascens' })).toEqual({});
     expect(indexNames(v, { genus: 'Copiapoa cinerascens' })).toEqual({ spellings: ['Cactus'] });
   });
-  it('a fuller name heads, and a generic noun beside it stays among the names (guard)', () => {
-    const r = englishNames([{ name: 'Cactus', lang: 'eng' }, { name: 'Golden barrel cactus', lang: 'eng' }], { genus: 'Echinocactus grusonii' });
+  it('a fuller name heads, and a generic noun beside it is searched, not shown (guard; round eighty-one, review D5)', () => {
+    const v = [{ name: 'Cactus', lang: 'eng' }, { name: 'Golden barrel cactus', lang: 'eng' }];
+    const r = englishNames(v, { genus: 'Echinocactus grusonii' });
     expect(r.common).toBe('Golden barrel cactus');
-    expect(r.commons).toEqual(['Cactus']);
+    expect(r.commons).toBeUndefined(); // it stood among the names until round eighty-one
+    expect(indexNames(v, { genus: 'Echinocactus grusonii' })).toEqual({ common: 'Golden barrel cactus', spellings: ['Cactus'] });
   });
   it('"cactus" answers the named cacti before a species a source calls only "Cactus"', () => {
     const p = prepare([

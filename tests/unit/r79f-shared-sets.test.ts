@@ -78,7 +78,9 @@ describe('the corpus step across the change of ids, on the two pages of the owne
 });
 
 describe('the order of a `shared` list is no change of the page', () => {
-  const d = (shared: PageId[]) => ({ ...JSON.parse(JSON.stringify(template)), key: 'k2505106', photos: [photo(77, shared as unknown as number[])] });
+  // The fixture page as r79base hashed it: round eighty-one gave it Kew's words (`distribution.kew`), which these guards leave out.
+  const r79Page = (() => { const t = JSON.parse(JSON.stringify(template)); delete t.distribution.kew; return t; })();
+  const d = (shared: PageId[]) => ({ ...JSON.parse(JSON.stringify(r79Page)), key: 'k2505106', photos: [photo(77, shared as unknown as number[])] });
   it('the fingerprint reads it as a set, so the index does not restamp a page whose list came in another order', () => {
     const a = d(['k1', 'k73814']), b = d(['k73814', 'k1']);
     expect(substanceHash(b)).toBe(substanceHash(a));
@@ -92,7 +94,7 @@ describe('the order of a `shared` list is no change of the page', () => {
     expect(substanceHash(d(['k1', 'k73814']))).toBe('5e3c871f38b42818');
     expect(substanceHash({ ...d([]), photos: [photo(77, [3176743, 7426033])] })).toBe('de0ec6ff06cc1a1c');
     expect(substanceHash({ ...d([]), photos: [photo(77, [7426033, 3176743])] })).toBe('de0ec6ff06cc1a1c');
-    expect(substanceHash(template)).toBe('a798b53af78786e8');
+    expect(substanceHash(r79Page)).toBe('a798b53af78786e8');
   });
   it('the index\'s mark of the same pages in another order is no rewrite; a page more or fewer is', () => {
     const ph = [photo(77, ['k73814', 'k1'] as unknown as number[])] as unknown as Parameters<typeof markShared>[0];

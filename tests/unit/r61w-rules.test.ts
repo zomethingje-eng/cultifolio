@@ -44,12 +44,10 @@ describe('ties: a month shared by several is not named as one (round sixty claim
   });
 });
 
-describe("the convention minimum is never printed without saying it has no source", () => {
-  it('a label line for a species with no habitat climate does not print a bare "group min"', () => {
-    const line = careLine({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: 'none', months: null });
-    // Today: "group min 10 °C", on a label that stays in a pot for years.
-    expect(line).not.toMatch(/^group min \d+ °C$/);
-    expect(line).toMatch(/convention, no source/);
+describe("no group minimum is printed (round eighty-one, the owner's decision; before, it was said as a convention)", () => {
+  it('a label line for a species with no habitat climate prints no "group min"', () => {
+    const line = careLine({ scientific: 'Tillandsia ionantha', family: 'Bromeliaceae', climateStatus: 'none', months: null, kew: { lifeform: 'epiphyte' } });
+    expect(line).not.toMatch(/group min|convention/);
   });
 });
 

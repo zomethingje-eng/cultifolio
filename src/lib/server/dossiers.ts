@@ -77,7 +77,8 @@ export const fromFiles = (c: Pick<Loaded, 'manifest'>): boolean => !!c.manifest 
 export const searchedFromFiles = (c: Pick<Loaded, 'manifest'>): boolean => fromFiles(c) && hasSearchFiles(c.manifest!);
 let cached: Loaded | null = null;
 /** One load at a time: after an upload, concurrent requests each parsed their own copy of the index (round fifty-one, 6). */
-let loading: Promise<Loaded> | null = null;
+/** With the request whose load it is: another request's load in flight is not waited on (round eighty-one; `Held`). */
+let loading: { p: Promise<Loaded>; by: unknown } | null = null;
 const CACHE_MS = 60_000;
 /** For tests: forget the parsed index and every product read. */
 export const _forgetIndex = () => { cached = null; products.clear(); rejectedManifest = null; };
@@ -161,8 +162,13 @@ export const REFUSAL_MS = 10 * 60_000;
 const RETRY_MS = 10_000;
 async function loadIndex(platform: Platform, fetch: Fetch): Promise<Loaded> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached;
-  if (!loading) loading = loadIndexNow(platform, fetch).finally(() => { loading = null; });
-  return loading;
+  const me = requestOf(platform);
+  if (loading && loading.by === me) return loading.p;
+  // Another request's load in flight: this request loads for itself, as a read is (`Held`; review-d 6).
+  if (loading) return loadIndexNow(platform, fetch);
+  const l = { p: loadIndexNow(platform, fetch).finally(() => { if (loading === l) loading = null; }), by: me };
+  loading = l;
+  return l.p;
 }
 /** A corpus present in the bucket but not one this build reads (a refused manifest, an index of the wrong shape): never answered with the fixture. */
 class Refused extends Error {}
@@ -369,7 +375,18 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
  * miss for ever and an upload was never seen (round fifty-five, 4; the second reviewer's finding 5). A read that threw
  * (R2 did not answer) is not remembered at all. The cache is bounded by size as well as count (the first reviewer's finding 21).
  */
-type Held = { p: Promise<unknown>; size: number; retryAt?: number };
+/**
+ * `by` and `done` (round eighty-one; review-d 6): the request whose read it is, and whether that read has settled. A read
+ * in flight is shared only within its own request. On Cloudflare a promise begun by one request and awaited by another
+ * is not kept for the other: the I/O belongs to the request that began it, and is cancelled when that request ends (a
+ * search's warm reads, begun and not awaited; a client that went away), and a continuation of another request that
+ * waited on it is never run, so that request hung with no answer until the client gave up (three of 205 searches over
+ * 60 s, one 4.5 minutes, each answered in under 2 s when asked again: a new isolate, or after the entry had gone). A
+ * request that meets another's read in flight reads for itself; a settled read is everyone's.
+ */
+type Held = { p: Promise<unknown>; size: number; retryAt?: number; by?: unknown; done?: boolean };
+/** The request a read belongs to: its execution context, one per request (the adapter's `platform.context`). */
+const requestOf = (platform: Platform): unknown => platform?.context ?? null;
 const products = new Map<string, Held>();
 /**
  * Bounded by count and by the characters read (round fifty-eight; the server review's finding 8). Parsed, a product
@@ -409,8 +426,10 @@ export async function stored<T>(c: Loaded, platform: Platform, fetch: Fetch, has
   const k = hash;
   let h = products.get(k);
   if (h?.retryAt !== undefined && Date.now() >= h.retryAt) { products.delete(k); h = undefined; }
+  // Another request's read still in flight: not waited on (`Held`), read again by this request, whose read stands in for it.
+  if (h && !h.done && h.by !== requestOf(platform)) h = undefined;
   if (!h) {
-    const held: Held = { p: Promise.resolve(null), size: 0 };
+    const held: Held = { p: Promise.resolve(null), size: 0, by: requestOf(platform) };
     held.p = (async () => {
       const path = productPath(hash);
       const store = platform?.env?.STORE;
@@ -432,7 +451,7 @@ export async function stored<T>(c: Loaded, platform: Platform, fetch: Fetch, has
       trim(k);
       return parsed;
     })();
-    held.p.catch(() => { if (products.get(k) === held) products.delete(k); }); // a read that threw is not a miss to remember
+    held.p.then(() => { held.done = true; }, () => { held.done = true; if (products.get(k) === held) products.delete(k); }); // a read that threw is not a miss to remember
     products.set(k, held);
     h = held;
   } else {
@@ -462,7 +481,7 @@ export const _productsHeld = () => ({ count: products.size, chars: [...products.
 export const _PRODUCTS_BYTES = PRODUCTS_BYTES;
 /** A product already read and parsed (the genera file a load checks), kept as `product` would keep it. */
 function hold(hash: string, parsed: unknown, size: number): void {
-  products.set(hash, { p: Promise.resolve(parsed), size });
+  products.set(hash, { p: Promise.resolve(parsed), size, done: true });
   trim(hash);
 }
 function trim(keep: string): void {
@@ -750,7 +769,11 @@ function keyReader(c: Loaded, platform: Platform, fetch: Fetch): SearchReader<In
  */
 export function warmSearch(c: Loaded, platform: Platform, fetch: Fetch, q?: string): void {
   if (!searchedFromFiles(c)) return;
-  const quiet = (p: Promise<unknown>) => { p.catch(() => {}); };
+  // Each read kept to its end by the request that began it (round eighty-one; review-d 6): begun and not awaited, a read
+  // was cancelled when its request answered first, and left in flight for the next request to meet (`Held`).
+  const ctx = platform?.context;
+  const keep = ctx?.waitUntil ? (p: Promise<unknown>) => ctx.waitUntil(p) : () => {};
+  const quiet = (p: Promise<unknown>) => { const q = p.catch(() => {}); keep(q); };
   quiet(product(c, platform, fetch, 'search/tables.json'));
   quiet(product(c, platform, fetch, 'search/genera.json'));
   quiet(product<Blocks>(c, platform, fetch, 'search/blocks.json').then((b) => { if (b && Array.isArray(b.photos)) for (const h of b.photos) if (typeof h === 'string') quiet(stored(c, platform, fetch, h)); }));

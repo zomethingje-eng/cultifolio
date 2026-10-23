@@ -669,7 +669,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   await expect(page.locator('h1.sci')).toContainText('Notaplantia fakeus');
-  await expect(page.locator('#name-not-in-reference')).toHaveText('Name not in the reference');
+  await expect(page.locator('#name-not-in-reference')).toHaveText('No species page under this name');
 
   // Edited into a cross: filed under the genus, the parents kept, and the log says what it was called before (round twenty-three, 3)
   await more(page, 'Edit');

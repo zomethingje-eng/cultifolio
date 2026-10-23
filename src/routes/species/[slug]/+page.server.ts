@@ -8,6 +8,7 @@ import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { isPageId, type PageId } from '$core/page-id';
+import { hybridOf, signedName, withKewLinks } from '$core/hybrids';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
@@ -138,13 +139,18 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // the browser (the type below lets no part of the page read them).
   const points = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
   const { open: _open, datasets: _datasets, ...occurrences } = d.occurrences;
-  const shown: Omit<typeof d, 'occurrences'> & { occurrences: typeof occurrences } = { ...d, occurrences };
+  // A hybrid of the list is shown with Kew's sign, and linked by Kew's own numbers where its record links neither (round
+  // eighty-one, H; review-w 3, review-d 3; `$core/hybrids`): its address, and every name this load compares (they read `d`), are without it.
+  const hybrid = hybridOf(key);
+  const signed = signedName(key, d.name.scientific);
+  const kewNo = withKewLinks(key, d.ids, d.links as Record<string, string>);
+  const shown: Omit<typeof d, 'occurrences'> & { occurrences: typeof occurrences } = { ...d, name: signed === d.name.scientific ? d.name : { ...d.name, scientific: signed }, ids: kewNo.ids, links: kewNo.links as typeof d.links, occurrences };
   // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
   // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
-  const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
+  const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: signedName(e.key, e.name), family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
   const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera), older: [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])] });
@@ -210,6 +216,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
     /** The pages GBIF files this page's names under, when it reads no key for that reason (round eighty). */
     heldUnder,
+    /** A hybrid of the list: its parents as Kew's file states them, and whether its links are Kew's own numbers (round eighty-one, H). */
+    hybrid: hybrid ? { parents: hybrid.parents ?? null, kewLinked: kewNo.kew } : null,
     /** English common names, the index's choice first (round sixty-one; decision 7). */
     commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */

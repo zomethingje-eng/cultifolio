@@ -16,7 +16,7 @@ test('the page shows its names from Wikidata and says whose they are, with the i
   await ready(page);
   await expect(page.locator('.idcard p.vern').first()).toHaveText('Mexican cypress; Cedar of Goa');
   const line = page.locator('#names-source');
-  await expect(line).toHaveText('English names from Wikidata, item Q50843040, read 2026-10-21 (CC0).');
+  await expect(line).toHaveText('English names as Wikidata spells them, item Q50843040, read 2026-10-21 (CC0), not corrected here.'); // round eighty-one: Wikidata's spelling is kept, and said to be Wikidata's
   await expect(line.locator('a')).toHaveAttribute('href', 'https://www.wikidata.org/wiki/Q50843040');
   // GBIF's names are still not asked, and the record of sources says both.
   const html = await page.content();

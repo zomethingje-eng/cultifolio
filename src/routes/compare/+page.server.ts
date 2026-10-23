@@ -1,4 +1,5 @@
 import { getDossier, resolveSlug, corpusNow } from '$lib/server/dossiers';
+import { signedName } from '$core/hybrids';
 import { unitsFor } from '$lib/server/units';
 import type { PageServerLoad } from './$types';
 
@@ -19,7 +20,8 @@ export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders, c
       const key = await resolveSlug(platform, fetch, slug, c);
       if (!key) return { slug, d: null, listed: false };
       const loaded = await getDossier(platform, fetch, key, c).catch(() => null);
-      const d = loaded && loaded.slug !== slug ? { ...loaded, slug } : loaded; // under the slug asked for, which is the index's (round seventeen, 6)
+      const signed = loaded ? signedName(key, loaded.name.scientific) : ''; // a hybrid with Kew's sign, as its page shows it (round eighty-one, H)
+      const d = loaded && (loaded.slug !== slug || signed !== loaded.name.scientific) ? { ...loaded, slug, name: { ...loaded.name, scientific: signed } } : loaded; // under the slug asked for, which is the index's (round seventeen, 6)
       return { slug, d, listed: true };
     })
   );

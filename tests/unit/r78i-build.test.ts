@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -43,6 +43,9 @@ describe('--rekey on the fixture corpus written as version 2', () => {
     expect(JSON.parse(readFileSync(join(v3, 'manifest.json'), 'utf8')).v).toBe(3);
     expect(md5s(v2)).toEqual(before);
     const first = md5s(v3);
+    // Round eighty-one: an index of unchanged files is not written again (`index-stamp.ts`); without its stamp it is, and
+    // this asks that the writing itself changes nothing.
+    rmSync(join(dir, 'cache/index-stamp.json'), { force: true });
     const again = builder(dir, '--index');
     expect(again.status, again.stderr).toBe(0);
     expect(again.stdout).toContain('0 dossiers written under a new id');

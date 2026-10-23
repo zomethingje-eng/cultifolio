@@ -12,7 +12,8 @@
  * retry is anything else. `near` is said as a similar spelling,
  * which the front page did not say (round sixty-two; the search review's 18).
  */
-import { droppedLabel, type Searchable } from '$core/search';
+import { droppedLabel, rankedWords, RANK_MARKERS, type Searchable } from '$core/search';
+import { words as nameWords } from '$core/postings';
 
 export interface SearchedAnswer {
   relaxed?: { query?: unknown; left?: unknown; retry?: unknown } | null;
@@ -101,4 +102,28 @@ export function moreOf(o: { loaded: number; total?: number; kept?: number }): { 
  */
 export function regionSentence(r: { name: string }): string {
   return `“${r.name}” is a region of origin; in the Origin grouping it is part of`;
+}
+
+/**
+ * The older name a catalogue hit was found by, when the words typed are not the hit's own name nor one of its common names
+ * but one of its older names (round eighty-one; review-w 5: "Sansevieria trifasciata" listed Dracaena trifasciata with
+ * nothing to say why, and "Lobivia" thirty species of four other genera). Null when the hit's own name, a common name, its
+ * family or its regions take the words. The words are read as the search reads them (`rankedWords`), each the start of
+ * a word, every one from the same older name; of two words or more, the first begins the older name's genus. The older
+ * names are the hit's own (`syn`, then those searched but not shown, then Kew's), as the search holds them.
+ */
+export function olderNameOf(typed: string, hit: Searchable): string | null {
+  const qs = rankedWords(typed).filter((w) => !RANK_MARKERS.has(w));
+  if (!qs.length) return null;
+  const begins = (ws: string[]) => qs.every((q) => ws.some((w) => w.startsWith(q)));
+  const own = [hit.name, hit.family ?? '', ...(hit.origin ?? [])].flatMap(nameWords);
+  if (begins(own)) return null;
+  for (const c of [hit.common, ...(hit.commons ?? []), ...(hit.spellings ?? [])]) if (c && begins([...nameWords(c), ...own])) return null;
+  for (const n of [...(hit.syn ?? []), ...(hit.older ?? []), ...(hit.kew ?? [])]) {
+    const ws = nameWords(n).filter((w) => !RANK_MARKERS.has(w));
+    if (!ws.length || !begins(ws)) continue;
+    if (qs.length > 1 && !ws[0].startsWith(qs[0])) continue;
+    return n;
+  }
+  return null;
 }

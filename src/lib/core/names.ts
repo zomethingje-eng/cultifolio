@@ -174,6 +174,11 @@ export function nameParts(scientific: string): Array<{ text: string; italic: boo
   return out;
 }
 
+/** A name without its hybrid sign, its spaces closed up: "Mentha × piperita" is "Mentha piperita", "× Astrolista bicarinata" is "Astrolista bicarinata" (round eighty-one, H). */
+export const withoutSign = (name: string): string => name.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim();
+/** Two names in the alphabet's order read past the hybrid sign, as a checklist orders them: Mentha × piperita between Mentha longifolia and Mentha pulegium, not before Mentha aquatica (round eighty-one, H). */
+export const nameOrder = (a: string, b: string): number => withoutSign(a).localeCompare(withoutSign(b));
+
 /** The genus of a scientific name: its first word, past a hybrid sign. A leading ASCII "x" counts as the sign only when it stands alone: Xanthosoma keeps its X. */
 export function genusOf(name: string): string {
   return name.trim().replace(/^(?:×\s*|x\s+)/i, '').split(/\s+/)[0] ?? name;
@@ -184,6 +189,27 @@ export function speciesOf(name: string): string {
   const p = parseName(name);
   return p.epithet ? `${p.genus} ${p.epithet}` : p.genus;
 }
+
+/**
+ * `speciesOf` as a grower reads it, with the hybrid sign kept (round eighty-one, H; review-w 10 of round eighty): "Aloe ×
+ * nobilis" is "Aloe × nobilis" and "× Gasteraloe beguinii 'Green Ice'" is "× Gasteraloe beguinii", where `speciesOf`
+ * gives "Aloe nobilis" and "Gasteraloe beguinii", which is what the slug and the matching read. A nothogenus alone keeps
+ * its sign ("× Graptoveria"); a cross written out is its genus, as `speciesOf` has it. Without the sign it is always
+ * `speciesOf`'s name, so the two name one record.
+ */
+export function speciesName(name: string): string {
+  const p = parseName(name);
+  const sign = p.scientific.startsWith('× ') ? '× ' : '';
+  if (!p.epithet) return p.parentage ? p.genus : sign + p.genus;
+  return !sign && isNamedHybrid(p) ? `${p.genus} × ${p.epithet}` : `${sign}${p.genus} ${p.epithet}`;
+}
+/** A nothospecies with a name of its own ("Aloe × nobilis", "Mentha × piperita"): a hybrid the reference may hold as a page, never a cross written out or a cultivar of a genus. */
+export function isNamedHybrid(nameOrParsed: string | ParsedName): boolean {
+  const p = typeof nameOrParsed === 'string' ? parseName(nameOrParsed) : nameOrParsed;
+  return p.kind === 'hybrid' && !p.parentage && !!p.epithet && (p.scientific.startsWith('× ') || p.scientific.includes(' × '));
+}
+/** A name that is a genus (or a nothogenus) alone, as a plant filed under its genus is ("Echeveria 'Perle von Nurnberg'", "× Graptoveria"): its species record is the genus's. */
+export const isGenusOnly = (name: string): boolean => { const p = parseName(name); return !!p.genus && !p.epithet; };
 
 /** The slug of the species a plant's name belongs to: what its species page, its taxon record, its thumbnail and its care line are joined on. A subspecies or a variety is one of its species' plants. */
 export const speciesSlug = (name: string): string => slugify(speciesOf(name));

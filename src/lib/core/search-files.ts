@@ -48,7 +48,7 @@
  * `search/blocks.json`.
  */
 import { words, entryWords, type Wordy } from './postings';
-import { prepare, search, hasExact, readingHits, rankedWords, wholeReading, wholeHits, cultivarShape, typedOf, searchGenera, RANK_MARKERS, type Searchable, type Prepared } from './search';
+import { prepare, search, hasExact, readingHits, rankedWords, wholeReading, wholeHits, cultivarShape, typedOf, searchGenera, readStart, RANK_MARKERS, type Searchable, type Prepared } from './search';
 
 /** A key with more entries than this is heavy: its file would be the size of a large part of the reference. */
 export const SEARCH_CAP = 2000;
@@ -504,7 +504,9 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
   const trailing = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
   const held = trailing ? qs.slice(0, -1) : qs;
   const genera = r.genera();
-  const exact = lightest(await Promise.all(held.map(exactBound)));
+  // Each word under the start the ranking reads it by: a plural in a phrase under its singular too (round eighty-one;
+  // `readStart`), whose candidates hold the word's own.
+  const exact = lightest(await Promise.all(held.map((w) => exactBound(readStart(w, qs)))));
   if (exact) {
     // Kew's older names are reached only as a name typed, its genus the query's first word (`kewTyped`; round eighty).
     const cands = await read(exact, Infinity, qs.length >= 2 ? qs[0] : undefined);
@@ -522,7 +524,8 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
   }
   // Every word the hits hold is heavy. The whole query read as one common name first, from a light word of its own.
   if (wholeReading(q)) {
-    const w = lightest(await Promise.all(wholeReading(q)!.map(exactBound)));
+    const whole = wholeReading(q)!;
+    const w = lightest(await Promise.all(whole.map((x) => exactBound(readStart(x, whole)))));
     if (!w) return done({ narrow: true });
     const cands = await read(w);
     if (await rank(cands)) return { stop: true };

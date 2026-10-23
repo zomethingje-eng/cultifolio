@@ -11,7 +11,10 @@
   import type { Photo } from '$lib/db/types';
 
   import { toast } from './toast.svelte';
+  import { backLayer } from './back-layer.svelte';
   let { photos, index = $bindable(0), acc = null, onclose }: { photos: Photo[]; index?: number; acc?: string | null; onclose: () => void } = $props();
+  // Back closes the viewer, as the × does, and stays on the page (round eighty-one; the phone review's 8).
+  backLayer('photo', () => true, () => onclose());
   // The viewer holds the photograph by id, not by its place in the list: saving a date re-sorts the list, and a viewer
   // on `photos[index]` would then be showing, and removing, a neighbour (round twenty-nine, 1). `index` follows the id.
   // svelte-ignore state_referenced_locally

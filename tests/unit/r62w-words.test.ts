@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { coldFloor, cultivationSheet } from '$core/sheet';
 import { careLine } from '$core/note';
-import { archFor } from '$core/arch';
+import { listedFor } from '$core/arch';
 import { climateCardSvg } from '$lib/share/card';
 import { speciesDescription, photoCredit, creditParts } from '$lib/ui/ref/head';
 import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
@@ -88,16 +88,16 @@ describe('the share card (visitor-words 11, A3, A4)', () => {
 
 describe('the groups (A4)', () => {
   it('terrestrial orchids, rock and ground bromeliads and Selaginella are in no group', () => {
-    for (const g of ['Paphiopedilum', 'Ludisia', 'Phaius', 'Phragmipedium', 'Cynorkis', 'Cymbidium']) expect(archFor(`${g} test`, 'Orchidaceae'), g).toBeNull();
-    for (const g of ['Alcantarea', 'Billbergia']) expect(archFor(`${g} test`, 'Bromeliaceae'), g).toBeNull();
-    expect(archFor('Selaginella test', 'Selaginellaceae')).toBeNull();
-    expect(archFor('Phalaenopsis amabilis', 'Orchidaceae')?.arch.key).toBe('orchid'); // the rest of the group stays
+    for (const g of ['Paphiopedilum', 'Ludisia', 'Phaius', 'Phragmipedium', 'Cynorkis', 'Cymbidium']) expect(listedFor(`${g} test`, 'Orchidaceae'), g).toBeNull();
+    for (const g of ['Alcantarea', 'Billbergia']) expect(listedFor(`${g} test`, 'Bromeliaceae'), g).toBeNull();
+    expect(listedFor('Selaginella test', 'Selaginellaceae')).toBeNull();
+    expect(listedFor('Phalaenopsis amabilis', 'Orchidaceae')?.arch.key).toBe('orchid'); // the rest of the group stays
   });
   it('the why text says what the table lists, not what the plant is', () => {
-    expect(archFor('Copiapoa cinerea', 'Cactaceae')!.why).toBe('listed under the genus Copiapoa in the archetype table');
-    const sheet = cultivationSheet({ scientific: 'Monstera deliciosa', family: 'Araceae' });
-    expect(sheet.floor?.s ?? '').not.toMatch(/reliably one kind of plant/);
-    expect(sheet.floor?.s ?? '').toContain('(listed under the genus Monstera in the archetype table)');
+    expect(listedFor('Copiapoa cinerea', 'Cactaceae')!.why).toBe('listed under the genus Copiapoa in the archetype table');
+    const sheet = cultivationSheet({ scientific: 'Monstera deliciosa', family: 'Araceae', kew: { lifeform: 'climber', climate: 'wet tropical' } });
+    expect(sheet.arch!.why).not.toMatch(/reliably one kind of plant/);
+    expect(sheet.arch!.why).toBe('listed under the genus Monstera in the archetype table, and Kew describes it as “climber”, “wet tropical”'); // round eighty-one: with Kew's words
   });
 });
 
