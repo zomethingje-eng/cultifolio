@@ -139,6 +139,9 @@ describe('a Replace from a backup with a second tab opened during its switch (th
   });
 
   it('without Web Locks: the second tab runs the copy beside the first and is closed part-way; nothing is lost', async () => {
+    // An engine without the API. Node's own `navigator.locks`, where its build has one (the owner's PC ran
+    // this with one, so B waited and wrote nothing): it is hidden here by an own property, which afterEach deletes.
+    Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true });
     const r = await twoTabs();
     expect(r.bWrites.length).toBeGreaterThan(0); // B did run a copy of its own, beside A's
     expect(r.ids).toEqual(ALL);
