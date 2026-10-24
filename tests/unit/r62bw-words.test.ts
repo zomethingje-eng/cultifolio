@@ -126,7 +126,7 @@ describe('the phone chart\'s labels do not touch (V22, the self-review\'s N10)',
 describe('the glance row (the words review\'s 1, the self-review\'s N10)', () => {
   const g = code('src/lib/ui/ref/Glance.svelte');
   it('is headed "Habitat figures"', () => {
-    expect(g).toMatch(/<span class="gt">Habitat figures<\/span>/);
+    expect(g).toMatch(/<span class="gt">Habitat figures(\{#if few\}.*?\{\/if\})?<\/span>/); // round eighty-two: the few-records mark beside it
   });
   it('states each gauge\'s scale, beside it and in its text alternative', () => {
     expect(g).toContain('const RAIN_FULL = 1200;');

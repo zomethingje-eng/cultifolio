@@ -165,7 +165,7 @@ export function nameParts(scientific: string): Array<{ text: string; italic: boo
   const out: Array<{ text: string; italic: boolean }> = [];
   let open = false; // after "sp." the rest is a grower's or a collector's designation, not Latin ("Lithops sp. C 036")
   for (const tok of scientific.split(' ')) {
-    const roman = open || /^(subsp\.|var\.|f\.|×|x|cv\.|cf\.|aff\.|nr\.|vel|sp\.|spp\.|nov\.)$/.test(tok) || /^'/.test(tok);
+    const roman = open || /^(subsp\.|var\.|f\.|nothosubsp\.|nothovar\.|nothof\.|×|x|cv\.|cf\.|aff\.|nr\.|vel|sp\.|spp\.|nov\.)$/.test(tok) || /^'/.test(tok);
     if (/^spp?\.$/.test(tok)) open = true;
     const last = out[out.length - 1];
     if (last && last.italic === !roman) last.text += ' ' + tok;

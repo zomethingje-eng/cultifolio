@@ -64,7 +64,7 @@ export const NameBlock = v.object({
    * Kew accepts (plant_name_id, or '' where Kew's rows do not decide), Kew's other names for it (words only), the stored
    * older names Kew accepts as species of their own, and the day of Kew's file. Absent: not read, never "none".
    */
-  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string() })),
+  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()) })),
   /** Present when the page cites Kew's author for the number it links: the backbone's citation, and Kew's row cited (plant_name_id). */
   cited: v.optional(v.object({ gbif: v.string(), kew: v.string() }))
 });
@@ -84,7 +84,9 @@ export const Summary = v.object({
   source: v.literal('wikipedia'),
   url: v.string(),
   licence: v.literal('CC BY-SA 4.0'),
-  title: v.string()
+  title: v.string(),
+  /** The article's lead went on past the text kept (`upToSentence`, round eighty-two): the page links "More on Wikipedia". */
+  cut: v.optional(v.literal(true))
 });
 
 /** A genus's own page: its Wikipedia lead, quoted like a species' summary, written by `--fill genus` to s/v<N>/g/<slug>.json. */

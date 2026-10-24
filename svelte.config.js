@@ -48,6 +48,9 @@ const config = {
         'connect-src': ['self'],
         'worker-src': ['self'],
         'frame-ancestors': ['none'],
+        // No plug-in content (<object>, <embed>): no page has any, and without this the directive fell back to
+        // default-src 'self', which let a same-origin file be embedded as one (round eighty-two; the independent review's 33).
+        'object-src': ['none'],
         'base-uri': ['self'],
         'form-action': ['self']
       }

@@ -71,6 +71,8 @@ describe('round seventy-four: the site speaks to every home grower, not to cactu
   it('the front page says what it is for every grower, with the live count, and the welcome says spaces', () => {
     const home = readFileSync('src/routes/+page.svelte', 'utf8');
     expect(home).toContain('<li>A reference for the plants people grow, {fmtN(data.total)} species so far, each with its habitat climate where its records allow one.</li>');
+    // Round eighty-two (the second review's 7): its first sentence says both halves, the record's list after it.
+    expect(home).toContain("<span class=\"wlead\"><b>A reference to {fmtN(data.total)} species, every figure sourced, and a record of your own plants, kept on this device.</b></span>");
     expect(home).toContain("<b>Keep your plants' record on this device:</b> watering read against each species' habitat season, spaces, seed batches");
     expect(home).not.toMatch(/Grow cacti|cactus, succulent and bulb|plants most grown alongside them/i);
   });

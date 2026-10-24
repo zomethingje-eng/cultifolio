@@ -7,7 +7,7 @@
   import { page } from '$app/state';
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT } from '$lib/ui/ref/head';
+  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT, shownAttribution } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -26,7 +26,7 @@
   import { heroOf } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
   import { notAnswered, climateDetail, registersNotChecked, namesSource } from '$lib/ui/ref/upstream';
-  import { noGbif, recordsUnchecked, kewKeysSentence, uncheckedWhy, uncheckedSentence } from '$core/no-gbif';
+  import { noGbif, recordsUnchecked, kewKeysSentence, uncheckedSentence } from '$core/no-gbif';
   import { climateReason, outsideOnly } from '$dossier/range-via';
   import { citedNote, rangeNote, olderNames, summaryOlderName } from '$lib/ui/ref/notes';
   import { firstSentences, clip } from '$core/text';
@@ -43,6 +43,8 @@
   import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
   import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
   import { worldSvg, regionSvg } from '$lib/map/still';
+  import { fewRecords, fewRecordsSentence } from '$core/few-records';
+  import { rangeCaption, UNITS_NOTE } from '$lib/ui/ref/range-words';
   let { data } = $props();
   let allPapers = $state(false);
   const u = $derived(units.current);
@@ -50,7 +52,8 @@
   // The two maps, drawn here from the page's own data (round seventy-seven): the load carried them drawn, beside the
   // range and the points they are drawn from, so each was in the page twice, once in the markup and once in its data.
   const worldMap = $derived(worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`));
-  const regionMap = $derived(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`));
+  // The close-up names the page's own native regions where they fall in its frame, with a scale bar and a light graticule (round eighty-two; the independent review's 12).
+  const regionMap = $derived(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))));
   // The index's own rule, so the page and the catalogue show one name first: the chosen English name, then its alternatives, up to four (round sixty-one; decision 7).
   const common = $derived(data.commonNames); // chosen on the server with the corpus's genera, as the index chooses (round sixty-one; decision 7)
   // A Commons photograph with no thumbnail is not shown: its original would load (round sixty-two; outside review A35).
@@ -62,8 +65,8 @@
   const gbifless = $derived(noGbif(d));
   // Its records not checked: a page without a GBIF key that read no key Kew's synonymy gives it (round seventy-nine).
   const unchecked = $derived(recordsUnchecked(d));
-  // Why, for this page (round eighty): what GBIF's backbone holds of Kew's names for it, where the build wrote it; else the general reason.
-  const noWhy = $derived(uncheckedWhy(d));
+  // Why, for this page (round eighty): what GBIF's backbone holds of Kew's names for it, where the build wrote it; else the
+  // general reason. Said once, under the name (round eighty-two), and referred to after.
   const noSentence = $derived(uncheckedSentence(d));
   /** The plant forms' query: the species, and its GBIF key where it has one (none is filed for a page without). */
   const addQuery = $derived(`species=${encodeURIComponent(d.name.scientific)}${d.ids.gbif != null ? `&key=${d.ids.gbif}` : ''}`);
@@ -92,11 +95,13 @@
    * suggests", which the sheet does not give (round sixty; self-review 14, the round forty-two review A5, product 6).
    */
   const climateOk = $derived(d.climate.status === 'ok');
+  /** A climate read from few records (round eighty-two; `$core/few-records`): marked on the figures and in the climate section, nothing removed. */
+  const few = $derived(fewRecords(d.climate as { status: string; records?: number; cells?: number }));
   const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null, annualRain: d.climate.annualRain ?? null } : { status: unchecked ? 'unchecked' : d.climate.status }, native: d.distribution.native.length, photos: photos.length, summary: !!d.summary });
   const title = $derived(speciesTitle(headIn));
   const desc = $derived(speciesDescription(headIn, u));
   /** The photograph's own words for a screen reader: the species and the credit (round sixty; a11y 12). */
-  const heroAlt = $derived(hero ? `${d.name.scientific}${hero.place ? `, ${hero.place}` : ''}; photograph ${hero.attribution}` : '');
+  const heroAlt = $derived(hero ? `${d.name.scientific}${hero.place ? `, ${hero.place}` : ''}; photograph ${shownAttribution(hero)}` : '');
   const jsonld = $derived(
     JSON.stringify({
       '@context': 'https://schema.org',
@@ -121,7 +126,7 @@
     const o = d.occurrences;
     const up = d.upstream['gbif.occurrences']?.status;
     // Not asked, and why, before anything is read from the empty counts (round seventy-nine).
-    if (unchecked) return { tone: 'warn', text: `GBIF's records not checked: ${noWhy}. So there are no points on the map, no map marker and no climate across the range; the range is Kew's. Not a statement that no record exists.` };
+    if (unchecked) return { tone: 'warn', text: "GBIF's records not checked, as said under the name: so there are no points on the map, no map marker and no climate across the range; the range is Kew's. Not a statement that no record exists." }; // the reason once, under the name (round eighty-two)
     // A refusal said as one, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2).
     if (up === 'refused' || up === 'error') return { tone: 'warn', text: `The occurrence source ${notAnswered(up)} when this species page was built. Nothing here is derived from records, and this is not a statement that none exist.` };
     // A refused range is said before anything is read as an absence of one (round seventeen, 5).
@@ -170,6 +175,8 @@
   });
   // The section row names where the reader is: the last section heading that has passed under the sticky row.
   /** The dossier's works without GBIF occurrence downloads: datasets that name the species, not papers about it (the builder drops them at source now; the corpus on disk is filtered here until it is refilled). */
+  /** Papers not yet asked for this reference (round seventy-eight): no Papers section or tab while nothing is asked (round eighty-two; the independent review's 23); the record of sources says it. */
+  const litOff = $derived(literatureOff(d.upstream['openalex']));
   const papers = $derived(d.literature.filter((p) => !isDatasetDoi(p.doi) && !/^Occurrence Download$/i.test(p.title)));
   let active = $state('');
   let tapped: { id: string; at: number } | null = null;
@@ -186,8 +193,11 @@
   onMount(() => {
     const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id]')].filter((h) => ['s-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
     if (!heads.length) return;
+    // The line a heading counts as passed at: where a tab's jump puts it, the page's scroll padding (the top bar) and the
+    // headings' scroll margin (this row), and a little more. At 110 px, a heading a tab or a #s-climate address put at
+    // 176 to 181 px was not counted, and the tab before it stayed marked (round eighty-two; the independent review's 19).
+    const line = (parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0) + (parseFloat(getComputedStyle(heads[0]).scrollMarginTop) || 110) + 8;
     const onScroll = () => {
-      const line = 110;
       const prev = active;
       let cur = '';
       for (const h of heads) {
@@ -438,7 +448,7 @@
       <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoOf(hero, 'medium')} /><img src={photoOf(hero, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" use:failedBeforeHydration={() => (heroFailed = true)} /></picture></a>
       <!-- Licence first, then the author's line: on a phone the two are two lines, so a long author name never cuts the
            licence to an ellipsis (round sixty-two; outside review A12); a licence the author's line contradicts is said. -->
-      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</span></a>
+      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{heroCredit.who}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</span></a>
     </div>
   {/if}
   <!-- No photograph: no grey box of text where one would be; the card takes the width, with the one placeholder as a small
@@ -459,9 +469,9 @@
       {#if hybrid?.parents}<p class="small muted" id="hybrid-parents">A hybrid: <SpeciesName name={hybrid.parents} />, the parents Kew's World Checklist states for it (WCVP, RBG Kew).</p>{/if}
       {#if wdNames && 'item' in wdNames && wdNames.hidden}<p class="small muted" id="names-source">Wikidata's <a href="https://www.wikidata.org/wiki/{wdNames.item}" rel="noopener">item {wdNames.item}</a> gives {wdNames.hidden.map((n) => `“${n}”`).join(', ')}{#if wdNames.day}, read {wdNames.day}{/if} (CC0), which the search finds and this page does not show as the species' English name.</p>{:else if wdNames && 'item' in wdNames}<p class="small muted" id="names-source">English names as Wikidata spells them, <a href="https://www.wikidata.org/wiki/{wdNames.item}" rel="noopener">item {wdNames.item}</a>{#if wdNames.day}, read {wdNames.day}{/if} (CC0), not corrected here.</p>{:else if wdNames}<p class="small muted" id="names-source">English names not checked: {wdNames.unchecked}.</p>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
-      {#if d.climate.status !== 'ok' || (!photos.length && photoGaps)}
+      {#if (d.climate.status !== 'ok' && !unchecked) || (!photos.length && photoGaps)}
         <div class="pills">
-          {#if unchecked}<NotChecked what="Climate" why={noSentence} />{:else if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(climDetail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
+          {#if unchecked}{:else if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(climDetail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
           {#if !photos.length && photoGaps}<NotChecked what="Photographs" why="{photoGaps.allUncredited ? `${photoGaps.names.join(' and ')} answered, but with no photograph credited under its licence` : photoGaps.clause} when this page was built." />{/if}
         </div>
       {/if}
@@ -484,6 +494,11 @@
     </div>
   </div>
   </div>
+  {#if unchecked}
+    <!-- Why GBIF's records were not asked, said once, under the name; the sections that would have been made from them
+         refer to it (round eighty-two; the independent review's 10: the same sentence five times on Echeveria alpina). -->
+    <p class="notice" id="records-unchecked"><b>GBIF's records not checked.</b> {noSentence} So this page has no points on its map, no map marker, no habitat climate, no cultivation sheet and no species of nearest climate; the range is Kew's. Not a statement that none exist. <a href="/about/how#no-gbif-key">How</a>.</p>
+  {/if}
 
   {#if stripPhotos.length}
     <!-- A few of the photographs under the name card, on a phone too: the grid was three and a half thousand pixels down (round fifty-eight; the first-impression review). Each opens its credit and licence in the Photographs section. -->
@@ -492,7 +507,7 @@
            51 px (a layout shift of 0.17 on a phone), and a failure before hydration drew the broken-image glyph (round
            sixty-seven; triage-66 P7, R45-8). -->
       <!-- The small size for a 72-pixel box, as every other small tile loads (round seventy; triage-69 C5, S-C14): the 500-pixel Commons tile was loaded. -->
-      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /></span>{/each}
+      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /></span>{/each}
       <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
   {/if}
@@ -502,7 +517,7 @@
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Habitat</a>
     {#if photos.length !== 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>Photographs</a>{/if}
-    {#if papers.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
+    {#if papers.length || (refused('openalex') && !litOff)}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
     {#if data.siblings.length || data.near.length || unchecked}<a href="#s-related" class:on={active === 's-related'} onclick={(e) => goTab(e, 's-related')}>Related</a>{/if}
     <a href="#s-registers" class:on={active === 's-registers'} onclick={(e) => goTab(e, 's-registers')}>Registers</a>
   </nav>
@@ -513,8 +528,8 @@
       <!-- The figures once, in growers' words, each with a small source tag; the season in the reader's months beside them.
            The "In short" list that repeated these cards line by line is gone: its one new line, the season, is the season
            card's sentence now (round sixty; visitor 2, 3, product 7, self-review "the experience" 2 and 3). -->
-      <Glance months={d.climate.status === 'ok' ? d.climate.months : []} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} extremes={glance.ex} extremesStatus={d.climate.status === 'ok' ? (d.climate.extremesStatus ?? null) : null} year={sheet.year} seasonLead={seasonRow?.plain?.lead ?? null} seasonRule={seasonRow?.plain?.rule ?? ''} {readerLat} {readerFrom} chartHref="#s-climate" />
-      {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}). <a href="#s-habitat">The records.</a></p>{/if}
+      <Glance months={d.climate.status === 'ok' ? d.climate.months : []} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} extremes={glance.ex} extremesStatus={d.climate.status === 'ok' ? (d.climate.extremesStatus ?? null) : null} year={sheet.year} seasonLead={seasonRow?.plain?.lead ?? null} seasonRule={seasonRow?.plain?.rule ?? ''} {readerLat} {readerFrom} chartHref="#s-climate" {few} />
+      {#if few}<p class="small muted thinline" id="few-records-glance">From few records: {few.records} record{few.records === 1 ? '' : 's'} in {few.cells} grid cell{few.cells === 1 ? '' : 's'}. <a href="#s-habitat">The records.</a></p>{/if}
       {#if placeLine}
         <!-- The grower's own place against this habitat's cold floor: the one comparison the site can make that no other does, one line under the figures (round fifty, 3). Nothing is inferred; two figures and their difference. -->
         <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
@@ -525,7 +540,7 @@
   <!-- The quoted summary comes after the figures: a phone reader reached At a glance only after a screen of Wikipedia (round forty, R2 design 1; R1 R12). -->
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
-    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
+    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more || d.summary.cut}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
     <p class="small muted">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>, {d.summary.licence}{#if summaryOlderName(d.summary.title, d.name)}; {summaryOlderName(d.summary.title, d.name)}{/if}.</p>
   {:else if refused('wikipedia')}
     <h2 class="sec" id="s-summary">Summary</h2>
@@ -601,7 +616,7 @@
       </details>
     {/each}
     {#if !sheetCards.length}
-      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(climDetail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given.{:else if unchecked}Not checked. {noSentence} The habitat climate is read only from them, so no sheet is derived.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet.{:else}Nothing derived: no habitat climate for this species.{/if}</div></div>
+      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(climDetail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given.{:else if unchecked}Not checked: GBIF's records were not asked (<a href="#records-unchecked">why, under the name</a>), and the habitat climate is read only from them, so no sheet is derived.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet.{:else}Nothing derived: no habitat climate for this species.{/if}</div></div>
     {/if}
     {#if sheetCards.length || sheet.arch}
       <!-- One account of the method per section, closed: the grey "by rule" lines under every block are gone (round sixty; visitor 2). -->
@@ -621,6 +636,7 @@
   <div class="deep">
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
+    {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few)}</p>{/if}
     <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
     <details class="figures">
       <summary>Figures by month</summary>
@@ -664,7 +680,7 @@
       </div>
     </details>
   {:else if unchecked}
-    <div class="notice" id="no-gbif-climate"><b>Not checked.</b> {noSentence} The habitat climate is read only from GBIF's records, so none is derived here. This is not a statement that no climate exists.</div>
+    <div class="notice" id="no-gbif-climate"><b>Not checked.</b> GBIF's records were not asked (<a href="#records-unchecked">why, under the name</a>), and the habitat climate is read only from them, so none is derived here. This is not a statement that no climate exists.</div>
   {:else if d.climate.status === 'pending'}
     <div class="cult"><div class="none">Pending: the habitat climate for this species has not been derived yet{d.climate.detail ? ` (${d.climate.detail})` : ''}. Not a statement that none exists.</div></div>
   {:else if d.climate.status === 'refused'}
@@ -675,8 +691,8 @@
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
-    <div class="mapbox">{@html worldMap}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker{/if}{/if}.</div></div>
-    <div class="mapbox">{@html regionMap}<div class="mapcap">{unchecked ? `Records not checked: ${noWhy}.` : d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `Records not checked: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html worldMap}<div class="mapcap" id="range-caption">{rangeCaption(d.distribution as never, d.upstream['wcvp.distribution']?.status)}{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker{/if}{/if}.</div></div>
+    <div class="mapbox">{@html regionMap}<div class="mapcap">{unchecked ? "Records not checked: GBIF's records were not asked, as said under the name." : d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `Records not checked: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   {#if unchecked && data.heldUnder?.length}
     <!-- A page that reads no key because GBIF files its names under other pages of the reference (round eighty): those pages, linked. -->
@@ -687,7 +703,7 @@
     <p class="small muted" id="kew-keys-records">{kewKeysSentence(d.occurrences.keys)} <a href="/about/how#no-gbif-key">How</a>.</p>
   {/if}
   <div class="factgrid">
-    <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted">{' · '}stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted">{' '}Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted">{' · '}introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
+    <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted">{' · '}stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted">{' '}Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted">{' · '}introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}{#if d.distribution.native.length || d.distribution.introduced.length || d.distribution.reported?.length}<span class="small muted" id="units-note">{' · '}{UNITS_NOTE} (<a href="/about/how#regions">how</a>).</span>{/if}</div>
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <!-- A range Kew files under another of the species' names says which (round sixty-eight). -->
     {#if viaNote}<div class="wide" id="range-via"><b>Range source</b>{viaNote.text}{#if data.viaPage}{' '}(<a href="/species/{data.viaPage.slug}"><i>{data.viaPage.name}</i></a>, a page of its own here){/if}{#if viaNote.clause}<span class="small muted">{' · '}{viaNote.clause}</span>{/if}</div>{/if}
@@ -739,14 +755,11 @@
     <Lightbox photos={myPhotos} bind:index={lightbox} acc={myPhotos[lightbox]?.plant.id ?? null} onclose={() => (lightbox = null)} />
   {/if}
 
-  {#if refused('openalex') && !papers.length}
+  {#if refused('openalex') && !papers.length && !litOff}
+    <!-- Literature off (round seventy-eight, the owner's decision 2) has no section: nothing is asked, and the record of
+         sources says so, "not asked" with why (round eighty-two; the independent review's 23). A source that did not answer is said here. -->
     <h2 class="sec" id="s-research">Papers naming this species</h2>
-    <!-- Literature off (round seventy-eight, the owner's decision 2): said as not checked, with why, never as none. -->
-    {#if literatureOff(d.upstream['openalex'])}
-      <div class="notice"><b>Not checked.</b> Papers are not yet asked for this reference; a later fill takes them from OpenAlex's free snapshot.</div>
-    {:else}
-      <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
-    {/if}
+    <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
   {/if}
   {#if papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
@@ -761,7 +774,7 @@
     <h2 class="sec" id="s-related">Related</h2>
     {#if unchecked}
       <!-- No habitat climate, so no nearest one: said, with why (round seventy-nine). -->
-      <p class="relhead" id="near-not-checked"><b>Similar habitat climate</b> <span class="small muted">Not checked: {noWhy}, and the nearest habitat climates are read from the climate they give.</span></p>
+      <p class="relhead" id="near-not-checked"><b>Similar habitat climate</b> <span class="small muted">Not checked: GBIF's records were not asked (<a href="#records-unchecked">why, under the name</a>), and the nearest habitat climates are read from the climate they give.</span></p>
     {/if}
     {#if data.near.length}
       <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean daily high, mean nightly low and rain, month by month. <a href="/about/how#related">How</a>.</span></p>
@@ -924,8 +937,10 @@
   .idcard .acts :global(.btn) { white-space: normal; max-width: 100%; }
   .idcard .who, .idcard h1 { min-width: 0; overflow-wrap: anywhere; }
   .placeline { overflow-wrap: anywhere; }
-  /* Anchors land under the top bar and the pinned section row, not beneath them (round sixty; visitor 5). */
-  h2.sec { scroll-margin-top: calc(44px + 64px + 12px); }
+  /* Anchors land under the top bar and the pinned section row, not beneath them (round sixty; visitor 5). The page's
+     own scroll padding already clears the top bar (theme.css, `--bar-h` and 12 px), so the margin clears the section row:
+     with the bar counted twice a heading landed 80 px under the row (round eighty-two; the independent review's 19). */
+  h2.sec { scroll-margin-top: 64px; }
   /* 44 px under a finger: the section row, the register links and the photograph strip (round sixty; a11y 6). */
   @media (pointer: coarse) {
     nav.tabs a { min-height: var(--tap); }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keepFieldsClearOf } from '$lib/ui/clear-of-bar';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import { batchHref } from '$lib/db/links';
   import { units } from '$lib/ui/units.svelte';
@@ -66,7 +67,12 @@
     if (formDirty()) e.preventDefault();
   }
   // The action bar is pinned on a phone, as on the Add form; the toast sits above it, not on it (round fifty-eight; the grower review).
-  $effect(() => { document.body.classList.add('stickyacts'); return () => document.body.classList.remove('stickyacts'); });
+  let actsEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    document.body.classList.add('stickyacts');
+    const clear = actsEl ? keepFieldsClearOf(actsEl) : () => {}; // no field under the pinned bar (round eighty-two; the independent review's 25)
+    return () => { clear(); document.body.classList.remove('stickyacts'); };
+  });
 
 
   const m = $derived(PROP_METHODS.find((x) => x.k === method) ?? PROP_METHODS[0]);
@@ -309,7 +315,7 @@
   </div>
 
   <!-- Pinned on a phone above the tab bar, as on the Add form, so Start batch is under the thumb however long the form; a greyed button says why next to it (round fifty-eight; the grower review). -->
-  <div class="actions sticky">
+  <div class="actions sticky" bind:this={actsEl}>
     {#if startBlocked}<span class="why small" id="s-start-why" role="status">{startBlocked}</span>{/if}
     <a class="btn" href="/propagation">Cancel</a>
     <button class="btn pri" type="submit" disabled={!name.trim() || busy} aria-describedby={startBlocked ? 's-start-why' : undefined}>Start batch</button>

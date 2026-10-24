@@ -117,16 +117,34 @@ export function photoCredit(p: { attribution: string; licence?: LicenceTag | nul
 /** The parts of a credit: the source's licence, the author's line, whether that line names a licence, and whether it names another. */
 export function creditParts(p: { attribution: string; licence?: LicenceTag | null }): { lic: string; who: string; named: boolean; disagree: boolean } {
   const lic = p.licence ? licenceLabel(p.licence) : '';
-  const who = p.attribution.trim();
+  const who = shownAttribution(p); // "author not stated" where the line names no one (round eighty-two)
   // Spaces made hyphens before tagging: `licenceTag` reads "by-sa" and "by-nc", and "CC BY SA" with spaces was read as
   // CC BY, so an author's line agreeing with the source was said to disagree (round sixty-two; the words review's 4).
   const named = [...who.matchAll(NAMED_LICENCE)].map((x) => licenceTag(x[0].replace(/^cc[\s-]?0$/i, 'cc0').replace(/^(cc[\s-].*)$/i, (t) => t.replace(/[\s_]+/g, '-'))));
   return { lic, who, named: named.length > 0, disagree: !!lic && named.some((t) => t !== p.licence) };
 }
 
+/**
+ * A credit's words for a photograph whose source names no author (round eighty-two; the independent reviews' 26 and 1):
+ * "author not stated", never the licence alone. iNaturalist's CC0 line is "no rights reserved", with no name; a line
+ * that is only a licence, or starts with its comma, names no one either. The fill gives iNaturalist's CC0 photographs
+ * their observer (`cc0Credit`); a Commons or GBIF file with no author keeps these words.
+ */
+export const AUTHOR_NOT_STATED = 'author not stated';
+const LICENCE_ONLY = /^(?:cc[\s-]?0|public domain|pd|cc[\s-]by(?:[\s-]sa)?(?:\s[\d.]+)?)$/i;
+export function shownAttribution(p: { attribution: string }): string {
+  const a = p.attribution.trim();
+  if (!a || LICENCE_ONLY.test(a)) return `${AUTHOR_NOT_STATED}${a ? `, ${a}` : ''}`;
+  if (/^(?:\(c\)\s*)?,?\s*no rights reserved(?:\s*\((?:cc0)\))?$/i.test(a)) return `${AUTHOR_NOT_STATED}, no rights reserved`;
+  if (/^,/.test(a)) return `${AUTHOR_NOT_STATED}${a}`;
+  return a;
+}
+
 /** A tile's credit line: the author and licence where the tile has them, else the source it came from, else nothing. */
 export function tileCredit(t: { credit?: string | null; thumb?: string | null }): string | null {
-  if (t.credit?.trim()) return `Photo: ${t.credit.trim()}`; // the index's credit, licence first (`tileCreditOf`; round sixty-three)
+  // The index's credit, licence first (`tileCreditOf`; round sixty-three). One that is a licence alone, as an index built
+  // before round eighty-two wrote for iNaturalist's CC0 line, says that no author is stated (round eighty-two).
+  if (t.credit?.trim()) return `Photo: ${t.credit.trim()}${t.credit.includes(',') ? '' : `, ${AUTHOR_NOT_STATED}`}`;
   const s = photoSource(t.thumb);
   return s ? `Photo: ${s}` : null;
 }
@@ -158,9 +176,11 @@ export function tileCreditOf(p: { attribution: string; licence?: LicenceTag | nu
   // A Commons line is split where its licence reads strictly, since a version list ("CC BY-SA 2.5,2.0,1.0") holds commas (round sixty-nine).
   // iNaturalist's CC0 line names no one ("no rights reserved"): the licence alone is the credit, as the species page gives
   // it (round seventy-one; S-F6: 807 tiles, Geissorhiza aspera's on the front page, said "Photo: iNaturalist").
-  if (p.licence === 'cc0' && /^no rights reserved$/i.test(c.who.trim())) return c.lic;
-  const cm = splitCommonsCredit(c.who);
-  const m = cm ? [c.who, cm.author, cm.short] : INAT_LINE.exec(c.who) ?? VIA_LINE.exec(c.who);
+  // Since round eighty-two the tile says so: "CC0, author not stated", never the licence alone (the reviews' 26 and 1).
+  if (p.licence === 'cc0' && /^no rights reserved$/i.test(p.attribution.trim())) return `${c.lic}, ${AUTHOR_NOT_STATED}`;
+  const raw = p.attribution.trim(); // the source's own line, not the page's "author not stated" words (round eighty-two)
+  const cm = splitCommonsCredit(raw);
+  const m = cm ? [raw, cm.author, cm.short] : INAT_LINE.exec(raw) ?? VIA_LINE.exec(raw);
   // The licence the line names must be the source's own; "author not stated" is said as that, under CC0 or public domain only (the build drops it otherwise).
   if (!m || (m[2] && lineTag(m[2]) !== p.licence)) return null;
   let who = m[1].trim();

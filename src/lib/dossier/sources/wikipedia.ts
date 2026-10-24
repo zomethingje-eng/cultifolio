@@ -1,5 +1,8 @@
 import type { JsonFetcher, SourceResult } from '../fetch';
 import { titleProof, redirected, notChecked, notOurs, titled, proofByName, titleKey, type Who, type Facts, type Proof } from '../summary-proof';
+import { upToSentence } from '../../core/text';
+/** The longest summary kept, in characters, cut at a sentence's end (`upToSentence`; the page quotes four sentences of it). */
+export const SUMMARY_MAX = 1500;
 
 /* ---------- Wikipedia (CC BY-SA): the lead paragraph, kept segregated ---------- */
 
@@ -20,7 +23,7 @@ export { redirected };
  * redirects X to Y"; a source that did not answer while the proof was read leaves it not checked, said so (rule 2).
  * `--fill summaries` reads the same rule on the same answers (S-A5).
  */
-export async function summary(f: JsonFetcher, title: string, accept?: readonly string[], who?: Who, pre?: Facts): Promise<SourceResult<{ text: string; url: string; title: string; proof?: Proof }>> {
+export async function summary(f: JsonFetcher, title: string, accept?: readonly string[], who?: Who, pre?: Facts): Promise<SourceResult<{ text: string; url: string; title: string; proof?: Proof; cut?: true }>> {
   const r = await f<{ extract?: string; content_urls?: { desktop?: { page?: string } }; title?: string; type?: string }>(
     `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
   );
@@ -45,7 +48,7 @@ export async function summary(f: JsonFetcher, title: string, accept?: readonly s
       proof = v.proof;
     } else if (!accept.some((a) => titleKey(a) === titleKey(got))) return { status: 'none', detail: redirected(title, got) };
   }
-  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: r.data.extract.slice(0, 1500), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}) } };
+  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: upToSentence(r.data.extract, SUMMARY_MAX), ...(r.data.extract.trim().length > SUMMARY_MAX ? { cut: true as const } : {}), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}) } };
 }
 
 /**

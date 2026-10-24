@@ -55,9 +55,12 @@ describe('K5: the lead is ranked by source: wild iNaturalist, GBIF, cultivated i
     expect(heroOf([gbif('9'), c])?.src).toBe('gbif'); // guard
     expect(heroOf([c, inat('5', true)])?.id).toBe('5');
   });
-  it('GBIF before cultivated iNaturalist, wild iNaturalist before both', () => {
-    expect(heroOf([inat('5', true), gbif('9')])?.src).toBe('gbif');
-    expect(heroOf([commons('Nepenthes dubia 1.jpg'), inat('5', true), gbif('9'), inat('6', false)])?.id).toBe('6');
+  // Round eighty-two (the owner's acceptance of the independent review's 13): the cultivated set's first leads where there is
+  // one; the rest keep this order (r82u-pages.test.ts).
+  it('cultivated iNaturalist first; then wild iNaturalist, then GBIF', () => {
+    expect(heroOf([inat('5', true), gbif('9')])?.id).toBe('5');
+    expect(heroOf([commons('Nepenthes dubia 1.jpg'), inat('5', true), gbif('9'), inat('6', false)])?.id).toBe('5');
+    expect(heroOf([commons('Nepenthes dubia 1.jpg'), gbif('9'), inat('6', false)])?.id).toBe('6');
   });
   it('a dossier of Commons files alone is led by the first (guard), and a still image over a GIF (guard)', () => {
     expect(heroOf([commons('A.jpg'), commons('B.jpg')])?.id).toBe('File:A.jpg');

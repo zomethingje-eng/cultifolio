@@ -62,9 +62,10 @@ describe('the recount keeps its generation check on the second try (round sixty-
     const r2 = fakeR2(); const counters = countersNs(); const kv = fakeKV();
     await writeMeta(r2 as never, id, { tokenHash: await tokenHash(token), created: 'c', entitlement: 'open', bytes: 0, filled: true });
     crossListings(r2, counters, 2, id);
-    const { GET } = await import('../../src/routes/api/sync/vault/+server');
-    const request = new Request(`https://x/api/sync/vault?vault=${id}`, { headers: { authorization: `Bearer ${token}` } });
-    const r = await GET({ request, url: new URL(request.url), platform: { env: { STORE: r2, QUEUE: kv, COUNTERS: counters } }, getClientAddress: () => '1.2.3.4' } as never);
+    // By the open (POST), since round eighty-two removed the status GET nothing called (the independent review's 31).
+    const { POST } = await import('../../src/routes/api/sync/vault/+server');
+    const request = new Request('https://x/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, token, create: false }) });
+    const r = await POST({ request, url: new URL(request.url), platform: { env: { STORE: r2, QUEUE: kv, COUNTERS: counters } }, getClientAddress: () => '1.2.3.4' } as never);
     expect(r.status).toBe(503);
     expect(r.headers.get('retry-after')).toBeTruthy();
   });

@@ -184,12 +184,20 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       // cannot finish now (the device is still full) leaves the collection openable, the reason said and writes refused
       // until it does (`storeIn`); it rejected every open, and the collection never opened (round sixty-seven; triage-66
       // R1, the self-review's C1).
+      // One tab copies, under the replace lock; a tab that finds the lock held waits, says why, and reads the flag again
+      // once it has the lock, since the tab that held it has most likely finished (round eighty-two; the independent
+      // review's 1: two tabs copying at once wiped each other's photographs). Every other tab still shows the old
+      // collection, and its writes went into the new log as half records, its new plant numbered from the old state
+      // (round sixty-nine; triage-68 R4, R46-21): told, they reload onto this one.
       if (await db.get('meta', STAGING_PENDING)) {
+        let waited = false;
         try {
-          await writing(() => replaceFromStaging(db));
-          // Every other tab still shows the old collection, and its writes went into the new log as half records, its new
-          // plant numbered from the old state (round sixty-nine; triage-68 R4, R46-21): told, they reload onto this one.
-          announce('replaced');
+          await underReplaceLock(async () => {
+            if (!(await db.get('meta', STAGING_PENDING))) return; // finished by the tab that held the lock
+            await writing(() => replaceFromStaging(db));
+            announce('replaced'); // once finished: a resume that cannot finish says nothing, or two tabs reloaded each other for good
+          }, () => { waited = true; notify(REPLACE_ELSEWHERE); });
+          if (waited) notify(null);
           replaceWaitingSeen = false;
         } catch (e) { replaceWaitingSeen = true; notify(await pendingText(e)); }
       }
@@ -225,8 +233,40 @@ export interface StagedReplacement {
   promote(): Promise<void>;
 }
 
-function openStagingDb(): Promise<IDBPDatabase<VaultDB>> {
-  return openDB<VaultDB>(STAGING_NAME, DB_V, { upgrade });
+function openStagingDb(made?: () => void): Promise<IDBPDatabase<VaultDB>> {
+  return openDB<VaultDB>(STAGING_NAME, DB_V, { upgrade(db, oldV) { if (oldV < 1) made?.(); upgrade(db, oldV); } });
+}
+
+/**
+ * One replacement at a time in this browser, and one copy of it (round eighty-two; the independent review's 1). A Replace
+ * holds this Web Lock from the staging to the end of the switch, and a tab that opens the vault while a switch is under
+ * way waits for it and reads the flag again inside it: two tabs copying at once wiped the photographs each other had
+ * copied, and when one of them was closed part-way those photographs were gone (and two Replaces at once deleted each
+ * other's staging database). In this tab the lock is taken once: a call made while this tab holds it runs at once.
+ *
+ * Without Web Locks (every engine the app supports has them: Chromium 69, Firefox 96, Safari 15.4) the work runs as it
+ * is, and the copy is safe to run twice at once all the same: the records are wiped and copied in one transaction, a
+ * photograph the file holds is never deleted (only the live ones the file does not hold, before the copy), and a tab that
+ * finds the staging database gone stops without touching the live vault (`replaceFromStaging`). Two tabs then copy the same
+ * photographs twice; none is lost.
+ */
+const REPLACE_LOCK = 'cultifolio-replace';
+let replaceHeld = 0;
+/** What a tab that waits for another tab's switch says meanwhile. */
+const REPLACE_ELSEWHERE = 'A replacement from a backup is being copied in another tab of this browser. This page opens when it is done.';
+export async function underReplaceLock<T>(work: () => Promise<T>, onWait?: () => void): Promise<T> {
+  const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  if (!locks || replaceHeld > 0) return work();
+  const held = async (): Promise<T> => {
+    replaceHeld++;
+    try { return await work(); } finally { replaceHeld--; }
+  };
+  // Asked first without waiting, so a tab that must wait can say so before it does.
+  const NOT_FREE = Symbol('held elsewhere');
+  const first = await locks.request(REPLACE_LOCK, { ifAvailable: true }, async (lock) => (lock ? { v: await held() } : NOT_FREE));
+  if (first !== NOT_FREE) return (first as { v: T }).v;
+  onWait?.();
+  return (await locks.request(REPLACE_LOCK, held)) as T;
 }
 
 /** A fresh, empty staging database (any leftover from an earlier attempt is deleted first). */
@@ -268,12 +308,13 @@ export async function openStaging(): Promise<StagedReplacement> {
     async promote() {
       need().close();
       db = null;
-      await writing(async () => {
+      // Under the replace lock (`underReplaceLock`): taken here if the caller did not take it for the whole Replace. The
+      // other tabs are told as the wipe lands (`replaceFromStaging`), and reload onto this one (round fifteen, 2).
+      await underReplaceLock(() => writing(async () => {
         const live = await openVault();
         await live.put('meta', true, STAGING_PENDING);
-        await replaceFromStaging(live);
-      });
-      announce('replaced'); // every other tab folds the old log; they reload onto this one (round fifteen, 2)
+        await replaceFromStaging(live, true);
+      }));
     }
   };
 }
@@ -281,56 +322,81 @@ export async function openStaging(): Promise<StagedReplacement> {
 /**
  * The flag means "the staged file is the collection now, whatever the live
  * stores hold": every run of this, the first or a recovery after the browser
- * stopped part-way, clears the live log before copying, so a stop between the
- * flag and the clear cannot leave the old collection merged under the new.
- * The ledger of issued numbers in `meta` is kept on purpose: a number given
- * after the backup was taken stays given.
+ * stopped part-way, replaces the live log before copying the photographs, so a
+ * stop between the flag and the copy cannot leave the old collection merged
+ * under the new. The ledger of issued numbers in `meta` is kept on purpose: a
+ * number given after the backup was taken stays given.
+ *
+ * Re-runnable, and safe to run in two tabs at once (round eighty-two; the independent review's 1), though the replace
+ * lock lets only one run (`underReplaceLock`): the live log is wiped and the file's copied in by one transaction, so no
+ * run's wipe lands after another run's copy; the photographs the file does not hold are deleted, and the file's are put
+ * one by one, so no run deletes a photograph another has copied; and a run that finds the staging database gone (another
+ * run finished and deleted it) touches nothing.
  */
-async function replaceFromStaging(live: IDBPDatabase<VaultDB>): Promise<void> {
-  // One transaction for the wipe and the drop of the snapshot: a load between two of them could lay the new log over the old fold (round fifty-four, 2).
-  const tx = live.transaction(['changes', 'photos', 'outbox', 'order', 'meta'], 'readwrite');
-  await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('photos').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), dropFoldIn(tx)]);
-  await tx.done;
-  await copyStagingIn(live);
-}
-
-/** The fold snapshot goes, and the counter moves, inside `tx`: a snapshot of a log that no longer exists is never read, and one being written of that log is refused (round fifty-three, 1). */
-type MetaStore = { get(k: string): Promise<unknown>; put(v: unknown, k: string): Promise<unknown>; delete(k: string): Promise<void> };
-async function dropFoldIn(tx: { objectStore(name: 'meta'): MetaStore }): Promise<void> {
-  const meta = tx.objectStore('meta');
-  const gen = Number((await meta.get(FOLD_GEN)) ?? 0) + 1;
-  await Promise.all([meta.delete(FOLD), meta.put(gen, FOLD_GEN)]);
-}
-
-/** Copy every change (into the log and the outbox: the server has not seen a restored log) and every photograph from the staging database into the live one, clear the flag, delete the staging database. Re-runnable. */
-async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
-  const stage = await openStagingDb();
+async function replaceFromStaging(live: IDBPDatabase<VaultDB>, sayAtWipe = false): Promise<void> {
+  let made = false;
+  const stage = await openStagingDb(() => { made = true; });
   try {
-    const changes = await stage.getAll('changes');
-    if (changes.length) {
-      // Through storeIn, so the numbers a restored collection carries go on the ledger like any other write (round twelve, 6).
-      await storeIn(live.transaction(['changes', 'outbox', 'meta', 'order'], 'readwrite'), changes, false, {}, false, undefined, {}, { copying: true });
-    }
-    // The parked set is the file's: the device's own named changes the wiped log no longer has (round fifty-eight).
-    await live.put('meta', ((await stage.get('meta', 'parked')) as string[] | undefined) ?? [], 'parked');
-    // Every row the copy wrote is of unknown order (`ORDER_FROM`). Read after the copy, so a run that resumes after a stop
-    // marks the same rows: the live order store was cleared before it, and nothing else writes while the flag is up.
+    if (made) {
+      // No staging database: it was made just now by this open, so the copy it held is gone. Another tab finished the
+      // switch (it clears the flag before it deletes the copy), or the browser lost it; either way the live vault is the
+      // most there is, and wiping it for an empty file would empty the collection.
+      if (await live.get('meta', STAGING_PENDING)) {
+        console.warn('the staged replacement is gone; the collection is left as the copy left it');
+        await live.delete('meta', STAGING_PENDING);
+      }
+      replaceWaitingSeen = false;
+    } else await copyStagingIn(live, stage, sayAtWipe);
+  } finally {
+    stage.close();
+  }
+  await deleteDB(STAGING_NAME);
+}
+
+/** The copy itself, from a staging database that holds the file (`replaceFromStaging`). */
+async function copyStagingIn(live: IDBPDatabase<VaultDB>, stage: IDBPDatabase<VaultDB>, sayAtWipe: boolean): Promise<void> {
+  {
+    const [changes, parked] = await Promise.all([stage.getAll('changes'), stage.get('meta', 'parked')]);
+    // One transaction for the wipe, the drop of the snapshot and the copy of the file's log: a load between a wipe and a
+    // copy could lay the new log over the old fold (round fifty-four, 2), and a second tab's wipe between this tab's copy
+    // and its end emptied the log the first had copied (round eighty-two). Through storeIn, so the numbers a restored
+    // collection carries go on the ledger like any other write (round twelve, 6); every row it writes is of unknown order
+    // (`ORDER_FROM`, its last row's number, written in the same transaction); the parked set is the file's: the device's
+    // own named changes the wiped log no longer has (round fifty-eight).
     {
-      const tx = live.transaction(['order', 'meta'], 'readwrite');
-      const cur = await tx.objectStore('order').openKeyCursor(null, 'prev');
-      await Promise.all([cur ? tx.objectStore('meta').put(Number(cur.key), ORDER_FROM) : tx.objectStore('meta').delete(ORDER_FROM), tx.done]);
+      const tx = live.transaction(STORES, 'readwrite');
+      await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), dropFoldIn(tx)]);
+      await storeIn(tx, changes, false, {}, false, undefined, {}, { copying: true, markLast: ORDER_FROM, meta: { parked: (parked as string[] | undefined) ?? [] } });
     }
-    // Photographs one at a time: a transaction holding every blob of a large collection would be one large allocation.
-    for (const id of await stage.getAllKeys('photos')) {
+    // The switch itself (`promote`) tells the other tabs as the wipe lands: they still show the old collection, and they
+    // reload onto this one, where a tab that opens the vault waits for this copy (round eighty-two; they were told only
+    // once the photographs were in, and not at all when the copy then failed). A resume says so only once it has finished
+    // (`openVault`), as before.
+    if (sayAtWipe) announce('replaced');
+    // The photographs: the live ones the file does not hold go first, which frees their room before the copy; then the
+    // file's, one at a time, since a transaction holding every blob of a large collection would be one large allocation.
+    const keep = new Set(await stage.getAllKeys('photos'));
+    {
+      const tx = live.transaction('photos', 'readwrite');
+      const gone = (await tx.store.getAllKeys()).filter((id) => !keep.has(id));
+      await Promise.all([...gone.map((id) => tx.store.delete(id)), tx.done]);
+    }
+    for (const id of keep) {
       const p = await stage.get('photos', id);
       if (p) await live.put('photos', p);
     }
     await live.delete('meta', STAGING_PENDING);
     replaceWaitingSeen = false;
-  } finally {
-    stage.close();
   }
-  await deleteDB(STAGING_NAME);
+}
+
+/** The fold snapshot goes, and the counter moves, inside `tx`: a snapshot of a log that no longer exists is never read, and one being written of that log is refused (round fifty-three, 1). */
+type MetaStore = { get(k: string): Promise<unknown>; put(v: unknown, k: string): Promise<unknown>; delete(k: string): Promise<void> };
+async function dropFoldIn(tx: { objectStore(name: 'meta'): MetaStore }): Promise<number> {
+  const meta = tx.objectStore('meta');
+  const gen = Number((await meta.get(FOLD_GEN)) ?? 0) + 1;
+  await Promise.all([meta.delete(FOLD), meta.put(gen, FOLD_GEN)]);
+  return gen;
 }
 
 export { storageErrorText } from './storage-error'; // its own module since round sixty, so the collection reads it without the vault (and tests that stand the vault in still get it)
@@ -972,14 +1038,20 @@ export async function touchFold(rules: number): Promise<void> {
   }
 }
 /** Park stamps and drop the snapshot in one transaction: a load between the two would fold a parked change into a snapshot it could then write (round fifty-five, 2; the first reviewer's finding 7). */
-export async function parkStamps(stamps: string[], drop = true): Promise<string[]> {
+/**
+ * `moved`, when the snapshot is dropped: told the fold counter's move, from what to what, in the same transaction, so a tab
+ * whose fold already holds these parks and was built against the counter before it can take the new number and write its
+ * snapshot (round eighty-two; the independent review's 38: after a Merge that parked, the snapshot was refused).
+ */
+export async function parkStamps(stamps: string[], drop = true, moved?: (from: number, to: number) => void): Promise<string[]> {
   const all = await writing(async () => {
     const tx = (await openVault()).transaction('meta', 'readwrite');
     // A union with what is stored, read in the same transaction: two tabs parking at once must not write each other's stamps away.
     const had = (await tx.store.get('parked')) as string[] | undefined;
     const out = [...new Set([...(Array.isArray(had) ? had : []), ...stamps])];
-    await Promise.all([tx.store.put(out, 'parked'), ...(drop ? [dropFoldIn(tx)] : [])]);
+    const [, to] = await Promise.all([tx.store.put(out, 'parked'), drop ? dropFoldIn(tx) : Promise.resolve(0)]);
     await tx.done;
+    if (drop) moved?.(to - 1, to);
     return out;
   });
   if (drop) announceRefold();

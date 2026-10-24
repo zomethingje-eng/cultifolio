@@ -62,6 +62,13 @@ interface SyncMeta {
   quarantined?: Array<{ key: string; error: string; at: string; build?: string; /** what the key names */ kind?: 'batch' | 'photo' }>;
   /** Things the server refused to take from this device, by name, with why. They stay in the outbox; the rest of a sync goes on. */
   refused?: Array<{ key: string; error: string; at: string }>;
+  /**
+   * The stamps of changes the server refused (a 400, 409 or 413 for a batch that could not be split further), with when
+   * (round eighty-two; the independent review's 37). Each stays in the log and the outbox, and is sent again once a day
+   * (`REFUSED_AGAIN_MS`), not on every run: it was re-sent, and refused, at every run. Dropped once it is taken or has
+   * left the outbox.
+   */
+  refusedAt?: Record<string, number>;
   /** HLCs of stored changes the fold is holding back because they are stamped too far ahead of this device's clock. */
   held?: string[];
   /** The server said the vault is full: what it held and the limit, in bytes. Cleared when a push is taken again. */
@@ -125,6 +132,8 @@ async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Prom
   }
 }
 /** The record as this build reads it, its lists present even when an older one stored none (round fifty-seven; read the same way at init and in a run's reload, round fifty-nine). */
+/** How long a change the server refused waits before it is sent again (`SyncMeta.refusedAt`; round eighty-two). */
+export const REFUSED_AGAIN_MS = 86_400_000;
 const withDefaults = (m: SyncMeta): SyncMeta => ({ ...m, have: Array.isArray(m.have) ? m.have : [], photosPushed: Array.isArray(m.photosPushed) ? m.photosPushed : [] });
 const PHOTO_MS = 180_000;
 /** How far ahead a refusal of this vault's uploads is kept: an hour (round sixty-one; decision 6), and the day's upload allowance a day (round seventy; triage-69 W2). */
@@ -226,6 +235,8 @@ class Sync {
   /** Runs that finished on this page, well or badly: the sync page shows it, so a test (or a person) can tell a new "Synced" from the one that was already there (round thirteen, B2). */
   runs = $state(0);
   pending = $state(0);
+  /** Changes the server refused, kept in the outbox and sent again after a day (`refusedAt`); not among `pending` (round eighty-two). */
+  refusedWaiting = $state(0);
   /** Batches on the server this device could not read; the sync page says so. */
   quarantined = $state<Array<{ key: string; error: string; at: string; kind?: 'batch' | 'photo' }>>([]);
   /** What the server refused from this device. */
@@ -433,9 +444,19 @@ class Sync {
     this.wasIn = next;
   }
 
+  /**
+   * What waits to be sent, counted one way wherever it is said (round eighty-two; the independent review's 37: the page
+   * read the outbox's length here and what a push would send there, and the two disagreed by every change this version
+   * cannot send and every change the server refused): the changes the next push sends, and apart from them the refused
+   * ones waiting for their day.
+   */
   private async countPending(): Promise<void> {
-    if (!this.meta) return;
-    this.pending = (await outboxKeys()).length;
+    const m = this.meta;
+    if (!m) return;
+    const { send, refused } = await this.outboxSplit(m);
+    if (this.meta !== m) return;
+    this.pending = send.length;
+    this.refusedWaiting = refused;
   }
 
   /**
@@ -443,9 +464,19 @@ class Sync {
    * it set the whole batch aside on every peer (round sixty-nine; triage-68 R3, R46-18). It stays in the log and the
    * outbox, for a build that reads it (a newer build's kind, written here before a rollback).
    */
-  private async toPush(): Promise<Change[]> {
+  private async toPush(m: SyncMeta | null = this.meta): Promise<Change[]> {
+    return (await this.outboxSplit(m)).send;
+  }
+  /** The outbox as the next push sends it, and how many of its changes wait out a refusal's day (`refusedAt`); refusals of changes no longer in the outbox are dropped. */
+  private async outboxSplit(m: SyncMeta | null): Promise<{ send: Change[]; refused: number }> {
     const ts = (await outboxKeys()).sort(hlcCompare);
-    return (await changesByKeys(ts)).filter((c) => !changeError(c, true));
+    const all = (await changesByKeys(ts)).filter((c) => !changeError(c, true));
+    const at = m?.refusedAt ?? {};
+    const inBox = new Set(ts);
+    for (const t of Object.keys(at)) if (!inBox.has(t)) delete at[t];
+    const now = Date.now();
+    const waiting = (c: Change) => at[c.t] != null && now - at[c.t] < REFUSED_AGAIN_MS;
+    return { send: all.filter((c) => !waiting(c)), refused: all.filter(waiting).length };
   }
 
   /**
@@ -478,6 +509,7 @@ class Sync {
     this.offline = false;
     this.unreached = null;
     this.pending = 0;
+    this.refusedWaiting = 0;
     this.quarantined = [];
     this.refused = [];
     this.held = 0;
@@ -908,9 +940,10 @@ class Sync {
     // with its verdict (`pushBatch`), so every device parks it alike and offers Apply (round sixty-two, second pass; the
     // data review's 5: left out, a record whose own fields were parked reached a joining device as waiting for a newer
     // version of the app, with nothing to Apply).
-    const todo = await this.toPush();
+    const todo = await this.toPush(m);
     this.pending = todo.length;
     let sent = 0;
+    const refusedBefore = this.refusedWaiting; // a change refused in this run leaves the count of what waits to be sent
     // A vault that was full last time is tried once more each run (one request); if it is still full the push stops there.
     for (let i = 0; i < todo.length; ) {
       const end = cutBefore(todo, Math.min(i + BATCH_MAX, todo.length));
@@ -918,7 +951,7 @@ class Sync {
       i = end;
       this.step(m, `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`);
       sent += await this.pushBatch(m, batch);
-      this.pending = todo.length - sent;
+      this.pending = Math.max(0, todo.length - sent - (this.refusedWaiting - refusedBefore));
       await this.save(m);
       if (this.vaultFull) return;
     }
@@ -1009,6 +1042,9 @@ class Sync {
       // own transaction: a run of a vault this device has since left or replaced must not empty the new vault's outbox of
       // these same changes (round sixteen, 2; round seventeen, A1).
       await outboxAck(batch.map((c) => c.t), m.key);
+      // A change refused before and taken now is no longer refused (round eighty-two).
+      if (m.refusedAt) for (const c of batch) delete m.refusedAt[c.t];
+      if (m.refused?.some((q) => batch.some((c) => c.t === q.key))) { m.refused = m.refused.filter((q) => !batch.some((c) => c.t === q.key)); this.refused = [...m.refused]; }
       this.setFull(m, null);
       // A small batch is not counted against the day's allowance, so its taking says nothing of it (round seventy).
       if (!(m.refusal?.day && body.length <= SMALL_BATCH_BYTES) && !m.refusal?.photos) this.clearRefusal(m);
@@ -1035,6 +1071,10 @@ class Sync {
     if (r.status === 400 || r.status === 409 || r.status === 413) {
       // Noted under the last HLC, which is stable across runs.
       this.note(m, 'refused', batch[batch.length - 1].t, `the server refused ${batch.length} change${batch.length === 1 ? '' : 's'} (${r.status})`);
+      // Not sent again at the next run, but after a day: each run re-sent it and was refused again (round eighty-two).
+      const now = Date.now();
+      for (const c of batch) (m.refusedAt ??= {})[c.t] = now;
+      this.refusedWaiting += batch.length;
       return 0;
     }
     throw new Error(`push failed: ${r.status}`);

@@ -79,7 +79,8 @@ describe('"cv." marks a cultivar, which is never read as an epithet by a similar
     const a = await ask('Echeveria cv. Lola');
     expect(a.relaxed).toBe('Echeveria'); // merged: E. lilacina and E. lozanoi, near, no "Showing results for"
     expect(a.near).toBe(false);
-    expect(a.names).toEqual(['Echeveria agavoides', 'Echeveria elegans', 'Echeveria lilacina', 'Echeveria lozanoi']);
+    // The genus's order is round eighty-two's (a genus word by its species' English names, then photographs): the set is the test's.
+    expect([...a.names].sort()).toEqual(['Echeveria agavoides', 'Echeveria elegans', 'Echeveria lilacina', 'Echeveria lozanoi']);
   });
 });
 

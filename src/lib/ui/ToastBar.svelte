@@ -61,6 +61,44 @@
     toast.hold('focus'); // once per visit, released on leaving: a hold per button moved through was never given back (round sixty-one); for as long as focus stays (round sixty-two)
   }
   $effect(() => { void toast.text; hasWayBack = false; });
+
+  /**
+   * A toast never sits over a form's buttons (round eighty-two; the independent review's 14: Water's "Watered. Undo",
+   * eight seconds long, covered the Cancel of the Record form opened meanwhile). While a toast is up, its place is checked
+   * against every visible button of a form on the page (as the toast is raised, as the page changes under it, on scroll and
+   * resize), and it is lifted just above the highest one it would cover, never above the top bar.
+   */
+  let box = $state<HTMLDivElement | null>(null);
+  let lift = $state(0);
+  const BUTTONS = 'form button, form input[type="submit"], form input[type="button"], form .btn';
+  function place() {
+    const el = box;
+    if (!el || !toast.text) { lift = 0; return; }
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) { lift = 0; return; }
+    // Where it sits unlifted, and the most it may be lifted: its top kept 56 px from the window's top (under the top bar).
+    const top0 = r.top + lift, bottom0 = r.bottom + lift, most = Math.max(0, top0 - 56);
+    const rects = [...document.querySelectorAll<HTMLElement>(BUTTONS)].filter((b) => !el.contains(b)).map((b) => b.getBoundingClientRect()).filter((b) => b.width > 0 && b.height > 0 && b.right > r.left && b.left < r.right);
+    let up = 0;
+    for (let i = 0; i < 6; i++) {
+      const hit = rects.filter((b) => b.top < bottom0 - up && b.bottom > top0 - up);
+      if (!hit.length) break;
+      up = Math.min(most, bottom0 - Math.min(...hit.map((b) => b.top)) + 8);
+      if (up >= most) break;
+    }
+    lift = up;
+  }
+  $effect(() => {
+    if (!toast.text || typeof window === 'undefined') { lift = 0; return; }
+    let frame = 0;
+    const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; place(); }); };
+    soon();
+    const watch = new MutationObserver(soon);
+    watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'open', 'style'] });
+    window.addEventListener('scroll', soon, { passive: true });
+    window.addEventListener('resize', soon);
+    return () => { watch.disconnect(); window.removeEventListener('scroll', soon); window.removeEventListener('resize', soon); if (frame) cancelAnimationFrame(frame); };
+  });
 </script>
 
 <!-- The live region is in the page from the start and only its words change: a region created with its text is not
@@ -71,7 +109,7 @@
   <!-- A toast with no action lets taps through: it sits over the lower part of the page on a phone, where the next button a grower reaches for is (round fifty-five, 5). -->
   <!-- While focus or the pointer is on it, its timer waits, up to HOLD_MAX_MS (round sixty; round sixty-one; the accessibility review, 1). -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="toast" class:quiet={!toast.text} class:through={!toast.action} onfocusin={onIn} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) toast.release('focus'); }} onpointerenter={() => toast.hold('pointer')} onpointerleave={() => toast.release('pointer')} onkeydown={onKey}><span role="status" aria-live="polite" aria-atomic="true">{toast.said}</span>{#if toast.text && toast.action}{' '}<button type="button" class="undo" bind:this={undoBtn} onclick={act}>{toast.action.label}</button>{#if toast.origin || hasWayBack}<button type="button" class="skipback" onclick={back}>Back to where you were</button>{/if}{/if}</div>
+  <div class="toast" bind:this={box} style:translate={lift ? `0 -${lift}px` : null} class:quiet={!toast.text} class:through={!toast.action} onfocusin={onIn} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) toast.release('focus'); }} onpointerenter={() => toast.hold('pointer')} onpointerleave={() => toast.release('pointer')} onkeydown={onKey}><span role="status" aria-live="polite" aria-atomic="true">{toast.said}</span>{#if toast.text && toast.action}{' '}<button type="button" class="undo" bind:this={undoBtn} onclick={act}>{toast.action.label}</button>{#if toast.origin || hasWayBack}<button type="button" class="skipback" onclick={back}>Back to where you were</button>{/if}{/if}</div>
 </div>
 
 <style>

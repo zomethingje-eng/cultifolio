@@ -1,6 +1,6 @@
 /**
- * The most-grown genera (round seventy-five, the owner's decision): the file `scripts/most-grown-genera.txt` read, and the
- * rule behind the catalogue's "Most grown" chip, a filter off by default and the same on every device. Pure, so the rule
+ * The popular genera (round seventy-five, the owner's decision): the file `scripts/most-grown-genera.txt` read, and the
+ * rule behind the catalogue's "Popular genera" chip, a filter off by default and the same on every device. Pure, so the rule
  * is tested on the real file and on made-up ones.
  *
  * The rule, as /about/how says it: the fewest genera of the reference, taken from the most observed down, that together

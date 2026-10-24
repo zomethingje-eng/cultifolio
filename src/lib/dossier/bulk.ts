@@ -969,6 +969,9 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       // its older names may be Kew's (round sixty-eight), read from the builder's own paged list; a list refused, failed or
       // cut short is no answer, and nothing is taken (triage-68 M4). Rows of its words by another author are another
       // name, said in the record, never Kew's answer for this species (round seventy; triage-69 B4, S-B4).
+      // Why Kew's file gave this species no range, for the record when GBIF has none either (round eighty-two, F; review
+      // 1's 7: Bisnaga hamatacantha's range row said "none" and not why).
+      let noKew: string | undefined;
       if (sp && !src.wcvp.holds(sp.name, sp.authorship, sp.family)) {
         const others = src.wcvp.ownRows(sp.name, sp.authorship, sp.family).others;
         // "Another name" only where the row is plainly another author's (`plainlyAnother`, the rule the links read): Kew's
@@ -993,6 +996,14 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
           const r = await base<{ results?: GbifDistribution[] }>(url, opts);
           return (r.status === 'ok' ? { status: 'ok', data: { ...r.data, results: (r.data.results ?? []).filter((d) => !isWcvpRow(d)), otherAuthor } } : r) as unknown as FetchResult<T>;
         }
+        const n = syn.status === 'ok' ? (syn.rows ?? []).length : 0;
+        const older = syn.status !== 'ok' ? `GBIF's older names for it were not read (${syn.status})` : syn.truncated ? "GBIF's list of its older names was cut short, so they were not read" : n ? `none of GBIF's ${n} older name${n === 1 ? '' : 's'} for it leads to one species Kew accepts with a native range` : 'GBIF lists no older name for it';
+        noKew = `Kew's file${src.wcvp.fileDay ? ` of ${src.wcvp.fileDay}` : ''} holds no row of ${sp.name}${sp.authorship ? ` ${sp.authorship}` : ''}, and ${older}`;
+      } else if (sp && got === null) noKew = `Kew's file holds ${sp.name}${sp.authorship ? ` ${sp.authorship}` : ''}, and this build did not read its entry's range`;
+      if (noKew) {
+        stats.through++;
+        const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+        return (r.status === 'ok' || r.status === 'none' ? { status: 'ok', data: { ...(r.status === 'ok' ? r.data : { results: [] }), noKew } } : r) as unknown as FetchResult<T>;
       }
     } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1])) && (!src.covered || src.covered.has(Number(m[1])))) {
       const key = Number(m[1]);

@@ -1,7 +1,7 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
 import { PAGE_IN_DEMO } from '$lib/db/demo';
 import { collection } from '$lib/db/collection.svelte';
-import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
+import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, setMeta, changeKeys, openStaging, underReplaceLock } from '$lib/db/vault';
 import { accNo, sowNo } from '$lib/db/types';
 import { sync } from '$lib/sync/engine.svelte';
 import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, type ReadBackup } from './backup';
@@ -162,7 +162,13 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   // Refused in code, not only hidden by the page (round sixty-one; review B): restored into the sample, a backup would be
   // deleted with it on leaving, and a replace would stage it beside the grower's own.
   if (PAGE_IN_DEMO) throw new Error(SAMPLE_REFUSAL); // the page's collection (round sixty-seven; triage-66 V3)
-  if (mode === 'replace') return replaceFromBackup(o, onProgress);
+  if (mode === 'replace') {
+    const r = await replaceFromBackup(o, onProgress);
+    await countedAsBackup();
+    return r;
+  }
+  // A merge into a device that held nothing leaves it exactly the file: a backup of it exists, and is counted.
+  const wasEmpty = (await changeKeys()).length === 0;
   const changes = o.merge.fresh;
   const have = new Set(await photoBlobIds());
   const ids = o.file.photoIds.filter((id) => !have.has(id));
@@ -203,7 +209,22 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   // The fold with the file in it, as the snapshot, off the page's path (round sixty-seven; triage-66 R13). A replace
   // drops the snapshot with the log, and the load after its reload folds the whole log and writes one.
   if (changes.length) void collection.saveSnapshot().catch(() => false);
+  if (wasEmpty && changes.length) await countedAsBackup();
+  // And the pixels already here of a photograph the file removed: bytes nothing names now, with sync or without (round
+  // eighty-two; the independent review's 38). Off the page's path.
+  if (changes.length) void collection.sweepPixels().catch(() => 0);
   return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings) };
+}
+
+/**
+ * A restore that leaves the device exactly the file (a Replace, or a Merge into a device that held nothing) counts as a
+ * backup made now: the file is a copy of the whole collection, kept somewhere else, and nothing has changed since (round
+ * eighty-two; the independent review's 15: /backup said "never" and three reminders asked for a backup just restored
+ * from). The page says it was a restore (`BACKUP_FROM`). A failure to note it changes nothing else.
+ */
+export const BACKUP_FROM = 'lastBackupFrom';
+async function countedAsBackup(): Promise<void> {
+  await Promise.all([setMeta('lastBackup', new Date().toISOString()), setMeta(BACKUP_FROM, 'restore')]).catch(() => {});
 }
 
 /** What a restore started in the sample collection is told. */
@@ -218,6 +239,9 @@ async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: n
   // A file of an older build is staged with no parks (`fileParks`): replace.ts stages the manifest's list as it is.
   const parks = fileParks(o.file.manifest);
   const file = parks === o.file.manifest.parked ? o.file : { ...o.file, manifest: { ...o.file.manifest, parked: parks } };
-  const r = await replaceThroughStaging(file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } });
+  // The whole Replace, from the staging to the end of the switch, under the replace lock (vault.ts `underReplaceLock`;
+  // round eighty-two, the independent review's 1): a second Replace in another tab waits for this one, and then finds
+  // nothing pending, and a tab opened during the switch waits for its copy rather than run a second one beside it.
+  const r = await underReplaceLock(() => replaceThroughStaging(file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } }));
   return { ...r, settingsRestored: applyDeviceSettings(o.file.settings) };
 }

@@ -8,5 +8,7 @@ export function failedBeforeHydration(img: HTMLImageElement, onFail: (img: HTMLI
   const check = () => { if (img.complete && img.naturalWidth === 0 && img.getAttribute('src')) fn(img); };
   img.addEventListener('error', () => fn(img));
   check();
-  return { update(next: (img: HTMLImageElement) => void) { fn = next; } };
+  // Only a function replaces the one heard: a caller that passed this update on with a value of its own (compare's key)
+  // made `fn` a string, and the next failure threw "n is not a function" (round eighty-two; the second review's lead).
+  return { update(next: (img: HTMLImageElement) => void) { if (typeof next === 'function') fn = next; } };
 }

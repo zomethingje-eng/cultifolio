@@ -1,0 +1,14 @@
+# Round eighty-two, agent F: the live pages round eighty-two's data changes need rebuilt, for DEPLOY's (d), joined into its
+# online line (one read of the download):
+#   npm run dossier -- --keys scripts/r80-repair-keys.txt,scripts/r82-repair-keys.txt,rebuild-wd-retry.txt,rebuild-no-reason.txt --grid climate --bulk bulk --skip inat
+# A line is a page's id and name. docs/DEPLOY.md, "Round eighty-two: the build and the reference's data (agent F)", says why.
+#
+# The owner's decision on review 1's 4: Echeveria peacockii (g7530398) merges into Echeveria desmetiana, not Dudleya
+# pulverulenta (scripts/merged-pages.txt). The page joined reads 7530398's records and answers its old address, then
+# --prune-followed takes g7530398; k2778991 Dudleya pulverulenta, on round eighty's list, then reads 7530398 no longer.
+k2781125 Echeveria desmetiana
+#
+# The owner's decision of 2026-10-23 (the merge, M): Bisnaga hamatacantha (g7281739) merges into Ferocactus hamatacanthus
+# (k2808164, Kew's accepted name; scripts/merged-pages.txt). The page joined reads 7281739's records and photographs and
+# answers its old address, then --prune-followed takes g7281739.
+k2808164 Ferocactus hamatacanthus

@@ -5,6 +5,8 @@
  * "refused" (round sixty-two; the grower review's 2).
  */
 
+import { lapseSetAside } from '$core/lapse';
+
 type Up = Record<string, { status: string; detail?: string } | undefined>;
 
 /** The pill word for each recorded status, as Provenance shows it. */
@@ -103,4 +105,32 @@ export function namesSource(d: {
   if (d.ids.gbif != null || rec?.status === 'none' || rec?.status === 'ok') return null;
   if (!rec) return { unchecked: "Wikidata's common names were not read for this page" };
   return { unchecked: (rec.detail ?? `Wikidata ${notAnswered(rec.status)}`).replace(/^not (?:checked|asked): /, '') };
+}
+
+/** What of a dossier the page shows, as `foundNotShown` reads it. */
+type Shown = {
+  photos?: ReadonlyArray<{ src?: string }>;
+  climate?: { status?: string; extremesStatus?: string; landFraction?: number; months?: ReadonlyArray<{ tmin: number }>; extremesLapse?: { minAbs: number; lapseAppliedM?: number } };
+  distribution?: { native?: readonly unknown[]; introduced?: readonly unknown[] };
+};
+
+/**
+ * What a source that answered ("ok") found, where the page shows none of it (round eighty-two, F; review 1's 29: GBIF
+ * media "answered" on 196 of the reviewers' 9,463 live pages with no photograph credited to GBIF; NASA POWER's daily
+ * extremes "answered" on 128 whose cold floor is set aside; Kew's range "answered" on 37 with no native region). Read
+ * from the dossier when the page is shown, so a page built before says it too; null where the page shows the answer, or
+ * the row's own words say it already.
+ */
+export function foundNotShown(src: string, u: { status: string; detail?: string } | undefined, d: Shown): string | null {
+  if (u?.status !== 'ok') return null;
+  if (src === 'gbif.media' && d.photos && !d.photos.some((p) => p.src === 'gbif')) return 'none of the photographs on this page is credited to GBIF: those shown are other sources\', and GBIF\'s were the same photographs or were set aside by the photograph rules';
+  if (src === 'climate.extremes' && d.climate?.status === 'ok') {
+    if (d.climate.extremesStatus === 'sea') return `read, and set aside: NASA POWER's cell is mostly sea${d.climate.landFraction != null ? ` (${Math.round(d.climate.landFraction * 100)}% land)` : ''}, so no cold floor is shown`;
+    if (d.climate.extremesStatus === 'lapse') { const why = d.climate.months && d.climate.extremesLapse ? lapseSetAside({ months: d.climate.months, extremes: d.climate.extremesLapse }) : null; return `read, and set aside${why ? `: ${why}` : ''}, so no cold floor is shown`; }
+  }
+  if (src === 'wcvp.distribution' && d.distribution && !(d.distribution.native ?? []).length && !/no native range/.test(u.detail ?? '')) {
+    const n = (d.distribution.introduced ?? []).length;
+    return `Kew's entry lists no native region${n ? `, only ${n} where it is introduced` : ''}`;
+  }
+  return null;
 }

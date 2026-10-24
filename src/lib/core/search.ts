@@ -33,6 +33,14 @@ export interface Searchable {
    */
   kew?: string[];
   /**
+   * The record's older names spelt as another species' accepted name of the reference, by another author (round
+   * eighty-two; review 1's 3: "Sempervivum tectorum · older name: Sempervivum montanum", where the record's name is S.
+   * montanum Sibth. & Sm. and the page S. montanum is Linnaeus's): never in `syn` or `older`, read only as a name typed,
+   * as `kew` is (`homTyped`), after every older name of the species itself, and said as another author's name
+   * (`homonymOf` of `$lib/ui/ref/searched`). Absent in an index built before, and where there is none.
+   */
+  hom?: string[];
+  /**
    * The other spellings of the shown names, searched as a common name is and never shown (round sixty-nine; triage-68
    * N2): "Bluemink" pooled "Blue mink", and "blue mink" found nothing. Absent in an index built before.
    */
@@ -141,6 +149,8 @@ export interface Prepared<T> {
    * reaches the species through one only when it types the whole name, the genus in full first (round eighty).
    */
   kewWords: string[][];
+  /** Each of the record's names by another author (`hom`)'s words, kept apart: read only by `homTyped`, as `kewWords` by `kewTyped` (round eighty-two). */
+  homWords: string[][];
   /** The species' own epithet, folded: a species that keeps the epithet of an older name typed comes first (round sixty-nine; triage-68 N1). */
   epithet: string;
   sortKey: string;
@@ -506,6 +516,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
     const synWords = [...(item.syn ?? []), ...(item.older ?? [])].map((x) => words(x).filter((w) => !RANK_MARKERS.has(w)));
     const shownSyn = (item.syn ?? []).length;
     const kewWords = (item.kew ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
+    const homWords = (item.hom ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
     return {
       item,
       nameWords,
@@ -519,6 +530,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
       synWords,
       shownSyn,
       kewWords,
+      homWords,
       epithet: nameWords[1] ?? '',
       wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
       // A nothogenus sorts under its genus, past its sign, as the rows do (`withoutSign` of `$core/names`; round eighty-one, H to S).
@@ -540,7 +552,8 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
  */
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
   // Or one of Kew's older names typed as a name (round eighty): the species is then a hit of the older names' group.
-  return rankWords(p, qs, match) ?? (kewTyped(p, qs).length ? 3 : null);
+  // Or a name of the record by another author typed as a name (round eighty-two), in the same group, after the rest.
+  return rankWords(p, qs, match) ?? (kewTyped(p, qs).length || homTyped(p, qs).length ? 3 : null);
 }
 /**
  * Kew's older names (their places in `kewWords`) a query types as a name (round eighty; review-d 5): two words or more,
@@ -550,9 +563,20 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
  * its genus, which is how the key files hold them (`$core/search-files`, the `@` keys).
  */
 export function kewTyped(p: Pick<Prepared<unknown>, 'kewWords'>, qs: string[]): number[] {
+  return typedName(p.kewWords, qs);
+}
+/**
+ * The record's names by another author (their places in `homWords`) a query types as a name, by `kewTyped`'s rule (round
+ * eighty-two): never by a word alone or a similar spelling, so "montanum" is no longer Sempervivum tectorum. The key files
+ * hold their words where they held them in `syn` and `older` (`$core/postings`), so every candidate is read as before.
+ */
+export function homTyped(p: Pick<Prepared<unknown>, 'homWords'>, qs: string[]): number[] {
+  return typedName(p.homWords, qs);
+}
+function typedName(groups: string[][], qs: string[]): number[] {
   const out: number[] = [];
   if (qs.length < 2) return out;
-  p.kewWords.forEach((g, at) => {
+  groups.forEach((g, at) => {
     if (g[0] !== qs[0]) return;
     for (let i = 1; i < qs.length; i++) if (i < qs.length - 1 ? !g.includes(qs[i]) : !g.some((w) => w.startsWith(qs[i]))) return;
     out.push(at);
@@ -621,7 +645,7 @@ function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string,
   // A binomial at least, every word but the last written in full: "coco plum" is no older name "Cocos plumosa" typed,
   // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
   // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
-  if (olderTyped(p, qs, match).length || kewTyped(p, qs).length) return Group.Older;
+  if (olderTyped(p, qs, match).length || kewTyped(p, qs).length || homTyped(p, qs).length) return Group.Older;
   const cm = commonMatch(match, qs);
   for (const cn of p.commonNames) if (holds(cn, qs, cm)) return Group.Common;
   return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
@@ -658,6 +682,9 @@ function olderOrder(p: Prepared<unknown>, qs: string[], match: (q: string, w: st
   // stramonium, the tautonyms by their genus), as they should be. A name still being typed ("Opuntia longisp") is no
   // one's exactly; a shown name of the typed length counts as shown, a shown variety does not.
   const typedAt = olderTyped(p, qs, match);
+  // A species reached only by a name of its record by another author comes after every species reached by an older name
+  // of its own, whatever its epithet (round eighty-two; review 1's 3).
+  if (!typedAt.length && !kewTyped(p, qs).length) return 8;
   // Kew's older names typed count as held exactly too (round eighty), and never as shown.
   const exact = typedAt.some((at) => same(p.synWords[at], qs)) || kewTyped(p, qs).some((at) => same(p.kewWords[at], qs));
   const shown = typedAt.some((at) => at < p.shownSyn && p.synWords[at].length === qs.length);
@@ -809,13 +836,19 @@ function commonTie(p: Prepared<unknown>, qs: string[], typed: string): [number, 
   const photos = (p.item as Searchable).photos;
   return [at, asTyped, -(typeof photos === 'number' ? photos : 0)];
 }
+/** How known a species is, for a genus word's order (`collect`): its English names shown, then its photographs, as one number, the larger the better. */
+function known(e: Searchable): number {
+  const names = (e.common ? 1 : 0) + (Array.isArray(e.commons) ? e.commons.length : 0);
+  const photos = typeof e.photos === 'number' && e.photos > 0 ? Math.min(e.photos, 99_999) : 0;
+  return names * 100_000 + photos;
+}
 function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w: string) => boolean, near = false, typed = '') {
-  const hits: Array<{ p: Prepared<T>; g: number; d: number; o: number; c: number; t: [number, number, number] }> = [];
+  const hits: Array<{ p: Prepared<T>; g: number; d: number; o: number; c: number; t: [number, number, number]; k: number }> = [];
   for (const p of prepared) {
     const r = rank(p, qs, match);
     if (r == null) continue;
     const g = group(p, qs, r, match);
-    hits.push({ p, g, d: near ? farness(p, qs) : 0, o: g === Group.Older ? olderOrder(p, qs, match) : 0, c: closeness(p, qs, g), t: g === Group.Common ? commonTie(p, qs, typed) : [0, 0, 0] });
+    hits.push({ p, g, d: near ? farness(p, qs) : 0, o: g === Group.Older ? olderOrder(p, qs, match) : 0, c: closeness(p, qs, g), t: g === Group.Common ? commonTie(p, qs, typed) : [0, 0, 0], k: 0 });
   }
   // An older name typed whole, held exactly, comes before a name reached only by its genus's start (round seventy-one;
   // S-F12: "Tecoma speciosa", Campsis radicans' older name, answered Tecomanthe speciosa first, "tecoma" being the start of
@@ -834,12 +867,28 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
   }
   // A common name of one word, the query itself, that species of two genera or more are called is no evidence of which
   // was meant, as a generic noun is not (`genericAlone`; round eighty-one, review-c 2: a source calls two Cotoneasters
-  // "Rose"): matched exactly, it comes after the whole-word and headline matches.
+  // "Rose"): matched exactly, it comes after the whole-word and headline matches. Never the headline (round eighty-two;
+  // review 1's 2: "peppermint" put Mentha × piperita, whose headline is "Peppermint", 18th, after eleven Eucalyptus,
+  // since one Eucalyptus is called "Peppermint" among its other names): a species whose own headline is the query is
+  // the one the reference names so, and comes first.
   if (qs.length === 1) {
     const genera = new Set<string>();
     const alone = (p: Prepared<unknown>) => p.commonNames.some((cn) => cn.length === 1 && cn[0] === qs[0]);
+    const headline = (p: Prepared<unknown>) => p.headed && same(p.commonNames[0], qs);
     for (const h of hits) if (alone(h.p)) genera.add(h.p.nameWords[0]);
-    if (genera.size > 1) for (const h of hits) if (h.c <= 1 && alone(h.p) && !same(h.p.nameWords, qs) && !h.p.synWords.some((x) => same(x, qs)) && !h.p.kewWords.some((x) => same(x, qs))) h.c = 3.5;
+    if (genera.size > 1) for (const h of hits) if (h.c <= 1 && alone(h.p) && !headline(h.p) && !same(h.p.nameWords, qs) && !h.p.synWords.some((x) => same(x, qs)) && !h.p.kewWords.some((x) => same(x, qs))) h.c = 3.5;
+    // A genus word alone (round eighty-two; review 1's 2: "echeveria" listed 259 species in the alphabet, and E. elegans
+    // was past the first thirty): the species of the genus typed, or, a genus still being typed or misspelt, of the one
+    // genus every name-typed hit belongs to, by how many English names the sources give them (the shown ones, `common`
+    // and `commons`), then by how many photographs their pages show, the most first, then the alphabet; the species of
+    // another genus that begins with the word after them ("aloe" is Aloe before Aloestrela). Several genera begun and
+    // none typed whole ("c", "mam") keep the alphabet, genus by genus. Measured on the live index over 71 species growers
+    // keep in 17 genera: 26 were in their genus's first thirty in the alphabet, 45 by photographs alone, 61 by names then
+    // photographs (a photograph count is near its cap on most pages).
+    const named = hits.filter((h) => h.g === Group.Name);
+    const of = new Set(named.map((h) => h.p.nameWords[0]));
+    const genus = named[0]?.p.genera.has(qs[0]) && of.has(qs[0]) ? qs[0] : of.size === 1 ? [...of][0] : null;
+    if (genus) for (const h of named) h.k = h.p.nameWords[0] === genus ? -known(h.p.item as Searchable) : 1;
   }
-  return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.o - b.o || a.c - b.c || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.t[2] - b.t[2] || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
+  return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.o - b.o || a.c - b.c || a.k - b.k || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.t[2] - b.t[2] || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
 }

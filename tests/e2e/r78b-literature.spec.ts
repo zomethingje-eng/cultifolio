@@ -13,17 +13,15 @@ import { test, expect, type Page } from '@playwright/test';
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
-test('r78b: a page built now says its papers are not checked, and why, in one sentence @phone', async ({ page }) => {
+// Round eighty-two (the independent review's 23): no Papers section or tab while papers are not asked; the record of
+// sources says it (r82u-pages.spec.ts 2). On r78base the page said "Not asked. OpenAlex was not asked when this page was built."
+test('r78b: a page built now has no Papers section, and its record says the papers are not checked, and why @phone', async ({ page }) => {
   await page.goto('/species/copiapoa-humilis');
   await ready(page);
-  const papers = page.locator('#s-research');
-  await expect(papers).toHaveText('Papers naming this species');
-  const notice = page.locator('#s-research + .notice');
-  await expect(notice).toHaveText("Not checked. Papers are not yet asked for this reference; a later fill takes them from OpenAlex's free snapshot.");
+  await expect(page.locator('#s-research')).toHaveCount(0);
   await expect(page.locator('main')).not.toContainText('OpenAlex was not asked');
-  // The page's tab to the section is there, so a reader finds the sentence, not a silence.
-  await expect(page.locator('a[href="#s-research"]')).toHaveCount(1);
-  // The record says the same, beside "not asked", never "nothing to report".
+  await expect(page.locator('a[href="#s-research"]')).toHaveCount(0);
+  // The record says it, beside "not asked", never "nothing to report".
   await page.locator('details.prov summary').click();
   const row = page.locator('details.prov .row', { hasText: 'OpenAlex papers' });
   await expect(row).toContainText('not asked');

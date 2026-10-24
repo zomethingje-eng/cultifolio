@@ -18,11 +18,13 @@ import { slugify } from '$core/names';
 // Round seventy-nine (D): its first change moved the seven lines into scripts/merged-pages.txt, after round seventy-three's two.
 const ALL = parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8'));
 // Round eighty (A): Ceropegia nubica now joins Echidnopsis cereiformis (k505095, no GBIF key), with Ceropegia cereiformis,
-// by the owner's decision; the pairs between GBIF keys are the other six.
+// by the owner's decision; the pairs between GBIF keys are the other six. Round eighty-two (F): Echeveria peacockii now
+// joins Echeveria desmetiana (k2781125, no GBIF key), by the owner's decision on review 1's 4; the pairs between GBIF keys
+// are the other five. At the merge of round eighty-two (M), Bisnaga hamatacantha joins Ferocactus hamatacanthus
+// (k2808164, no GBIF key), by the owner's decision of 2026-10-23.
 const PENDING = ALL.slice(2).filter((m) => !m.intoPage);
 /** Each pair: the page that leaves, the page kept (Kew's accepted name), Kew's entry. */
 const PAIRS: Array<[number, string, number, string, string]> = [
-  [7530398, 'Echeveria peacockii', 2985894, 'Dudleya pulverulenta', '2778991'],
   [3947359, 'Weingartia pulchra', 3948341, 'Weingartia canigueralii', '2465834'],
   [3190985, 'Drosera parvula', 3190812, 'Drosera paleacea', '64497'],
   [3574291, 'Ceropegia melanops', 3574112, 'Ceropegia nigra', '502875'],
@@ -34,7 +36,7 @@ describe('the seven merges, applied from round seventy-nine', () => {
   it('scripts/merged-pages.txt names each pair after round seventy-three\'s two, the page under Kew\'s accepted name kept', () => {
     expect(ALL.slice(0, 2).map((m) => m.from)).toEqual([3084426, 7906297]);
     expect(PENDING.map((m) => [m.from, m.name, m.into])).toEqual(PAIRS.map(([from, name, into]) => [from, name, into]));
-    expect(ALL.filter((m) => m.intoPage).map((m) => [m.from, m.intoPage])).toEqual([[9592399, 'k505095'], [9574874, 'k505095']]);
+    expect(ALL.filter((m) => m.intoPage).map((m) => [m.from, m.intoPage])).toEqual([[7530398, 'k2781125'], [9592399, 'k505095'], [9574874, 'k505095'], [7281739, 'k2808164']]);
   });
   it('the builder reads that one file, and merged-pages-79.txt is gone (round seventy-nine D; failed on r79base, where the file held two)', () => {
     expect(existsSync('scripts/merged-pages-79.txt')).toBe(false);

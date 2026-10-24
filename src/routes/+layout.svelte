@@ -135,6 +135,13 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
   let vaultNote = $state<string | null>(null);
+  /**
+   * The frost bar (round eighty-two; the independent review's 18): a night within 72 hours of the forecast, or one below
+   * the cold floor of a space of the grower's that the site's forecast covers (no coordinates of its own, not indoors, a
+   * floor that is not a heater's set-point), dated; red only at or below freezing.
+   */
+  const frostFloors = $derived(collection.ready ? collection.locations.map((l) => ({ l, c: collection.conditions(l.id) })).filter((x) => x.c.floorC != null && !x.c.floorHeld && x.c.indoor !== true && x.c.lat == null).map((x) => ({ name: x.l.name, floorC: x.c.floorC! })) : []);
+  const frostBar = $derived(frost.bar(frostFloors));
   /** Whether anything was typed, ticked or chosen on this page: a takeover then waits for the next navigation (round sixty-seven; triage-66 P2). */
   let typedHere = false;
   if (browser) {
@@ -441,7 +448,7 @@
      itself may be the one that is wrong. Either way an edit made now saves and shows; "Nothing is lost" was not true of
      every case and is not said (round sixty; the lead's wording, the outside review's A17). -->
 {#if collection.clockBehindAt && privateRoute}{@const when = new Date(collection.clockBehindAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}<p class="clockbar" role="status" id="clockbar">{#if collection.clockTrusted}Some changes on this device are dated ahead of now, up to {when}: its clock was probably fast when they were made. They count here. Once synced, any change dated more than two days after the sync bundle carrying it arrived is parked on every device: kept, not applied, and offered with Apply on the Sync page. What you edit now saves and shows.{:else}This device's date reads earlier than its last change ({when}). What you edit now still saves and shows; set the date right when you can.{/if}</p>{/if}
-{#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
+{#if frostBar && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" class:warn={frostBar.tone === 'warn'} href="/today#frost" id="frostbar">{frostBar.text} <span class="go">Today ›</span></a>{/if}
 
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
      server before any click, which the bucket lookups exist to avoid; a tap or click is a visit the grower chose (round thirteen, 2). -->
@@ -510,6 +517,9 @@
   .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
   .frostbar:hover { text-decoration: underline; }
   .frostbar .go { white-space: nowrap; color: var(--bad); font-weight: 600; margin-left: 4px; }
+  /* A cold night above freezing, or a space's floor reached above it: amber, not the red of a frost (round eighty-two). */
+  .frostbar.warn { background: var(--warm-soft); }
+  .frostbar.warn .go { color: var(--warm-ink); }
   .iconbtn.sync.on { color: var(--accent); }
   .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
   .iconbtn.sync.err { color: var(--bad); }

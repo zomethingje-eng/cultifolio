@@ -1078,8 +1078,8 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await expect(page.locator('.hitrow')).toHaveCount(1);
   // A chip that is on filters the search too (R1-4).
   await page.fill('.searchbar', '');
-  await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
-  await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
+  await page.locator('.chipbtn', { hasText: 'No climate' }).click();
+  await expect(page.locator('.chipbtn.on')).toContainText('No climate');
   await page.fill('.searchbar', 'copiapoa');
   await expect(page.locator('.emptybox')).toContainText('with the chip on (2 without it)');
   await page.fill('.searchbar', 'welwit');
@@ -1145,13 +1145,14 @@ test('round forty-two: the species photograph is preloaded from the head, one si
   await page.route(/inaturalist-open-data\.s3\.amazonaws\.com/, () => new Promise(() => {}));
   await page.setViewportSize({ width: 390, height: 800 });
   await page.goto('/species/copiapoa-cinerea', { waitUntil: 'domcontentloaded' }); // the held request means the load event never fires
-  await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /photos\/900\/medium\.jpg$/);
+  // The fixture's cultivated set's first (1000) leads since round eighty-two (the independent review's 13); its wild first (900) before.
+  await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /photos\/1000\/medium\.jpg$/);
   await expect(page.locator('head link[rel="preload"][as="image"][media="(min-width: 641px)"]')).toHaveAttribute('imagesrcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
   await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://inaturalist-open-data.s3.amazonaws.com');
   const box = await page.locator('.hero.photo').boundingBox();
   expect(box?.height).toBe(150);
   // the phone's source is the medium file alone; the wide screen's img chooses between medium and large for a 480 px box
-  await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/900\/medium\.jpg$/);
+  await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/1000\/medium\.jpg$/);
   await expect(page.locator('.hero.photo source')).toHaveAttribute('media', '(max-width: 640px)');
   await expect(page.locator('.hero.photo img')).toHaveAttribute('srcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
   await expect(page.locator('.hero.photo img')).toHaveAttribute('sizes', '480px');

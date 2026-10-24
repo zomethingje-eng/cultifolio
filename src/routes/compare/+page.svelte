@@ -19,7 +19,9 @@
   import { searchCatalogue } from '$lib/ui/index.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { temp, rain, ruleRain, ruleDeltaT } from '$core/units';
-  import { photoCredit, detailSentence } from '$lib/ui/ref/head';
+  import { photoCredit, detailSentence, shownAttribution } from '$lib/ui/ref/head';
+  import { heroOf } from '$dossier/dedupe';
+  import { unitName } from '$core/regions';
   import { climateDetail } from '$lib/ui/ref/upstream';
   import { showable } from '$lib/ui/ref/photos';
   import { yearRain } from '$climate/year-rain';
@@ -42,7 +44,7 @@
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
     const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: recordsUnchecked(d) ? 'unchecked' : cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const shown = d.photos.filter(showable); // a Commons photograph with no thumbnail is not shown (round sixty-two; outside review A35)
-    const hero = shown.find((p) => !p.captive) ?? shown[0];
+    const hero = heroOf(shown); // the species page's lead, by its one rule (round eighty-two; the independent review's 13)
     return {
       d,
       hero,
@@ -124,11 +126,16 @@
   const creditOf = photoCredit;
   /** Which header photographs have loaded, and which failed: none is shown until it has, so a failure before hydration never draws the browser's broken-image glyph (round sixty; visitor 4). */
   let shownImg = $state<Record<string, 'ok' | 'fail'>>({});
+  // Its own update, which takes the key: it returned `failedBeforeHydration`'s, whose update takes the failure's function,
+  // so when the columns were drawn again (the hemisphere read once the site loaded) the key replaced the function, and a
+  // photograph failing after that threw "TypeError: n is not a function" (round eighty-two; the second review's lead).
   const loaded = (img: HTMLImageElement, key: string) => {
-    const mark = () => { if (img.complete && img.naturalWidth > 0) shownImg = { ...shownImg, [key]: 'ok' }; };
+    let k = key;
+    const mark = () => { if (img.complete && img.naturalWidth > 0) shownImg = { ...shownImg, [k]: 'ok' }; };
     img.addEventListener('load', mark);
     mark();
-    return failedBeforeHydration(img, () => (shownImg = { ...shownImg, [key]: 'fail' }));
+    failedBeforeHydration(img, () => (shownImg = { ...shownImg, [k]: 'fail' }));
+    return { update(next: string) { k = next; } };
   };
   /* ---- the column names, pinned while the table scrolls on a phone, and moved sideways with it (round sixty; visitor 10) ---- */
   let table = $state<HTMLElement | null>(null);
@@ -197,10 +204,11 @@
       <span class="visually-hidden" role="columnheader">Figure</span>
       {#each cols as c (c.d.key)}
         <div class="cell" role="columnheader">
-          <div class="hero">{#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="{c.d.name.scientific}; photograph {c.hero.attribution}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{/if}</div>
+          <div class="hero">{#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="{c.d.name.scientific}; photograph {shownAttribution(c.hero)}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{/if}</div>
           {#if c.hero && shownImg[c.d.key] !== 'fail'}<a class="cred" href={c.hero.page ?? c.hero.url} rel="noopener">{creditOf(c.hero)}</a>{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
-          <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => r.name).join(', ') : ''}</div>
+          <!-- The first two regions and how many more, as the species page's line under the name says them (round eighty-two; the independent review's 20). -->
+          <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (c.d.distribution.native.length > 2 ? ` +${c.d.distribution.native.length - 2}` : '') : ''}</div>
           {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Remove {c.d.name.scientific} from the comparison">Remove</a>{/if}
           {#if c.d.climate.status === 'refused'}<div class="small muted hnote"><NotChecked what="Climate" why={climateWhy(c.d)} /></div>{:else if !c.ok}<div class="small muted hnote">{climateWord(c.d)}</div>{/if}
         </div>
@@ -219,7 +227,7 @@
     </div>
     <div class="row" class:differs={differs.rain} role="row">
       <div class="rowlab" role="rowheader">{rainCells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}{#if differs.rain}<span class="dif">differs</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if rainOf(c) != null && c.wet}<b>{rain(rainOf(c)!, u)}</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · {c.wet.mo === 'every month' ? 'the same in every month' : `wettest ${c.wet.mo}`} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if rainOf(c) != null && c.wet}<b>{rain(rainOf(c)!, u)}</b><span>{#if rainCells && c.rainYr?.cells}the median of the range's cells' own yearly totals; {/if}{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · {c.wet.mo === 'every month' ? 'the same in every month' : `wettest ${c.wet.mo}`} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.light} role="row">
       <div class="rowlab" role="rowheader">Open-sky light{#if differs.light}<span class="dif">differs</span>{/if}</div>
@@ -247,6 +255,9 @@
         {#each cols as c (c.d.key)}
           <div class="cell sheet" role="cell">
             {#each c.cards.find((x) => x.title === t)?.rows ?? [] as r}<p>{r.short ?? r.s}</p>{:else}<p class="muted small">{climateWord(c.d) || 'no figure'}</p>{/each}
+            <!-- The two rain totals, each said as what it is, where they differ (round eighty-two; the second review's 5:
+                 agavoides read 573 mm above and 582 mm here, with nothing to say why). -->
+            {#if t === 'Rain' && rainCells && c.rainYr?.cells && c.sheet.year && rain(c.sheet.year.annualMm, u) !== rain(c.rainYr.mm, u)}<p class="muted small rainnote">The {rain(c.sheet.year.annualMm, u)} here is the twelve monthly medians added, the year the rain rule reads; the {rain(c.rainYr.mm, u)} in "Rain a year" is the median of the range's cells' own yearly totals. Two figures, which need not agree.</p>{/if}
           </div>
         {/each}
       </div>
@@ -298,6 +309,7 @@
   .fig span { display: block; font-size: var(--fs-sm); color: var(--ink2); line-height: 1.45; margin-top: 3px; }
   .sheet p { margin: 0 0 6px; font-size: var(--fs-md); line-height: 1.5; }
   .sheet p:last-child { margin: 0; }
+  .sheet .rainnote { margin-top: 6px; font-size: var(--fs-sm); }
   .muted { color: var(--ink3); }
   .cell :global(.climo) { margin: 0; padding: 0; box-shadow: none; }
   .notice { margin: 10px 0 0; }

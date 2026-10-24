@@ -13,6 +13,7 @@
  * than spinning. Sync and photo APIs are never cached.
  */
 import { build, files, version } from '$service-worker';
+import { pruneOnActivate, sweepPrevious, capCache, isSpeciesEntry, SPECIES_KEEP, CORPUS_KEEP } from '$core/sw-keep';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -83,18 +84,42 @@ self.addEventListener('message', (e) => {
 self.addEventListener('activate', (e) => {
   // claim() is safe without skipWaiting: on a first install it lets the very first visit work offline, and on an
   // update the worker only reaches this point once every page of the old build has gone.
+  // This build's cache stays, and the newest one before it only while a tab open now is open (a tab of the old build
+  // may still ask for its chunks); everything older goes. The kept one goes later, once none of those tabs is open
+  // (`sweepPrevious`, from the fetch handler), where before it stayed until the next deploy reached the device (round
+  // eighty-two; the independent review's 8: a device held a build from three weeks before).
   e.waitUntil(
-    caches
-      .keys()
-      .then((keys) => {
-        // This build's cache and the newest one before it stay; everything older goes.
-        const ours = keys.filter((k) => k.startsWith('cultifolio-') && k !== CACHE && k !== CORPUS_CACHE).sort();
-        const keep = new Set([CACHE, CORPUS_CACHE, ...ours.slice(-1)]);
-        return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
-      })
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((open) => pruneOnActivate(caches, CACHE, CORPUS_CACHE, open.map((c) => c.id)))
+      .catch(() => {})
+      .then(() => { heldMaybe = true; })
       .then(() => self.clients.claim())
   );
 });
+
+/** Whether a build before this one may still be recorded as kept: true until a look finds none, and again after each activation. */
+let heldMaybe = true;
+let lastLook = 0;
+/** At most every ten seconds, while one is recorded: the build before this one goes once no tab that held it is open. */
+function lookAtPrevious(e: FetchEvent) {
+  if (!heldMaybe) return;
+  const now = Date.now();
+  if (now - lastLook < 10_000) return;
+  lastLook = now;
+  // Housekeeping: whatever it meets, the request is still answered.
+  try {
+    e.waitUntil(
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then((open) => sweepPrevious(caches, CACHE, open.map((c) => c.id)))
+        .then((left) => { heldMaybe = left; })
+        .catch(() => {})
+    );
+  } catch {
+    /* a worker that cannot list its tabs keeps the previous build until the next activation */
+  }
+}
 
 /** Where the build's hashed files live: a path under it is a build file of some build. */
 const IMMUTABLE = '/_app/immutable/';
@@ -146,6 +171,7 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+  lookAtPrevious(e);
   // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
   // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
   if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname === '/api/corpus') return;
@@ -228,6 +254,7 @@ self.addEventListener('fetch', (e) => {
               // The first answer under a corpus id in this worker's life drops the answers under any other: they are a different URL and would never be asked for again.
               if (c && !prunedTo.has(c)) { prunedTo.add(c); for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k); }
               await corpusCache.put(keyOf, r.clone());
+              await capCache(corpusCache, CORPUS_KEEP); // the oldest go past the cap (round eighty-two; the independent review's 8)
             })().catch(() => {}));
           }
           return r;
@@ -249,7 +276,9 @@ self.addEventListener('fetch', (e) => {
         const good = (r: Response) => (queried ? false : navigate ? cacheableHtml(r) : r.ok && r.type === 'basic');
         // The cache write is a promise of its own, handed to `waitUntil`: a write started with `void` after the response
         // was returned could be cut off with the event, and the copy the next visit found was the old one (round thirty-eight, R2-2).
-        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).catch(() => {}) : Promise.resolve() });
+        // And the species pages held are capped, the oldest written first to go (round eighty-two; the independent review's 8).
+        const species = isSpeciesEntry(url.href);
+        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).then(() => (species ? capCache(cache, SPECIES_KEEP, isSpeciesEntry) : 0)).catch(() => {}) : Promise.resolve() });
         try {
           const live = fetch(request).then(keep);
           if (!kept || queried) {

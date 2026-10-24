@@ -1,5 +1,5 @@
 /**
- * The most-grown genera (round seventy-five, the owner's decision): the catalogue's "Most grown" chip, off by default and
+ * The popular genera (round seventy-five, the owner's decision): the catalogue's "Popular genera" chip, off by default and
  * the same on every device, shows the species of these genera. The counts are `scripts/most-grown-genera.txt`
  * (iNaturalist's observations marked captive or cultivated, written by `scripts/most-grown-genera.ts`); the rule is
  * `most-grown-rule.ts`. Read on the server only: the page is sent the chip's counts, and the genera's names only while
@@ -25,7 +25,7 @@ function of(index: Named[]): { genera: ReadonlySet<string>; species: number } {
   return v;
 }
 
-/** The most-grown genera among those the index holds, by the rule; empty when no genus of it is counted. */
+/** The popular genera among those the index holds, by the rule; empty when no genus of it is counted. */
 export const grownGenera = (index: Named[]): ReadonlySet<string> => of(index).genera;
 
 /** What the chip says: how many genera and species it shows; null when none is counted (a file not written, or every request failed), and then no chip is drawn. */

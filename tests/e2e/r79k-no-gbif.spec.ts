@@ -29,13 +29,11 @@ test('the species page says GBIF\'s records, the map, the climate and the neares
   await ready(page);
   await expect(page.locator('h1.sci')).toContainText('Hesperocyparis lusitanica');
   await expect(page.locator('.note-slot')).toHaveAttribute('data-key', 'k457911');
-  // The pill under the name, its reason on a press.
-  const pill = page.locator('.idcard .pills details.nc').first();
-  await expect(pill).toContainText('Climate not checked');
-  await pill.locator('summary').click();
-  await expect(pill).toContainText(WHY);
-  await expect(page.locator('#no-gbif-climate')).toContainText(`Not checked. ${WHY}`);
-  await expect(page.locator('.mapcap').nth(1)).toContainText(`Records not checked: ${WHY}`);
+  // The reason once, under the name card (round eighty-two; the independent review's 10: it was a pill here and the same
+  // sentence in four sections); each section says "not checked" and points to it (r82u-pages.spec.ts).
+  await expect(page.locator('#records-unchecked')).toContainText(`GBIF's records not checked. ${WHY}`);
+  await expect(page.locator('#no-gbif-climate')).toContainText("Not checked. GBIF's records were not asked");
+  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked');
   await expect(page.locator('.factgrid')).toContainText("GBIF's records not checked");
   await expect(page.locator('.facts')).toContainText('not checked');
   await expect(page.locator('#near-not-checked')).toContainText('Not checked');

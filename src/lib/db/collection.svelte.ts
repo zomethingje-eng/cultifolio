@@ -46,6 +46,8 @@ import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo 
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL } from './types';
 import { fieldWords } from '$lib/ui/held-words';
 import { mySpeciesOf, type MySpecies } from './species-list';
+/** How long after a load the pixels nothing names are swept (`sweepPixels`): off the page's first moments. */
+export const PIXEL_SWEEP_MS = 5000;
 
 export { NUMBERING_SETTING };
 
@@ -225,7 +227,14 @@ class Collection {
     // The parked set is an input to the fold: the stamps are stored and the snapshot dropped in one transaction, and the
     // other tabs are told to fold again, since one of them may have folded the change as ordinary a moment before
     // (round fifty-four, 2; round fifty-five, 2; the first reviewer's findings 6 and 7).
-    for (const t of await parkStamps(changes.map((c) => c.t))) if (!isPastStamp(t)) { this.parkedStamps.add(t); this.storedParked.add(t); }
+    // None of them folded yet (a Merge parks the file's before it takes them in): this fold already reads them as parked,
+    // so when nothing else moved the counter since it was built, it is the fold of the counter the park moved to, and its
+    // snapshot can be written (round eighty-two; the independent review's 38: the Merge's snapshot was refused).
+    let moved: [number, number] | null = null;
+    const all = await parkStamps(changes.map((c) => c.t), true, (from, to) => { moved = [from, to]; });
+    for (const t of all) if (!isPastStamp(t)) { this.parkedStamps.add(t); this.storedParked.add(t); }
+    const m = moved as [number, number] | null;
+    if (!folded && m && this.builtGen === m[0]) this.builtGen = m[1];
     return folded;
   }
   /**
@@ -321,6 +330,8 @@ class Collection {
         // (round seventy-one; the self-review's D3). The outbox only: the log is not written.
         // Read through the module, not a named import: a test's stand-in for the vault that lacks it then queues nothing.
         void import('./vault').then((v) => v.queueReadable()).then((q) => { if (q.length) for (const fn of this.listeners) fn(q); }, () => {});
+        // Pixels nothing names, swept off the page's path, sync or not (round eighty-two; the independent review's 38).
+        if (typeof window !== 'undefined') setTimeout(() => void this.sweepPixels().catch(() => 0), PIXEL_SWEEP_MS);
         // A plant or batch of the oldest shape has its number as its id and no `acc`/`no` field; `accNo`/`sowNo` read either,
         // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
         // does not write to it (round fifty-six, 3), and the reading rule is the one every page already used.
@@ -1372,6 +1383,38 @@ class Collection {
   async setCover(acc: string, photoId: string | null): Promise<void> {
     if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.put('accession', acc, { cover: photoId });
+  }
+  /**
+   * Pixels nothing names, taken off this device (round eighty-two; the independent review's 38: they were reclaimed only by
+   * sync's run, so without sync a removal cut off between its record and its pixels, a photograph a Merge's file had
+   * removed, or an add cut off between its pixels and its record left bytes on the device for good). Two kinds go: the
+   * pixels of a photograph whose record is removed (an Undo still in its toast holds its own copy and puts them back), and
+   * pixels with no change at all in the log under their id, made two days ago or more by the time in the id (so no add
+   * under way in another tab, and no photograph whose record waits held, parked or unread, is touched). Nothing else is.
+   * Not while a replacement from a backup is being copied. The count taken away.
+   */
+  async sweepPixels(): Promise<number> {
+    if (!this.ready) return 0;
+    const v = await import('./vault');
+    if (v.replaceWaiting() || (await v.replacePending())) return 0;
+    let n = 0;
+    for (const id of await v.photoBlobIds()) {
+      if (this.photoKnown(id)) continue;
+      // Read from the log itself, not this tab's fold alone, which another tab's Undo may have overtaken a moment ago.
+      const log = await changesOf('photo', id);
+      if (this.photoRemoved(id)) {
+        const last = log.filter((c) => c.field === '_deleted').sort((a, b) => hlcCompare(b.t, a.t))[0];
+        if (!last || last.value !== true) continue;
+      } else {
+        const made = madeOn(id);
+        if (!made || daysBetween(made) < 2 || log.length) continue;
+      }
+      if (this.photoKnown(id)) continue; // brought back meanwhile
+      await deletePhotoBlobs(id);
+      this.urls.delete(id);
+      n++;
+    }
+    return n;
   }
   /** The pixels went (a removal folded from another device): the cached URLs would show them still (round forty-nine, 1). */
   forgetPhotoUrls(id: string): void {

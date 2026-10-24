@@ -260,7 +260,7 @@ export const dueAt = (t: string) => hlcWall(t) - MAX_AHEAD_MS;
  * is empty.
  */
 export function apply(state: State, changes: Iterable<Change>, seen?: Map<string, string>, hold?: Hold): Change[] {
-  const latest = seen ?? new Map<string, string>(); // `${key} ${field}` -> hlc (NUL: no field name can collide with the bookkeeping keys)
+  const latest = seen ?? new Map<string, string>(); // `${key}\0${field}` -> hlc (NUL: no field name can collide with the bookkeeping keys)
   const held: Change[] = [];
   for (const c of changes) {
     assertField(c.field);
@@ -278,7 +278,7 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
       continue;
     }
     const k = key(c.kind, c.id);
-    const fk = k + ' ' + c.field;
+    const fk = k + '\0' + c.field;
     const prev = latest.get(fk);
     if (prev !== undefined && hlcCompare(c.t, prev) < 0) continue;
     let rec = state.get(k);
@@ -292,18 +292,18 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
     // The same for a removal under a repeated stamp: the tie goes to "removed", the same in any order (round thirteen, 8).
     if (prev !== undefined && hlcCompare(c.t, prev) === 0 && c.field === '_deleted' && (!c.value || latest.get(k + '\0_deleted=') === '1')) continue; // NUL, as every other bookkeeping key: a space here meant this lookup never matched (round twenty-nine, 10)
     latest.set(fk, c.t);
-    if (c.field === '_deleted') latest.set(k + ' _deleted=', c.value ? '1' : '0');
+    if (c.field === '_deleted') latest.set(k + '\0_deleted=', c.value ? '1' : '0');
     else {
       rec[c.field] = c.value;
-      const e = latest.get(k + ' *');
-      if (!e || hlcCompare(c.t, e) > 0) latest.set(k + ' *', c.t); // the latest edit to any ordinary field
+      const e = latest.get(k + '\0*');
+      if (!e || hlcCompare(c.t, e) > 0) latest.set(k + '\0*', c.t); // the latest edit to any ordinary field
     }
     if (hlcCompare(c.t, rec._t) > 0) rec._t = c.t;
     // Visibility is a function of two maxima, so it comes out the same whatever order the changes
     // arrived in: deleted iff the latest `_deleted` change says so and nothing was edited after it.
-    const delT = latest.get(k + ' _deleted');
-    const editT = latest.get(k + ' *');
-    rec._deleted = latest.get(k + ' _deleted=') === '1' && !!delT && (!editT || hlcCompare(delT, editT) > 0);
+    const delT = latest.get(k + '\0_deleted');
+    const editT = latest.get(k + '\0*');
+    rec._deleted = latest.get(k + '\0_deleted=') === '1' && !!delT && (!editT || hlcCompare(delT, editT) > 0);
   }
   return held;
 }

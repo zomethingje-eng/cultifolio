@@ -34,8 +34,13 @@ export interface KewRow {
   homotypic?: boolean;
 }
 
-/** `name.kew`: Kew's names for the page's plant (the shape of FIX-BRIEF-72). */
-export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string }
+/**
+ * `name.kew`: Kew's names for the page's plant (the shape of FIX-BRIEF-72). `heldBy` (round eighty-two, F; review 1's 4):
+ * the page that holds the entry Kew's rows read this page to, when that is another page (its id is `k<entry>`): the entry
+ * is then not this page's, so `entry` is '' and `synonyms` empty (they are the other page's plant's names), and the
+ * page keeps its GBIF id. Echeveria peacockii (g7530398) read to Dudleya pulverulenta's 2778991, page k2778991's.
+ */
+export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string }
 /** `name.cited`: the page cites Kew's author; `gbif` is the backbone's citation, `kew` the Kew row cited. */
 export interface KewCited { gbif: string; kew: string }
 
@@ -146,16 +151,28 @@ export function scientificVernacular(v: string, holds: (name: string) => boolean
 /** The words a Wikidata row says when the links are none because Kew holds the name only under another author (A5). */
 export const onlyAnotherAuthor = (others: string[]) => `Kew holds this name only under another author (${others.join('; ')}); no POWO link`;
 
-/** What `fillKewNames` changed, one line a dossier. */
-export type KewNamesCounts = { read: number; changed: number; cited: number; elsewhere: number; vernacularDropped: number; lines: string[] };
+/** What `fillKewNames` changed, one line a dossier. `held`: pages not given an entry another page holds (round eighty-two). */
+export type KewNamesCounts = { read: number; changed: number; cited: number; elsewhere: number; vernacularDropped: number; held: number; lines: string[] };
+
+/**
+ * A page's `name.kew` when the entry its rows read to is another page's (round eighty-two, F; review 1's 4): no entry, no
+ * Kew names (they are that page's plant's), the older names Kew accepts apart kept (they are this page's own names'
+ * reading), and the page that holds it. Its id stays its GBIF key (`page-ids.ts`, 'kew-held').
+ */
+export function heldElsewhereNames(k: KewNames, heldBy: string): KewNames {
+  return { entry: '', synonyms: [], acceptedElsewhere: k.acceptedElsewhere, file: k.file, heldBy };
+}
+/** The record's words for a page not given the entry another page holds. */
+const HELD_WORDS = /^Kew's rows read this name to the entry \d+, which is page k\d+'s/;
+export const heldByWords = (entry: string, heldBy: string) => `Kew's rows read this name to the entry ${entry}, which is page ${heldBy}'s: not given to this page (one Kew entry, one page; a merge decides)`;
 
 /**
  * `--fill kew-names --bulk <dir>`: every page's `name.kew`, its citation (`kewCitation`), its common names that are
  * binomials (`scientificVernacular`) and its "no POWO link" words, from Kew's file. Offline; a second run changes nothing.
  * `reference` is the reference's own names (lower case), for the common names.
  */
-export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; write(f: string, d: unknown): void }, idx: KewNamesIndex, file: string, reference: Set<string> = new Set()): KewNamesCounts {
-  const c: KewNamesCounts = { read: 0, changed: 0, cited: 0, elsewhere: 0, vernacularDropped: 0, lines: [] };
+export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; write(f: string, d: unknown): void }, idx: KewNamesIndex, file: string, reference: Set<string> = new Set(), o: { heldBy?: (entry: string, page: string) => string | undefined } = {}): KewNamesCounts {
+  const c: KewNamesCounts = { read: 0, changed: 0, cited: 0, elsewhere: 0, vernacularDropped: 0, held: 0, lines: [] };
   for (const f of store.files()) {
     let d: Page;
     try { d = store.read<Page>(f); } catch { continue; }
@@ -163,9 +180,19 @@ export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; 
     const before = JSON.stringify(d);
     const what: string[] = [];
     d.name.kew = kewNames(d, idx, file);
+    // One Kew entry, one page (round eighty-two, F; review 1's 4): an entry another page holds is not given to this one.
+    const holder = d.name.kew.entry ? o.heldBy?.(d.name.kew.entry, String(d.key)) : undefined;
+    const up = (d.upstream ??= {});
+    if (holder) {
+      const words = heldByWords(d.name.kew.entry, holder);
+      what.push(words);
+      d.name.kew = heldElsewhereNames(d.name.kew, holder);
+      // The page's record says it, as Kew's file's answer (read, and not this page's).
+      if (up['kew.names']?.detail !== words) up['kew.names'] = { status: 'none', at: new Date().toISOString(), detail: words };
+      c.held++;
+    } else if (HELD_WORDS.test(up['kew.names']?.detail ?? '')) delete up['kew.names'];
     if (d.name.kew.acceptedElsewhere.length) c.elsewhere++;
     const k = kewCitation(d, (n) => idx.byPowo.get(n));
-    const up = (d.upstream ??= {});
     if (k) {
       what.push(`cited ${d.name.authorship || '(none)'} → ${k.authorship}`);
       d.name.authorship = k.authorship;

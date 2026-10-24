@@ -466,14 +466,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
   const sameType = synRows ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, synRows) : [];
   // Wikidata's lag is waited out in rounds by a corpus run, as the fills wait it (round seventy, the owner's run).
-  // A page with a Kew id is matched on Wikidata by its GBIF key and Kew's identifiers alone, never by its label (round eighty, A).
+  // A page with a Kew id is matched on Wikidata by its GBIF key and Kew's identifiers alone, never by its label (round eighty, A),
+  // wherever Kew gives its name and author an identifier; with none, its label is read and the item proved (round eighty-two).
   const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk, kewPage: pageId.startsWith('k') || !!o.kewEntryOf?.(key) });
   const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
   // GBIF not answering while it checks the item Wikidata gave is recorded as GBIF's, after Wikidata's answer (round
   // seventy; triage-69 B2, S-B6: the row read "Wikidata · refused" for a source that had answered).
   else if ((x.status === 'refused' || x.status === 'error') && x.by === 'gbif') mark('wikidata', { status: x.status, detail: `Wikidata answered; GBIF, asked to check the item it gave, ${x.status === 'refused' ? 'refused the request' : 'did not answer'} (${x.detail})` });
-  else mark('wikidata', x.status === 'none' && olderNotAsked && !x.detail ? { status: 'none', detail: olderNotAsked } : x);
+  // A "none" always says why (round eighty-two, F; review 1's 7: eight pages built on 2026-10-21 and 22 said none with no
+  // reason): the older names not asked, or no item found by any route (`NO_ITEM`, the words `--fill wikidata` writes).
+  else mark('wikidata', wikidataSaid(x, olderNotAsked));
   let enTitle = scientific;
   // The titles that are this species' article: the item's sitelink (or, when Wikidata did not answer, the title the
   // previous build kept, itself checked), the name and the older names (round sixty-nine; triage-68 M3).
@@ -555,7 +558,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}) };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }
@@ -913,6 +916,14 @@ export async function borrowNames(f: JsonFetcher, b: { usage: number; target: nu
     for (const n of sy.data) if (!own(canonicalOf(n) ?? n) && !names.includes(n)) names.push(n);
   }
   return { status: 'ok', data: { synonyms: names, rows, vernacular } };
+}
+
+/**
+ * Wikidata's answer as the build records it (round eighty-two, F; review 1's 7): a "none" always says why, the older names
+ * not asked where GBIF's list was not read, else that no route found an item (`NO_ITEM`, the words `--fill wikidata` writes).
+ */
+export function wikidataSaid<X extends { status: string; detail?: string }>(x: X, olderNotAsked?: string): X | { status: 'none'; detail: string } {
+  return x.status === 'none' && !x.detail ? { status: 'none', detail: olderNotAsked ?? wm.NO_ITEM } : x;
 }
 
 /** One other key's part in a page's records (`occurrences.keys`, round seventy-three). */

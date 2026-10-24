@@ -20,7 +20,7 @@ export * from '$dossier/catalogue';
 export async function catalogueRows(platform: Platform, fetch: Fetch, by: By, chip: Chip, held?: Loaded): Promise<{ cat: CatalogueRows; corpus: string; fromFile: boolean }> {
   const c = held ?? (await corpusNow(platform, fetch));
   const { corpus } = c;
-  // "Most grown" (round seventy-five): no build writes it, since its genera are the deploy's file; derived from the index
+  // "Popular genera" (round seventy-five): no build writes it, since its genera are the deploy's file; derived from the index
   // and the ranking's file, or since round seventy-six from the build's genus rows of those genera, and kept.
   if (chip === 'grown') return { cat: fromFiles(c) ? await grownFromFiles(c, platform, fetch, by) : catalogueOf(c.idx!, by, chip, grownGenera(c.idx!)), corpus, fromFile: false };
   const file = await product<CatalogueRows>(c, platform, fetch, catalogueFile(by, chip));
@@ -30,7 +30,7 @@ export async function catalogueRows(platform: Platform, fetch: Fetch, by: By, ch
 }
 
 /**
- * The "Most grown" chip's catalogue from the build's files (round seventy-six): the species of the most-grown genera
+ * The "Popular genera" chip's catalogue from the build's files (round seventy-six): the species of the popular genera
  * from their genus rows, put back in the index's order (`RowRecord.at`), so the rows, their order and their counts are
  * the ones the index gave; the whole reference's counts from the grouping's file under "all". Kept per manifest.
  */
@@ -57,7 +57,7 @@ function grownFromFiles(c: Loaded, platform: Platform, fetch: Fetch, by: By): Pr
   return p;
 }
 
-/** One row's species under a chip, the most-grown genera given for "grown". */
+/** One row's species under a chip, the popular genera given for "grown". */
 export const rowItemsUnder = (index: IndexEntry[], by: By, chip: Chip, id: string): Item[] | undefined => rowItems(index, by, chip, id, chip === 'grown' ? grownGenera(index) : undefined);
 /**
  * One row's species under a chip, of the corpus a request holds: from the build's row file (round seventy-six), filtered

@@ -59,6 +59,8 @@
   // The lines in the order of the dates they show, newest first, as the plant page orders its timeline: a repair note
   // shown under the day it was written sat among lines of its stored day, months back (round sixty-three; the fix pass, R2 9).
   const shownEvents = $derived([...events].sort((a, b) => (lineDates.get(b.id) ?? b.d).localeCompare(lineDates.get(a.id) ?? a.d) || b.id.localeCompare(a.id)));
+  /** The line the batch's start is shown before: the first, newest first, dated before the start (a typed date); null when none is, and the start is last (round eighty-two; the independent review's 16). */
+  const startBefore = $derived(s?.sown ? (shownEvents.find((e) => (lineDates.get(e.id) ?? e.d) < s!.sown)?.id ?? null) : null);
   const raised = $derived(collection.raisedFrom(id));
   const photos = $derived(collection.photosOfSowing(id));
   let lightbox = $state<number | null>(null);
@@ -521,23 +523,37 @@
   {/if}
   {#if lightbox != null && photos.length}<Lightbox {photos} bind:index={lightbox} onclose={() => (lightbox = null)} />{/if}
 
-  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(events.length, 'entry', 'entries')}</span></div>
+  {#snippet startLine()}
+  <div class="tlrow" id="log-start">
+    <span class="d">{s?.sown}</span>
+    <!-- Plain spaces: at 320 px with the text at 200% the line "Sown 10 seeds" held together by non-breaking spaces ran
+         5 px past the screen (r67h engines 3, at the merge of round eighty-two). -->
+    <span class="t">{m.veg ? 'Started' : 'Sown'}{#if s?.count != null}{' '}<b>{s.count}</b>{' '}{m.unit}{/if}</span>
+    <span class="x small muted">the batch's own record</span>
+  </div>
+  {/snippet}
+  <!-- The batch's own start is the log's first line, from the batch's record: a batch just sown read "0 entries, Nothing
+       recorded yet" (round eighty-two; the independent review's 16). It is counted, and it cannot be removed here. -->
+  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(events.length + (s.sown ? 1 : 0), 'entry', 'entries')}</span></div>
   <form class="noteform" onsubmit={note}>
     <!-- round fifty-eight; the accessibility review: visible names, as above -->
     <label class="fl"><span class="eyebrow">Date of the note</span><input id="n-date" type="date" bind:value={nd} /></label><label class="fl"><span class="eyebrow">Note</span><input id="n-text" type="text" placeholder="Add a note to the log" bind:value={ntext} /></label><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
   </form>
   {#if nmsg}<p class="refuse" role="alert">{nmsg}</p>{/if}
-  {#if !events.length}
+  {#if !events.length && !s.sown}
     <div class="cult"><div class="none">Nothing recorded yet.</div></div>
   {:else}
     <div class="tl">
+      <!-- The start sits where its date puts it among the lines, newest first: before the first line dated earlier (a typed date), else last. -->
       {#each shownEvents as e}
+        {#if e.id === startBefore}{@render startLine()}{/if}
         <div class="tlrow">
           <span class="d">{lineDates.get(e.id) ?? e.d}</span>
           <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href={plantHref(pl)}>{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" aria-label="Remove? {eventLabel(e.t)}, {lineDates.get(e.id) ?? e.d}: press again to remove it" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry: {eventLabel(e.t)}, {lineDates.get(e.id) ?? e.d}" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}
+      {#if s.sown && !startBefore}{@render startLine()}{/if}
     </div>
   {/if}
 

@@ -15,13 +15,21 @@ const ABBR = /(?:\b(?:subsp|ssp|var|f|fa|cv|cf|aff|ca|approx|syn|sp|spp|nov|comb
 export function firstSentences(text: string, n: number): { text: string; more: boolean } {
   const t = text.trim();
   if (!t) return { text: '', more: false };
+  const ends = sentenceEnds(t, n);
+  if (ends.length < n) return { text: t, more: false };
+  const cut = ends[n - 1];
+  return { text: t.slice(0, cut).trim(), more: cut < t.length };
+}
+
+/** Where the sentences of a text end (at most `n`), by `firstSentences`' rule; a stop at the very end of the text counts. */
+function sentenceEnds(t: string, n = Infinity): number[] {
   const ends: number[] = [];
-  const re = /[.!?]["'\u201D\u2019)\]]*(?=\s+(?:["'\u201C\u2018(\[]?[\p{Lu}0-9]))/gu;
+  const re = /[.!?]["'\u201D\u2019)\]]*(?=\s+(?:["'\u201C\u2018(\[]?[\p{Lu}0-9])|$)/gu;
   let m: RegExpExecArray | null;
   while ((m = re.exec(t))) {
     const end = m.index + m[0].length;
     const before = t.slice(0, m.index + 1);
-    if (ABBR.test(before)) continue;
+    if (end < t.length && ABBR.test(before)) continue;
     // "Sp. Pl. 1753": a token of at most four letters ending in "." followed by another such token or a digit is a citation, not an end.
     const tail = /(?:^|\s)(\p{L}{1,4})\.$/u.exec(before);
     const next = /^\s+(\p{L}{1,4}\.|\d)/u.exec(t.slice(end));
@@ -29,9 +37,20 @@ export function firstSentences(text: string, n: number): { text: string; more: b
     ends.push(end);
     if (ends.length >= n) break;
   }
-  if (ends.length < n) return { text: t, more: false };
-  const cut = ends[n - 1];
-  return { text: t.slice(0, cut).trim(), more: cut < t.length };
+  return ends;
+}
+
+/**
+ * A quoted text kept to at most `max` characters, cut at the end of its last whole sentence within them (round eighty-two,
+ * F; review 1's 36: Wikipedia's extract was sliced at 1,500 characters before the page's four-sentence cut, so a long first
+ * paragraph could end mid-word with no sign of the cut). With no sentence end inside, it is cut at a word with an ellipsis
+ * (`clip`). A text within `max` is kept whole.
+ */
+export function upToSentence(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const ends = sentenceEnds(t).filter((e) => e <= max);
+  return ends.length ? t.slice(0, ends[ends.length - 1]).trim() : clip(t, max);
 }
 
 /**

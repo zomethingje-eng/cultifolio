@@ -51,9 +51,22 @@ export function leadRank(p: { src?: string; captive?: boolean; url?: string; spe
 const HERBARIUM_HOSTS = /^https?:\/\/(?:oxalis\.br\.fgov\.be|collections\.nmnh\.si\.edu|specimens\.kew\.org|sweetgum\.nybg\.org|mediaphoto\.mnhn\.fr|herbarium\.bgbm\.org|[^/]*herbari[^/]*)\//i;
 export const isSpecimenMedia = (p: { src?: string; url?: string; specimen?: boolean }): boolean => p.src === 'gbif' && (p.specimen === true || HERBARIUM_HOSTS.test(p.url ?? ''));
 
-/** The photograph to show first: by `leadRank`, the first of the best rank, and a still image over a GIF when there is one. */
-export function heroOf<T extends { url: string; captive?: boolean; src?: string }>(photos: readonly T[]): T | undefined {
+/**
+ * The photograph to show first (round eighty-two; the independent review's 13: Echeveria elegans led with a cropped
+ * flower stalk, an upright photograph cut to the hero's band). In this order, each set in the photographs' own order:
+ *
+ *   1. iNaturalist's cultivated set, the first of it where there is one: the plant as it is grown;
+ *   2. the rest by `leadRank`, as before (iNaturalist's wild, GBIF's, Commons', a specimen last);
+ *
+ * and of those the first that is not upright (taller than wide, by the shape its source states), when there is one: the
+ * hero is a 4:3 box on a desktop and a wide band on a phone, and an upright photograph is cut to its middle third there.
+ * A photograph whose shape is not stated (GBIF's) keeps its place. A still image over a GIF when there is one.
+ */
+export function heroOf<T extends { url: string; captive?: boolean; src?: string; width?: number | null; height?: number | null; specimen?: boolean }>(photos: readonly T[]): T | undefined {
   const still = photos.filter((p) => !isGif(p.url));
-  const pick = (xs: readonly T[]) => xs.reduce<T | undefined>((best, p) => (!best || leadRank(p) < leadRank(best) ? p : best), undefined);
-  return pick(still) ?? pick(photos);
+  const pool = still.length ? still : photos;
+  const rank = (p: T) => (p.captive === true && p.src === 'inat' ? -1 : leadRank(p));
+  const ordered = pool.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map((x) => x.p);
+  const upright = (p: T) => !!p.width && !!p.height && p.height > p.width;
+  return ordered.find((p) => !upright(p)) ?? ordered[0];
 }

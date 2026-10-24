@@ -19,7 +19,8 @@ describe('S-F5: iNaturalist is not "not asked" when its photographs answered', (
 });
 
 describe('S-F6: a tile names the licence of an iNaturalist CC0 photograph', () => {
-  it('Geissorhiza aspera\'s lead, "no rights reserved" under CC0, is "CC0"', () => expect(tileCreditOf({ attribution: 'no rights reserved', licence: 'cc0' })).toBe('CC0'));
+  // Round eighty-two (the reviews' 26 and 1): never the licence alone, "author not stated" with it.
+  it('Geissorhiza aspera\'s lead, "no rights reserved" under CC0, is "CC0, author not stated"', () => expect(tileCreditOf({ attribution: 'no rights reserved', licence: 'cc0' })).toBe('CC0, author not stated'));
   it('guard: an author\'s line is cut as before, and a line naming no one under CC BY still names the source', () => {
     expect(tileCreditOf({ attribution: '(c) Sam McCarren, some rights reserved (CC BY)', licence: 'by' })).toBe('CC BY, Sam McCarren');
     expect(tileCreditOf({ attribution: 'no rights reserved', licence: 'by' })).toBeNull();

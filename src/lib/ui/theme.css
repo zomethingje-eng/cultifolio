@@ -136,6 +136,9 @@
   color-scheme: dark;
 }
 @media (max-width: 700px) { :root { --tap: 40px; } } /* a narrow window is likely a finger even when the pointer says not */
+/* Running text on a desktop at 15 px: the notes, captions and lines set in `--fs-md` read at 13.5 px at 1280 px (round
+   eighty-two; the independent review's 24). A phone keeps its sizes, which its layouts are measured at. */
+@media (min-width: 701px) { :root { --fs-md: 0.9375rem; } }
 @media (pointer: coarse) { :root { --tap: 44px; } }
 
 /* Fonts are self-hosted via @fontsource packages (OFL), imported in the root layout. */
@@ -147,6 +150,10 @@ html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; font-size: 100%
    element alone, so the anchors and headings tuned to land under the bars keep their own margins. */
 :focus { scroll-margin-top: 112px; scroll-margin-bottom: 24px; }
 @media (max-width: 700px) { :focus { scroll-margin-bottom: calc(80px + env(safe-area-inset-bottom)); } }
+/* And of an add form's pinned bar, by its measured height, for an engine that reads it when it scrolls a focused field
+   into view (round eighty-two; the independent review's 25); a field the keyboard's opening puts under the bar is brought
+   above it by the form itself (clear-of-bar.ts). */
+@media (max-width: 700px) and (min-height: 30em) { body.stickyacts :focus { scroll-margin-bottom: calc(56px + var(--acts-h, 70px) + 16px + env(safe-area-inset-bottom)); } }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: var(--ui); font-size: var(--fs-base); line-height: 1.55; -webkit-font-smoothing: antialiased;
@@ -211,6 +218,15 @@ i, em { font-style: italic; }
 .map .range { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-opacity: 0.6; stroke-width: 1px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 .map .occ { fill: var(--accent); fill-opacity: 0.5; }
 .map .pin { fill: var(--warm); stroke: var(--card); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* The close-up's graticule, scale bar and region names (round eighty-two; the independent review's 12). The names are HTML
+   over the map, so they keep the page's own size at every width, with a halo of the land's colour to read over lines. */
+.map .grat { stroke: var(--map-coast); stroke-opacity: 0.4; stroke-width: 0.6px; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+.map .scale { stroke: var(--ink2); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.mapwrap { position: relative; }
+.mwords { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.mwords span { position: absolute; font-family: var(--ui); font-size: var(--fs-xs); line-height: 1.2; color: var(--ink2); white-space: nowrap; text-shadow: 0 0 2px var(--map-land), 0 0 3px var(--map-land), 0 0 4px var(--map-land); }
+.mwords .mlab { transform: translate(-50%, -50%); font-weight: 700; letter-spacing: 0.02em; }
+.mwords .mscale { transform: translate(0, -135%); font-family: var(--mono); }
 
 /* Tables of numbers */
 table.data { border-collapse: collapse; width: 100%; font-size: var(--fs-md); }

@@ -86,10 +86,11 @@ export type Dir = Record<string, DirEntry>;
 /**
  * A species as a key file holds it, what the ranking reads: its name, its family and regions of origin as numbers into
  * `search/tables.json` (-1 for no family), its headline common name ('' for none), its other common names, its pooled
- * spellings, its shown and its other older names; and, in a Kew file only (an `@` key), Kew's older names of that key's
- * genus (round eighty). Empty fields at the end are left off.
+ * spellings, its shown and its other older names; in a Kew file only (an `@` key), Kew's older names of that key's
+ * genus (round eighty); and the record's names by another author (`hom`, round eighty-two), after Kew's place, so a
+ * file built before reads as it did. Empty fields at the end are left off.
  */
-export type Doc = [name: string, family?: number, origin?: number[], common?: string, commons?: string[], spellings?: string[], syn?: string[], older?: string[], kew?: string[]];
+export type Doc = [name: string, family?: number, origin?: number[], common?: string, commons?: string[], spellings?: string[], syn?: string[], older?: string[], kew?: string[], hom?: string[]];
 /** A light key's file: its species as `Doc`s, each with its position in the index, in the index's order. */
 export type NodeFile = Array<[number, Doc]>;
 /**
@@ -120,7 +121,8 @@ export function searchDirOf(key: string, dirs: number): string {
 export const searchFileNames = (species: number): string[] => ['search/top.json', 'search/genera.json', 'search/tables.json', 'search/blocks.json', ...Array.from({ length: searchDirsFor(species) }, (_, i) => `search/${i}.json`)];
 
 /** The words a near match reads (`nearPrefix`): the name, the common names and their spellings, the older names. */
-const nameWordsOf = (e: Wordy) => [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...(e.spellings ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words), ...(e.older ?? []).flatMap(words)];
+// The record's names by another author too (`hom`; round eighty-two), as `syn` and `older` held them before: never matched by a similar spelling, but every near key holds the species it held.
+const nameWordsOf = (e: Wordy) => [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...(e.spellings ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words), ...(e.older ?? []).flatMap(words), ...(e.hom ?? []).flatMap(words)];
 const drop = (w: string, j: number) => w.slice(0, j) + w.slice(j + 1);
 
 /** An entry's exact keys of `len` characters: the prefix of that length of each of its words. */
@@ -218,7 +220,7 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
   const regions = [...new Set(index.flatMap((e) => e.origin ?? []))].sort();
   const fam = new Map(families.map((f, i) => [f, i])), region = new Map(regions.map((p, i) => [p, i]));
   const docs = index.map((e) => {
-    const d: unknown[] = [e.name, e.family ? fam.get(e.family)! : -1, (e.origin ?? []).map((o) => region.get(o)!), e.common ?? '', e.commons ?? [], e.spellings ?? [], e.syn ?? [], e.older ?? []];
+    const d: unknown[] = [e.name, e.family ? fam.get(e.family)! : -1, (e.origin ?? []).map((o) => region.get(o)!), e.common ?? '', e.commons ?? [], e.spellings ?? [], e.syn ?? [], e.older ?? [], [], e.hom ?? []];
     while (d.length > 1 && (Array.isArray(d[d.length - 1]) ? !(d[d.length - 1] as unknown[]).length : d[d.length - 1] === '' || d[d.length - 1] === -1)) d.pop();
     return JSON.stringify(d);
   });
@@ -233,7 +235,7 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
     }
     for (const [g, ns] of by) (kewBy.get(g) ?? kewBy.set(g, []).get(g)!).push([i, ns]);
   });
-  const kewDoc = (i: number, ns: string[]) => { const d = JSON.parse(docs[i]) as unknown[]; while (d.length < 8) d.push(d.length === 1 ? -1 : d.length === 3 ? '' : []); d.push(ns); return JSON.stringify(d); };
+  const kewDoc = (i: number, ns: string[]) => { const d = JSON.parse(docs[i]) as unknown[]; while (d.length < 8) d.push(d.length === 1 ? -1 : d.length === 3 ? '' : []); d[8] = ns; return JSON.stringify(d); };
   const hashes = new Set<string>();
   // Each body to the sink as it is made, when one is given: at fifty thousand species they are gigabytes, never held at once.
   const store = (body: string) => { const h = hash(body); if (!hashes.has(h)) { hashes.add(h); if (sink) sink(h, body); else stored.set(h, body); } return h; };
@@ -479,8 +481,8 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     reads += blocks.length;
     const counts = new Map(await Promise.all(blocks.map(async (k) => [k, await r.photos(k)] as const)));
     return ats.map((i) => {
-      const [name, family = -1, origin = [], common = '', commons = [], spellings = [], syn = [], older = [], kew = []] = byAt.get(i)!;
-      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, kew, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK] };
+      const [name, family = -1, origin = [], common = '', commons = [], spellings = [], syn = [], older = [], kew = [], hom = []] = byAt.get(i)!;
+      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, kew, hom, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK] };
     });
   };
   /** The entries of the hits, in their order: from the show blocks, read only for them. */

@@ -22,7 +22,7 @@ declare global {
         QUEUE?: KVNamespace;
         /** The vault-creation counters, one Durable Object (src/lib/server/counters.ts); without it the KV counters bound approximately. */
         COUNTERS?: DurableObjectNamespace<import('$lib/server/counters').Counters>;
-        /** '1' lets any vault sync without a licence (dev and pre-launch). */
+        /** '1': a vault made now syncs without a licence (dev and pre-launch); anything else makes new vaults that are refused with 402. A vault keeps what it was made with. */
         SYNC_OPEN?: string;
         /** Set only by the browser suite's local server (`--var E2E_OFFLINE:1`): the server asks no outside service, as if none answered (round sixty-two, the first deploy). */
         E2E_OFFLINE?: string;

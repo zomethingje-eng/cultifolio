@@ -3,7 +3,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { getMeta, setMeta, photoBlobIds, storageErrorText } from '$lib/db/vault';
-  import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
+  import { prepareBackup, downloadBackup, openBackup, restoreBackup, BACKUP_FROM, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { ReplaceBegunError } from '$lib/backup/replace';
   import { sync } from '$lib/sync/engine.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -12,10 +12,13 @@
   import { keepWorking } from '$lib/ui/grow/example.svelte';
 
   let lastBackup = $state<string | null>(null);
+  /** How the last backup came to be: a file taken here, or a file restored from, which counts as one (round eighty-two; the independent review's 15). */
+  let lastFrom = $state<string | null>(null);
   let photoCount = $state<number | null>(null);
   onMount(async () => {
     await collection.load();
     lastBackup = (await getMeta<string>('lastBackup')) ?? null;
+    lastFrom = (await getMeta<string>(BACKUP_FROM)) ?? null;
     photoCount = (await photoBlobIds()).length;
   });
   $effect(() => {
@@ -49,8 +52,9 @@
     exported = { name: p.name, bytes: p.bytes };
     shortfall = null;
     const now = new Date().toISOString();
-    await setMeta('lastBackup', now);
+    await Promise.all([setMeta('lastBackup', now), setMeta(BACKUP_FROM, 'export')]);
     lastBackup = now;
+    lastFrom = 'export';
   }
 
   /* ---- restore ---- */
@@ -171,11 +175,11 @@
   <!-- Skipped and counted (round sixty-seven; triage-66 R10): the change stays in the log and in a backup, and is not folded. -->
   <p class="notice" id="bk-malformed">{collection.malformed === 1 ? 'One change' : `${collection.malformed} changes`} in this device's log could not be read and {collection.malformed === 1 ? 'is' : 'are'} not shown. {collection.malformed === 1 ? 'It stays' : 'They stay'} in the log, and in a backup.</p>
 {/if}
-{#if collection.persisted === false}
+{#if collection.persisted === false && collection.ready && collection.accessions.length}<!-- nothing to keep, nothing to ask (round eighty-two; the independent review's 15) -->
   <div class="cult warn"><div class="body"><!-- The outcome first, warmly; the browser's rule kept (round sixty; the grower review, §3). --><b>Your plants live only in this browser.</b> Take a backup now and install the app to your home screen so they are safe: a browser can clear storage for sites you rarely open, and has not promised to keep this one's.</div></div>
 {/if}
 
-<div class="secrule"><h2>Take a backup</h2><div class="line"></div><span class="n">{lastBackup ? `last ${ago(lastBackup)}` : 'never'}</span></div>
+<div class="secrule"><h2>Take a backup</h2><div class="line"></div><span class="n">{lastBackup ? `last ${ago(lastBackup)}${lastFrom === 'restore' ? ', restored from a file' : ''}` : 'never'}</span></div>
 <div class="cult">
   <div class="body">
     <p>One zip file: <code>changes.json</code> (the collection itself, every change ever made), a folder of photographs, and <code>plants.csv</code>, <code>batches.csv</code> and <code>events.csv</code> for a spreadsheet. Restoring it on another device merges by the same rule sync will use, so nothing is lost by restoring an old file over a newer collection, and restoring twice changes nothing.</p>

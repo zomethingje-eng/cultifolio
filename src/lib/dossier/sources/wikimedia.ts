@@ -307,7 +307,8 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     if (hits.length === 1) {
       const e = await entityOf(f, hits[0].title);
       if (e.status !== 'ok') return e;
-      if (!e.data) return { status: 'none' };
+      // Said, as every "none" of this route is (round eighty-two, F; review 1's 7): the one item Wikidata's search gave is gone.
+      if (!e.data) return { status: 'none', detail: `the one item that carries its GBIF key, ${hits[0].title}, is not served by Wikidata` };
       return { status: 'ok', data: crossOf(hits[0].title, e.data) };
     }
     // Round eighty (A; Datura innoxia lost its item, IPNI, POWO and WFO to two items labelled with its name): a page with a

@@ -39,3 +39,19 @@ export function firstsOf(ids: Iterable<string>, src: FirstsSource, today: string
   }
   return out.sort((a, b) => b.d.localeCompare(a.d) || a.kind.localeCompare(b.kind) || a.recId.localeCompare(b.recId));
 }
+
+/**
+ * What a batch's first count is called, by its method (round eighty-two; review 2's 4: six cuttings with four struck were
+ * announced as "First seedlings up"). The batch page's own verb: seed comes up, the rest strike. A method this version
+ * does not know is not given a verb.
+ */
+const FIRST_UP: Record<string, string> = {
+  seed: 'First seedlings up',
+  cutting: 'First cuttings struck',
+  offset: 'First offsets struck',
+  leaf: 'First leaf cuttings struck',
+  division: 'First divisions struck',
+  bulbil: 'First bulbils struck',
+  graft: 'First grafts struck'
+};
+export const firstUpWords = (method: string | null | undefined): string => FIRST_UP[method ?? 'seed'] ?? 'First count';

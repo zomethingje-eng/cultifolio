@@ -92,9 +92,12 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
  * 1024 × 768, a visitor with the welcome shown), and its photographs fetched as before: the first preloaded, the first
  * three at once, the first two with priority.
  */
+// Round eighty-two moved these on purpose: the welcome's example is a button (the second review's 6) and the desktop's
+// running text is 15 px (the independent review's 24), the tile's lines among it.
+// Round seventy-six's figures were 307, 496, 510, 655 (654 at 1024) and a tile 155 × 179.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 307, stripBottom: 496, searchTop: 510, rowTop: 655, tile: [155, 179] },
-  '1024': { stripTop: 307, stripBottom: 496, searchTop: 510, rowTop: 654, tile: [155, 179] }
+  '1280': { stripTop: 311, stripBottom: 502, searchTop: 516, rowTop: 662, tile: [155, 181] },
+  '1024': { stripTop: 311, stripBottom: 501, searchTop: 515, rowTop: 662, tile: [155, 181] }
 };
 
 test('r76p strip 2: the desktop is unchanged: the same strip at the same place, its photographs fetched as before, and no second copy in the page', async ({ browser, baseURL }) => {

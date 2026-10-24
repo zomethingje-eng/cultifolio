@@ -12,7 +12,7 @@
  * retry is anything else. `near` is said as a similar spelling,
  * which the front page did not say (round sixty-two; the search review's 18).
  */
-import { droppedLabel, rankedWords, RANK_MARKERS, type Searchable } from '$core/search';
+import { droppedLabel, rankedWords, homTyped, RANK_MARKERS, type Searchable } from '$core/search';
 import { words as nameWords } from '$core/postings';
 
 export interface SearchedAnswer {
@@ -127,3 +127,24 @@ export function olderNameOf(typed: string, hit: Searchable): string | null {
   }
   return null;
 }
+
+/**
+ * The name of the hit's record by another author that a catalogue hit was found by (round eighty-two; review 1's 3:
+ * "Sempervivum montanum" listed "Sempervivum tectorum · older name: Sempervivum montanum", where the record's name is S.
+ * montanum Sibth. & Sm., and S. montanum, Linnaeus's, is a page of its own, listed first). The index keeps such names apart
+ * (`hom`), and the search reaches the hit by one only as a name typed (`homTyped`), so it is said as what it is: the name
+ * with the authors the record writes after it, as the species page's "Under another author" line writes it, or with "no
+ * author in the record". `name` is the name alone, for the page's `?was=`. Null when the hit was not found so, or when
+ * `olderNameOf` names an older name of its own.
+ */
+export function homonymOf(typed: string, hit: Searchable & { homBy?: string[][] }): { name: string; text: string } | null {
+  const names = hit.hom ?? [];
+  if (!names.length || olderNameOf(typed, hit)) return null;
+  const qs = rankedWords(typed).filter((w) => !RANK_MARKERS.has(w));
+  const at = homTyped({ homWords: names.map((n) => nameWords(n).filter((w) => !RANK_MARKERS.has(w))) }, qs)[0];
+  if (at === undefined) return null;
+  const name = names[at];
+  const by = (hit.homBy?.[at] ?? []).filter((a) => typeof a === 'string' && a.trim());
+  return { name, text: by.length ? by.map((a) => `${name} ${a.trim()}`).join(' and ') : `${name}, with no author in the record` };
+}
+

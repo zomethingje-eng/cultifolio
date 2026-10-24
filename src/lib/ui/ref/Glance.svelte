@@ -28,7 +28,8 @@
     toggle = true,
     chartHref = null,
     season = true,
-    annualRain = null
+    annualRain = null,
+    few = null
   }: {
     months: M[];
     extremes?: Ex;
@@ -48,6 +49,8 @@
     season?: boolean;
     /** The dossier's per-cell yearly totals; with their median the rain card shows it (round sixty-three; REVIEW-TRIAGE-61). */
     annualRain?: { p50?: number | null } | null;
+    /** A climate read from few records (round eighty-two; `$core/few-records`): marked beside the row's head, the counts in its title. */
+    few?: { records: number; cells: number } | null;
   } = $props();
   const u = $derived(units.current);
   const idx = (f: (x: M) => number, hi: boolean) => months.reduce((b, x, i) => ((hi ? f(x) > f(months[b]) : f(x) < f(months[b])) ? i : b), 0);
@@ -77,7 +80,7 @@
 <div class="ghead">
   <!-- "Habitat figures", not "In the wild": the floor is one reanalysis cell at a typical spot and the rest are medians
        across cells, which "in the wild" said more than (round sixty-two; the words review's 1, outside review A3). -->
-  <span class="gt">Habitat figures</span>
+  <span class="gt">Habitat figures{#if few}<span class="few" id="few-records-mark" title="{few.records} record{few.records === 1 ? '' : 's'} in {few.cells} grid cell{few.cells === 1 ? '' : 's'}">from few records</span>{/if}</span>
   {#if toggle}
     <!-- Both units shown, the current one marked: a lone "°F" beside a figure in °C read as a contradiction (round sixty; visitor 13). -->
     <div class="useg" role="group" aria-label="Units">
@@ -122,6 +125,8 @@
 <style>
   .ghead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; flex-wrap: wrap; }
   .gt { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  /* The mark of a climate read from few records (round eighty-two): the warm dashed edge the page's other cautions wear. */
+  .few { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.04em; text-transform: none; font-weight: 700; }
   .useg { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; background: var(--card); color: var(--ink3); }
   .useg button { min-width: var(--tap); min-height: var(--tap); padding: 0 10px; border: 0; background: none; color: var(--ink2); font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
   .useg button.on { background: var(--accent); color: var(--on-accent, #fff); }

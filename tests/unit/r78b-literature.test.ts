@@ -47,9 +47,12 @@ describe('the build asks OpenAlex nothing', () => {
 
 describe('a page built now: not checked, with why, in one sentence', () => {
   const page = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
-  it('the species page says "Not checked." and the one sentence under Papers', () => {
-    expect(page).toContain("<b>Not checked.</b> Papers are not yet asked for this reference; a later fill takes them from OpenAlex's free snapshot."); // base: absent
-    expect(page).toMatch(/\{#if literatureOff\(d\.upstream\['openalex'\]\)\}/);
+  // Round eighty-two (the independent review's 23): no Papers section or tab while nothing is asked; the record of
+  // sources says "not asked" with why (r82u-pages.spec.ts).
+  it('the species page draws no Papers section while papers are not asked', () => {
+    expect(page).toContain("const litOff = $derived(literatureOff(d.upstream['openalex']));");
+    expect(page).toContain("{#if refused('openalex') && !papers.length && !litOff}");
+    expect(page).not.toContain('Papers are not yet asked for this reference');
   });
   it('the builder no longer carries a previous build\'s papers into a page built now', () => {
     const script = readFileSync('scripts/build-dossiers.ts', 'utf8');

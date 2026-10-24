@@ -82,8 +82,12 @@ export function kindNamesOf(d: { key?: PageId; ids?: { gbif?: number } | null; n
  */
 type ReadCtx = { slips?: readonly string[] | null; asked?: string[] };
 
-/** What `heldNamesOf` reads of an index entry: the accepted name and the older names the index carries (`syn`, `older`). */
-export type HeldSource = { key: PageId; name: string; syn?: readonly string[] | null; older?: readonly string[] | null };
+/**
+ * What `heldNamesOf` reads of an index entry: the accepted name and the older names the index carries (`syn`, `older`),
+ * and the record's names by another author (`hom`, round eighty-two), which `syn` and `older` held before: the
+ * photograph rules read every name they read then.
+ */
+export type HeldSource = { key: PageId; name: string; syn?: readonly string[] | null; older?: readonly string[] | null; hom?: readonly string[] | null };
 
 const heldMemo = new WeakMap<readonly HeldSource[], HeldNames>();
 /** The reference's names from its index, made once an index (the Worker keeps one parsed index a minute). */
@@ -99,7 +103,7 @@ export function heldNamesOf(entries: readonly HeldSource[]): HeldNames {
     const a = nameOf(e.name);
     if (a) accGenera.add(a.genus.toLowerCase());
     if (a && !a.infra) acc.set(`${a.genus.toLowerCase()} ${spellingKey(a.epithet)}`, e.key);
-    for (const n of [e.name, ...(e.syn ?? []), ...(e.older ?? [])]) {
+    for (const n of [e.name, ...(e.syn ?? []), ...(e.older ?? []), ...(e.hom ?? [])]) {
       const b = nameOf(n);
       if (!b) continue;
       const g = b.genus.toLowerCase();

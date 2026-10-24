@@ -12,28 +12,47 @@
 # accepted name and takes that entry's Kew id at the next `--index`. Six of the seven are Kew's heterotypic synonyms of the
 # entry; the merge is the owner's claim that the two are one plant, so `--list-extra-keys` reads the leaving page's key on
 # the kept page whatever its type (round seventy-eight). Kept (Kew's accepted name, its plant_name_id): Dudleya
-# pulverulenta 2778991, Weingartia canigueralii 2465834, Drosera paleacea 64497, Ceropegia cereiformis (Kew's Echidnopsis
+# pulverulenta 2778991 (until round eighty-two, below), Weingartia canigueralii 2465834, Drosera paleacea 64497, Ceropegia cereiformis (Kew's Echidnopsis
 # cereiformis, homotypic) 505095, Ceropegia nigra 502875, Copiapoa calderana 2735922, Echeveria pinetorum 2781299.
 #
 # Round eighty (A; the owner's decision on the duplicate pages, "each into the page under Kew's accepted name"): Ceropegia
 # cereiformis (9574874) and Ceropegia nubica (9592399, before into 9574874) into Echidnopsis cereiformis, Kew's accepted
 # name, whose page has no GBIF key and is named by its id, k505095: it reads both keys' records and answers both old
-# addresses, and the two pages leave at --prune-followed. Echeveria peacockii into Dudleya pulverulenta is read whether
-# or not the extra keys' rule reads GBIF's name and author for it (`mergeKeys`).
+# addresses, and the two pages leave at --prune-followed.
+#
+# Round eighty-two (F; the owner's decision on review 1's 4): Echeveria peacockii (7530398) into Echeveria desmetiana
+# (k2781125, Kew's accepted name, a page without a GBIF key), no longer into Dudleya pulverulenta. What GBIF files under
+# 7530398 is Kew's Echeveria desmetiana: E. desmetiana De Smet ex É.Morren and De Smet, its subsp. columnaris, Cotyledon
+# desmetiana and E. subsessilis are each Kew's synonym of 2781125 (wcvp_names.csv of 2026-06-04). The name Echeveria
+# peacockii Croucher ex T.Moore & Mast. alone is filed by Kew's file under Dudleya pulverulenta (2781292 under 2778991), and
+# GBIF's page of it showed that entry, so one Kew entry had two pages (g7530398 and k2778991); the merge is the owner's
+# claim that the key's plant is E. desmetiana, which its synonymy reads to. The key is read by the page it joins whatever
+# the extra keys' rule makes of its name and author (`mergeKeys`).
+#
+# Round eighty-two (M; the owner's decision of 2026-10-23, on F's finding): Bisnaga hamatacantha (7281739) into Ferocactus
+# hamatacanthus (k2808164, Kew's accepted name, a page without a GBIF key), as Echeveria peacockii into Echeveria desmetiana.
+# One type: Bisnaga hamatacantha (Muehlenpf.) Orcutt is a combination based on Echinocactus hamatacanthus Muehlenpf., which
+# Kew's file files under Ferocactus hamatacanthus (Muehlenpf.) Britton & Rose, 2808164, as its basionym (homotypic); Kew's
+# file holds no row of the name Bisnaga hamatacantha. GBIF files under 7281739 Ferocactus hamatacanthus itself (3084155) and
+# Kew's other names of 2808164 and of its two subspecies (GBIF's species API of 2026-10-23: 38 usages), which is why
+# k2808164 read no key (scripts/extra-keys-kew-none.txt, "lumped"). None is one Kew holds as another plant by the rule
+# (`mergedExcept`: none), so there is no fourth column; GBIF's Echinocactus haematacanthus Monv. (7498042), whose words Kew
+# files under Ferocactus haematacanthus, holds no record (GBIF, 2026-10-23).
 #
 # A line: <key that leaves>	<key it joins, or k<plant_name_id> for a page without one>	<name that leaves>[	except:<keys>]
 # The fourth column (round eighty, A), where there is one, lists the keys GBIF files under the leaving key that Kew holds as
 # another plant than the page joined, whose records are not read (GBIF's species API of 2026-10-22 against Kew's file):
-# under Echeveria peacockii Croucher, Echeveria desmetiana and its subspecies, Cotyledon desmetiana and Echeveria
-# subsessilis (Kew's Echeveria desmetiana) and Cotyledon peacockii (a pro parte synonym); under Ceropegia nubica,
-# Echidnopsis uraiqatiana (a species of its own at Kew).
+# under Echeveria peacockii Croucher (round eighty-two), Cotyledon peacockii (Croucher) Baker, GBIF's pro parte synonym,
+# which Kew's file files under Dudleya pulverulenta; under Ceropegia nubica, Echidnopsis uraiqatiana (a species of its own
+# at Kew).
 3084426	11798439	Coryphantha macromeris
 7906297	7281301	Rebutia fidana
-7530398	2985894	Echeveria peacockii	except:4198044,4202274,5688475,5690759,8531704,12287937,12349199
+7530398	k2781125	Echeveria peacockii	except:5690759
 3947359	3948341	Weingartia pulchra
 3190985	3190812	Drosera parvula
 9592399	k505095	Ceropegia nubica	except:3577721
 9574874	k505095	Ceropegia cereiformis
+7281739	k2808164	Bisnaga hamatacantha
 3574291	3574112	Ceropegia melanops
 3959296	7284393	Copiapoa boliviana
 7334118	4199517	Echeveria sessiliflora

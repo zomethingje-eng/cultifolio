@@ -161,8 +161,9 @@ describe('the page says it', () => {
   it('the species and compare pages say the page\'s own reason; the species page links the pages GBIF files its names under', () => {
     const sp = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
     expect(sp).not.toMatch(/NO_GBIF_(WHY|SENTENCE)/);
-    expect(sp).toContain('const noWhy = $derived(uncheckedWhy(d));');
-    expect(sp).toContain('<div class="mapcap">{unchecked ? `Records not checked: ${noWhy}.`');
+    // Round eighty-two (the independent review's 10): the page's own reason said once, under the name card.
+    expect(sp).toContain('const noSentence = $derived(uncheckedSentence(d));');
+    expect(sp).toContain('<p class="notice" id="records-unchecked"><b>GBIF\'s records not checked.</b> {noSentence}');
     expect(sp).toContain('<p class="small muted" id="kew-held-under">');
     const server = readFileSync('src/routes/species/[slug]/+page.server.ts', 'utf8');
     expect(server).toContain('const underIds = [...new Set((d.occurrences.unread?.under ?? []).map((u) => u.page)');

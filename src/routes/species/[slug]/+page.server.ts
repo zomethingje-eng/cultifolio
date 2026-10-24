@@ -12,6 +12,7 @@ import { hybridOf, signedName, withKewLinks } from '$core/hybrids';
 import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
+import { authorKey, plainlyAnother } from '$dossier/authors';
 import type { PageServerLoad } from './$types';
 
 /** The genera's words for `englishNames`, once for each genera read (round seventy-seven: every page folded all 1,300). */
@@ -201,10 +202,18 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // to be that species (round seventy-one; S-F3: 169 pages, "Also known as … Annona muricata" on Annona montana).
   const olderOwn = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))];
   const elsewhere = await look.elsewhere(key, olderOwn.map(plain));
-  const namedElsewhere = olderOwn.flatMap((n) => {
+  // A name the record cites by that page's own author is that page's very name, which GBIF files under both, not another
+  // author's (round eighty-two, the merge, on S's need: 10 of 283 such names on round seventy-seven's corpus): it is an
+  // older name as any other, as the index now keeps it (`homonymEntries`). The other page's record gives its author; one
+  // not read leaves the name under "another author", as before.
+  const namedElsewhere = (await Promise.all(olderOwn.map(async (n) => {
     const e = elsewhere.get(plain(n));
-    return e && e[0] !== key ? [{ name: n, slug: e[1], authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
-  });
+    if (!e || e[0] === key) return [];
+    const authors = authorsOf(n, d.name.synonyms ?? []);
+    const other = authors.some((a) => !!authorKey(a)) ? ((await getDossier(platform, fetch, e[0], c).catch(() => null))?.name.authorship ?? undefined) : undefined;
+    if (authors.some((a) => !!authorKey(a) && !!authorKey(other) && !plainlyAnother(other, a))) return [];
+    return [{ name: n, slug: e[1], authors }];
+  }))).flat();
   // The other page whose Kew entry gives this page its range, when the dossier names one (round seventy-two; triage B3, F13),
   // by its id (round seventy-eight).
   const viaKey = (d.distribution as { via?: { page?: string } }).via?.page;

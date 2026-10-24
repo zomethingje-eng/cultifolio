@@ -87,7 +87,7 @@ describe('the cookies (H204; the cookie clause of the full detail)', () => {
     // "your units", "its hemisphere": each cookie's value is what the sentence says it holds.
     expect(s.text).toMatch(/your units/);
     expect(s.text).toMatch(/once a site is set, its hemisphere/);
-    expect(cookies).toContain('cultifolio.units=us; path=/; max-age=31536000; samesite=lax');
+    expect(cookies).toContain('cultifolio.units=us; path=/; max-age=31536000; samesite=lax; secure'); // Secure since round eighty-two (sent over HTTPS only)
     expect(cookies.filter((c) => c.startsWith('cultifolio.hemi=s;')).length).toBeGreaterThan(0); // a southern site, one letter
     expect(cookies.filter((c) => c.startsWith('cultifolio.hemi=;') && /max-age=0/.test(c)).length).toBeGreaterThan(0); // no site, no hemisphere
     // Every cookie the code writes is written by these two stores (a third writer would be a third cookie).

@@ -10,7 +10,7 @@
  * changed (`changed.on`); its fingerprint is taken again, since the id is part of it.
  */
 import { byId, gbifPage, isPageId, type PageId } from '../core/page-id';
-import { pageIds, idWords, type IdAnswer } from './page-ids';
+import { pageIds, idWords, sharedKewEntries, type IdAnswer } from './page-ids';
 import { substanceHash } from './changed';
 import { DOSSIER_V } from './schema';
 
@@ -27,12 +27,12 @@ export const DOSSIER_FILE = /^[kg][1-9][0-9]{0,9}\.json$/;
 /** A dossier file of a version 2 corpus: GBIF's key and `.json`. */
 export const V2_FILE = /^[1-9][0-9]{0,9}\.json$/;
 
-type Slim = { file: string; gbif?: number; entry?: string; name: string; refs: boolean; key: unknown };
+type Slim = { file: string; gbif?: number; entry?: string; heldBy?: string; name: string; refs: boolean; key: unknown };
 type Doc = {
   v?: number;
   key?: unknown;
   ids?: { gbif?: number };
-  name?: { scientific?: string; kew?: { entry?: string } };
+  name?: { scientific?: string; kew?: { entry?: string; heldBy?: string } };
   distribution?: { via?: { page?: string } };
   photos?: Array<{ shared?: unknown[] }>;
   changed?: { on: string; h: string };
@@ -50,6 +50,8 @@ export interface RekeyReport {
   gbif: Array<{ id: PageId; name: string; why: string }>;
   /** Pages with no id the rule can give, left where they are (never today). */
   refused: Array<{ file: string; name: string; why: string }>;
+  /** The Kew entries two pages or more hold after the rekey (`sharedKewEntries`, round eighty-two): none before an upload. */
+  shared?: ReturnType<typeof sharedKewEntries>;
   /** Files that could not be read: the rekey then changes nothing, since an id given without them could be given twice. */
   unreadable: string[];
   /** Files that hold a GBIF key an earlier file holds too (a run stopped between writing a page and removing its old file): nothing is changed either. */
@@ -73,7 +75,7 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
     if (!d || typeof d !== 'object') { unreadable.push(file); continue; }
     const gbif = typeof d.ids?.gbif === 'number' ? d.ids.gbif : migrating && typeof d.key === 'number' ? d.key : undefined;
     const refs = !!d.distribution?.via?.page || !!d.photos?.some((p) => Array.isArray(p.shared) && p.shared.length);
-    slim.push({ file, gbif, entry: d.name?.kew ? (d.name.kew.entry ?? '') : undefined, name: d.name?.scientific ?? '', refs, key: d.key });
+    slim.push({ file, gbif, entry: d.name?.kew ? (d.name.kew.entry ?? '') : undefined, ...(d.name?.kew?.heldBy ? { heldBy: d.name.kew.heldBy } : {}), name: d.name?.scientific ?? '', refs, key: d.key });
   }
   // Two files of one GBIF key (a run stopped between writing a page and removing its old file) are one page twice: said,
   // and nothing is changed until one goes, since both would take one id.
@@ -102,7 +104,9 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
     const n = typeof x === 'number' ? x : typeof x === 'string' && /^[1-9][0-9]*$/.test(x) ? Number(x) : null;
     return n == null ? x : (byGbif.get(n) ?? gbifPage(n));
   };
-  const report: RekeyReport = { pages: slim.length, renamed: 0, followed: 0, kew: 0, gbif: [], refused: [], unreadable, twice };
+  // One Kew entry, one page (round eighty-two): the entries two pages hold under their new ids, for the index to say.
+  const shared = sharedKewEntries(slim.flatMap((p, i) => (answers[i].id ? [{ id: answers[i].id!, entry: p.entry, name: p.name }] : [])));
+  const report: RekeyReport = { pages: slim.length, renamed: 0, followed: 0, kew: 0, gbif: [], refused: [], unreadable, twice, shared };
   // In place, every change is read before any is written, so a page that takes the file another page leaves never writes
   // over it before it is read; the old files no page now takes are removed last. Migrating, the two directories differ.
   const out: Array<{ file: string; old: string; d: Doc }> = [];

@@ -53,7 +53,11 @@ export interface VaultMeta {
    * is judged on, since a missing place entry alone is also what a vault from before round fifty-nine has.
    */
   reclaimedAt?: number;
-  /** 'open' while nobody pays; the licence check lands here. */
+  /**
+   * Set once, when the vault is made, and never changed by any code: 'open' under `SYNC_OPEN=1`, 'none' otherwise, and
+   * every authenticated request on a 'none' vault is refused with 402 (`authed`). 'licensed' is reserved for a licence
+   * step that does not exist yet: nothing writes it (round eighty-two; the independent review's 34).
+   */
   entitlement: 'open' | 'licensed' | 'none';
   /**
    * Bytes stored, as last flushed from the live KV counter (see `storeCounted`).
@@ -1685,6 +1689,19 @@ export function networkKey(ip: string): string | null {
  */
 const UPSTREAM: ReadonlySet<RateBucket> = new Set(['forecast', 'names', 'match', 'search', 'searchmiss', 'reference', 'sync', 'syncobj', 'index', 'sheets', 'render']);
 export const NET_RATE_FACTOR = NET_FACTOR;
+/**
+ * The buckets an IPv4 address's /24 is counted in too, at the same four times one address's allowance, as the shares of
+ * outside calls are (round eighty-two; the independent review's 9): the whole index (megabytes an answer) and sync with
+ * its batches and photographs. A /24 of IPv4 addresses had no network window at all, so 254 addresses of one block each
+ * had six whole indexes per ten minutes. The other buckets count an IPv6 /48 alone, as before: a search, a render or a
+ * reference read is the reader's own, and a campus or a carrier's block is many readers.
+ */
+const BY_V4_NETWORK: ReadonlySet<RateBucket> = new Set(['index', 'sync', 'syncobj']);
+/** The network a request window counts an address in, for `bucket`: its IPv6 /48, or its IPv4 /24 where the bucket is counted so; null for none. */
+export function windowNetwork(bucket: RateBucket, ip: string): string | null {
+  if (!UPSTREAM.has(bucket)) return null;
+  return BY_V4_NETWORK.has(bucket) ? upstreamNetwork(ip) : networkKey(ip);
+}
 /** The services this site calls under its own name, each with its own share of `RATE.upstream` a minute (round sixty-one). */
 export type Upstream = 'met' | 'nws' | 'gbif';
 export type UpstreamAnswer = { ok: true } | { ok: false; who: 'site' | 'address' | 'network' | 'reserve'; service: string; retryAfter: number };
@@ -1768,7 +1785,7 @@ export async function limited(platform: App.Platform | undefined, getClientAddre
   const ip = clientIp(getClientAddress);
   const r = await rateLimit(platform?.env?.QUEUE, bucket, ip);
   if (!r.ok) return tooMany('too many requests from this address; wait and try again', r.retryAfter);
-  const net = UPSTREAM.has(bucket) ? networkKey(ip) : null;
+  const net = windowNetwork(bucket, ip); // an IPv4 /24 too for the index and sync (round eighty-two; the independent review's 9)
   if (net) {
     const n = await rateLimit(platform?.env?.QUEUE, bucket, net, Date.now(), RATE_FLUSH_MS, NET_RATE_FACTOR);
     if (!n.ok) return tooMany('too many requests from this network; wait and try again', n.retryAfter);

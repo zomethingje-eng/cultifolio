@@ -16,7 +16,7 @@
   import { parseName } from '$core/names';
   import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
-  import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick } from '$lib/ui/picked-name';
+  import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick, rankedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   // `received`: the text as typed, when the last pick wrote a name that left some of it out; the form files it as the
@@ -205,7 +205,8 @@
     // Rows the name service answered: the species part asked; for a genus followed by capitalised words with no species
     // of that name in the answer, the genus asked too, for the genus row's key.
     const toRows = (rows: Row[]) => rows
-      .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName ?? '', family: x.family, rank: x.rank, status: x.status }))
+      // A name below the species with its rank word, shown and written so (`rankedName`; round eighty-two, review 1's 17).
+      .map((x) => ({ key: x.key, name: rankedName(x.canonicalName ?? x.scientificName ?? '', x.rank), family: x.family, rank: x.rank, status: x.status }))
       // The backbone lists a subspecies under several keys (accepted, synonyms of one another); one line per name and rank is enough.
       .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
     const namesP = needle.length < 3 ? Promise.resolve() : namesFor(needle).then(async (rows) => {
@@ -289,7 +290,7 @@
       // and never called "not in the backbone" unasked (round sixty-two; the verification review's search 4).
       const rows = await namesFor(requestName(value));
       if (gen !== reqGen) return; // the field changed while this was asked
-      const m = rows.find((x) => sameName(x.canonicalName ?? x.scientificName ?? '', p.scientific) && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));
+      const m = rows.find((x) => (sameName(x.canonicalName ?? x.scientificName ?? '', p.scientific) || sameName(rankedName(x.canonicalName ?? x.scientificName ?? '', x.rank), p.scientific)) && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));
       const shape = cultivarRest(value);
       if (m) {
         taxonKey = m.key;
@@ -436,7 +437,7 @@
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key > 0 ? s.key : `${s.local ? 'page' : 'row'}:${s.rank ?? ''}:${s.name}`)}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{rowNote(s)}</span></li>
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : /\s(?:(?:notho)?(?:var|subsp)|f|nothof)\.\s/.test(s.name) ? '' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{rowNote(s)}</span></li>
     {/each}
   </ul>
   </div>

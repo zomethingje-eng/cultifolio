@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keepFieldsClearOf } from '$lib/ui/clear-of-bar';
   import { goto, beforeNavigate, afterNavigate, replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
@@ -173,7 +174,8 @@
     const ro = el ? new ResizeObserver(fit) : null;
     if (el) ro!.observe(el);
     addEventListener('resize', fit);
-    return () => { ro?.disconnect(); removeEventListener('resize', fit); document.body.classList.remove('stickyacts'); document.body.style.removeProperty('--acts-h'); };
+    const clear = el ? keepFieldsClearOf(el) : () => {}; // no field under the pinned bar (round eighty-two; the independent review's 25)
+    return () => { ro?.disconnect(); clear(); removeEventListener('resize', fit); document.body.classList.remove('stickyacts'); document.body.style.removeProperty('--acts-h'); };
   });
   /** What the Add button is doing, said in a status line beside it: the button itself was a live region, so every relabel was announced from a button (round sixty; the accessibility review, 12). */
   const addStatus = $derived(checking ? 'Checking the name against the reference…' : busy ? 'Adding…' : '');

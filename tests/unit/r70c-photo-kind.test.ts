@@ -261,6 +261,8 @@ describe('C5: among files of one rank, a lead at least 500 pixels wide (S-C12)',
   it('a file whose width was not kept is not set back, and the title\'s epithet still ranks first (guards)', () => {
     const a = { ...photo({ title: 'File:Aloe vera 1.jpg' }), width: undefined };
     expect(leadOf([a, photo({ title: 'File:Aloe vera 2.jpg' })], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 1.jpg');
-    expect(leadOf([photo({ title: 'File:DSC_0001.jpg', width: 4000 }), photo({ title: 'File:Aloe vera 3.jpg', width: 300 })], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 3.jpg');
+    // A landscape 300-pixel file (round eighty-two passes over an upright lead where one that is not is there; this
+    // fixture's 2,000-pixel height had made it upright).
+    expect(leadOf([photo({ title: 'File:DSC_0001.jpg', width: 4000 }), { ...photo({ title: 'File:Aloe vera 3.jpg', width: 300 }), height: 200 }], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 3.jpg');
   });
 });

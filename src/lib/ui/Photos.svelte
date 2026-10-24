@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Photo } from '$dossier/schema';
   import { heroOf } from '$dossier/dedupe';
-  import { photoCredit } from '$lib/ui/ref/head';
+  import { photoCredit, shownAttribution } from '$lib/ui/ref/head';
   let { photos, name, strip = false }: { photos: Photo[]; name: string; strip?: boolean } = $props();
   // "Wild" is what a source says, not what it leaves unsaid: iNaturalist marks each photograph; Commons and GBIF media
   // carry no flag, so those go unsaid rather than captioned as wild (round thirty, R2-12).
@@ -26,7 +26,7 @@
 {#if hero && !strip}
   <figure class="hero card">
     <a href={hero.page ?? hero.url} rel="noopener"><img src={hero.url} alt="{name}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" /></a>
-    <figcaption class="faint small">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</figcaption>
+    <figcaption class="faint small">{shownAttribution(hero)}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</figcaption>
   </figure>
 {/if}
 {#if hero}

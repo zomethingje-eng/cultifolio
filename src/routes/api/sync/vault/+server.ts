@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf, RecountCrossed, untilMidnight } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf, RecountCrossed, untilMidnight } from '$lib/server/sync';
 
 /** The most a creation body may be: its three fields are under two hundred bytes. */
 const MAX_VAULT_BODY = 1024;
@@ -37,7 +37,10 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (body.create === false && !existing) return json({ error: 'no vault answers to that key' }, { status: 404 });
   // A new vault only under the name its own token derives (an existing one is decided by the token hash, 403 when wrong).
   if (!existing && (await vaultIdFor(body.token)) !== id) return json({ error: 'that vault id does not belong to that token' }, { status: 400 });
-  // SYNC_OPEN=1 (dev, and the launch before licences) lets any vault sync; anything else, including an unset variable, means a licence must be attached later.
+  // SYNC_OPEN decides only what a NEW vault is made with (round eighty-two; the independent review's 34): exactly "1" makes
+  // it 'open', and it syncs; anything else, an unset variable included, makes it 'none', which is still made and counted
+  // but whose every request with its token (the log, the photographs; not this open) is refused with 402. A vault made before keeps what it was made with, so
+  // "0" closes sync to new vaults only, never to vaults that sync now. No licence step exists yet to change a 'none'.
   const open = platform?.env?.SYNC_OPEN === '1';
   const now = Date.now(); // one instant for the count and any refund, so a creation counted at 23:59:59 is refunded on the same day's keys (round twenty-three, 8)
   if (!existing) {
@@ -76,23 +79,9 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
     if (e instanceof RecountCrossed) return e.response();
     throw e;
   }
-  return json({ created, entitlement: meta.entitlement, bytes });
+  return json({ created, entitlement: meta.entitlement, bytes }, { headers: { 'cache-control': 'no-store' } }); // an answer about one vault, for its token's holder alone
 };
 
-/** Vault status. `bytes` is the live counter where KV is bound, else the meta snapshot. */
-export const GET: RequestHandler = async ({ request, url, platform, getClientAddress }) => {
-  const r2 = store(platform);
-  const stop = await limited(platform, getClientAddress, 'sync');
-  if (stop) return stop;
-  const id = vaultId(url.searchParams.get('vault'));
-  const meta = await authed(r2, id, request);
-  const kv = platform?.env?.QUEUE;
-  let bytes: number;
-  try {
-    bytes = kv ? await vaultBytes(r2, kv, id, meta, Date.now(), false, quotaOf(platform, getClientAddress)) : meta.bytes;
-  } catch (e) {
-    if (e instanceof RecountCrossed) return e.response(); // round sixty-one; B11
-    throw e;
-  }
-  return json({ entitlement: meta.entitlement, bytes, created: meta.created });
-};
+// No GET (round eighty-two; the independent review's 31): a vault's status by GET was answered with no cache-control and
+// was in no list of the endpoints, and nothing called it (the sync engine opens a vault by POST, which answers the same
+// `entitlement` and `bytes`). A GET is now the framework's 405.

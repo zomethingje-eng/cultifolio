@@ -515,7 +515,11 @@ export function facts(root, before, backupDir) {
   }
   const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${acrossIds ? ' apart from their ids' : ''}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
   const er = errors.pages ? `; ${errors.pages} page${errors.pages === 1 ? ' holds' : 's hold'} a row a source did not answer ("error": ${[...errors.by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ')}; ${errors.sample.join(', ')}${errors.pages > errors.sample.length ? ', …' : ''}), each said "did not answer" on its page until a fill or a build asks it again` : '';
-  return ` (corpus on disk ${m?.id ?? 'none'}, was ${before ?? 'not recorded'}; ${idx?.length ?? '?'} species${ch}${er}; drops.txt ${drops ? `${drops} lines` : 'not there'}).`;
+  // The Kew entries two pages hold, as the last --index listed them (round eighty-two, F; review 1's 4): said only when the
+  // file is there, so a corpus with one page a Kew entry reads as before.
+  const sharedLines = existsSync(join(root, 'kew-shared.txt')) ? readFileSync(join(root, 'kew-shared.txt'), 'utf8').split(/\r?\n/).filter(Boolean) : [];
+  const sh = sharedLines.length ? `; kew-shared.txt ${sharedLines.length} Kew entr${sharedLines.length === 1 ? 'y' : 'ies'} held by two pages or more (${sharedLines.slice(0, 4).map((l) => l.split('\t')[0]).join(', ')}${sharedLines.length > 4 ? ', …' : ''}): one Kew taxon on two pages, which the repair should leave none of` : '';
+  return ` (corpus on disk ${m?.id ?? 'none'}, was ${before ?? 'not recorded'}; ${idx?.length ?? '?'} species${ch}${er}; drops.txt ${drops ? `${drops} lines` : 'not there'}${sh}).`;
 }
 
 /** Every dossier's rows whose status is "error", by source (round eighty-one, review B2), read whole from the corpus on disk. */

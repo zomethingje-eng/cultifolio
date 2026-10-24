@@ -6,6 +6,7 @@
  */
 import { browser } from '$app/environment';
 import { readSetting, sampleTab, writeSetting } from '$lib/ui/stored';
+import { secureAttr } from './cookie';
 
 const KEY = 'cultifolio.frost.site';
 export interface Site {
@@ -34,7 +35,7 @@ class SiteStore {
     if (sampleTab()) return; // the hemisphere cookie is the device's: never written from the sample (round sixty-one; the records review, 17)
     try {
       const v = s ? s.lat < 0 ? 's' : 'n' : null;
-      for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax`;
+      for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax${secureAttr()}` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax${secureAttr()}`;
     } catch {
       /* no document: nothing to seed */
     }

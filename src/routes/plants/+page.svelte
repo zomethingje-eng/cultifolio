@@ -33,6 +33,7 @@
   import { CLOSED_WORDS, PAGE_IN_DEMO } from '$lib/db/demo';
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
+  import { backupReminder } from '$lib/ui/backup-reminder.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
   import { today as day } from '$lib/ui/day.svelte';
   onMount(() => { site.load(); collection.load(); }); // the site, for the empty list's third step (round fifty-eight; the grower review)
@@ -133,6 +134,9 @@
     return () => clearTimeout(t);
   });
   const opened = $derived(collection.ready && (collection.persisted !== null || persistWaited));
+  /** The storage notice, which asks for a backup itself: the layer's backup line gives way to it (round eighty-two; the independent review's 15). */
+  const storageNotice = $derived(opened && storageLow && !storageNoticeHidden && !PAGE_IN_DEMO);
+  $effect(() => { backupReminder.page = storageNotice; return () => { backupReminder.page = false; }; });
   let thumbs = $state<Map<string, string>>(new Map());
   // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
   // Only when the grower has switched the reference's photographs on for their own pages: the thumbnails are the one thing
@@ -261,7 +265,7 @@
 {:else if opened && PAGE_IN_DEMO}
   <!-- The example is backed up nowhere and has no backup to offer: it is deleted on Leave (round sixty-seven; triage-66 V7; R45-3). -->
   <p class="small muted keepline" id="storage-notice">The example collection is kept nowhere: it is deleted when you leave it.</p>
-{:else if opened && collection.persisted === false && !sync.configured}
+{:else if opened && collection.persisted === false && !sync.configured && collection.accessions.length && !backupReminder.nudge}<!-- one backup reminder at a time, and none over an empty list (round eighty-two; the independent review's 15) -->
   <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
 <!-- What "set aside" meant, and "version of the app", not "build" (round fifty-eight; the accessibility review). -->

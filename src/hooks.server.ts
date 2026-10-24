@@ -55,6 +55,9 @@ async function homeQuery(event: RequestEvent): Promise<string> {
   return parts.join('&');
 }
 
+/** Pages rendered on every request with no copy held, each render counted under the `render` bucket: Compare (round eighty-two). */
+const COUNTED_RENDERS = /^\/compare\/?$/;
+
 /** A path as the page reads it: `/species/%63opiapoa-cinerea` is the page `/species/copiapoa-cinerea` renders, and minted its own copy (round fifty-eight). */
 const pathKey = (p: string) => { try { return decodeURIComponent(p); } catch { return p; } };
 
@@ -176,7 +179,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   // A render of a held page that cannot be held (a `?was=` page, a client navigation's data, a HEAD the copy did not
   // answer) is counted per address under a generous bucket: each read the bucket and rendered, with no limit at all
   // (round sixty; the server review, 6). A GET that misses is held once rendered, so it is not counted.
-  if (held && !building && (event.isDataRequest || method === 'HEAD' || !key)) {
+  // And every render of /compare, its data included (round eighty-two; the independent review's 32): three dossiers read
+  // and parsed a request, and no cache holds it, since its key would be every combination of three species a link can
+  // name. It is counted as the other renders are, under the same bucket.
+  if (!building && ((held && (event.isDataRequest || method === 'HEAD' || !key)) || COUNTED_RENDERS.test(path))) {
     const stop = await limited(event.platform, event.getClientAddress ?? (() => 'unknown'), 'render').catch(() => null);
     if (stop) return policy(new Response(stop.body, stop));
   }

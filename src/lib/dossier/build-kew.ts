@@ -298,7 +298,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}) };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }

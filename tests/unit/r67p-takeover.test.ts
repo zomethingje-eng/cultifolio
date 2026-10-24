@@ -67,7 +67,7 @@ const cacheOf = (name: string) => {
 let claims = 0;
 beforeAll(async () => {
   vi.doMock('$service-worker', () => ({ build: ['/_app/immutable/entry/new.js'], files: [], version: 'B' }));
-  vi.stubGlobal('self', { addEventListener: (t: string, h: Handler) => handlers.set(t, h), skipWaiting: () => {}, clients: { claim: async () => { claims++; } } });
+  vi.stubGlobal('self', { addEventListener: (t: string, h: Handler) => handlers.set(t, h), skipWaiting: () => {}, clients: { claim: async () => { claims++; }, matchAll: async () => [] } }); // matchAll: the open tabs, which round eighty-two's worker reads
   vi.stubGlobal('location', { origin: ORIGIN });
   vi.stubGlobal('caches', { open: async (n: string) => cacheOf(n), keys: async () => [...stores.keys()], delete: async (n: string) => stores.delete(n), match: async () => undefined });
   vi.stubGlobal('fetch', async (r: Request) => { fetched.push(r.url); throw new TypeError('offline'); });

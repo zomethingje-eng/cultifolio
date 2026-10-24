@@ -15,7 +15,7 @@ export const BYS = ['genus', 'origin', 'family'] as const;
 export type By = (typeof BYS)[number];
 /**
  * The chips: every species, those with a habitat climate, those without, and (round seventy-five, the owner's decision)
- * the species of the most-grown genera, ranked by iNaturalist's observations of plants marked captive or cultivated. The
+ * the species of the popular genera, ranked by iNaturalist's observations of plants marked captive or cultivated. The
  * set of genera is given by the caller (`$lib/server/catalogue`, from `scripts/most-grown-genera.txt`); the corpus build
  * writes files for the first three only (`CHIPS`), and "grown" is derived from the index on the server.
  */
@@ -167,7 +167,7 @@ function build(index: IndexEntry[], by: By, chip: Chip, grown?: ReadonlySet<stri
 
 /**
  * A catalogue from the species it shows, in the index's order (round seventy-six): `total` and `withClimate` are the
- * whole reference's, whatever the chip, as `build` gives them. The Worker builds the "Most grown" chip's rows with it from
+ * whole reference's, whatever the chip, as `build` gives them. The Worker builds the "Popular genera" chip's rows with it from
  * the build's row files, without the index.
  */
 export function catalogueFrom(shown: Item[], by: By, total: number, withClimate: number, list: Item[] = shown): Catalogue {

@@ -17,18 +17,16 @@ import { slugify } from '../../src/lib/core/names';
 const merges = parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8'));
 
 describe('the owner\'s merges of the duplicate pages', () => {
-  it('scripts/merged-pages.txt joins the two Ceropegias to k505095, and keeps Echeveria peacockii into 2985894, each with what is left out', () => {
+  it('scripts/merged-pages.txt joins the two Ceropegias to k505095, each with what is left out', () => {
     expect(merges.find((m) => m.from === 9574874)).toMatchObject({ into: 0, intoPage: 'k505095', name: 'Ceropegia cereiformis' });
     expect(merges.find((m) => m.from === 9592399)).toMatchObject({ intoPage: 'k505095', except: [3577721] });
-    const e = merges.find((m) => m.from === 7530398)!;
-    expect(mergeTarget(e)).toBe(2985894);
-    expect(e.except).toContain(8531704); // Echeveria desmetiana De Smet, Kew's Echeveria desmetiana
+    // Echeveria peacockii: re-pointed in round eighty-two (tests/unit/r82f-peacockii.test.ts).
   });
   it('a merge the rule gave no line is read by the page it joins, and one it gave a line is not given two', () => {
     const have: ExtraKey[] = [{ page: 0, pageId: 'k505095', key: 9574874, label: 'Ceropegia cereiformis (Hook.fil.) Bruyns', status: 'ACCEPTED', kew: '525085', kewLabel: 'x', how: 'filed' }];
     const lines = mergeKeys(merges, have, slugify);
     const peacockii = lines.find((k) => k.key === 7530398)!;
-    expect(peacockii).toMatchObject({ page: 2985894, how: 'merged', merged: 'echeveria-peacockii' });
+    expect(peacockii).toMatchObject({ page: 0, pageId: 'k2781125', how: 'merged', merged: 'echeveria-peacockii', except: [5690759] });
     expect(lines.find((k) => k.key === 9592399)).toMatchObject({ page: 0, pageId: 'k505095', merged: 'ceropegia-nubica', except: [3577721] });
     expect(lines.some((k) => k.key === 9574874)).toBe(false);
     expect(extraWhy(peacockii)).toBe("the key of a page merged here by the owner's decision (scripts/merged-pages.txt)");

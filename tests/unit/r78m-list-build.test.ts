@@ -31,8 +31,11 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
   });
   it('carries no GBIF key that leaves by a merge (the nine of scripts/merged-pages.txt since round seventy-nine)', () => {
     const leaving = new Set(parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')).map((m) => m.from));
-    expect(leaving.size).toBe(10); // round eighty (A): Ceropegia cereiformis joins k505095 too
-    expect(list.filter((e) => e.gbifKey != null && leaving.has(e.gbifKey))).toEqual([]);
+    expect(leaving.size).toBe(11); // round eighty (A): Ceropegia cereiformis joins k505095 too; round eighty-two (M): Bisnaga hamatacantha
+    // Round eighty-two (M): the list (of 19 October, not changed mid-fill) still gives Bisnaga hamatacantha its key; the merge
+    // takes it into k2808164, a page without a GBIF key, and the build builds no key merged into such a page (`intoKew`).
+    const intoKew = new Set(parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')).filter((m) => m.intoPage).map((m) => m.from));
+    expect(list.filter((e) => e.gbifKey != null && leaving.has(e.gbifKey)).map((e) => [e.gbifKey, e.name, intoKew.has(e.gbifKey!)])).toEqual([[7281739, 'Bisnaga hamatacantha', true]]);
   });
 });
 

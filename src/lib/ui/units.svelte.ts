@@ -8,6 +8,7 @@
 import { browser } from '$app/environment';
 import { METRIC, parseUnits, unitsForLocale, type Units } from '$core/units';
 import { readSetting, sampleTab, writeSetting } from '$lib/ui/stored';
+import { secureAttr } from './cookie';
 
 const KEY = 'cultifolio.units';
 
@@ -35,7 +36,7 @@ class UnitsStore {
     // Never the cookie from the sample: it was the device's, and the grower's own pages were in °F after a visit (round sixty-one; the grower review, 14).
     if (sampleTab()) { writeSetting(KEY, 'device', u); return; }
     try {
-      document.cookie = `cultifolio.units=${u}; path=/; max-age=31536000; samesite=lax`;
+      document.cookie = `cultifolio.units=${u}; path=/; max-age=31536000; samesite=lax${secureAttr()}`;
     } catch {
       /* a browser that refuses cookies still gets the page it is on */
     }

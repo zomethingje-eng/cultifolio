@@ -101,6 +101,7 @@
  *                                                                # dossiers on disk, and rebuild-default-points.txt, the pages holding one, for --keys; offline
  *   npx tsx scripts/build-dossiers.ts --list-range-shapes        # rebuild-shapes.txt (round eighty): every page with an open in-range record outside every
  *                                                                # native region's shape (scripts/tdwg3-shapes.json), for --keys … --offline; offline
+ *   npx tsx scripts/build-dossiers.ts --list-no-reason           # rebuild-no-reason.txt (round eighty-two): every page with a row not ok and no reason
  *   npx tsx scripts/build-dossiers.ts --list-wikidata-retry      # rebuild-wd-retry.txt (round eighty): every page Wikidata did not answer at its build, and
  *                                                                # every page with a Kew id whose item a label refused, for --keys; offline
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
@@ -129,7 +130,7 @@ import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -186,6 +187,8 @@ import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/c
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
 import { gbifPage, isPageId, type PageId } from '../src/lib/core/page-id';
 import { rekey, DOSSIER_FILE, V2_FILE, idsGbifLines, type RekeyStore, type RekeyReport } from '../src/lib/dossier/rekey';
+import { sharedKewLines } from '../src/lib/dossier/page-ids';
+import { noReasonLines, type NoReasonPage } from '../src/lib/dossier/no-reason';
 import { upToDate, writeStamp, INDEX_STAMP } from '../src/lib/dossier/index-stamp';
 /** This checkout's folder: the builder's code, whose content the index's stamp holds (round eighty-one). */
 const CODE_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -367,8 +370,8 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; kew?: string[]; changed?: number };
-type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[]; kew?: { synonyms?: string[] } }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
+type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; kew?: string[]; hom?: string[]; homBy?: string[][]; changed?: number };
+type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; authorship?: string | null; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[]; kew?: { synonyms?: string[] } }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string; name?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
 /**
  * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
  * `englishNames`'s rule, which sets back a name naming another genus of the corpus, and the corpus's genera are known
@@ -377,6 +380,18 @@ type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { 
 const vernOf = new Map<PageId, VernacularName[]>();
 /** Each species' own older names, GBIF's and Kew's, kept with its vernacular names: one written as a common name is not one (round eighty, A). */
 const olderOf = new Map<PageId, string[]>();
+/** Each species' own author and GBIF's older names as its record writes them, with their authors: what `homonymEntries` reads (round eighty-two; review 1's 3). */
+const recordOf = new Map<PageId, { authorship?: string | null; synonyms: string[] }>();
+/**
+ * The index as published (round eighty-two; review 1's 3): an older name spelt as another page's accepted name, by another
+ * author, moved from `syn` and `older` to `hom` (`homonymEntries`), and said. The index given stays as it was, for the
+ * photograph judgement, which reads the names it read before (`heldNamesOf` reads `hom` too).
+ */
+function homonymIndex<E extends IndexEntry>(index: E[]): E[] {
+  const h = homonymEntries(index, (key) => recordOf.get(key));
+  if (h.names) console.log(`  ${h.names} older name${h.names === 1 ? '' : 's'} on ${h.pages} page${h.pages === 1 ? '' : 's'} spelt as another page's accepted name, by another author: searched only as a name typed, and said as another author's name (hom)${h.kept ? `; ${h.kept} by that page's own author kept as older names` : ''}`);
+  return h.index;
+}
 /** The common names of every entry of the finished index, by the rule with the index's own genera. */
 function nameEntries(index: IndexEntry[]): void {
   const genera = generaOf(index.map((e) => e.name));
@@ -409,10 +424,19 @@ function photoFields(d: Pick<Dossierish, 'key' | 'name' | 'photos'>, held?: Held
 function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { status?: string } {
   const { thumb, credit, photos } = photoFields(d, held);
   vernOf.set(d.key, d.name.vernacular.filter((v) => v.lang === 'eng'));
-  olderOf.set(d.key, [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])]);
+  // The names of the pages merged into this one by the owner's decision (`occurrences.keys`, a key with its old address;
+  // scripts/merged-pages.txt), as GBIF writes them, are this page's older names in the index too (round eighty-two, the
+  // merge, on F's need): a page built from Kew's file does not hold a name Kew files elsewhere or not at all (Echeveria
+  // peacockii, which Kew files under Dudleya pulverulenta; Bisnaga hamatacantha, which Kew's file does not hold), and the
+  // search found the old name's page, after the prune, nowhere or only elsewhere. The record's own names come first.
+  const own = d.name.synonyms ?? [];
+  const mergedHere = (d.occurrences.keys ?? []).flatMap((x) => (x.slug && x.name && !own.includes(x.name) ? [x.name] : []));
+  const names = mergedHere.length ? [...own, ...mergedHere] : own;
+  olderOf.set(d.key, [...names, ...(d.name.kew?.synonyms ?? [])]);
+  recordOf.set(d.key, { authorship: d.name.authorship, synonyms: names });
   // Older names: six shown, the rest of species rank searched (`olderNamesOf`; round sixty-seven, N1).
   const genus = d.name.scientific.split(' ')[0];
-  const { syn, older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
+  const { syn, older } = olderNamesOf(d.name.scientific, names);
   // Kew's older names the two do not hold, for the search alone (`kewOlderOf`; round eighty, review-d 5).
   const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) ? d.name.kew.synonyms : undefined);
   // The day the dossier last changed in substance, for the sitemap (round sixty-three).
@@ -649,7 +673,7 @@ async function fillGenera(): Promise<void> {
     }
     const r = await wm.summary(f, g);
     const rec = r.status === 'ok'
-      ? { genus: g, slug, status: 'ok' as const, summary: { text: r.data.text, source: 'wikipedia' as const, url: r.data.url, licence: 'CC BY-SA 4.0' as const, title: r.data.title }, at: new Date().toISOString() }
+      ? { genus: g, slug, status: 'ok' as const, summary: { text: r.data.text, source: 'wikipedia' as const, url: r.data.url, licence: 'CC BY-SA 4.0' as const, title: r.data.title, ...(r.data.cut ? { cut: true as const } : {}) }, at: new Date().toISOString() }
       : r.status === 'none'
         ? { genus: g, slug, status: 'none' as const, at: new Date().toISOString() }
         : { genus: g, slug, status: 'refused' as const, detail: `${r.status}: ${r.detail}`, at: new Date().toISOString() };
@@ -1343,8 +1367,12 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
   const idx = await loadKewNames(bulkDir, pages);
   if (!idx) { console.error(`  no ${bulkDir}/wcvp_names.csv: nothing done`); process.exit(2); }
   const reference = new Set(all.files().flatMap((file) => { try { return [store.read<Dossier>(file).name.scientific.toLowerCase()]; } catch { return []; } }));
-  const c = fillKewNames(store, idx, kewFileDay(bulkDir), reference);
-  console.log(`  ${c.read} dossiers read, ${c.changed} changed: ${c.cited} cite Kew's author, ${c.elsewhere} list older names Kew accepts as species of their own, ${c.vernacularDropped} common names dropped as scientific names${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // One Kew entry, one page (round eighty-two, F; review 1's 4): an entry whose page is on disk (`k<entry>.json`) is not
+  // given to another page, whichever pages this run reads.
+  const ids = new Set(all.files().map((f) => f.replace(/\.json$/, '')));
+  const heldBy = (entry: string, page: string) => (ids.has(`k${entry}`) && page !== `k${entry}` ? `k${entry}` : undefined);
+  const c = fillKewNames(store, idx, kewFileDay(bulkDir), reference, { heldBy });
+  console.log(`  ${c.read} dossiers read, ${c.changed} changed: ${c.cited} cite Kew's author, ${c.elsewhere} list older names Kew accepts as species of their own, ${c.vernacularDropped} common names dropped as scientific names${c.held ? `, ${c.held} not given a Kew entry another page holds` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
   if (index) writeIndexFromDisk();
 }
 
@@ -1798,9 +1826,18 @@ function sayRekey(r: RekeyReport): boolean {
   }
   writeFileSync('ids-gbif.txt', idsGbifLines(r).join('\n') + (r.gbif.length ? '\n' : ''));
   console.log(`  page ids: ${r.kew} by Kew's plant_name_id, ${r.gbif.length} by GBIF's key (ids-gbif.txt says why)${r.refused.length ? `, ${r.refused.length} with no id the rule can give, left as they are: ${r.refused.map((x) => x.name).join(', ')}` : ''}; ${r.renamed} dossier${r.renamed === 1 ? '' : 's'} written under a new id${r.followed ? `, ${r.followed} rewritten for a page they name` : ''}`);
+  // One Kew entry, one page (round eighty-two, F; review 1's 4): the entries two pages hold, said and listed (kew-shared.txt),
+  // for the review before an upload. Expected before (d)'s repair: Ceropegia cereiformis and C. nubica with k505095 and
+  // Echeveria peacockii with k2778991 (merged, gone at --prune-followed), Crocus nudiflorus with C. mazziaricus (repaired).
+  const shared = sharedKewLines(r.shared ?? []);
+  if (shared.length) writeFileSync(KEW_SHARED, shared.join('\n') + '\n');
+  else if (existsSync(KEW_SHARED)) unlinkSync(KEW_SHARED);
+  if (shared.length) console.log(`  ${shared.length} Kew entr${shared.length === 1 ? 'y is' : 'ies are'} held by two pages or more → ${KEW_SHARED} (one Kew taxon, one page: a merge or a rebuild with Kew's file decides): ${shared.slice(0, 6).join(' | ')}${shared.length > 6 ? ' | …' : ''}`);
   onDiskIds = null; // read again from the files
   return true;
 }
+/** The Kew entries two pages hold, as the last index wrote them (round eighty-two): `corpus-step.mjs`'s review counts its lines. */
+const KEW_SHARED = 'kew-shared.txt';
 /**
  * `--fixtures` (round seventy-nine): the fixture pages read Kew's rows for their species (`kewRows` in fixtures/upstream.ts,
  * by the build's own Kew fill, as a build given Kew's file reads them), then are keyed by the rule, so the fixtures are
@@ -1878,7 +1915,7 @@ function writeIndexFromDisk(): void {
   if (unreadable.length) { sayUnreadable(); console.error('  the index, its products and the manifest are left as they were.'); return; }
   nameEntries(index);
   // Kew's hybrid sign on the hybrids' names (round eighty-one, H; `$core/hybrids`): in the index and its products, not in the photographs' judgement.
-  const shownIndex = signEntries(index);
+  const shownIndex = signEntries(homonymIndex(index));
   const idxDir = `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
   const indexText = JSON.stringify(shownIndex, null, 1);
@@ -1985,6 +2022,20 @@ async function main() {
     if (lines.length) writeFileSync('rebuild-wd-retry.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-wd-retry.txt')) unlinkSync('rebuild-wd-retry.txt');
     console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} to build again for Wikidata → rebuild-wd-retry.txt${lines.length ? '; run --keys rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat' : ''}`);
+    return;
+  }
+  // Round eighty-two (F; review 1's 7): the pages with a row not ok and no reason, the build's "none" written before it
+  // gave one (`no-reason.ts`), for --keys.
+  if (args.includes('--list-no-reason')) {
+    const store = diskStore();
+    // A page that leaves by a merge (scripts/merged-pages.txt) is not rebuilt: --prune-followed takes it (round eighty-two,
+    // M: Bisnaga hamatacantha, whose range row was the review's case, joins Ferocactus hamatacanthus).
+    const away = new Set(merges().map((m) => m.from));
+    const read = function* () { for (const f of store.files()) { try { const d = store.read<NoReasonPage & { ids?: { gbif?: number } }>(f); if (d.ids?.gbif != null && away.has(d.ids.gbif)) continue; yield d; } catch { /* half-written */ } } };
+    const { lines, by } = noReasonLines(read());
+    if (lines.length) writeFileSync('rebuild-no-reason.txt', lines.join('\n') + '\n');
+    else if (existsSync('rebuild-no-reason.txt')) unlinkSync('rebuild-no-reason.txt');
+    console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} with a row not ok and no reason${lines.length ? ` (${[...by].map(([k, n]) => `${k} ${n}`).join(', ')}) → rebuild-no-reason.txt; run --keys rebuild-no-reason.txt --grid climate --bulk bulk --skip inat` : ''}`);
     return;
   }
   if (args.includes('--names')) return fillNames();
@@ -2438,7 +2489,7 @@ async function main() {
   nameEntries(index);
   const idxDir = fixtures ? outDir : `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
-  writeAtomic(`${idxDir}/index.json`, JSON.stringify(signEntries(index), null, 1)); // with Kew's hybrid signs, as --index writes it (round eighty-one, H)
+  writeAtomic(`${idxDir}/index.json`, JSON.stringify(signEntries(homonymIndex(index)), null, 1)); // with Kew's hybrid signs, as --index writes it (round eighty-one, H), and the names by another author apart (round eighty-two)
   writeFileSync(`${idxDir}/report.txt`, report.join('\n'));
   sayUnreadable();
   console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)`);

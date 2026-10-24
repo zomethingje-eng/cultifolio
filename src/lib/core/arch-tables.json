@@ -133,8 +133,7 @@
       "Monsonia",
       "Tylophora",
       "Ibervillea",
-      "Xerosicyos",
-      "Peperomia graveolens"
+      "Xerosicyos"
     ],
     "tropical": [
       "Aglaonema",
@@ -196,7 +195,6 @@
       "Coffea",
       "Clusia",
       "Dizygotheca",
-      "Maranta",
       "Pellionia",
       "Ruellia",
       "Sanchezia",
@@ -461,6 +459,7 @@
     ]
   },
   "species": {
+    "peperomia graveolens": "arid",
     "dracaena trifasciata": "arid",
     "dracaena angolensis": "arid",
     "dracaena cylindrica": "arid",

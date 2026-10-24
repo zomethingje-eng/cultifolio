@@ -69,7 +69,9 @@ export function indexMaps(index: readonly IndexEntry[]): IndexMaps {
     if (xs) xs.push(e); else byGenus.set(g, [e]);
     // Every older name of species rank too, past the six `syn` shows (round sixty-seven; triage-66 N1): an address under
     // "Ferocactus glaucescens" is Bisnaga glaucescens from the index, without asking the backbone.
-    for (const syn of [...(e.syn ?? []), ...(e.older ?? [])]) {
+    // And the record's names by another author (`hom`, round eighty-two), held as `syn` and `older` held them before: an
+    // address or a `?was=` under one is answered as it was (the accepted page of that name first, the species route's rule).
+    for (const syn of [...(e.syn ?? []), ...(e.older ?? []), ...(e.hom ?? [])]) {
       hold(syn.toLowerCase(), e, syn);
       const slug = slugify(syn);
       if (slug) hold(slug, e, syn);
@@ -197,7 +199,7 @@ export function buildOlderFiles(index: readonly IndexEntry[]): Map<string, Recor
   return out;
 }
 
-/** A row's species and each one's place in the index (which orders the "Most grown" chip's rows as the index did). */
+/** A row's species and each one's place in the index (which orders the "Popular genera" chip's rows as the index did). */
 export type RowRecord = { at: number[]; items: Item[] };
 /** The row files of a grouping: each row's species under "all", sorted by name, by row id. */
 export function buildRowFiles(index: IndexEntry[], by: By): Map<string, Record<string, RowRecord>> {

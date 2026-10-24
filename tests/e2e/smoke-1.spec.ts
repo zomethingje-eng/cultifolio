@@ -982,9 +982,9 @@ test('the front page carries closed rows, never fetches the whole index, and a s
   await page.fill('.searchbar', '');
   await expect(page.locator('.grow')).toHaveCount(4);
   await expect(page.locator('.chipbtn', { hasText: 'You grow' })).toHaveCount(0);
-  await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
+  await page.locator('.chipbtn', { hasText: 'No climate' }).click();
   await expect(page).toHaveURL(/chip=noclimate/);
-  await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
+  await expect(page.locator('.chipbtn.on')).toContainText('No climate');
   await expect(page.locator('.grow')).toHaveCount(3); // only the genera with a species without climate (Hesperocyparis not checked, without a GBIF key since round seventy-nine; Refusia refused; Welwitschia pending)
   await expect(page.locator('.seccount').last()).toContainText('3 genera');
   await page.locator('.grow', { hasText: 'Welwitschia' }).click();

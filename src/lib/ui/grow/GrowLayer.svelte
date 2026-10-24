@@ -14,6 +14,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { askToKeep } from '$lib/ui/keep-ask';
   import DemoBar from './DemoBar.svelte';
+  import { backupReminder, pageSaysKeeping } from '$lib/ui/backup-reminder.svelte';
 
   const PERSIST = 'cultifolio.persistAfterFirst';
   const NUDGE_HIDDEN = 'cultifolio.backupNudgeHidden';
@@ -44,20 +45,28 @@
     if (answer === null || navigating.to) return;
     const ok = answer;
     answer = null;
-    toast.show(ok ? 'This browser has promised to keep your plants.' : 'This browser has not promised to keep your data: take a backup now and then.', 10000, ok ? null : { label: 'Back up', run: () => { location.href = '/backup'; } });
+    // A refusal asks for a backup only where no line on the page does, and only while there is neither a backup nor sync
+    // (round eighty-two; the independent review's 15: said on My plants straight after a restore, beside two more).
+    const ask = !ok && lastBackup === null && !sync.configured && !pageSaysKeeping(page.url.pathname);
+    toast.show(ok ? 'This browser has promised to keep your plants.' : ask ? 'This browser has not promised to keep your data: take a backup now and then.' : 'This browser has not promised to keep your data.', 10000, ask ? { label: 'Back up', run: () => { location.href = '/backup'; } } : null);
     writeSetting(PERSIST, 'device', '1'); // asked again next time if the browser refuses the write: harmless
   });
-  /** The fifth plant with no backup taken and no sync: one line on My plants and Today, put away for this tab on request. */
+  /**
+   * The fifth plant with no backup taken and no sync: one line on My plants, put away for this tab on request. Not on
+   * Today, whose own line already says "no backup yet" (round eighty-two; the independent review's 15). A restore that
+   * left the device the file counts as a backup (backup/io.ts `countedAsBackup`).
+   */
   let lastBackup = $state<string | null | undefined>(undefined);
   let hidden = $state(false);
   $effect(() => {
     void page.url.pathname; // read again on each page: a backup taken a page ago puts the line away
-    if (!collection.ready || n < 5 || PAGE_IN_DEMO) return;
+    if (!collection.ready || n < 1 || PAGE_IN_DEMO) return; // from the first plant: the browser's answer reads it too
     try { hidden = sessionStorage.getItem(NUDGE_HIDDEN) === '1'; } catch { /* shown */ }
     void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null), () => (lastBackup = null));
   });
-  const where = $derived(/^\/(plants|today)(\/|$)/.test(page.url.pathname) && page.url.pathname !== '/plants/import');
-  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !PAGE_IN_DEMO);
+  const where = $derived(/^\/plants(\/|$)/.test(page.url.pathname) && page.url.pathname !== '/plants/import');
+  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !PAGE_IN_DEMO && !backupReminder.page);
+  $effect(() => { backupReminder.nudge = nudge; });
   function hide() {
     hidden = true;
     try { sessionStorage.setItem(NUDGE_HIDDEN, '1'); } catch { /* fine */ }

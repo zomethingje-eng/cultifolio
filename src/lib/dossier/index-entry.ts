@@ -37,6 +37,16 @@ export interface IndexEntry {
    * photograph rules. Absent in an index built before, where Kew was not read, and where there is none.
    */
   kew?: string[];
+  /**
+   * The record's older names (GBIF's, of `syn` and `older`) spelt as another page's accepted name, by another author than
+   * that page's, written at index time (`homonymEntries`; round eighty-two, review 1's 3: 1,691 pages showed one as an
+   * older name, "Sempervivum tectorum · older name: Sempervivum montanum", where the record's name is S. montanum Sibth.
+   * & Sm. and the page S. montanum is Linnaeus's). Never in `syn` or `older`; searched only as a name typed, and said as
+   * another author's name. Absent in an index built before, and where there is none.
+   */
+  hom?: string[];
+  /** For each of `hom`, the authors the record writes after it, as written (none where the record has none). */
+  homBy?: string[][];
   /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
   changed?: number;
 }
@@ -57,8 +67,16 @@ export interface NameScope {
 }
 
 import { canonicalSynonym } from '../core/names';
+import { authorKey, plainlyAnother } from './authors';
 import { words as searchWords } from '../core/postings';
 import { GENERIC_NOUNS } from '../core/search';
+
+/**
+ * A hybrid formula: a name followed by "×" or a lone "x" and another epithet or name ("Mentha aquatica × spicata",
+ * "Fragaria chiloensis (L.) Mill. × F. virginiana Mill."), as GBIF lists one among a hybrid's synonyms (round eighty-two).
+ * A nothospecies ("Mentha × piperita", "Mentha xpiperita") is not one: its sign stands before the epithet.
+ */
+export const isHybridFormula = (s: string) => /^[A-Z][a-z-]+ [a-z][a-z-]+\b.*\s[×x]\s+(?:[A-Z][a-z-]*\.?\s+)?[a-z]/.test(s.trim());
 
 /**
  * A species' older names as the index carries them (round thirty-one, 3): as binomials (or a variety or subspecies), other-genus
@@ -68,7 +86,13 @@ import { GENERIC_NOUNS } from '../core/search';
  */
 export function olderNamesOf(accepted: string, synonyms: readonly string[] = []): { syn: string[]; older: string[] } {
   const genus = accepted.split(' ')[0];
-  const all = [...new Set(synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' ')));
+  // The accepted name's own words, the hybrid sign aside: "Mentha xpiperita", GBIF's way of writing Mentha × piperita, is
+  // the species' own name, not an older one (round eighty-two, F; review 1's 27).
+  const own = accepted.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const isOwn = (x: string) => { const [g, e, ...rest] = x.toLowerCase().split(' '); return !rest.length && `${g} ${e.replace(/^x(?=[a-z])/, '')}` === own; };
+  // A hybrid formula ("Mentha aquatica × spicata", "Fragaria chiloensis x virginiana") is two parents, not a name: cut to its
+  // first two words it was the first parent, shown as an older name of the hybrid (k125188 "older name: Mentha aquatica").
+  const all = [...new Set(synonyms.filter((s) => !isHybridFormula(s)).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted && !isOwn(x)))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' ')));
   return { syn: all.slice(0, 6), older: all.slice(6).filter((x) => x.split(' ').length === 2) };
 }
 
@@ -497,4 +521,73 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
     if (!meant.has(k) && lower.has(k) && /^[^\p{L}]*\p{Lu}(?:[\p{Ll}\p{M}'’]|$)/u.test(w)) return w.replace(/\p{Lu}/u, (c) => c.toLocaleLowerCase('en'));
     return w;
   });
+}
+
+/** A name as an older name is compared with an accepted one: lower case, no hybrid sign, no rank word, spaces closed up. */
+const plainOf = (x: string) => x.toLowerCase().replace(/×\s*/g, '').replace(/\b(?:var|subsp|ssp|f)\.? /g, '').replace(/\s+/g, ' ').trim();
+/**
+ * The texts of a record (`name.synonyms`) that are the name `n` (`canonicalSynonym`), each with what the record writes
+ * after the name: its author, or nothing. A hybrid formula ("Mentha aquatica × spicata") is no text of its first parent.
+ */
+function recordTexts(n: string, synonyms: readonly string[]): { formula: boolean; author: string }[] {
+  const want = n.trim().replace(/\s+/g, ' ').toLowerCase();
+  const out: { formula: boolean; author: string }[] = [];
+  for (const s of synonyms) {
+    if (typeof s !== 'string') continue;
+    const t = s.trim().replace(/\s+/g, ' ');
+    if (canonicalSynonym(t)?.toLowerCase() !== want || t.slice(0, want.length).toLowerCase() !== want) continue;
+    const author = t.slice(want.length).trim();
+    out.push({ formula: /^(?:×|x\s)/i.test(author), author });
+  }
+  return out;
+}
+
+/**
+ * The index's older names, a name spelt as another page's accepted name set apart (round eighty-two; review 1's 3; rule
+ * 3). An older name of `syn` or `older` that is another page's accepted name is moved to `hom`, with the authors the
+ * record writes after it (`homBy`), unless an author the record gives it is that page's own (`plainlyAnother` says it is
+ * not another's): then it is the one name, which GBIF files under both, and it stays. A record that writes the name with
+ * no author gives none, and the name is moved, as the species page says it ("with no author in the record"). A name the
+ * record holds only as the first parent of a hybrid formula is left to the formula's own rule. `recordOf` gives each
+ * page's record: its own author and its older names as GBIF writes them, with their authors. Entries are new objects;
+ * the index given is not changed, so the photograph judgement reads the names it read before. `pages`: entries
+ * changed; `names`: names moved; `kept`: names the record holds by the other page's own author, left as older names.
+ */
+export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn' | 'older' | 'hom' | 'homBy'>>(index: readonly E[], recordOf: (key: E['key']) => { authorship?: string | null; synonyms?: readonly string[] | null } | undefined): { index: E[]; pages: number; names: number; kept: number } {
+  const accepted = new Map<string, E>();
+  for (const e of index) { const k = plainOf(e.name); if (!accepted.has(k)) accepted.set(k, e); }
+  let pages = 0, names = 0, kept = 0;
+  const out = index.map((e) => {
+    const rec = recordOf(e.key);
+    const hom: string[] = [], homBy: string[][] = [];
+    const moved = (n: string): boolean => {
+      const o = accepted.get(plainOf(n));
+      if (!o || o.key === e.key) return false;
+      const texts = recordTexts(n, rec?.synonyms ?? []);
+      if (texts.length && texts.every((t) => t.formula)) return false;
+      const authors = [...new Set(texts.filter((t) => !t.formula && t.author).map((t) => t.author))];
+      const other = recordOf(o.key)?.authorship ?? undefined;
+      if (authors.some((a) => !!authorKey(a) && !!authorKey(other) && !plainlyAnother(other, a))) { kept++; return false; }
+      if (!hom.includes(n)) { hom.push(n); homBy.push(authors); names++; }
+      return true;
+    };
+    const syn = (e.syn ?? []).filter((n) => !moved(n));
+    const older = (e.older ?? []).filter((n) => !moved(n));
+    if (!hom.length) return e;
+    pages++;
+    // In the entry's own order, `hom` and `homBy` where `older` was (or after `syn`), so a rebuilt index differs only there.
+    const o: Record<string, unknown> = {};
+    let placed = false;
+    const place = () => { if (placed) return; placed = true; o.hom = hom; if (homBy.some((a) => a.length)) o.homBy = homBy; };
+    for (const [k, v] of Object.entries(e)) {
+      if (k === 'syn') { if (syn.length) o.syn = syn; continue; }
+      if (k === 'older') { if (older.length) o.older = older; place(); continue; }
+      if (k === 'hom' || k === 'homBy') continue;
+      if (k === 'kew' || k === 'changed' || k === 'near') place();
+      o[k] = v;
+    }
+    place();
+    return o as E;
+  });
+  return { index: out, pages, names, kept };
 }

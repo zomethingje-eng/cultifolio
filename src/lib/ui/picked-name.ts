@@ -12,6 +12,22 @@ export const cleanTyped = (typed: string) => typed.normalize('NFKC').replace(/\p
  * or a nothovariety or nothosubspecies; the epithet in any case ("var. Columna-alba"), three letters or more.
  */
 const RANK_TAIL = /^((?:notho)?(?:var|subsp)\.|f\.)\s+(\p{L}[\p{L}-]{2,})(?=\s|$)/u;
+/** The rank words a name below the species is written with, by the backbone's rank (round eighty-two; review 1's 17). */
+const RANK_WORD: Readonly<Record<string, string>> = { SUBSPECIES: 'subsp.', VARIETY: 'var.', FORM: 'f.', NOTHOSUBSPECIES: 'nothosubsp.', NOTHOVARIETY: 'nothovar.', NOTHOFORM: 'nothof.' };
+/**
+ * A name of the backbone below the species as a botanist writes it, with its rank word (round eighty-two; review 1's 17:
+ * the picker showed and wrote "Lithops lesliei luteoviridis · variety"): "Lithops lesliei var. luteoviridis", "Aloe
+ * ferox subsp. x", "… f. cristata". The backbone's canonical name leaves the word out. A name that writes one already, a
+ * name of another rank, or one not of a species' two words and one more, is as given.
+ */
+export function rankedName(name: string, rank?: string): string {
+  const word = rank ? RANK_WORD[rank] : undefined;
+  const ts = name.trim().split(/\s+/);
+  if (!word || ts.some((t) => /^(?:(?:notho)?(?:var|subsp|ssp)|f|fo|forma|nothof)\.?$/i.test(t))) return name;
+  const words = ts.filter((t) => t !== '×');
+  if (words.length !== 3 || !/^\p{Ll}/u.test(words[2].replace(/^×/, ''))) return name;
+  return [...ts.slice(0, -1), word, ts[ts.length - 1]].join(' ');
+}
 /** One name whatever its case, spacing and hybrid sign: the backbone writes "Aloe nobilis" for "Aloe × nobilis". */
 export const sameName = (a: string, b: string) => {
   const k = (s: string) => cleanTyped(s).toLowerCase().replace(/(^|\s)x(?=\s)/g, ' ').replace(/×/g, ' ').replace(/\s+/g, ' ').trim();

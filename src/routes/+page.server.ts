@@ -33,8 +33,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     if (r.id !== w.open) return { ...r, items: undefined };
     return { ...r, items: opened.slice(w.part, w.part + HOME_ITEMS), itemsAt: w.part, itemsCount: opened.length };
   });
-  // "Most grown" (round seventy-five, the owner's decision): a chip like the others, off by default, the same on every
-  // device. Its counts always; the genera's names only while it is on, since its search filters the matches by them.
+  // "Popular genera" (round seventy-five, the owner's decision; named so since round eighty-two, the second review's 3): a
+  // chip like the others, off by default, the same on every device. Its counts always; the genera's names only while it is on, since its search filters the matches by them.
   const genera = await look.genera();
   const g = grownChipFrom(genera);
   const grown = g ? { ...g, names: chip === 'grown' ? [...grownFrom(genera).genera] : undefined } : null;
@@ -43,6 +43,12 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // The pool is the build's `featured.json` (round seventy-six), or chosen from the index once per index.
   const pool = await featuredOfCorpus(c, platform, fetch);
   const day = Math.floor(Date.now() / 86_400_000);
+  // Of the species without a habitat climate, those whose climate was not checked and those still to be built, counted
+  // apart from those with none derived, for the chip (round eighty-two; the independent review's 11: "Without climate
+  // 10,573" was 9,653 with none and 920 not checked). The rows partition the species under a chip, so their counts add up;
+  // under the other chips, from the "noclimate" chip's rows (a file the build writes, kept as any product is).
+  const sum = (rs: ReadonlyArray<{ notChecked?: number; pending?: number }>) => rs.reduce<{ notChecked: number; pending: number }>((a, r) => ({ notChecked: a.notChecked + (r.notChecked ?? 0), pending: a.pending + (r.pending ?? 0) }), { notChecked: 0, pending: 0 });
+  const without = chip === 'all' || chip === 'noclimate' ? sum(rows) : sum((await catalogueRows(platform, fetch, by, 'noclimate', c)).cat.rows);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]) : [];
   return {
     units: unitsFor(cookies, request),
@@ -59,6 +65,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     start,
     total: cat.total,
     withClimate: cat.withClimate,
+    notChecked: without.notChecked,
+    pending: without.pending,
     grown
   };
 };

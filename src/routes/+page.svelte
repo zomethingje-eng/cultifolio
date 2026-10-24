@@ -21,7 +21,7 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, homonymOf, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -622,6 +622,8 @@
   /** "1 genus", "3 genera": the row word by count (round sixty; visitor 7: "1 genera"). */
   const rowWord = (n: number) => (data.by === 'genus' ? (n === 1 ? 'genus' : 'genera') : data.by === 'family' ? (n === 1 ? 'family' : 'families') : n === 1 ? 'region' : 'regions');
   /** The species under the chip, not the whole catalogue's: each species sits in one row of a grouping (round sixty; visitor 7). */
+  /** The species with no habitat climate derived: those not checked and those pending are counted apart (round eighty-two; the independent review's 11). */
+  const noneN = $derived(data.total - data.withClimate - (data.notChecked ?? 0) - (data.pending ?? 0));
   const chipSpecies = $derived(chip === 'climate' ? data.withClimate : chip === 'noclimate' ? data.total - data.withClimate : chip === 'grown' ? (data.grown?.species ?? 0) : data.total);
   /** A row's species whose climate is pending, apart from those whose source did not answer (round sixty; words 10). */
   const pendingOf = (r: object) => (r as { pending?: number }).pending ?? 0;
@@ -644,7 +646,7 @@
   const ITEMS = 240;
   const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
   const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
-  /** The genera of "Most grown" while that chip is on, for its search (round seventy-five); the server sends them only then. */
+  /** The genera of "Popular genera" while that chip is on, for its search (round seventy-five); the server sends them only then. */
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
@@ -788,12 +790,15 @@
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
   <!-- A catalogue hit found by an older name says so, and its page is opened as the older name's address opens it, with the line saying whose name it is (round eighty-one; review-w 5). -->
   {@const older = catalogue ? olderNameOf(q, c as unknown as Found) : null}
-  <a class="azrow hitrow" href="/species/{c.slug}{older ? `?was=${encodeURIComponent(older)}` : ''}" data-slug={c.slug}>
+  <!-- Or found by a name of its record by another author, said as that (round eighty-two; review 1's 3). -->
+  {@const homonym = catalogue && !older ? homonymOf(q, c as unknown as Found) : null}
+  {@const was = older ?? homonym?.name}
+  <a class="azrow hitrow" href="/species/{c.slug}{was ? `?was=${encodeURIComponent(was)}` : ''}" data-slug={c.slug}>
     <!-- The thumbnail's letter and the "›" are for the eye: the link's name is the species' (round eighty-one; the desktop review's 7). -->
     <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[older ? `older name: ${older}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig" aria-hidden="true">›</span>
   </a>
@@ -896,7 +901,10 @@
          It opens on Today, the page that shows most of what the record does at once (round sixty-three, V2). What a grower
          gets is said in a few words, each a page the app has (round sixty-three, V3: a visitor "isn't given the knowledge
          of the app's capabilities"); short, so the first screen still holds a whole row on a phone (V4). -->
-    <p class="welcome" id="welcome"><span><b>Keep your plants' record on this device:</b> watering read against each species' habitat season, spaces, seed batches, frost warnings, labels. <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button>, <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>add your first plant</a> or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    <!-- Its first sentence says both halves of the app, on a phone's first screen too, where the pitch waits while this line
+         is shown (round eighty-two; the second review's 7). The example is a control of its own, 44 px tall (its 6): it
+         was a run of text 20 px tall. -->
+    <p class="welcome" id="welcome"><span><span class="wlead"><b>A reference to {fmtN(data.total)} species, every figure sourced, and a record of your own plants, kept on this device.</b></span><span class="wfeat"><b>Keep your plants' record on this device:</b> watering read against each species' habitat season, spaces, seed batches, frost warnings, labels.</span><span class="wacts"><button class="btn small trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button><span><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>add your first plant</a> or <a href="/backup">restore a backup</a></span></span></span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
     {#if exampleRefused}<p class="small" role="status" id="try-sample-home-refused">{notEnteredWords(exampleRefused)}</p>{/if}
   {/if}
   {#if visitor && !searchMode}
@@ -937,11 +945,12 @@
         <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
         <nav class="chiprow" aria-label="Filter the catalogue">
           <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="sep0">{', '}</span><span class="n">{fmtN(data.total)}</span></a>
-          <!-- "Most grown" (round seventy-five, the owner's decision): the species of the genera most observed in cultivation, a
+          <!-- "Popular genera" (round seventy-five, the owner's decision; "Most grown" until round eighty-two, the second review's
+               3: the measure is a genus's, not a count of growers): the species of the genera most observed in cultivation, a
                filter like the others, off by default and the same on every device; the about page says how they are chosen. -->
-          {#if data.grown}<a class="chipbtn" class:on={chip === 'grown'} aria-current={chip === 'grown' ? 'page' : undefined} href="?by={data.by}&chip=grown" title="The species of the {data.grown.genera === 1 ? 'genus' : `${fmtN(data.grown.genera)} genera`} most observed in cultivation on iNaturalist" data-sveltekit-noscroll>Most grown<span class="sep0">{', '}</span><span class="n">{fmtN(data.grown.species)}</span></a>{/if}
+          {#if data.grown}<a class="chipbtn" class:on={chip === 'grown'} aria-current={chip === 'grown' ? 'page' : undefined} href="?by={data.by}&chip=grown" title="The species of the {data.grown.genera === 1 ? 'genus' : `${fmtN(data.grown.genera)} genera`} most observed in cultivation on iNaturalist" data-sveltekit-noscroll>Popular genera<span class="sep0">{', '}</span><span class="n">{fmtN(data.grown.species)}</span></a>{/if}
           <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="sep0">{', '}</span><span class="n">{fmtN(data.withClimate)}</span></a>
-          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="sep0">{', '}</span><span class="n">{fmtN(data.total - data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll title="{fmtN(noneN)} with no habitat climate derived{data.notChecked ? `, ${fmtN(data.notChecked)} not checked (GBIF's records not asked, or a source did not answer)` : ''}{data.pending ? `, ${fmtN(data.pending)} pending` : ''}">No climate<span class="sep0">{', '}</span><span class="n">{fmtN(noneN)}</span>{#if data.notChecked}<span class="nc"><span class="sep0">{', '}</span>{fmtN(data.notChecked)} not checked</span>{/if}</a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
         <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
@@ -1016,7 +1025,7 @@
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ' without habitat climate' : ''}{#if chip === 'grown' && data.grown}{' '}in the most-grown genera, by iNaturalist's records of cultivated plants (<a href="/about/how#list">how they are chosen</a>){/if}</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ` without habitat climate: ${fmtN(noneN)} with none derived${data.notChecked ? `, ${fmtN(data.notChecked)} not checked` : ''}${data.pending ? `, ${fmtN(data.pending)} pending` : ''}` : ''}{#if chip === 'grown' && data.grown}{' '}in the popular genera, the genera most observed in cultivation on iNaturalist (<a href="/about/how#list">how they are chosen</a>){/if}</p>
   {/if}
 {/if}
 
@@ -1030,7 +1039,7 @@
   @media (max-width: 640px) { .welcome { line-height: 1.45; } :global(html:not([data-welcomed])) .welcome:not(.quiet) ~ .stickyhead .toolrow { margin-top: 6px; } }
   .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: var(--tap); min-width: var(--tap); text-decoration: none; } /* 44 px under a finger (round sixty; visitor 17) */
   /* The visitor's three lines, then the product itself (round sixty; visitor 1). */
-  .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 46rem; }
+  .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 60rem; } /* each line whole at 1024 px in the desktop's 15 px text (round eighty-two) */
   .pitch li::marker { color: var(--accent); }
   /* On a phone the introduction is its first line alone, one sentence, so the search, the grouping and a whole catalogue
      row are on the first screen; what the other two lines say is on the about page (round sixty-two; outside
@@ -1069,7 +1078,24 @@
   .welcome a { font-weight: 600; }
   /* A button in the sentence, read and tapped as its links are (round sixty). */
   /* A link's weight and colour, not a pill: the pill's padding took a line on a phone and pushed the first catalogue row under the tab bar (round fifty, 1; the merge of round sixty-one). */
-  .welcome .linkish.trysample { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; margin: 0; padding: 0; font-size: inherit; display: inline; min-height: 0; }
+  /* The example's own button, 44 px tall at every width (round eighty-two; the second review's 6), and the two other ways in beside it. */
+  .welcome .wacts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; margin-top: 6px; }
+  .welcome .btn.trysample { min-height: 44px; margin: 0; }
+  /* A mouse's target on a desktop, as every other button there (the theme's --tap); a finger's 44 px wherever the pointer is coarse or the window narrow. */
+  @media (min-width: 701px) and (pointer: fine) { .welcome .btn.trysample { min-height: var(--tap); } }
+  /* On a phone, where the pitch waits while this line is shown, its first sentence is the introduction, both halves of the
+     app in one sentence, and the list of what the record does waits on its pages, so the strip and the search stay on the
+     first screen with the 44 px button (r63v V4's budgets). On a desktop the pitch above says the reference, and this line
+     says the record, as before; the ways in follow it on its line, so a catalogue row stays on the first screen (r62bw). */
+  @media (max-width: 640px) { .welcome .wfeat { display: none; } }
+  @media (min-width: 641px) { .welcome .wlead { display: none; } .welcome .wacts { display: inline-flex; margin: 0 0 0 12px; vertical-align: middle; } }
+  /* The chip's "not checked" count, in words, on a line of its own under its number (round eighty-two; the independent
+     review's 11): beside it, the chip pushed the toolbar to a second line at 1024 px and the first row off the screen. */
+  .chipbtn:has(.nc) { display: inline-flex; flex-wrap: wrap; align-items: baseline; max-width: 13em; padding-top: 3px; padding-bottom: 3px; line-height: 1.25; }
+  .chipbtn .nc { flex-basis: 100%; font-size: var(--fs-xs); font-weight: 500; }
+  /* So the toolbar stays one line at 1024 px with the chip's second count: a little less padding and gap, and a search box
+     that may narrow to 170 px, as it already narrows to fit (r62bw's first screen; round eighty-two). */
+  @media (min-width: 901px) { .tools .chiprow .chipbtn { padding-left: 11px; padding-right: 11px; } .tools { gap: 6px; } .tools .chiprow { gap: 5px; } .toolrow .searchbar { min-width: 170px; } }
   .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); display: none; }
   :global(html[data-welcomed]) .welcome.quiet, .welcome.quiet.shown { display: flex; }
   /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */

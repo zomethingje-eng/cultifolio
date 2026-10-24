@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * One line for each first recorded today or yesterday (round sixty; the grower review's §3): a plant's first flowering,
-   * a batch's first germination count, a plant's first photograph. A plain reading of the log (`firsts.ts`); nothing is
+   * a batch's first count of what came up or struck (by its method), a plant's first photograph. A plain reading of the log (`firsts.ts`); nothing is
    * written.
    */
   import { collection } from '$lib/db/collection.svelte';
@@ -9,7 +9,7 @@
   import { plantHref, batchHref } from '$lib/db/links';
   import { localDate } from '$core/dates';
   import { today as day } from '$lib/ui/day.svelte';
-  import { firstsOf, type First } from './firsts';
+  import { firstsOf, firstUpWords, type First } from './firsts';
   const yesterday = (d: string) => { const t = new Date(`${d}T12:00:00`); t.setDate(t.getDate() - 1); return localDate(t); };
   const list = $derived.by(() => {
     if (!collection.ready) return [] as First[];
@@ -21,7 +21,7 @@
     if (f.kind === 'germinate') {
       const s = collection.sowing(f.recId);
       if (!s) return null;
-      return { href: batchHref(s), text: `First seedlings up in ${sowNo(s)} ${s.taxonName}${f.n ? `: ${f.n} counted` : ''}, ${when(f.d)}.` };
+      return { href: batchHref(s), text: `${firstUpWords(s.method)} in ${sowNo(s)} ${s.taxonName}${f.n ? `: ${f.n} counted` : ''}, ${when(f.d)}.` };
     }
     const a = collection.accession(f.recId);
     if (!a) return null;

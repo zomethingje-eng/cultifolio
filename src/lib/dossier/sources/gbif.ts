@@ -226,7 +226,7 @@ export interface DistributionAnswer {
  * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
  */
 export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; synonymOf?: DistributionAnswer['synonymOf']; rangeVia?: RangeVia; kewFile?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; noKew?: string; synonymOf?: DistributionAnswer['synonymOf']; rangeVia?: RangeVia; kewFile?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
   // Kew's rows of the species' words by another author, which are another name (round seventy; triage-69 B4): said in the record.
   const other = r.data.otherAuthor ? { otherAuthor: r.data.otherAuthor } : {};
@@ -242,7 +242,8 @@ export async function distributions(f: JsonFetcher, key: number): Promise<Source
     const k = `${d.country ?? d.locality ?? '?'}|${CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`) ? 'i' : 'n'}`;
     if (!seen.has(k)) seen.set(k, d);
   }
-  return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false, ...other } } : r.data.otherAuthor ? { status: 'none', detail: r.data.otherAuthor } : { status: 'none' };
+  // A "none" from Kew's files says why (round eighty-two, F; review 1's 7): `noKew`, the bulk path's words.
+  return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false, ...other } } : r.data.otherAuthor ? { status: 'none', detail: r.data.otherAuthor } : r.data.noKew ? { status: 'none', detail: `${r.data.noKew}; GBIF holds no national checklist's range for it` } : { status: 'none' };
 }
 
 /** A distribution row from Kew's WCVP, as GBIF republishes it or the bulk path serves it. */

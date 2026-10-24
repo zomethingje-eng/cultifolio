@@ -204,7 +204,7 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
       c.restored++;
       c.restoredLines.push(`${d.name.scientific}: ${r.detail ?? r.data.title}`);
     }
-    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title };
+    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title, ...(r.data.cut ? { cut: true as const } : {}) };
     d.ids.wikipedia = r.data.title;
     d.links.wikipedia = r.data.url;
     d.upstream.wikipedia = { status: 'ok', at: now(), ...(r.detail ? { detail: r.detail } : {}) };

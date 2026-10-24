@@ -23,14 +23,14 @@ const DEVICES: Record<string, Parameters<Browser['newContext']>[0]> = {
 const rows = (page: Page) => page.locator('.rows a.grow:visible .gname').allTextContents();
 
 for (const [device, opts] of Object.entries(DEVICES)) {
-  test(`r75g grown 1, ${device}: "Most grown" is a chip, off by default; on, it shows the most-grown genera by the rule on the real file`, async ({ browser, baseURL }) => {
+  test(`r75g grown 1, ${device}: "Popular genera" ("Most grown" until round eighty-two) is a chip, off by default; on, it shows the most-grown genera by the rule on the real file`, async ({ browser, baseURL }) => {
     expect(expected).toEqual(['Hesperocyparis']); // the file's counts, as of its day (Welwitschia until round eighty's count)
     const ctx = await browser.newContext({ ...opts, baseURL, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
     await page.goto('/'); await ready(page);
     expect(await rows(page)).toEqual(FIXTURE); // off by default: every genus
-    const grown = page.locator('.chiprow a', { hasText: 'Most grown' });
-    await expect(grown).toHaveText('Most grown, 1');
+    const grown = page.locator('.chiprow a', { hasText: 'Popular genera' });
+    await expect(grown).toHaveText('Popular genera, 1');
     await expect(grown).not.toHaveAttribute('aria-current', 'page');
     await expect(grown).toHaveAttribute('title', 'The species of the genus most observed in cultivation on iNaturalist');
     await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 5');
@@ -38,7 +38,7 @@ for (const [device, opts] of Object.entries(DEVICES)) {
     await expect(page).toHaveURL(/\?by=genus&chip=grown$/);
     await expect(grown).toHaveAttribute('aria-current', 'page');
     await expect.poll(() => rows(page)).toEqual(expected);
-    await expect(page.locator('.seccount:visible').last()).toHaveText("1 genus · 1 species in the most-grown genera, by iNaturalist's records of cultivated plants (how they are chosen)");
+    await expect(page.locator('.seccount:visible').last()).toHaveText("1 genus · 1 species in the popular genera, the genera most observed in cultivation on iNaturalist (how they are chosen)");
     // The search under the chip is filtered by it too, as under the climate chips.
     await page.locator('input.searchbar').fill('Copiapoa cinerea');
     await expect(page.locator('.emptybox')).toContainText('with the chip on (1 without it)');
@@ -50,10 +50,10 @@ test('r75g grown 2: without JavaScript the chip is a link and its address draws 
   const ctx = await browser.newContext({ ...DEVICES.phone, baseURL, locale: 'en-GB', javaScriptEnabled: false, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await page.goto('/');
-  await page.locator('.chiprow a', { hasText: 'Most grown' }).click();
+  await page.locator('.chiprow a', { hasText: 'Popular genera' }).click();
   await expect(page).toHaveURL(/\?by=genus&chip=grown$/);
   expect(await rows(page)).toEqual(expected);
-  await expect(page.locator('.chiprow a[aria-current="page"]')).toHaveText('Most grown, 1');
+  await expect(page.locator('.chiprow a[aria-current="page"]')).toHaveText('Popular genera, 1');
   await page.goto('/?by=family&chip=grown');
   expect(await rows(page)).toEqual(['Cupressaceae']);
   await ctx.close();
@@ -63,7 +63,7 @@ test('r75g grown 3: /about/how names the source, the day and the rule, and that 
   await page.goto('/about/how');
   const day = new Date(`${file.day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
-  expect(text).toContain("The front page's catalogue is the same on every device, every genus and every species, and its chip “Most grown”, off until chosen, narrows it to the species of the most-grown genera");
+  expect(text).toContain("The front page's catalogue is the same on every device, every genus and every species, and its chip “Popular genera”, off until chosen, narrows it to the species of the popular genera");
   expect(text).toContain(`together hold half of iNaturalist's observations of plants marked captive or cultivated across all the reference's genera that were counted, each genus counted with every taxon under it, on ${day} (scripts/most-grown-genera.txt in the source`);
   expect(text).not.toMatch(/On a phone the front page's catalogue opens/);
 });

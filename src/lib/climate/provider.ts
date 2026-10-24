@@ -83,7 +83,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
     return { id: cell.id, months, elevationM: v.elevationM };
   }
 
-  /** Daily extremes at one point, lapse-corrected to its cell's elevation unless that elevation is below sea level (a coastal cell averaged with sea floor). */
+  /** Daily extremes at one point, lapse-corrected to its cell's elevation (the land's: scripts/pack-climate.py leaves the sea floor out). A negative elevation, which only a grid packed before that could give, is not corrected for. */
   async function extremesAt(lat: number, lon: number, elevationM: number | undefined, src: { extremes?: string; elevation?: string }): Promise<{ extremes: ClimateOk['extremes']; status: NonNullable<ClimateOk['extremesStatus']> }> {
     if (o.noExtremes) {
       src.extremes = 'extremes skipped in this build';
@@ -105,7 +105,8 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         return { extremes: undefined, status: r.status === 'none' ? 'none' : 'refused' };
       }
     }
-    // ETOPO's cell mean over a coastline includes sea floor; a negative "elevation" would warm every extreme. No lapse then, and say so.
+    // A grid packed before scripts/pack-climate.py masked the sea took a coastal cell's mean over the sea floor; a negative
+    // "elevation" would warm every extreme. No lapse then, and say so (the grid packed since gives no such cell).
     const target = elevationM != null && elevationM >= 0 ? elevationM : undefined;
     const e = extremesFor(ps, target);
     if (!e.usable) {
