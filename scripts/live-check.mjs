@@ -179,6 +179,16 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   const d = await get(`/species/${species}/__data.json?x-sveltekit-invalidated=01`, { headers: { accept: '*/*' } });
   if (d.status !== 200 || !d.h('content-type').startsWith('application/json') || d.h('x-cultifolio-page')) fail(`/species/${species}/__data.json: the data request was not answered with JSON (status ${d.status}, type "${d.h('content-type')}", x-cultifolio-page "${d.h('x-cultifolio-page')}")`, d);
   ok(`species page: ${a.h('x-cultifolio-page')} then held, private to the browser`);
+  // The page's weight (round eighty-three): its regional map drawn into the markup (its mark replaced), its records' places
+  // not in its data a second time, and in a move's data as before. A Worker of an earlier round (its pages scope their
+  // styles with `svelte-<hash>`, where this round's write `s<hash>`) is noted, not failed: the plan's own live check may
+  // run before this round's Worker is deployed.
+  if (/class="[^"]*\bsvelte-[a-z0-9]{5,8}\b/.test(a.text)) console.log(`  note  ${path}: the page scopes its styles with svelte-<hash>: the deployed Worker is older than round eighty-three, and the page's weight is not checked`);
+  else {
+    const markup = a.text.slice(0, a.text.indexOf('kit.start('));
+    if (markup.includes('data-drawn') || /\bpoints:\[/.test(a.text) || !/"points"/.test(d.text)) fail(`${path}: the regional map's mark was left in the markup, or the records' places are in the page's data, or not in a move's data (round eighty-three, src/lib/server/drawn.ts)`, a);
+    ok(`species page: ${Math.round(a.text.length / 1024)} kB of HTML, the regional map drawn once`);
+  }
 }
 
 // The private pages are sent noindex, from the hook and, for the prerendered /offline, from _headers (round sixty; the

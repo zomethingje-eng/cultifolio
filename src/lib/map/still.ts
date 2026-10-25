@@ -89,6 +89,30 @@ function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArr
   return { lines, words };
 }
 
+/** A number as short as SVG reads it, to `places` decimals: no leading zero and no trailing ones ("-0.50" is "-.5"). */
+export const short = (n: number, places: number): string => {
+  let s = n.toFixed(places);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  if (s === '-0') return '0';
+  return s.replace(/^(-?)0\./, '$1.');
+};
+
+/**
+ * The open records as dots (round eighty-three; the species page's weight): each a path of no length, which a round cap
+ * draws as a disc as wide as the stroke, in one group that carries the class and the stroke's width. Each record is still
+ * its own shape, so where records overlap the half-transparent dots still darken as the circles did; but a dot was 68
+ * bytes as a circle with its class, radius and coordinates to a thousandth of a degree, and is about 27 now: Sempervivum
+ * tectorum's 1,052 were 72 kB of its page. A coordinate is kept to a quarter of a dot's radius or finer, a tenth of a
+ * pixel or less at the sizes the map is drawn.
+ */
+export function dots(points: ReadonlyArray<readonly [number, number]>, r: number): string {
+  if (!points.length) return '';
+  const places = Math.min(4, Math.max(1, Math.ceil(Math.log10(4 / r))));
+  let out = `<g class="occ" stroke-width="${short(2 * r, places + 1)}">`;
+  for (const p of points) { const y = short(-p[0], places); out += `<path d="M${short(p[1], places)}${y.startsWith('-') ? '' : ' '}${y}h0"/>`; }
+  return out + '</g>';
+}
+
 export function regionSvg(boxes: Box[], points: Array<[number, number]>, centroid?: { lat: number; lon: number }, title = 'Regional map', labels: ReadonlyArray<{ name: string; box: Box }> = []): string {
   // Frame: union of boxes (or point extent), padded, aspect ~ 4:3, clamped to the world.
   let s = 90,
@@ -137,7 +161,7 @@ export function regionSvg(boxes: Box[], points: Array<[number, number]>, centroi
     e = Math.min(180, c + wantW / 2);
   }
   const r = Math.max(0.05, (e - w) / 220);
-  const pts = points.map((p) => `<circle class="occ" cx="${p[1]}" cy="${-p[0]}" r="${r}"/>`).join('');
+  const pts = dots(points, r);
   const up = closeUp(w, n, e, s, labels);
   // The words over the map are for the eye: the map's name says what it is, and the regions are listed beside it.
   return (

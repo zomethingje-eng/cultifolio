@@ -4,6 +4,7 @@ import { building, version } from '$app/environment';
 import { corpusNow } from '$lib/server/dossiers';
 import { catalogueRows, homeWindow, byOf, chipOf } from '$lib/server/catalogue';
 import { limited } from '$lib/server/sync';
+import { placeDrawn } from '$lib/server/drawn';
 
 /**
  * A species page is public content rendered in the reader's units and hemisphere, which is why its own header is
@@ -186,7 +187,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     const stop = await limited(event.platform, event.getClientAddress ?? (() => 'unknown'), 'render').catch(() => null);
     if (stop) return policy(new Response(stop.body, stop));
   }
-  const res = await resolve(event);
+  // A page's markup drawn for its HTML alone goes into its marks' places as the HTML is sent (round eighty-three; the
+  // species page's weight, $lib/server/drawn).
+  const res = await resolve(event, { transformPageChunk: ({ html }) => placeDrawn(html, event.locals?.drawn) });
   // A response taken from the edge cache (the names route returns its hit as it is) has immutable headers in Workers, and
   // setting one throws, which SvelteKit turned into a 500 on every repeated lookup (round seventeen, 1). A copy is mutable.
   const r = policy(new Response(res.body, res));

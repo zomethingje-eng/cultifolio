@@ -41,6 +41,13 @@ export interface Searchable {
    */
   hom?: string[];
   /**
+   * The names of the pages merged into this one by the owner's decision (round eighty-three; the index's `merged`): a
+   * name typed as a name puts this page first among the pages that hold it (`mergedTyped`, `olderOrder`), and the row
+   * says it is merged here. Each is one of the species' older names too, where its words are read. Absent in an index
+   * built before, and where there is none.
+   */
+  merged?: string[];
+  /**
    * The other spellings of the shown names, searched as a common name is and never shown (round sixty-nine; triage-68
    * N2): "Bluemink" pooled "Blue mink", and "blue mink" found nothing. Absent in an index built before.
    */
@@ -151,6 +158,8 @@ export interface Prepared<T> {
   kewWords: string[][];
   /** Each of the record's names by another author (`hom`)'s words, kept apart: read only by `homTyped`, as `kewWords` by `kewTyped` (round eighty-two). */
   homWords: string[][];
+  /** Each name of a page merged into this one (`merged`)'s words, kept apart: read only by `mergedTyped` (round eighty-three). */
+  mergedWords: string[][];
   /** The species' own epithet, folded: a species that keeps the epithet of an older name typed comes first (round sixty-nine; triage-68 N1). */
   epithet: string;
   sortKey: string;
@@ -517,6 +526,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
     const shownSyn = (item.syn ?? []).length;
     const kewWords = (item.kew ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
     const homWords = (item.hom ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
+    const mergedWords = (Array.isArray(item.merged) ? item.merged : []).filter((x) => typeof x === 'string').map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))).filter((g) => g.length >= 2);
     return {
       item,
       nameWords,
@@ -531,6 +541,7 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
       shownSyn,
       kewWords,
       homWords,
+      mergedWords,
       epithet: nameWords[1] ?? '',
       wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
       // A nothogenus sorts under its genus, past its sign, as the rows do (`withoutSign` of `$core/names`; round eighty-one, H to S).
@@ -553,7 +564,8 @@ export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<st
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
   // Or one of Kew's older names typed as a name (round eighty): the species is then a hit of the older names' group.
   // Or a name of the record by another author typed as a name (round eighty-two), in the same group, after the rest.
-  return rankWords(p, qs, match) ?? (kewTyped(p, qs).length || homTyped(p, qs).length ? 3 : null);
+  // Or the name of a page merged into this one typed as a name (round eighty-three), in the same group, before the rest.
+  return rankWords(p, qs, match) ?? (kewTyped(p, qs).length || homTyped(p, qs).length || mergedTyped(p, qs).length ? 3 : null);
 }
 /**
  * Kew's older names (their places in `kewWords`) a query types as a name (round eighty; review-d 5): two words or more,
@@ -572,6 +584,15 @@ export function kewTyped(p: Pick<Prepared<unknown>, 'kewWords'>, qs: string[]): 
  */
 export function homTyped(p: Pick<Prepared<unknown>, 'homWords'>, qs: string[]): number[] {
   return typedName(p.homWords, qs);
+}
+/**
+ * The names of the pages merged into this one (their places in `mergedWords`) a query types as a name, by `kewTyped`'s
+ * rule (round eighty-three): two words or more, the genus in full first, every word but the last whole, the last the
+ * start of one; never by a word alone or a similar spelling. "Echeveria peacockii" and "Echeveria peac" are Echeveria
+ * desmetiana's, merged into it, before Dudleya pulverulenta's, which Kew's file holds it under.
+ */
+export function mergedTyped(p: Pick<Prepared<unknown>, 'mergedWords'>, qs: string[]): number[] {
+  return typedName(p.mergedWords ?? [], qs);
 }
 function typedName(groups: string[][], qs: string[]): number[] {
   const out: number[] = [];
@@ -632,8 +653,9 @@ function oneOlder(p: Prepared<unknown>, qs: string[], match: (q: string, w: stri
  * "Opuntia longispina" is Airampoa corrugata before the species with a variety of that name); then the common names,
  * each read whole (one name holds every word: "cape aloe" is Aloe ferox, "Cape aloe", before an aloe of the Cape
  * Provinces); then the other ranks. Within a group: a near hit by its distance from what was typed, the nearest first
- * ("Ceropegia pica" is C. picta before C. dicapuae); among older names typed, a species that holds the name exactly,
- * then the one that keeps the name's epithet, then one that shows the name itself (`olderOrder`); then a name that is
+ * ("Ceropegia pica" is C. picta before C. dicapuae); among older names typed, the page the name's own page was merged
+ * into (round eighty-three), then a species that holds the name exactly, then the one that keeps the name's epithet, then
+ * one that shows the name itself (`olderOrder`); then a name that is
  * exactly the query, the headline first ("onion" is Allium cepa, "Onion", before Albuca's "Sea-onion"; "fig" is Ficus
  * carica, "Fig"); then a hit whose every word is a whole word typed; then one whose headline holds every word; among
  * the common names' hits, the name's place among the species' names, a name written as typed, more photographs
@@ -645,7 +667,7 @@ function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string,
   // A binomial at least, every word but the last written in full: "coco plum" is no older name "Cocos plumosa" typed,
   // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
   // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
-  if (olderTyped(p, qs, match).length || kewTyped(p, qs).length || homTyped(p, qs).length) return Group.Older;
+  if (olderTyped(p, qs, match).length || kewTyped(p, qs).length || homTyped(p, qs).length || mergedTyped(p, qs).length) return Group.Older;
   const cm = commonMatch(match, qs);
   for (const cn of p.commonNames) if (holds(cn, qs, cm)) return Group.Common;
   return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
@@ -681,6 +703,10 @@ function olderOrder(p: Prepared<unknown>, qs: string[], match: (q: string, w: st
   // answered by a name typed as a name ("Nepenthes mira" by Nepenthes mirabilis, "Stramonium datura" by Datura
   // stramonium, the tautonyms by their genus), as they should be. A name still being typed ("Opuntia longisp") is no
   // one's exactly; a shown name of the typed length counts as shown, a shown variety does not.
+  // The page a page of that name was merged into, by the owner's decision, comes first of all (round eighty-three): it is
+  // where the old name's page went ("Echeveria peacockii" is Echeveria desmetiana, then Dudleya pulverulenta, which Kew's
+  // file holds the name under; before, the alphabet put Dudleya first).
+  if (mergedTyped(p, qs).length) return -1;
   const typedAt = olderTyped(p, qs, match);
   // A species reached only by a name of its record by another author comes after every species reached by an older name
   // of its own, whatever its epithet (round eighty-two; review 1's 3).

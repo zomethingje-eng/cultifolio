@@ -16,6 +16,14 @@ import { join } from 'node:path';
 export const OFFLINE_ROUTE = /(^|\/)src\/routes\/(\+layout\.svelte|\+error\.svelte|\+page\.svelte|(plants|places|propagation|labels|backup|sync|today|settings|offline)\/)/;
 
 /**
+ * The species page, whose stylesheets alone are cached at install (round eighty-three): a species page read by a link from
+ * another species page is kept as its data and its scripts, and its own stylesheets were never fetched (the page it was
+ * opened from carried them in its HTML), so with the network gone the offline page could not open it from that data and
+ * said "No connection". Its scripts are still kept only as a page asks for them; its sheets are about 26 kB.
+ */
+export const STYLE_ROUTE = /(^|\/)src\/routes\/species\/\[slug\]\/\+page\.svelte$/;
+
+/**
  * The build files (paths as the manifest names them, `_app/immutable/...`) that the offline pages need: Kit's two entries,
  * the nodes whose route file is an offline one, and everything each reaches through static and dynamic imports, with their
  * styles and assets. The app entry's own dynamic imports are every node of the site and are not followed from it.
@@ -39,11 +47,22 @@ export function offlineBuild(manifest, routeOf) {
     for (const k of e.imports ?? []) walk(k);
     if (!isApp(key)) for (const k of e.dynamicImports ?? []) walk(k);
   };
+  // The stylesheets of a node and of everything it imports statically, and nothing else of them.
+  const styled = new Set();
+  const sheets = (key) => {
+    if (styled.has(key)) return;
+    styled.add(key);
+    const e = manifest[key];
+    if (!e) return;
+    for (const f of e.css ?? []) out.add(f);
+    for (const k of e.imports ?? []) sheets(k);
+  };
   for (const [key, e] of Object.entries(manifest)) {
     if (e.isEntry && !/\/nodes\/\d+\.js$/.test(key)) walk(key);
     else if (/\/nodes\/\d+\.js$/.test(key)) {
       const route = routeOf(key);
       if (route && OFFLINE_ROUTE.test(route)) walk(key);
+      else if (route && STYLE_ROUTE.test(route)) sheets(key);
     }
   }
   return [...out].sort();

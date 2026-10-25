@@ -15,6 +15,8 @@ declare global {
     interface Locals {
       /** The corpus this request reads, loaded once by the hook for a page it may hold, so the cache key, the page's query and the page itself are one corpus (round fifty-nine). */
       corpus?: import('$lib/server/dossiers').Loaded;
+      /** Markup a page's load drew for its HTML alone, by the mark its data carries in the markup's place (round eighty-three; $lib/server/drawn). */
+      drawn?: import('$lib/server/drawn').Drawn;
     }
     interface Platform {
       env: {

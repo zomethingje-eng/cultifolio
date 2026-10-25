@@ -30,7 +30,8 @@ test('the maps drawn in the browser are the ones the server drew @phone', async 
   expect(cinerea).toHaveLength(2);
   expect(cinerea[0]).toContain('aria-label="Native range of Copiapoa cinerea"');
   expect(cinerea[1]).toContain('aria-label="Openly licensed records of Copiapoa cinerea"');
-  expect((cinerea[1].match(/class="occ"/g) ?? []).length).toBe(52); // every open record a point
+  // Every open record a point: a dot each, in the one group (round eighty-three; it was a circle each).
+  expect((cinerea[1].match(/<path d="M[-.\d ]+h0"/g) ?? []).length).toBe(52);
 
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   expect(await maps(page)).toEqual(cinerea);

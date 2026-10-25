@@ -16,6 +16,7 @@
   import { parseName } from '$core/names';
   import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
+  import { mergedOf, mergedSentence } from '$lib/ui/ref/searched';
   import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick, rankedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
@@ -26,7 +27,8 @@
   let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', labelledby = undefined, describedby = undefined, unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { /** The field's name, by id: the label around the field also holds the check's pills and lines, which a screen reader read as its name (round eighty-one; the desktop review's 7). */ labelledby?: string; /** The form's own hint under the field, by id. */ describedby?: string; reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
   // `similar`: found by a similar spelling (the server's near pass); `asCultivar`: the genus offered for a genus followed by
   // capitalised words, the rest kept as a cultivar; a key below 1 is a row with no key to file (round sixty-two; A7).
-  type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string };
+  // `merged`: a reference row found by the name of a page merged into it, which the search lists first for that name (round eighty-three).
+  type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string; merged?: string };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -189,7 +191,7 @@
       const similar = Array.isArray(answer) && 'near' in answer && answer.near === true;
       const offered = !relaxed || (relaxed.trim().split(/\s+/).length === 2 && !!species && sameName(words(relaxed), species));
       // A row's key is the GBIF key a plant files (round seventy-eight): the page's `gbif`, never its id.
-      local = (offered ? hits : []).map((e) => ({ key: e.gbif ?? -1, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
+      local = (offered ? hits : []).map((e) => { const merged = similar ? null : mergedOf(text, e); return { key: e.gbif ?? -1, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))), ...(merged ? { merged } : {}) }; });
       show();
       // The reference answered after the field's check had concluded (a leave, or Enter, before this answer, with the name
       // service silent), or after the grower had left the field (a leave within the search's 180 ms, whose check this
@@ -342,6 +344,8 @@
     const q = parseName(value).qualifier;
     const compared = q === 'cf.' || q === 'aff.' || q === 'nr.' || q === 'vel aff.';
     // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that.
+    // A row found by the name of a page merged into it says so, as the catalogue's row does (round eighty-three).
+    if (s.local && s.merged) return ` · ${mergedSentence(s.merged)}${keyed ? '' : '; no key filed'}`;
     if (s.local && s.key <= 0 && !compared && sameName(s.name, parseName(value).scientific)) return s.far ? ' · has a species page, under another genus, with no GBIF key; no key filed' : ' · has a species page, with no GBIF key; no key filed';
     if (s.local) return keyed ? (s.far ? ' · has a species page, under another genus' : ' · has a species page') : compared ? ' · compared species is in the reference; no key filed' : ' · its species is in the reference; no key filed';
     // GBIF's name service's row of a name whose reference page holds no GBIF key looked the same as that page's row

@@ -47,6 +47,16 @@ export interface IndexEntry {
   hom?: string[];
   /** For each of `hom`, the authors the record writes after it, as written (none where the record has none). */
   homBy?: string[][];
+  /**
+   * The names of the pages merged into this one by the owner's decision (`scripts/merged-pages.txt`), as binomials: the
+   * page reads each one's GBIF key and answers its old address (`occurrences.keys` with a `slug`), written at index time
+   * (`mergedNamesOf`; round eighty-three). The search puts this page first among the pages that hold such a name typed
+   * as a name (`mergedTyped` of `$core/search`), and its row says why ("Echeveria peacockii is merged into this page"):
+   * Kew's file keeps Echeveria peacockii under Dudleya pulverulenta too, and the alphabet put that page first. Each name is
+   * also one of `syn`, `older` or `hom`, as the index builder writes them. Absent in an index built before, and where
+   * there is none.
+   */
+  merged?: string[];
   /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
   changed?: number;
 }
@@ -115,6 +125,22 @@ export function kewOlderOf(accepted: string, held: readonly string[], kew: reado
     if (!k || k.split(' ').length < 2 || seen.has(k)) continue;
     seen.add(k);
     out.push(n);
+  }
+  return out;
+}
+
+/**
+ * The names of the pages merged into a page, as the index carries them (`merged`; round eighty-three): of the other keys
+ * the page reads (`occurrences.keys`), each one that came with an old address (`slug`), which only a merge of
+ * `scripts/merged-pages.txt` gives (`mergeKeys`), its name as GBIF writes it, without the author (`canonicalSynonym`),
+ * once, in the keys' order, never the page's own name. A page not yet built with its merge, or with none, has none.
+ */
+export function mergedNamesOf(accepted: string, keys: ReadonlyArray<{ name?: unknown; slug?: unknown }> | null | undefined): string[] {
+  const out: string[] = [];
+  for (const k of keys ?? []) {
+    if (typeof k?.slug !== 'string' || !k.slug || typeof k.name !== 'string') continue;
+    const n = canonicalSynonym(k.name.trim().replace(/\s+/g, ' '));
+    if (n && n !== accepted && !out.includes(n)) out.push(n);
   }
   return out;
 }
@@ -583,7 +609,7 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
       if (k === 'syn') { if (syn.length) o.syn = syn; continue; }
       if (k === 'older') { if (older.length) o.older = older; place(); continue; }
       if (k === 'hom' || k === 'homBy') continue;
-      if (k === 'kew' || k === 'changed' || k === 'near') place();
+      if (k === 'kew' || k === 'merged' || k === 'changed' || k === 'near') place();
       o[k] = v;
     }
     place();

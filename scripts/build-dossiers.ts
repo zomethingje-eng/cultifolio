@@ -130,7 +130,7 @@ import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -439,10 +439,13 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
   const { syn, older } = olderNamesOf(d.name.scientific, names);
   // Kew's older names the two do not hold, for the search alone (`kewOlderOf`; round eighty, review-d 5).
   const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) ? d.name.kew.synonyms : undefined);
+  // The names of the pages merged here, marked (`mergedNamesOf`; round eighty-three): the search puts this page first for
+  // one typed, and its row says why. A page whose merge is not yet built into it (no key with an old address) has none.
+  const merged = mergedNamesOf(d.name.scientific, d.occurrences.keys);
   // The day the dossier last changed in substance, for the sitemap (round sixty-three).
   const changed = dayNumber(d.changed?.on);
   // The names with the other spellings the search alone reads (`indexNames`; round sixty-nine; triage-68 N2, S-F2).
-  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus, older: olderOf.get(d.key) }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(kew.length ? { kew } : {}), ...(changed ? { changed } : {}) };
+  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus, older: olderOf.get(d.key) }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(kew.length ? { kew } : {}), ...(merged.length ? { merged } : {}), ...(changed ? { changed } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
@@ -1923,6 +1926,9 @@ function writeIndexFromDisk(): void {
   console.log(`  index: ${index.length} species`);
   // Old addresses of merged pages (round seventy-three): read from the kept pages' records, as `--prune-followed` reads them.
   if (aliases.length) console.log(`  ${aliases.length} old address${aliases.length === 1 ? '' : 'es'} of pages merged into another answered by the kept page: ${aliases.map((a) => a.slug).join(', ')}`);
+  // And their names, marked on the kept pages (round eighty-three): the search lists the kept page first for one typed.
+  const marked = shownIndex.flatMap((e) => (e.merged ?? []).map((n) => `${n} → ${e.name}`));
+  if (marked.length) console.log(`  ${marked.length} name${marked.length === 1 ? '' : 's'} of pages merged into another marked on the kept page, which the search lists first for it: ${marked.join(', ')}`);
   // The photograph judgement with every name of the reference, stored in each dossier (round seventy-six), and each
   // record's older names for the name files: the Worker then reads a page without the index.
   const synonyms = judgeDossiers(idxDir, index);

@@ -13,6 +13,9 @@ import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
 import { authorKey, plainlyAnother } from '$dossier/authors';
+import { regionSvg } from '$lib/map/still';
+import { unitName } from '$core/regions';
+import { drawOnce } from '$lib/server/drawn';
 import type { PageServerLoad } from './$types';
 
 /** The genera's words for `englishNames`, once for each genera read (round seventy-seven: every page folded all 1,300). */
@@ -22,7 +25,7 @@ const generaHeld = (g: ReadonlyMap<string, number>) => { let w = generaWords.get
 /** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
 const SPECIES_UNREADABLE = 'This species page could not be read just now';
 
-export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress, locals }) => {
+export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress, locals, isDataRequest }) => {
   // One corpus for the page, the hook's when it held the page: its key, its slug and every index read (round fifty-nine).
   // A corpus that cannot be read is a 503 that says so (`UNREADABLE`), never the fixture's species (round sixty).
   const c = locals?.corpus ?? (await corpusNow(platform, fetch));
@@ -221,6 +224,16 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // The pages GBIF files the names of a page that reads no key under (round eighty, `occurrences.unread`), by their ids.
   const underIds = [...new Set((d.occurrences.unread?.under ?? []).map((u) => u.page).filter((x): x is PageId => isPageId(x) && x !== key))];
   const heldUnder = (await Promise.all(underIds.map((id) => look.species(id)))).filter((e): e is NonNullable<typeof e> => !!e).map((e) => ({ slug: e.slug, name: e.name }));
+  // The page's own HTML (round eighty-three; the species page's weight, $lib/server/drawn): the regional map is drawn here,
+  // once, into the HTML, and its records' places are not carried in the data the page hydrates from, where nothing read
+  // them once the page had loaded. Nor are the common names in other languages: the page reads only Wikidata's, for the
+  // line that names its source ($lib/ui/ref/upstream `namesSource`); the rest were a twelfth of Sempervivum tectorum's
+  // data. A move inside the app asks for the data alone (`isDataRequest`), and gets it all, as before: the page draws the
+  // map from it, and the offline page and a tab of the build before read what they always did. Anything else that is not
+  // plainly the page's HTML (a caller that does not say) gets the whole data too.
+  const regionMark = isDataRequest === false ? drawOnce(locals, 'region-map', regionSvg(shown.distribution.boxes, points, shown.centroid, `Openly licensed records of ${shown.name.scientific}`, shown.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! })))) : null;
+  const map: { regionMark?: string; points?: typeof points } = regionMark ? { regionMark } : { points };
+  const sent = regionMark ? { ...shown, name: { ...shown.name, vernacular: shown.name.vernacular.filter((v) => v.source === 'Wikidata') } } : shown;
   return {
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
     /** The pages GBIF files this page's names under, when it reads no key for that reason (round eighty). */
@@ -246,13 +259,17 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     units: unitsFor(cookies, request),
     // The grower's hemisphere, when their site has been saved on this device: seeds the months before the site store loads.
     hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null,
-    d: shown,
+    d: sent,
     genusRecord,
     siblings,
     siblingCount,
     near,
-    /** The open records' places (latitude, longitude), which the page draws its regional map from: the two maps are drawn by the page, on the server and again in the browser, from what it carries, rather than carried as drawn (round seventy-seven). */
-    points,
+    /**
+     * The open records' places (latitude, longitude), which the page draws its regional map from, in the browser and on the
+     * server, rather than carried as drawn (round seventy-seven); in a move inside the app's data only. The page's own HTML
+     * carries the map drawn and, in its data, the mark the map takes the place of (round eighty-three).
+     */
+    ...map,
     /** How many datasets the open records came from (the provenance line). */
     datasets: d.occurrences.datasets.length
   };

@@ -12,34 +12,11 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Cultifolio" />
   <link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
-  <!-- The example's flag is taken off here when the address says the tab left it (`?left=`), when the tab was sent home
-       because another tab closed it (`cultifolio.sampleClosed`), or when another tab left the example since this tab
-       opened it (its generation, `cultifolio.demo.gen`, is not the device's, `cultifolio.sampleGen`): such a tab, away
-       when the other left (another site, the back-forward cache, a tab the browser discarded), opens the grower's own
-       collection and says why, rather than set out a new example (round sixty-nine; triage-68 X2). Leave marks the
-       example for deletion in the tab's storage; the address marks it too, but only when it carries the one-use token
-       Leave wrote in this same tab (`cultifolio.sampleLeaving`), taken off as it is read (triage-68 X1): a copied link,
-       a bookmark, the history or another tab's address deletes nothing, and no delete runs while any tab holds the
-       example open (round sixty-seven; V3, V6).
-       The flag is set here too, and only here, when the address carries `?enter=` and the one-use token the button
-       "Show the example collection" wrote in this same tab (`cultifolio.sampleEntering`), taken off as it is read, and
-       the tab's generation is noted with it (round seventy-seven): the button wrote the flag itself before its page
-       went, and a "Leave site?" answered Cancel then rested on a 3 s guess, a reload before it opening the example.
-       An example page takes the shared "an example is open" lock (`cultifolio-sample-open`) here, before anything else
-       runs, and the bar takes the hold over once it is drawn (`keepSampleOpen`; round seventy, triage-69 X1, S-D1): the
-       lock was taken only by the bar, so from the moment a reloading example tab's old page went until its new page was
-       drawn (1 to 4.5 s on a slow phone) it held nothing, and another tab read its example as left, offered it back and
-       deleted it, the visitor's records with it. -->
   <script>try{var t=localStorage.getItem('cultifolio.theme'),d=document.documentElement.dataset,s=sessionStorage,a=/[?&]left=([^&#]*)/.exec(location.search),k=s.getItem('cultifolio.sampleLeaving'),e=/[?&]enter=([^&#]*)/.exec(location.search),n=s.getItem('cultifolio.sampleEntering');if(t==='light'||t==='dark')d.theme=t;if(localStorage.getItem('cultifolio.welcomed')==='1')d.welcomed='1';if(localStorage.getItem('cultifolio.hasMine')==='1')d.grower='1';if(a){if(k&&a[1]===k)s.setItem('cultifolio.sampleLeft','1');s.removeItem('cultifolio.sampleLeaving')}if(e){if(n&&e[1]===n&&!a){s.setItem('cultifolio.demo','1');s.setItem('cultifolio.demo.gen',localStorage.getItem('cultifolio.sampleGen')||'');s.removeItem('cultifolio.sampleClosed')}s.removeItem('cultifolio.sampleEntering')}if(s.getItem('cultifolio.demo')==='1'&&(s.getItem('cultifolio.demo.gen')||'')!==(localStorage.getItem('cultifolio.sampleGen')||''))s.setItem('cultifolio.sampleClosed','1');if(a||s.getItem('cultifolio.sampleClosed')==='1')s.removeItem('cultifolio.demo');if(s.getItem('cultifolio.demo')==='1'){d.demo='1';d.grower='1';var l=navigator.locks;if(l){var h=window.__sampleOpen={r:null,done:false,failed:false};try{l.request('cultifolio-sample-open',{mode:'shared'},function(){return new Promise(function(r){if(h.done)r();else h.r=r})}).catch(function(){h.failed=true})}catch(x){h.failed=true}}}}catch(e){}</script>
   %sveltekit.head%
 </head>
 <body data-sveltekit-preload-data="hover">
   <div style="display: contents">%sveltekit.body%</div>
-  <!-- A page about your own plants is drawn only on the device, so its HTML had nothing in it and the screen stayed
-       blank until the scripts ran: 4.5 s on a slow phone. This placeholder shows the bar and a line meanwhile, and only
-       on such a page: a page the server drew has its content in the box above, and the rule below keeps the line hidden;
-       so does a browser without :has(). The app removes it once it draws (round sixty; the accessibility review, 7).
-       No script: the page's policy allows only hashed inline scripts, and a style needs none. -->
   <style>#shell{display:none}body>div:first-child:not(:has(>:not(script)))+#shell{display:block}</style>
   <div id="shell" style="font-family: var(--ui, system-ui, sans-serif); color: var(--ink, #1b2421)">
     <div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 16px; margin: 0 -16px; border-bottom: 1px solid var(--rule, #dde3e0); background: var(--bg, #f3f5f4)"><span aria-hidden="true" style="color: var(--accent, #1f6b4f); font-weight: 600; min-width: 44px; text-align: center">✳</span><span style="font-size: 0.6875rem; letter-spacing: 0.11em; text-transform: uppercase; font-weight: 600; color: var(--ink3, #5b6662)">Cultifolio</span></div>

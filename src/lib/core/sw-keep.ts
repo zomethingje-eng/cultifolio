@@ -33,8 +33,8 @@ export interface CacheStorageLike {
 export const OUR_PREFIX = 'cultifolio-';
 /**
  * The species pages a device keeps: 200 entries, a page and its data being two (about a hundred pages read). A species
- * page is about 240 kB of HTML as the cache holds it (`/species/sempervivum-tectorum`, 238,280 B), so the cap is under
- * about 50 MB at the worst. A plant's own page does not need them: it reads its species from the corpus answers.
+ * page was about 240 kB of HTML as the cache holds it (`/species/sempervivum-tectorum`, 238,280 B), so the cap is under
+ * about 50 MB at the worst; since round eighty-three that page is about 140 kB (the species page's weight). A plant's own page does not need them: it reads its species from the corpus answers.
  */
 export const SPECIES_KEEP = 200;
 /**

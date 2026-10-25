@@ -21,7 +21,7 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, homonymOf, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, homonymOf, mergedOf, mergedSentence, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -789,16 +789,19 @@
 {#snippet hit(c: Tile, catalogue = false)}
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
   <!-- A catalogue hit found by an older name says so, and its page is opened as the older name's address opens it, with the line saying whose name it is (round eighty-one; review-w 5). -->
-  {@const older = catalogue ? olderNameOf(q, c as unknown as Found) : null}
+  <!-- Found by the name of a page merged into it, said as that, and opened as itself: it is first for that name, and the
+       name is no older name of this one alone (round eighty-three; "Echeveria peacockii is merged into this page"). -->
+  {@const merged = catalogue ? mergedOf(q, c as unknown as Found) : null}
+  {@const older = catalogue && !merged ? olderNameOf(q, c as unknown as Found) : null}
   <!-- Or found by a name of its record by another author, said as that (round eighty-two; review 1's 3). -->
-  {@const homonym = catalogue && !older ? homonymOf(q, c as unknown as Found) : null}
+  {@const homonym = catalogue && !older && !merged ? homonymOf(q, c as unknown as Found) : null}
   {@const was = older ?? homonym?.name}
   <a class="azrow hitrow" href="/species/{c.slug}{was ? `?was=${encodeURIComponent(was)}` : ''}" data-slug={c.slug}>
     <!-- The thumbnail's letter and the "›" are for the eye: the link's name is the species' (round eighty-one; the desktop review's 7). -->
     <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[merged ? mergedSentence(merged) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig" aria-hidden="true">›</span>
   </a>

@@ -12,7 +12,7 @@
  * retry is anything else. `near` is said as a similar spelling,
  * which the front page did not say (round sixty-two; the search review's 18).
  */
-import { droppedLabel, rankedWords, homTyped, RANK_MARKERS, type Searchable } from '$core/search';
+import { droppedLabel, rankedWords, homTyped, mergedTyped, RANK_MARKERS, type Searchable } from '$core/search';
 import { words as nameWords } from '$core/postings';
 
 export interface SearchedAnswer {
@@ -127,6 +127,26 @@ export function olderNameOf(typed: string, hit: Searchable): string | null {
   }
   return null;
 }
+
+/**
+ * The name of a page merged into the hit by the owner's decision that a catalogue hit was found by (round eighty-three:
+ * "Echeveria peacockii" listed Dudleya pulverulenta first and Echeveria desmetiana second, each "older name: Echeveria
+ * peacockii", with nothing to say that the old page went into the second): the name, when the words typed are it typed as
+ * a name (`mergedTyped`, the rule that put the hit first), so the row says "Echeveria peacockii is merged into this
+ * page". Null otherwise, and for a hit whose own name the words are.
+ */
+export function mergedOf(typed: string, hit: Searchable): string | null {
+  const names = Array.isArray(hit.merged) ? hit.merged.filter((n): n is string => typeof n === 'string') : [];
+  if (!names.length) return null;
+  const qs = rankedWords(typed).filter((w) => !RANK_MARKERS.has(w));
+  const own = nameWords(hit.name).filter((w) => !RANK_MARKERS.has(w));
+  if (qs.length === own.length && qs.every((q, i) => own[i] === q)) return null;
+  const at = mergedTyped({ mergedWords: names.map((n) => nameWords(n).filter((w) => !RANK_MARKERS.has(w))) }, qs)[0];
+  return at === undefined ? null : names[at];
+}
+
+/** The words a row says of a hit found by the name of a page merged into it (`mergedOf`). */
+export const mergedSentence = (name: string) => `${name} is merged into this page`;
 
 /**
  * The name of the hit's record by another author that a catalogue hit was found by (round eighty-two; review 1's 3:

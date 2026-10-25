@@ -551,6 +551,55 @@ The second form only when the first refuses. It says `written into src/routes/ab
 
 **Nothing to run for the pages.** With the reference's photographs switched on, a plant page now keeps the species photograph's room while it asks for the sheet, so the photograph's arrival moves neither the card nor the buttons under a finger; a species page keeps "Your notes: none yet"'s line while the collection opens, so the cultivation cards do not move. In the owner's WebKit runs a press made in that moment was lost (r69p P5, and r73p keys 1 on the front page, whose test now waits for the collection).
 
+### Round eighty-three: a merged page first for its old name (agent K)
+
+What changes: searching "Echeveria peacockii" lists Echeveria desmetiana first, the page Echeveria peacockii was merged into, and Dudleya pulverulenta (under which Kew's file holds the name) second, where the alphabet put Dudleya first; "Bisnaga hamatacantha" lists Ferocactus hamatacanthus first; and so for every merge of `scripts\merged-pages.txt`, the name typed as a name or being typed ("Echeveria peacoc"), never a word alone or a similar spelling. The kept page's row says why, in the catalogue and in the species picker: "Echeveria peacockii is merged into this page". The mark is the index's (`merged` on the kept page's entry, from the keys it reads with an old address), carried in the search's key files.
+
+**Safe mid-fill, and the date.** Nothing here changes `scripts\corpus-plan-full.txt`, `corpus-step.json` or a dossier; the fill (step 11) runs none of the changed code but the index it writes. Take it with this round's zip **before the fill's last day (about 27 October)**, on an evening between two fill days, as round eighty-two's walk (a) says: then the plan's own index writes, step 12's `--index` and (d)'s index carry the mark, and it reaches the site with the plan's own upload at no extra cost. Taken later, the app's part goes with the deploy and changes nothing until an index carrying the mark is uploaded (an index without it is searched as before; an app deployed before reads the mark as nothing, also as before).
+
+1. **The first fill day after the zip** writes the index in full (the code changed) and says one line more, expected: `7 names of pages merged into another marked on the kept page, which the search lists first for it: …`, the seven earlier merges whose kept pages already read the old key, as the live pages show them (Ceropegia melanops, Copiapoa boliviana, Drosera parvula, Echeveria sessiliflora, Coryphantha macromeris, Weingartia pulchra, Rebutia fidana). Not the two of round eighty-two yet: their kept pages are built at (d).
+2. **At (d)**, nothing to add: the online line builds the three kept pages still to come (Echeveria desmetiana and Ferocactus hamatacanthus, and Echidnopsis cereiformis from round eighty's list), so its index, and `--prune-followed`'s after it, name 11, with `Echeveria peacockii → Echeveria desmetiana`, `Bisnaga hamatacantha → Ferocactus hamatacanthus`, `Ceropegia cereiformis → Echidnopsis cereiformis` and `Ceropegia nubica → Echidnopsis cereiformis` among them. If `--prune-followed`'s index names fewer than 11, paste its lines back before `--go-on`. (Between the online line and the prune, the old page itself is first for its name and the kept page second, as it should be: the prune takes it within minutes.)
+3. **The tests in every engine** (with round eighty-two's walk (a) 4, or alone, a minute):
+
+   ```
+   npx playwright test tests/e2e/r83k-merged.spec.ts --project webkit --project phone-webkit --project firefox
+   ```
+
+   The spec blocks the service worker, answers the search and the name service by routes, and waits on the very line it reads.
+4. **After the upload, on the site** (four requests):
+
+   ```
+   curl -s "https://cultifolio.com/api/search?q=Echeveria%20peacockii&shape=2&n=3"
+   curl -s "https://cultifolio.com/api/search?q=Bisnaga%20hamatacantha&shape=2&n=3"
+   ```
+
+   Good: the first hit of the first is Echeveria desmetiana, carrying `"merged":["Echeveria peacockii"]`, and the second hit Dudleya pulverulenta; the second's first hit is Ferocactus hamatacanthus with `"merged":["Bisnaga hamatacantha"]`. Then on the front page, type `Echeveria peacockii` in the catalogue's search: the first row reads "Echeveria desmetiana · Echeveria peacockii is merged into this page", and opens `/species/echeveria-desmetiana`; and on Add a plant, the same name typed in the species field lists Echeveria desmetiana first with "Echeveria peacockii is merged into this page; no key filed".
+
+### Round eighty-three: the species page's weight (agent W)
+
+**What changes.** A species page is lighter: `/species/sempervivum-tectorum` from 238 kB of HTML (47 kB gzipped) to about 162 kB (36 kB), a page of the median kind (24 photographs, 84 records) from about 131 kB (28 kB) to about 116 kB (25 kB). Nothing the page shows, says or does changes, by its address or by a link, with scripts or without, on paper, in the dark, on a phone or offline; the computed style of every element of ten species pages is the same as before.
+
+1. **Each record on the regional map is a dot of one short path** (`src/lib/map/still.ts`, `dots`; its colours in `src/lib/ui/theme.css`), not a circle with its class and radius: Sempervivum tectorum's 1,052 were 73.7 kB of its page and are 28.7 kB. Each is still its own shape, so overlapping records darken as before.
+2. **The regional map is drawn once, into the page's HTML**, and its records' places are no longer in the page's data a second time; nor are the common names in other languages, which nothing in the browser reads (`src/lib/server/drawn.ts`, the species load, `src/hooks.server.ts`). A move inside the app asks for the page's data as before and gets all of it, so a tab left open across the deploy, the offline page and a move between species all read what they always did.
+3. **`src/app.html` sends no comment** (2.7 kB of every page of the site; what they said is in `svelte.config.js`), and the class that scopes a component's styles is `s<hash>` instead of `svelte-<hash>` (about 3 kB of a species page).
+4. **The page's own stylesheets stay in its HTML.** As files they took 25.7 kB (5.2 kB gzipped) more off every page, but the page's first paint on a throttled phone came about 150 ms later (measured, the same build otherwise); `svelte.config.js` says so. The install now keeps the species page's own stylesheet, so a species page read by a link from another species page opens offline (it said "No connection": `scripts/offline-files.mjs`). The build's line reads `offline-files: the service worker caches 143 build files at install` (it was 142).
+5. **The live check** says the page's weight: `ok  species page: … kB of HTML, the regional map drawn once`. Before this round's Worker is deployed it only notes `the deployed Worker is older than round eighty-three, and the page's weight is not checked`, so the plan's own `live-check` steps pass either way.
+
+**When.** Any day between two fill days, with `npm run deploy`. **Safe mid-fill**: it is the Worker's code, its pages, the service worker's install list and the live check; nothing the fill, `--index` or section (d) runs reads any of it (the catalogue rows `--index` writes draw their world maps with `worldSvg`, which is unchanged), and `scripts/corpus-plan-full.txt` is not changed. No page needs rebuilding. A device's service worker updates as on every deploy; the pages it kept open offline until then, as before.
+
+**After the deploy** (two requests), in PowerShell:
+
+```
+curl.exe -s -o NUL -w "%{size_download}\n" https://cultifolio.com/species/sempervivum-tectorum
+curl.exe -s -o NUL -H "accept-encoding: gzip" -w "%{size_download}\n" https://cultifolio.com/species/sempervivum-tectorum
+```
+
+Good: the first prints about 162000 (it was 238280), the second about 36000 (it was about 47000). Then open the page in Safari on the iPhone and in Firefox: the close-up map shows its dots, densest where they overlap, as before; in the dark theme the dots stay the accent green.
+
+**The browser suite** has `tests/e2e/r83w-weight.spec.ts`; in WebKit and Firefox its third test also proves that the engine paints a path of no length as a dot (it compares the map with its dots and without).
+
+**For you to decide** (nothing to do unless you choose it): the page's own sheets as files. One line, `inlineStyleThreshold: 0` in `svelte.config.js`, takes another 25.7 kB (5.2 kB gzipped) off every species page and every other page's own sheets out of its HTML. Measured here it delayed the first paint on a throttled phone by about 150 ms, and the cascade then turns (the layout's sheet comes first and about 280 computed styles of ten species pages change), so it would also need the layout's sheet linked last; round eighty-three's report (W) has the figures and the code that did that.
+
 ### Round eighty-two: the owner's walk
 
 This replaces "Round eighty-one: the owner's walk" below, from where your PC is now: round eighty-one is deployed (Worker `87f265f3`), the full plan (`scripts\corpus-plan-full.txt`) is at step 11 of 15, the cultivated-photograph fill, with about 33,000 pages and about three fill days left, and the revert of the FUZZY hotfix is committed (your tree is `r82pc`, commit `15496d8`). It is the whole of round eighty-two for you, in order. The agents' sections after it are notes, for reference; where one says otherwise about when to run something, this walk is the one to follow.

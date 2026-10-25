@@ -53,7 +53,10 @@
   // range and the points they are drawn from, so each was in the page twice, once in the markup and once in its data.
   const worldMap = $derived(worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`));
   // The close-up names the page's own native regions where they fall in its frame, with a scale bar and a light graticule (round eighty-two; the independent review's 12).
-  const regionMap = $derived(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))));
+  // The page's own HTML carries it drawn, and its data only a mark in its place (round eighty-three; $lib/server/drawn):
+  // the mark is what the browser's copy holds, and Svelte keeps the server's markup for it. A move inside the app carries
+  // the records' places, and the map is drawn from them here.
+  const regionMap = $derived(data.points ? regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))) : (data.regionMark ?? ''));
   // The index's own rule, so the page and the catalogue show one name first: the chosen English name, then its alternatives, up to four (round sixty-one; decision 7).
   const common = $derived(data.commonNames); // chosen on the server with the corpus's genera, as the index chooses (round sixty-one; decision 7)
   // A Commons photograph with no thumbnail is not shown: its original would load (round sixty-two; outside review A35).

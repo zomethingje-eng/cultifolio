@@ -216,7 +216,9 @@ i, em { font-style: italic; }
 .map .sea { fill: var(--map-sea); }
 .map .land { fill: var(--map-land); stroke: var(--map-coast); vector-effect: non-scaling-stroke; } /* the colours are the theme's, not the file's, so dark mode draws dark land (round fifty-eight) */
 .map .range { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-opacity: 0.6; stroke-width: 1px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
-.map .occ { fill: var(--accent); fill-opacity: 0.5; }
+/* Each record a dot (round eighty-three; $lib/map/still `dots`): a path of no length in the group, whose round cap is a disc
+   as wide as the group's stroke. The opacity is each path's own, so overlapping records darken as the circles did. */
+.map .occ { fill: none; stroke: var(--accent); stroke-opacity: 0.5; stroke-linecap: round; }
 .map .pin { fill: var(--warm); stroke: var(--card); stroke-width: 1; vector-effect: non-scaling-stroke; }
 /* The close-up's graticule, scale bar and region names (round eighty-two; the independent review's 12). The names are HTML
    over the map, so they keep the page's own size at every width, with a halo of the land's colour to read over lines. */
