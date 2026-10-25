@@ -186,7 +186,11 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   if (/class="[^"]*\bsvelte-[a-z0-9]{5,8}\b/.test(a.text)) console.log(`  note  ${path}: the page scopes its styles with svelte-<hash>: the deployed Worker is older than round eighty-three, and the page's weight is not checked`);
   else {
     const markup = a.text.slice(0, a.text.indexOf('kit.start('));
-    if (markup.includes('data-drawn') || /\bpoints:\[/.test(a.text) || !/"points"/.test(d.text)) fail(`${path}: the regional map's mark was left in the markup, or the records' places are in the page's data, or not in a move's data (round eighty-three, src/lib/server/drawn.ts)`, a);
+    // A move's data as a move into this page asks it: the page's own node (the third) wanted afresh. The request above asks
+    // `01`, which leaves the page's node out ("skip"), so it held no points on any page (the owner's deploy of round
+    // eighty-three failed here, on a sound page).
+    const move = await get(`/species/${species}/__data.json?x-sveltekit-invalidated=001`, { headers: { accept: '*/*' } });
+    if (markup.includes('data-drawn') || /\bpoints:\[/.test(a.text) || !/"points"/.test(move.text)) fail(`${path}: the regional map's mark was left in the markup, or the records' places are in the page's data, or not in a move's data (round eighty-three, src/lib/server/drawn.ts)`, a);
     ok(`species page: ${Math.round(a.text.length / 1024)} kB of HTML, the regional map drawn once`);
   }
 }
