@@ -148,6 +148,7 @@ import { loadKewInfra } from './kew-infra-load';
 import { inatKewFill, kewReading, type InatKewDossier } from '../src/lib/dossier/inat-kew-fill';
 import { inatBatched, wildGroups, CULTIVATED_BATCH } from '../src/lib/dossier/inat-batch';
 import { restoreInatIds } from '../src/lib/dossier/inat-restore';
+import { mendInatPhotos } from '../src/lib/dossier/inat-urls';
 import { openWildStore, heldWild, wildToAsk, mostVotedToAsk, OPEN_WILD_RULE, MOST_VOTED_RULE, WILD_PER_TAXON, type OpenWildStore } from '../src/lib/dossier/inat-open';
 import type { KewInfra } from '../src/lib/dossier/kew-infra';
 import { dossierPath, DOSSIER_V, parseDossier, unchain, Dossier as DossierSchema } from '../src/lib/dossier/schema';
@@ -1429,6 +1430,28 @@ function fillInatRestoreStep(): void {
 }
 
 /**
+ * `--fill inat-urls` (round eighty-three, M; `inat-urls.ts`): every iNaturalist photograph address written the broken way
+ * for a file with no extension (`photos/1223631/square./large.jpg`, a 404) mended to the file's own name (`large.`).
+ * Offline: nothing is asked. Then the index. A second run changes nothing.
+ */
+function fillInatUrlsStep(): void {
+  const store = diskStore();
+  let pages = 0, addresses = 0, read = 0;
+  const lines: string[] = [];
+  for (const f of store.files()) {
+    const d = store.read<{ key?: string; name?: { scientific?: string }; photos?: Array<{ url?: string; thumb?: string }> }>(f);
+    read++;
+    const n = mendInatPhotos(d.photos);
+    if (!n) continue;
+    pages++; addresses += n;
+    if (lines.length < 20) lines.push(`${d.name?.scientific ?? f} [${d.key ?? f}]: ${n} addresses`);
+    store.write(f, d);
+  }
+  console.log(`  ${read} dossiers read: ${addresses} iNaturalist photograph addresses mended on ${pages} pages (a file with no extension, written as …/square./large.jpg)${lines.length ? `:\n${lines.map((l) => `    ${l}`).join('\n')}${pages > lines.length ? `\n    … and ${pages - lines.length} more` : ''}` : '.'}`);
+  writeIndexFromDisk();
+}
+
+/**
  * `--fill inat-ids` (round sixty-nine; triage-68 M5, R46-13; round seventy, triage-69 B1): every stored iNaturalist id
  * checked, thirty a request, inactive ids followed only by the build's rule and earlier follows read again by it; each
  * change printed; then the index.
@@ -1975,6 +1998,7 @@ async function main() {
   if (fill === 'gbif-licence') return fillGbifLicencePhotos();
   if (fill === 'inat-ids') return fillInatIdsStep();
   if (fill === 'inat-restore') return fillInatRestoreStep();
+  if (fill === 'inat-urls') return fillInatUrlsStep();
   if (fill === 'wikidata') return fillWikidataStep();
   if (fill === 'wikidata-names') return fillWikidataNamesStep();
   if (fill === 'summaries') return fillSummaries();
@@ -1985,7 +2009,7 @@ async function main() {
   if (fill === 'kew-links') return fillKewLinksStep();
   if (fill === 'kew-names') return fillKewNamesStep();
   if (fill === 'kew-why') return fillKewWhyStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why or genus`);
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
   // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.

@@ -256,8 +256,9 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
       if (!isOpen(tag) || (tag !== 'cc0' && tag !== 'by' && tag !== 'by-sa')) continue;
       // iNaturalist's stand-in for a photograph it has not yet processed is no photograph (round seventy-two, F8).
       if (placeholderPhoto(p.url)) continue;
-      const base = p.url.replace(/\/square\.(\w+)$/, '');
-      const ext = /\.(\w+)$/.exec(p.url)?.[1] ?? 'jpg';
+      // The base and the extension as iNaturalist writes them: an old photograph's file may have none (`square.`; round
+      // eighty-three, M), and the size is then written with none (`large.`), as the file is named.
+      const { base, ext } = inatBase(p.url) ?? { base: p.url.replace(/\/[^/]*$/, ''), ext: /\.(\w+)(?:\?.*)?$/.exec(p.url)?.[1] ?? 'jpg' };
       if (!p.attribution && tag !== 'cc0') continue; // no attribution line means no author to credit, which CC BY requires (round sixteen, 3)
       // A CC0 line names its observer (`cc0Credit`; round eighty). An e-mail address is never published as the author;
       // with nothing else left, a CC BY or CC BY-SA photograph is not taken (C10).
@@ -301,6 +302,7 @@ export type Verdict = { take: boolean; why: string };
 
 export { epithetsAgree } from '../own-names';
 import { epithetsAgree } from '../own-names';
+import { inatBase } from '../inat-urls';
 
 type GbifMatch = { usageKey?: number; matchType?: string; rank?: string; status?: string; speciesKey?: number; species?: string; canonicalName?: string; alternatives?: GbifMatch[] };
 

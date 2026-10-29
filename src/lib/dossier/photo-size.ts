@@ -23,7 +23,7 @@ export const srcsetOf = (url: string, sizes: PhotoSize[]): string | undefined =>
 };
 const WIDTH: Record<PhotoSize, number> = { square: 75, small: 240, medium: 500, large: 1024 };
 export type PhotoSize = 'square' | 'small' | 'medium' | 'large';
-const INAT = /^(https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/\d+\/)(square|small|medium|large|original)(\.\w+)$/;
+const INAT = /^(https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/\d+\/)(square|small|medium|large|original)(\.\w*)$/; // an extension may be empty (iNaturalist's `medium.`; round eighty-three, M)
 const GBIF = /^https:\/\/api\.gbif\.org\/v1\/image\/cache\/fit-in\/\d+x\//;
 const PX: Record<PhotoSize, number> = { square: 120, small: 160, medium: 400, large: 1024 };
 

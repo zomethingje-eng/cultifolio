@@ -723,8 +723,9 @@ node scripts\corpus-step.mjs --backup r83c
 git show 9823833:scripts/tdwg3-shapes.json > tdwg3-shapes-before.json
 npm run dossier -- --list-r83-repair backups/v3-9f88d4de481d58f3-filled tdwg3-shapes-before.json
 npm run dossier -- --keys rebuild-r83c.txt --offline --grid climate --bulk bulk
+npm run dossier -- --fill inat-urls
 npm run dossier -- --index
-node scripts\corpus-step.mjs --compare backups\v3-<the id the first line named>-r83c
+node scripts\corpus-step.mjs --compare backups\v3-7a1b94be6920ef3f-r83c
 rclone copy static\s\v3 r2:cultifolio/s/v3 --transfers 32 --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --s3-no-check-bucket -P
 rclone copy static\s\v3\manifest.json r2:cultifolio/s/v3 --s3-no-check-bucket -P
 npm run live-check
@@ -737,6 +738,7 @@ npm run live-check
 | `--list-r83-repair` | `about 14,000 pages to derive again: about 2,200 with a record inside a native region's shape now and outside them before, about 13,500 with records left out at a default point → rebuild-r83c.txt` (here, on 702 live pages and their copies of 23 October: 204, 32 and 196). It reads both folders and asks nothing | a few minutes |
 | `--keys rebuild-r83c.txt --offline …` | as (d)'s offline line: the download read once, then the pages, then the index; drops.txt, if written, names a page that lost photographs, an identifier or its range: paste it back | about an hour for the download, about two hours for the pages, then up to 17 minutes for the index |
 | `--index` | `not written again`; if it writes, let it | seconds |
+| `--fill inat-urls` (M) | mends the iNaturalist photograph addresses written for a file with no extension (`photos/1223631/square./large.jpg`, a 404; the live check of 29 October failed on it): `N iNaturalist photograph addresses mended on M pages`, then the index. Offline; a second run says 0 | a minute, then the index (up to 17 minutes) |
 | `--compare …-r83c` | up to about 14,000 dossiers differ (a page the rules leave as it was is written the same); no row "error" | 5 to 10 minutes |
 | the two rclone lines, then `npm run live-check` | the live check passes and names the new corpus id | half an hour to an hour, then a few minutes |
 
