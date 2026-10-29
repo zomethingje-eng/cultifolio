@@ -49,8 +49,12 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   // browser only: back up", and the browser's answer as a toast asking for a backup too.
   await inject(page, plants(6), Date.now() - 86_400_000, 'r82dddddddddddd0');
   await page.goto('/plants'); await ready(page);
-  await expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) });
-  await expect(page.locator('.toast')).toContainText('This browser has not promised to keep your data', { timeout: 15_000 });
+  // Both at once: the toast is shown for a while from the page's load, and under a loaded machine the nudge's wait outlasted
+  // it (round 83's merge, one flake in a whole run).
+  await Promise.all([
+    expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) }),
+    expect(page.locator('.toast')).toContainText('This browser has not promised to keep your data', { timeout: writeWait(15_000, 50) })
+  ]);
   expect(await reminders(page)).toEqual(['nudge']);
   await expect(page.locator('.toast')).not.toContainText('take a backup');
   // Today says it in its own line, once: the layer's line is not added to it (r82base: both).

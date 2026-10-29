@@ -127,7 +127,7 @@ export interface BuildOptions {
   kewEntryOf?: (gbifKey: number) => string | undefined;
 }
 /** The record's words for the records left out at default points (round eighty, A). */
-export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year: scripts/default-points.txt)`;
+export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year: scripts/default-points.txt; a record there its dataset states to within 10 km is kept)`;
 /**
  * The test of a record against a page's native range by the regions' shapes (round eighty, A; review-w 5), and the words
  * the record of the occurrences says of it: how many of the native regions were tested by their shapes and how many by
@@ -744,6 +744,21 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 }
 
 /**
+ * Whether a record is placed precisely enough to read climate at (round thirty; the words above `forClimate` in
+ * `readRecords`): its dataset states an uncertainty of 10 km or less, or, stating none, it is a human observation with
+ * coordinates to three decimals or better. The decimals are counted as the record wrote them: the download's text keeps
+ * a trailing zero ("-33.120" is three) and the parser carries the count; a JSON number from the API has lost it, so the
+ * count from the number is a floor, never an overstatement. A publisher's stated coordinatePrecision of 0.001° or finer
+ * counts the same as three decimals.
+ */
+export function placedForClimate(r: Pick<gbif.GbifOccurrence, 'decimalLatitude' | 'decimalLongitude' | 'coordinateUncertaintyInMeters' | 'basisOfRecord' | 'coordDecimals' | 'coordinatePrecision'>): boolean {
+  if (r.coordinateUncertaintyInMeters != null) return r.coordinateUncertaintyInMeters <= 10_000;
+  const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
+  const written = r.coordDecimals ?? Math.min(decimals(r.decimalLatitude!), decimals(r.decimalLongitude!));
+  return r.basisOfRecord === 'HUMAN_OBSERVATION' && (written >= 3 || (r.coordinatePrecision != null && r.coordinatePrecision <= 0.001));
+}
+
+/**
  * The records of a page read against its range (round seventy-nine, the merge: one reading for a page with a GBIF key
  * and a page without one, whose records come from the keys Kew's synonymy gives it): planted and garden records left
  * out, one record a three-decimal coordinate, each tested against the range's boxes, the open ones kept for the map, the
@@ -781,7 +796,12 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       }
       const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
       // A dataset's default point, not where the plant was found (round eighty, A; `default-points.ts`): left out, counted.
-      if (defaults?.has(dk)) { nDefault++; continue; }
+      // A record there whose dataset states it placed to within 10 km, the climate's own line, is kept (round eighty-three,
+      // C): at 48,357 species the list's 5,187 points are mostly survey plots and local floras that state where they are,
+      // and a centroid's records state no such thing (Mexico's middle: GenBank's samples with no figure; French Guiana's:
+      // 201 km). A record with no figure there is left out, whatever its decimals: a checklist placed at one point
+      // writes them as a phone does.
+      if (defaults?.has(dk) && !(r.coordinateUncertaintyInMeters != null && r.coordinateUncertaintyInMeters <= 10_000)) { nDefault++; continue; }
       const held = byCoord.get(dk);
       // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
       // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
@@ -816,10 +836,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // three) and the parser carries the count; a JSON number from the API has lost it, so the count from the number
       // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
       // coordinatePrecision of 0.001° or finer counts the same as three decimals.
-      const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
-      const written = r.coordDecimals ?? Math.min(decimals(r.decimalLatitude!), decimals(r.decimalLongitude!));
-      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && (written >= 3 || (r.coordinatePrecision != null && r.coordinatePrecision <= 0.001)) : r.coordinateUncertaintyInMeters <= 10_000;
-      if (precise) forClimate.push([lat, lon]);
+      if (placedForClimate(r)) forClimate.push([lat, lon]);
       else nVague++;
     }
   }

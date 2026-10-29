@@ -575,6 +575,44 @@ What changes: searching "Echeveria peacockii" lists Echeveria desmetiana first, 
 
    Good: the first hit of the first is Echeveria desmetiana, carrying `"merged":["Echeveria peacockii"]`, and the second hit Dudleya pulverulenta; the second's first hit is Ferocactus hamatacanthus with `"merged":["Bisnaga hamatacantha"]`. Then on the front page, type `Echeveria peacockii` in the catalogue's search: the first row reads "Echeveria desmetiana · Echeveria peacockii is merged into this page", and opens `/species/echeveria-desmetiana`; and on Add a plant, the same name typed in the species field lists Echeveria desmetiana first with "Echeveria peacockii is merged into this page; no key filed".
 
+### Round eighty-three: the merged page's old address (agent A)
+
+**What changes.** `/species/echeveria-peacockii` answered 404 ("Echeveria peacockii is an older name of two species of the reference, so this address leads to neither …"), because Kew's file also files the name, as Echeveria peacockii Croucher ex T.Moore & Mast., under Dudleya pulverulenta. A merged page's old address now leads to its kept page whatever other page holds the name: a 302 to `/species/echeveria-desmetiana?was=Echeveria%20peacockii`, as `/species/bisnaga-hamatacantha` leads to Ferocactus hamatacanthus. The Worker knows the merge from the kept page's own record (its `occurrences.keys` line for GBIF's key 7530398 carries the old address, `echeveria-peacockii`), so it decides with no new file (`mergedHolder` in `src/lib/server/lookup.ts`, used by the species route's shared-name answer). The kept page says under its name: "Echeveria peacockii is the name of a page merged into this one. It is also an older name of Dudleya pulverulenta, by another author (Echeveria peacockii Croucher ex T.Moore & Mast.)", with a link. The other ten merged addresses answer as before, and a name two pages hold that no merge made is the 404 that names both, as before.
+
+**The Worker alone.** No `--index`, no upload, no page rebuilt: the live corpus `7a1b94be6920ef3f` already holds what the Worker reads. Any day, with `npm run deploy`. Safe whatever the plan is doing: nothing the plan runs reads the changed code.
+
+1. **The tests in every engine** (a minute):
+
+   ```
+   npx vitest run tests/unit/r83a-merged-address.test.ts
+   npx playwright test tests/e2e/r83a-merged-address.spec.ts --project webkit --project phone-webkit --project firefox
+   ```
+
+2. **After the deploy, on the site** (eleven requests), in PowerShell:
+
+   ```
+   foreach ($s in 'echeveria-peacockii','coryphantha-macromeris','rebutia-fidana','weingartia-pulchra','drosera-parvula','ceropegia-nubica','ceropegia-cereiformis','bisnaga-hamatacantha','ceropegia-melanops','copiapoa-boliviana','echeveria-sessiliflora') { curl.exe -s -o NUL -w "$s %{http_code} %{redirect_url}`n" "https://cultifolio.com/species/$s" }
+   ```
+
+   Good: every line `302`, the first to `/species/echeveria-desmetiana?was=Echeveria%20peacockii`, the others where they went before (Pelecyphora macromeris, Weingartia fidaiana, Weingartia canigueralii, Drosera paleacea, Echidnopsis cereiformis twice, Ferocactus hamatacanthus, Ceropegia nigra, Copiapoa calderana, Echeveria pinetorum). A browser that kept the 404 keeps it five minutes. Then open `https://cultifolio.com/species/echeveria-peacockii`: Echeveria desmetiana, with the line above under its name, and its link opens Dudleya pulverulenta.
+
+**The 18 dossiers in the bucket that no index lists** (`bucket-unlisted.txt`). The plan's prune does not remove them: `corpus-step.mjs --prune` deletes only files under `s/v3/p/` that no manifest names (the products and the search's files), and the upload's report of the dossiers (`unlistedReport`) deletes nothing. The site answers each with a 404 whatever the bucket holds. To remove them, in PowerShell in the project folder, after the plan's last step:
+
+```
+Get-Content bucket-unlisted.txt | Where-Object { Test-Path "static\s\v3\$_.json" }
+```
+
+Good: it prints nothing. A key it prints is still on disk, and the next upload would copy it back: stop, and paste the keys back. Then:
+
+```
+Get-Content bucket-unlisted.txt | ForEach-Object { "$_.json" } | Set-Content -Encoding ascii unlisted-files.txt
+rclone delete r2:cultifolio/s/v3 --files-from-raw unlisted-files.txt --dry-run
+rclone delete r2:cultifolio/s/v3 --files-from-raw unlisted-files.txt
+rclone lsf r2:cultifolio/s/v3 --files-only --files-from-raw unlisted-files.txt
+```
+
+The dry run names the 18 files (`g2695104.json`, `g2747305.json`, …) and nothing else; the last line prints nothing once they are gone. Seconds.
+
 ### Round eighty-three: the species page's weight (agent W)
 
 **What changes.** A species page is lighter: `/species/sempervivum-tectorum` from 238 kB of HTML (47 kB gzipped) to about 162 kB (36 kB), a page of the median kind (24 photographs, 84 records) from about 131 kB (28 kB) to about 116 kB (25 kB). Nothing the page shows, says or does changes, by its address or by a link, with scripts or without, on paper, in the dark, on a phone or offline; the computed style of every element of ten species pages is the same as before.
@@ -599,6 +637,114 @@ Good: the first prints about 162000 (it was 238280), the second about 36000 (it 
 **The browser suite** has `tests/e2e/r83w-weight.spec.ts`; in WebKit and Firefox its third test also proves that the engine paints a path of no length as a dot (it compares the map with its dots and without).
 
 **For you to decide** (nothing to do unless you choose it): the page's own sheets as files. One line, `inlineStyleThreshold: 0` in `svelte.config.js`, takes another 25.7 kB (5.2 kB gzipped) off every species page and every other page's own sheets out of its HTML. Measured here it delayed the first paint on a throttled phone by about 150 ms, and the cascade then turns (the layout's sheet comes first and about 280 computed styles of ten species pages change), so it would also need the layout's sheet linked last; round eighty-three's report (W) has the figures and the code that did that.
+
+### Round eighty-three: the dependency delivery
+
+This replaces "Round eighty-one: the dependency delivery, after the upload" below; the owner's decision was to take it after the upload, which is now. It is `package-lock.json` alone. `package.json` does not change: every version below is within the range it already names. Made with `npm update devalue vite vitest @vitest/mocker wrangler source-map-js` (npm 11, so the lock keeps the `libc` marks your npm writes; npm 10's `npm ci` reads it unchanged), read against the registry and `npm audit` on 2026-10-29:
+
+| Package | Was | Now | Why |
+|---|---|---|---|
+| devalue (in the Worker and the pages) | 5.9.2 | 5.9.4 | seven advisories up to 5.9.2, four high (GHSA-mcm9-63f2-9j32 among them) |
+| vite | 8.3.0 | 8.3.5 | six advisories, 8.3.0 to 8.3.2, one high |
+| vitest, @vitest/mocker | 5.0.0 | 5.0.5 | two moderate advisories before 5.0.3 |
+| wrangler | 4.143.0 | 4.155.0 | its miniflare pins undici and sharp exactly |
+| miniflare, workerd | 5.20260926.0-alpha, 1.20260926.1 | 5.20261023.2-beta, 1.20261023.1 | brought by wrangler |
+| undici | 7.29.0 | 7.30.1 | eighteen advisories, six high; eight of them (four high) were published after round eighty-one's reading and need 7.30.1, which only wrangler 4.153.0 or later brings (4.149.0, round eighty-one's choice, brings 7.29.1) |
+| sharp | 0.35.4 | 0.35.5 | one high advisory before 0.35.5 |
+| source-map-js | 1.2.1 | 1.2.2 | one high advisory, 1.0.0 to 1.2.1 |
+| @cloudflare/workers-types | 5.20260927.1 | 5.20261029.1 | wrangler 4.155.0 asks for 5.20261023.1 or later; types only |
+
+With them move the build's own parts (rolldown 1.2.8 to 1.2.15, postcss 8.5.28 to 8.5.32, chai, tinybench and a few more of vitest's); siginfo and stackback go, vitest brings obug 3.0.0, and wrangler now uses the project's esbuild 0.28.2 instead of its own 0.28.1. No package with an install script is added. `npm audit signatures`: 155 packages with verified registry signatures.
+
+**Left, all low, all needing SvelteKit 3** (a major version, not this delivery): cookie 0.6.0 (GHSA-pxg6-pf52-xh8x), two in SvelteKit 2 itself (GHSA-pfhg-q3qv-9q6r, a redirect through an enhanced form submission, and no page here uses `use:enhance`; GHSA-27mw-82g8-phjj, about a prerendered page's `cache-control` header) and deepmerge through the Svelte plugin (GHSA-gcqx-w48m-w2h4). `npm audit --omit=dev` finds nothing, before and after: every package here is a dev dependency, including those that end up in the Worker.
+
+**Measured here on this tree:** the whole unit suite (4,753 passed, 3 skipped, 0 failed; with this round's `tests/unit/r83p-deps.test.ts`, 3 more, run after), `tsc`, `svelte-check` (0 errors, 0 warnings), the whole browser suite strict in Chromium and the Chromium phone (688 passed, 5 skipped, 0 failed, none only on its retry, on wrangler 4.155.0's local server), and a production build. The Worker's upload, by `wrangler deploy --dry-run`: 1,957.04 KiB (502.80 KiB gzipped), against today's 1,956.01 KiB (502.32 KiB); the service worker still caches 144 build files at install. WebKit and Firefox did not run here: step 3 runs them.
+
+**When.** Any evening when no `corpus-step.mjs` or `npm run dossier` is running (`npm ci` replaces the `node_modules` they run from). About an hour, most of it the tests.
+
+1. **The delivery.** Extract the zip over the project folder (it holds `package-lock.json`, and `docs\DEPLOY.md` with this section). Close any window running `npm run dev`, `wrangler dev` or `npm run preview`, and anything else that has a file open under `node_modules` (Windows will not let `npm ci` remove a running `workerd.exe`).
+2. **The new tree:**
+
+   ```
+   npm ci
+   npx wrangler --version
+   ```
+
+   Good: `npm ci` ends `added … packages` with no `ERR!` (it deletes `node_modules` and installs exactly the lock), and the second line prints `4.155.0`. A minute or two. If `npm ci` stops with `EPERM` or `EBUSY`, close what holds the file and run it again. Then, to check: `npm audit` prints `5 low severity vulnerabilities` (the four above and SvelteKit's adapter, which only depends on SvelteKit), and `npm audit --omit=dev` prints `found 0 vulnerabilities`.
+3. **The tests, every engine, strict:**
+
+   ```
+   node scripts\predeploy.mjs --tier=app
+   ```
+
+   About as long as your last `--tier=app` run. Its unit tests now include `r83p-deps`, which fails with `node_modules is not the lock's tree: run npm ci` if step 2 was skipped. Good: every step passed and no test passed only on its retry. Wrangler's local server is the new one (workerd 1.20261023.1), so a failure only here and not on round eighty-three's first part is this delivery's: paste the end back and do not deploy.
+4. **The commit, on its own** (commit `docs\DEPLOY.md` with the round's other files first, so that this commit holds the lock alone and step 7 can undo it by itself):
+
+   ```
+   git add package-lock.json
+   git commit -m "Round 83: the dependency delivery (package-lock.json only)"
+   git push
+   ```
+
+   `git push` only if your tree has a remote; nothing here needs one.
+5. **The deploy:**
+
+   ```
+   node scripts\corpus-ready.mjs && npm run deploy
+   ```
+
+   It ends with the live check passing, as every deploy. What the pages say and do does not change; the build's file names do (a new vite), so devices fetch the service worker's 144 files again, as after any deploy.
+6. **After it**, nothing more: no page needs rebuilding and nothing is uploaded.
+7. **How to go back.** If the live check fails, roll the Worker back first (section 6: Workers → cultifolio → Deployments → roll back; live within a minute). Then put the old tree back:
+
+   ```
+   git checkout HEAD~1 -- package-lock.json && npm ci
+   git commit -m "Back to the lock before the dependency delivery" package-lock.json
+   ```
+
+   (`HEAD~1` while the delivery's commit is the last one; after later commits, name the commit before it instead.) That is the lock you have now (wrangler 4.143.0). Paste the failure back.
+
+### Round eighty-three: the climate review (agent C)
+
+**What changes.** Three rules of the habitat climate, found by reading the live pages after the repair of 29 October:
+
+1. **The regions' shapes hold the whole region** (`scripts\tdwg3-shapes.json`, made by `scripts\dev\r80a-tdwg-shapes.py`). TDWG's tables write the former Yugoslavia's units under YU, a code no state or province carries now, and Slovenia under SL (Sierra Leone's), so Yugoslavia's shape was Croatia and Macedonia: the repair took every record in Slovenia, Bosnia, Serbia, Montenegro and Kosovo out of those species' ranges (Picea omorika now says "the range and the records disagree"). Natural Earth gives Somaliland, South Sudan, Northern Cyprus, the West Bank and Gaza, Aland, Baikonur and Guantanamo Bay no code of TDWG's tables, so their regions' shapes left them out; and 570 islets were lost to the simplification. Of the 101 pages that lost their climate in the repair, 68 lost it to the shapes; about 20 of them get it back with this file.
+2. **A record at a default point is kept when its dataset states it placed to within 10 km** (`src\lib\dossier\build.ts`). At 48,357 species the list your PC wrote holds 5,187 points; of 100 of them read on GBIF, 37 are survey plots and quadrats, 39 local floras' centres, 14 herbarium or municipal localities, 4 atlas grid cells, 2 published localities and 4 a country's or a territory's middle. A plot states where it is (10 m to 1 km); a middle does not (no figure, or 20 to 201 km).
+3. **A 1-in-100 night warmer than the coldest month's mean nightly low sets the extremes aside** (`src\lib\core\lapse.ts`), as a record low warmer than it already did (Eulychnia acida: 7.5 °C against 6.8 °C). The page then reads its cold floor from the coldest mean night and says why. About 1 page in 80 with extremes.
+
+**What the deploy does at once:** rule 3 (the reader applies it to every page as it is read) and /about/how. **What waits for the rebuild below:** rules 1 and 2, on about 14,000 pages.
+
+**Keep `backups\v3-9f88d4de481d58f3-filled`** until the step below has run: it is the only copy that still holds the records the repair took out. (If it is gone, step 3 takes `none` in its place and lists about 20,000 pages instead.) This delivery does not carry `scripts\default-points.txt`; keep yours (5,187 points): the repo's has 19.
+
+**The repair** (one evening with nothing else running; about four and a half hours, five to six with the upload). In the project folder, after this round's delivery is extracted and deployed:
+
+```
+node scripts\corpus-step.mjs --backup r83c
+git show 9823833:scripts/tdwg3-shapes.json > tdwg3-shapes-before.json
+npm run dossier -- --list-r83-repair backups/v3-9f88d4de481d58f3-filled tdwg3-shapes-before.json
+npm run dossier -- --keys rebuild-r83c.txt --offline --grid climate --bulk bulk
+npm run dossier -- --index
+node scripts\corpus-step.mjs --compare backups\v3-<the id the first line named>-r83c
+rclone copy static\s\v3 r2:cultifolio/s/v3 --transfers 32 --checkers 32 --exclude report.txt --exclude manifest.json --exclude manifest.prev.json --s3-no-check-bucket -P
+rclone copy static\s\v3\manifest.json r2:cultifolio/s/v3 --s3-no-check-bucket -P
+npm run live-check
+```
+
+| Line | Good output | Time |
+|---|---|---|
+| `--backup r83c` | `done: backups/v3-<id>-r83c`, the corpus as it is live now | 5 to 15 minutes |
+| `git show 9823833:…` | writes `tdwg3-shapes-before.json` (about 2.2 MB), the file the repair used; `9823833` is your head before this round | seconds |
+| `--list-r83-repair` | `about 14,000 pages to derive again: about 2,200 with a record inside a native region's shape now and outside them before, about 13,500 with records left out at a default point → rebuild-r83c.txt` (here, on 702 live pages and their copies of 23 October: 204, 32 and 196). It reads both folders and asks nothing | a few minutes |
+| `--keys rebuild-r83c.txt --offline …` | as (d)'s offline line: the download read once, then the pages, then the index; drops.txt, if written, names a page that lost photographs, an identifier or its range: paste it back | about an hour for the download, about two hours for the pages, then up to 17 minutes for the index |
+| `--index` | `not written again`; if it writes, let it | seconds |
+| `--compare …-r83c` | up to about 14,000 dossiers differ (a page the rules leave as it was is written the same); no row "error" | 5 to 10 minutes |
+| the two rclone lines, then `npm run live-check` | the live check passes and names the new corpus id | half an hour to an hour, then a few minutes |
+
+Then on the site (about six requests): `https://cultifolio.com/api/dossier/k380733` (Picea omorika) has `"climate":{"status":"ok"` and open records in Serbia; `/species/primula-carniolica` and `/species/salvia-somalensis` show a habitat climate; `/species/eulychnia-acida` (at once, after the deploy) shows no cold floor and says the 1-in-100 night was set aside. The front page's "No climate" chip falls from 9,745. Delete both backups once the site looks right, and a day later run the prune (`node scripts\corpus-step.mjs --prune`, then `--prune --go-on`) for the old products.
+
+**Going back:** copy `backups\v3-<id>-r83c` back over `static\s\v3` and upload it with the two rclone lines (the manifest last).
+
+**The tests:** `tests\unit\r83c-climate.test.ts` (13; 8 fail on the tree before this round, and the file does not load there without `src\lib\dossier\repair-r83.ts`). No browser spec: the page's words for extremes set aside are round eighty's, unchanged.
 
 ### Round eighty-two: the owner's walk
 
@@ -863,6 +1009,8 @@ Then on the site (a few minutes): Crocus nudiflorus at `k327378`; `/species/cero
 **Proved before delivery** (round eighty-one's merge, `docs/REVIEW-ROUND-81.md` section 4): on a copy made like your PC at step 11 (your code, your plan file, 40 real pages, the record of day 1), this delivery extracted over it, then `--status`, a fill day with the network gone, a fill day with iNaturalist answered by a stub, and the review stop, all with `scripts\corpus-step.mjs` run for real.
 
 ### Round eighty-one: the dependency delivery, after the upload (review C4)
+
+Replaced by "Round eighty-three: the dependency delivery" above, which takes wrangler 4.155.0 (undici 7.30.1) instead of 4.149.0, because of advisories published after this reading.
 
 The owner's decision: the advisories review C found in `package-lock.json` are fixed in a separate small delivery **after the fill's upload**, not in round eighty-one, so nothing the fill, the index or the upload runs changes mid-plan. That delivery is `package-lock.json` alone: `package.json` does not change, since every version below is within the range it already names. Read by agent B from the lock, review C's `npm audit` and the registry on 2026-10-23:
 

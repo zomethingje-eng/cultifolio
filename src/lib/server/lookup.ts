@@ -162,6 +162,19 @@ export function lookupOf(c: Loaded, platform: Platform, fetch: Fetch): Lookup {
 }
 
 /**
+ * Of the holders of an older name two species or more hold, the one page the address is the old address of (round
+ * eighty-three, A): a page merged into another by the owner's decision (`scripts/merged-pages.txt`) is answered by the
+ * page it joined, which its record says by the leaving key's old address (`occurrences.keys` with `slug`, as the build's
+ * `mergeKeys` writes it), even where another page holds the same name (Echeveria peacockii, which Kew's file also files
+ * under Dudleya pulverulenta, answered 404 as a shared name). `records` are the holders' dossiers in their order, null
+ * where one was not read. Null unless exactly one record read says so.
+ */
+export function mergedHolder(address: string, holders: readonly Ref[], records: ReadonlyArray<{ occurrences?: { keys?: ReadonlyArray<{ slug?: string }> } } | null | undefined>): Ref | null {
+  const hit = holders.filter((_, i) => (records[i]?.occurrences?.keys ?? []).some((k) => k?.slug === address));
+  return hit.length === 1 ? hit[0] : null;
+}
+
+/**
  * What a species address names, as far as the reference's own names say, before GBIF is asked (the species route's
  * order since round seventy, read through `Lookup` since round seventy-six, so the proof can run it on every address):
  * an address that is not written as a slug moves to its slug; a slug of a page is that page; a genus alone opens its

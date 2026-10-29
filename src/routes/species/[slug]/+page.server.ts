@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer } from '$lib/server/dossiers';
 import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch, type SynonymAnswer } from '$lib/server/synonyms';
-import { lookupOf, addressOf, type Lookup } from '$lib/server/lookup';
+import { lookupOf, addressOf, mergedHolder, type Lookup } from '$lib/server/lookup';
 import { plainName, synonymKey, type Card } from '$dossier/lookups';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
@@ -10,7 +10,7 @@ import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { isPageId, type PageId } from '$core/page-id';
 import { hybridOf, signedName, withKewLinks } from '$core/hybrids';
 import { unitsFor } from '$lib/server/units';
-import { englishNames, generaOf } from '$dossier/index-entry';
+import { englishNames, generaOf, mergedNamesOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
 import { authorKey, plainlyAnother } from '$dossier/authors';
 import { regionSvg } from '$lib/map/still';
@@ -57,6 +57,14 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     if (at.kind === 'shared') {
       const asName = at.name;
       const records = await Promise.all(at.holders.map(([k]) => getDossier(platform, fetch, k, c).catch(() => null)));
+      // The old address of a page merged into one of them by the owner's decision goes to that page, as every merged
+      // page's old address does (round eighty-three, A; `mergedHolder`): `/species/echeveria-peacockii` answered this 404,
+      // because Kew's file also files the name under Dudleya pulverulenta. The kept page says so under its name.
+      const kept = mergedHolder(params.slug, at.holders, records);
+      if (kept) {
+        setHeaders({ 'cache-control': records.every(Boolean) ? 'public, max-age=86400' : 'no-store' });
+        redirect(302, `/species/${kept[1]}?was=${encodeURIComponent(asName)}`);
+      }
       // A record not read is the next visit's to read again: kept by no one (rule 2), where a full answer is kept five minutes.
       setHeaders({ 'cache-control': records.every(Boolean) ? 'public, max-age=300' : 'no-store' });
       const g = asName.split(' ')[0];
@@ -200,7 +208,15 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // accepted this species as Annona muricata, the soursop's name).
   const acceptedElsewhere = shownWas ? [await look.accepted(wasPlain)].filter((e): e is NonNullable<typeof e> => !!e && e[0] !== key).map(([, slug, name]) => ({ slug, name })) : [];
   const wasHeld = shownWas ? await look.older(synonymKey(shownWas)) : null;
-  const sharedWith = wasHeld && 'many' in wasHeld ? wasHeld.many.filter(([k, slug]) => k !== key && !acceptedElsewhere.some((a) => a.slug === slug)).map(([, slug, name]) => ({ slug, name })) : [];
+  const sharedRefs = wasHeld && 'many' in wasHeld ? wasHeld.many.filter(([k, slug]) => k !== key && !acceptedElsewhere.some((a) => a.slug === slug)) : [];
+  // The old name of a page merged into this one by the owner's decision (round eighty-three, A): the record's keys with an
+  // old address (`mergedNamesOf`). Its old address leads here even where other pages hold the name (`mergedHolder`), so
+  // the line says the name is merged here, and also an older name of each other page, with the author under which that
+  // page's record holds it, read from its dossier (Echeveria peacockii Croucher ex T.Moore & Mast., of Dudleya pulverulenta).
+  const wasMerged = !!shownWas && mergedNamesOf(d.name.scientific, d.occurrences.keys).some((n) => plain(n) === wasPlain);
+  const sharedWith = wasMerged
+    ? await Promise.all(sharedRefs.map(async ([k, slug, name]) => ({ slug, name, authors: authorsOf(shownWas!, (await getDossier(platform, fetch, k, c).catch(() => null))?.name.synonyms ?? []) })))
+    : sharedRefs.map(([, slug, name]) => ({ slug, name }));
   // The record's older names that are another species' accepted name here: shown with the record's author, and said not
   // to be that species (round seventy-one; S-F3: 169 pages, "Also known as … Annona muricata" on Annona montana).
   const olderOwn = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))];
@@ -245,7 +261,9 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */
     was: shownWas,
     /** The other species of the reference that hold the old name too: the line then says so, and never that GBIF accepts this species as it (round seventy; triage-69 F1). */
-    wasShared: sharedWith,
+    wasShared: sharedWith as Array<{ slug: string; name: string; authors?: string[] }>,
+    /** The old name is that of a page merged into this one by the owner's decision (round eighty-three, A). */
+    wasMerged,
     /** Species of the reference accepted under the old name: the line names them, and never says the backbone accepts this species as it. */
     wasAcceptedBy: acceptedElsewhere,
     /** The old name is one the backbone files under a subspecies or variety of this species, by its cached answer. */

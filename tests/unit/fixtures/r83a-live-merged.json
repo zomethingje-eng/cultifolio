@@ -1,0 +1,647 @@
+{
+ "_": "The 11 merged pages' old addresses as the live site answered them on 2026-10-29 (corpus 7a1b94be6920ef3f, Worker cb66f298), and the index entries (/api/search) and dossier fields (/api/dossier: name.authorship, name.synonyms, occurrences.keys) of every page that holds one of the 11 names. Read by tests/unit/r83a-merged-address.test.ts.",
+ "corpus": "7a1b94be6920ef3f",
+ "live": {
+  "coryphantha-macromeris": "302 /species/pelecyphora-macromeris?was=Coryphantha%20macromeris",
+  "rebutia-fidana": "302 /species/weingartia-fidaiana?was=Rebutia%20fidana",
+  "echeveria-peacockii": "404",
+  "weingartia-pulchra": "302 /species/weingartia-canigueralii?was=Weingartia%20pulchra",
+  "drosera-parvula": "302 /species/drosera-paleacea?was=Drosera%20parvula",
+  "ceropegia-nubica": "302 /species/echidnopsis-cereiformis?was=Ceropegia%20nubica",
+  "ceropegia-cereiformis": "302 /species/echidnopsis-cereiformis?was=Ceropegia%20cereiformis",
+  "bisnaga-hamatacantha": "302 /species/ferocactus-hamatacanthus?was=Bisnaga%20hamatacantha",
+  "ceropegia-melanops": "302 /species/ceropegia-nigra?was=Ceropegia%20melanops",
+  "copiapoa-boliviana": "302 /species/copiapoa-calderana?was=Copiapoa%20boliviana",
+  "echeveria-sessiliflora": "302 /species/echeveria-pinetorum?was=Echeveria%20sessiliflora"
+ },
+ "entries": [
+  {
+   "key": "k502875",
+   "gbif": 3574112,
+   "slug": "ceropegia-nigra",
+   "name": "Ceropegia nigra",
+   "family": "Apocynaceae",
+   "photos": 0,
+   "open": 16,
+   "climate": "ok",
+   "syn": [
+    "Ceropegia kroboensis",
+    "Ceropegia recurvata",
+    "Ceropegia melanops",
+    "Ceropegia microgaster"
+   ],
+   "merged": [
+    "Ceropegia melanops"
+   ]
+  },
+  {
+   "key": "k2735922",
+   "gbif": 7284393,
+   "slug": "copiapoa-calderana",
+   "name": "Copiapoa calderana",
+   "family": "Cactaceae",
+   "photos": 66,
+   "open": 0,
+   "climate": "none",
+   "syn": [
+    "Echinocactus bolivianus",
+    "Copiapoa atacamensis var. calderana",
+    "Copiapoa calderana var. spinosior",
+    "Copiapoa lembckei",
+    "Copiapoa boliviana",
+    "Copiapoa atacamensis"
+   ],
+   "merged": [
+    "Copiapoa boliviana"
+   ]
+  },
+  {
+   "key": "k64497",
+   "gbif": 3190812,
+   "slug": "drosera-paleacea",
+   "name": "Drosera paleacea",
+   "family": "Droseraceae",
+   "photos": 39,
+   "open": 400,
+   "climate": "ok",
+   "syn": [
+    "Drosera micrantha",
+    "Drosera minutiflora",
+    "Drosera secunda",
+    "Drosera parvula"
+   ],
+   "hom": [
+    "Drosera pygmaea"
+   ],
+   "merged": [
+    "Drosera parvula"
+   ]
+  },
+  {
+   "key": "k2778991",
+   "gbif": 2985894,
+   "slug": "dudleya-pulverulenta",
+   "name": "Dudleya pulverulenta",
+   "family": "Crassulaceae",
+   "photos": 72,
+   "open": 322,
+   "climate": "ok",
+   "syn": [
+    "Cotyledon peacockii",
+    "Cotyledon pulverulenta",
+    "Echeveria argentea",
+    "Echeveria farinosa",
+    "Echeveria peacockii",
+    "Echeveria pulverulenta"
+   ],
+   "older": [
+    "Sedum pulverulentum"
+   ]
+  },
+  {
+   "key": "k2781125",
+   "slug": "echeveria-desmetiana",
+   "name": "Echeveria desmetiana",
+   "family": "Crassulaceae",
+   "photos": 3,
+   "open": 3,
+   "climate": "ok",
+   "syn": [
+    "Cotyledon desmetiana",
+    "Echeveria subsessilis",
+    "Echeveria peacockii"
+   ],
+   "merged": [
+    "Echeveria peacockii"
+   ]
+  },
+  {
+   "key": "k2781299",
+   "gbif": 4199517,
+   "slug": "echeveria-pinetorum",
+   "name": "Echeveria pinetorum",
+   "family": "Crassulaceae",
+   "photos": 4,
+   "open": 8,
+   "climate": "ok",
+   "syn": [
+    "Echeveria huehueteca",
+    "Echeveria sessiliflora var. pinetorum",
+    "Echeveria sessiliflora",
+    "Echeveria corallina"
+   ],
+   "merged": [
+    "Echeveria sessiliflora"
+   ]
+  },
+  {
+   "key": "k505095",
+   "slug": "echidnopsis-cereiformis",
+   "name": "Echidnopsis cereiformis",
+   "family": "Apocynaceae",
+   "photos": 12,
+   "open": 4,
+   "climate": "none",
+   "syn": [
+    "Apteranthes cylindrica",
+    "Apteranthes tessellata",
+    "Stapelia cylindrica",
+    "Ceropegia nubica",
+    "Ceropegia cereiformis",
+    "Boucerosia cylindrica"
+   ],
+   "older": [
+    "Echidnopsis cylindrica",
+    "Echidnopsis nubica",
+    "Echidnopsis tessellata"
+   ],
+   "merged": [
+    "Ceropegia cereiformis",
+    "Ceropegia nubica"
+   ]
+  },
+  {
+   "key": "k2808164",
+   "slug": "ferocactus-hamatacanthus",
+   "name": "Ferocactus hamatacanthus",
+   "family": "Cactaceae",
+   "photos": 63,
+   "open": 460,
+   "climate": "ok",
+   "syn": [
+    "Echinocactus hamatacanthus",
+    "Hamatocactus hamatacanthus",
+    "Bisnaga hamatacantha"
+   ],
+   "merged": [
+    "Bisnaga hamatacantha"
+   ]
+  },
+  {
+   "key": "k3294939",
+   "gbif": 11798439,
+   "slug": "pelecyphora-macromeris",
+   "name": "Pelecyphora macromeris",
+   "family": "Cactaceae",
+   "photos": 24,
+   "open": 215,
+   "climate": "ok",
+   "syn": [
+    "Coryphantha macromeris"
+   ],
+   "merged": [
+    "Coryphantha macromeris"
+   ]
+  },
+  {
+   "key": "k2465834",
+   "gbif": 3948341,
+   "slug": "weingartia-canigueralii",
+   "name": "Weingartia canigueralii",
+   "family": "Cactaceae",
+   "photos": 29,
+   "open": 13,
+   "climate": "ok",
+   "syn": [
+    "Aylostera zavaletae",
+    "Rebutia canigueralii",
+    "Rebutia canigueralii subsp. canigueralii",
+    "Sulcorebutia arachnites",
+    "Sulcorebutia atrospinosa",
+    "Sulcorebutia brevispina"
+   ],
+   "older": [
+    "Sulcorebutia callecallensis",
+    "Sulcorebutia canigueralii",
+    "Sulcorebutia cantargalloensis",
+    "Sulcorebutia christiei",
+    "Sulcorebutia elizabethae",
+    "Sulcorebutia heliosoides",
+    "Sulcorebutia insperata",
+    "Sulcorebutia lamprochlora",
+    "Sulcorebutia luteiflora",
+    "Sulcorebutia naunacaensis",
+    "Sulcorebutia pasopayana",
+    "Sulcorebutia perplexiflora",
+    "Sulcorebutia pirhuaniensis",
+    "Sulcorebutia ritteri",
+    "Sulcorebutia roberto-vasquezii",
+    "Sulcorebutia rubroaurea",
+    "Sulcorebutia slabana",
+    "Sulcorebutia tarabucoensis",
+    "Sulcorebutia tarvitaensis",
+    "Sulcorebutia viridis",
+    "Sulcorebutia zavaletae",
+    "Rebutia caracarensis",
+    "Rebutia inflexiseta",
+    "Rebutia pulchera",
+    "Rebutia pulchra",
+    "Rebutia rauschii",
+    "Sulcorebutia albaoides",
+    "Sulcorebutia albiareolata",
+    "Sulcorebutia callichroma",
+    "Sulcorebutia caracarensis",
+    "Sulcorebutia crispata",
+    "Sulcorebutia frankiana",
+    "Sulcorebutia gemmae",
+    "Sulcorebutia gerosenilis",
+    "Sulcorebutia hertusii",
+    "Sulcorebutia inflexiseta",
+    "Sulcorebutia pulchra",
+    "Sulcorebutia rauschii",
+    "Weingartia brevispina",
+    "Weingartia callecallensis",
+    "Weingartia cantargalloensis",
+    "Weingartia elizabethae",
+    "Weingartia frey-juckeri",
+    "Weingartia heliosoides",
+    "Weingartia naunacaensis",
+    "Weingartia pasopayana",
+    "Weingartia perplexiflora",
+    "Weingartia ritteri",
+    "Weingartia roberto-vasquezii",
+    "Weingartia rubroaurea",
+    "Weingartia tarabucoensis",
+    "Weingartia tarvitaensis",
+    "Weingartia zavaletae",
+    "Weingartia pulchra",
+    "Weingartia albaoides",
+    "Weingartia aureispina",
+    "Weingartia caracarensis",
+    "Weingartia crispata",
+    "Weingartia frankiana",
+    "Weingartia gemmae",
+    "Weingartia inflexiseta",
+    "Weingartia pulchera",
+    "Weingartia rauschii",
+    "Weingartia tarabucina"
+   ],
+   "merged": [
+    "Weingartia pulchra"
+   ]
+  },
+  {
+   "key": "k2465732",
+   "gbif": 7281301,
+   "slug": "weingartia-fidaiana",
+   "name": "Weingartia fidaiana",
+   "family": "Cactaceae",
+   "photos": 15,
+   "open": 4,
+   "climate": "ok",
+   "syn": [
+    "Rebutia fidana",
+    "Echinocactus fidanus"
+   ],
+   "merged": [
+    "Rebutia fidana"
+   ]
+  }
+ ],
+ "records": {
+  "k2465732": {
+   "authorship": "(Backeb.) Werderm.",
+   "synonyms": [
+    "Rebutia fidana (Backeb.) D.R.Hunt",
+    "Echinocactus fidanus Backeb."
+   ],
+   "keys": [
+    {
+     "key": 7906297,
+     "name": "Rebutia fidana (Backeb.) D.R.Hunt",
+     "kew": "Kew's file holds it as Rebutia fidana (Backeb.) D.R.Hunt (synonym under Weingartia fidana (Backeb.) Werderm.)",
+     "n": 0,
+     "from": "api",
+     "slug": "rebutia-fidana"
+    }
+   ]
+  },
+  "k2465834": {
+   "authorship": "(Cárdenas) F.H.Brandt",
+   "synonyms": [
+    "Aylostera zavaletae Cárdenas",
+    "Rebutia canigueralii Cárdenas",
+    "Rebutia canigueralii subsp. canigueralii",
+    "Sulcorebutia arachnites Slaba & Sorma",
+    "Sulcorebutia atrospinosa J.de Vries",
+    "Sulcorebutia brevispina (F.H.Brandt) Pilbeam",
+    "Sulcorebutia callecallensis (F.H.Brandt) Pilbeam",
+    "Sulcorebutia canigueralii (Cárdenas) Backeb.",
+    "Sulcorebutia canigueralii (Cárdenas) Buining & Donald",
+    "Sulcorebutia canigueralii subsp. brevispina (F.H.Brandt) Horácek",
+    "Sulcorebutia cantargalloensis Gertel, Jucker & J.de Vries",
+    "Sulcorebutia cantargalloensis var. torrepampensis Gertel & Jucker",
+    "Sulcorebutia christiei B.Bates, Halda, Hertus & Horácek",
+    "Sulcorebutia elizabethae J.de Vries",
+    "Sulcorebutia heliosoides P.Lechner & Draxler",
+    "Sulcorebutia insperata Rol.Müll.",
+    "Sulcorebutia lamprochlora J.de Vries",
+    "Sulcorebutia luteiflora J.de Vries",
+    "Sulcorebutia naunacaensis J.de Vries",
+    "Sulcorebutia pasopayana (F.H.Brandt) Gertel",
+    "Sulcorebutia pasopayana (F.H.Brandt) Pilbeam, 1985",
+    "Sulcorebutia perplexiflora (F.H.Brandt) Gertel",
+    "Sulcorebutia perplexiflora (F.H.Brandt) Pilbeam",
+    "Sulcorebutia pirhuaniensis Gertel & Jucker",
+    "Sulcorebutia ritteri (F.H.Brandt) F.Ritter",
+    "Sulcorebutia roberto-vasquezii Diers & Krahn",
+    "Sulcorebutia rubroaurea (F.H.Brandt) Pilbeam",
+    "Sulcorebutia slabana Horácek",
+    "Sulcorebutia tarabucoensis Rausch",
+    "Sulcorebutia tarabucoensis subsp. aureiflora (Rausch) Horácek",
+    "Sulcorebutia tarabucoensis subsp. callecallensis (F.H.Brandt) Gertel",
+    "Sulcorebutia tarabucoensis subsp. hermosana Horácek & Megarejo",
+    "Sulcorebutia tarabucoensis subsp. lindae Halda, Hertus & Horácek",
+    "Sulcorebutia tarabucoensis subsp. pasopayana (F.H.Brandt) Gertel",
+    "Sulcorebutia tarabucoensis subsp. patriciae B.Bates, Halda, Hertus & Horácek",
+    "Sulcorebutia tarabucoensis var. aureiflora (Rausch) K.Augustin & Gertel",
+    "Sulcorebutia tarabucoensis var. callecallensis (F.H.Brandt) K.Augustin & Gertel",
+    "Sulcorebutia tarabucoensis var. tarabucoensis",
+    "Sulcorebutia tarvitaensis Gertel & P.Lechner",
+    "Sulcorebutia verticillacantha f. brevispina (F.H.Brandt) Pilbeam",
+    "Sulcorebutia verticillacantha f. brevispina (F.H.Brandt) Pilbeam ex Rausch",
+    "Sulcorebutia verticillacantha var. aureiflora Rausch",
+    "Sulcorebutia verticillacantha var. ritteri (F.H.Brandt) Donald & Krahn",
+    "Sulcorebutia viridis P.Lechner & Draxler",
+    "Sulcorebutia zavaletae (Cárdenas) Backeb.",
+    "Weingartia brevispina F.H.Brandt",
+    "Weingartia callecallensis F.H.Brandt",
+    "Weingartia cantargalloensis (Gertel, Jucker & J.de Vries) Hentzschel & K.Augustin",
+    "Weingartia elizabethae (J.de Vries) Hentzschel & K.Augustin",
+    "Weingartia frey-juckeri Diers & K.Augustin",
+    "Weingartia gemmae subsp. naunacaensis (J.de Vries) Gertel",
+    "Weingartia gemmae var. elizabethae (J.de Vries) Gertel",
+    "Weingartia gemmae var. naunacaensis (J.de Vries) Gertel",
+    "Weingartia heliosoides (P.Lechner & Draxler) Hentzschel & K.Augustin",
+    "Weingartia naunacaensis (J.de Vries) Hentzschel & K.Augustin",
+    "Weingartia pasopayana F.H.Brandt",
+    "Weingartia perplexiflora F.H.Brandt",
+    "Weingartia ritteri F.H.Brandt",
+    "Weingartia roberto-vasquezii (Diers & Krahn) Hentzschel & K.Augustin",
+    "Weingartia rubroaurea F.H.Brandt",
+    "Weingartia tarabucoensis (Rausch) F.H.Brandt",
+    "Weingartia tarabucoensis var. aureiflora (Rausch) Hentzschel & K.Augustin",
+    "Weingartia tarabucoensis var. callecallensis (F.H.Brandt) Hentzschel & K.Augustin",
+    "Weingartia tarvitaensis (Gertel & P.Lechner) Hentzschel & K.Augustin",
+    "Weingartia zavaletae (Cárdenas) F.H.Brandt",
+    "Weingartia pulchra (Cárdenas) F.H.Brandt",
+    "Rebutia canigueralii subsp. crispata (Rausch) Donald",
+    "Rebutia canigueralii subsp. pulchra (Cárdenas) Donald",
+    "Rebutia caracarensis Cárdenas",
+    "Rebutia inflexiseta Cárdenas",
+    "Rebutia pulchera Cárdenas",
+    "Rebutia pulchra Cárdenas",
+    "Rebutia rauschii (G.Frank) D.R.Hunt",
+    "Sulcorebutia albaoides (F.H.Brandt) Pilbeam",
+    "Sulcorebutia albiareolata (Slaba & Sorma) J.de Vries",
+    "Sulcorebutia callichroma J.de Vries",
+    "Sulcorebutia callichroma var. longispina (Slaba & Sorma) J.de Vries",
+    "Sulcorebutia canigueralii var. atropurpurea Rausch",
+    "Sulcorebutia caracarensis (Cárdenas) Donald",
+    "Sulcorebutia crispata Rausch",
+    "Sulcorebutia crispata subsp. aureicapillata Halda, Hertus & Horácek",
+    "Sulcorebutia crispata subsp. hertusii Halda & Horácek",
+    "Sulcorebutia crispata subsp. weberi Horácek",
+    "Sulcorebutia crispata var. auricapillata Halda et al.",
+    "Sulcorebutia crispata var. muelleri Gertel",
+    "Sulcorebutia frankiana Rausch",
+    "Sulcorebutia frankiana var. aureispina Rausch",
+    "Sulcorebutia frankiana var. intermedia Slaba & Sorma",
+    "Sulcorebutia frankiana var. rectispina Slaba & Sorma",
+    "Sulcorebutia frankiana var. variabilis Slaba & Sorma",
+    "Sulcorebutia gemmae Mosti & Rovida",
+    "Sulcorebutia gerosenilis Ríha & Arandia",
+    "Sulcorebutia hertusii (Halda & Horácek) Halda & Horácek",
+    "Sulcorebutia hertusii subsp. aureicapillata (Halda, Hertus & Horácek) Halda, Hertus & Horácek",
+    "Sulcorebutia hertusii var. auricapillata (Halda et al.) Halda et al.",
+    "Sulcorebutia inflexiseta (Cárdenas) Donald",
+    "Sulcorebutia pulchra (Cárdenas) Donald",
+    "Sulcorebutia pulchra subsp. lenkae Halda, Hertus & Horácek",
+    "Sulcorebutia pulchra var. albiareolata Slaba & Sorma",
+    "Sulcorebutia pulchra var. longispina Slaba & Sorma",
+    "Sulcorebutia rauschii G.Frank",
+    "Sulcorebutia tarabucoensis subsp. hertusii (Halda & Horácek) Gertel & R.Wahl",
+    "Sulcorebutia tarabucoensis subsp. rauschii (G.Frank) Halda & Malina",
+    "Weingartia albaoides F.H.Brandt",
+    "Weingartia albaoides subsp. subfusca F.H.Brandt",
+    "Weingartia albaoides subsp. subfuscata F.H.Brandt",
+    "Weingartia aureispina (Rausch) F.H.Brandt",
+    "Weingartia caracarensis (Cárdenas) F.H.Brandt",
+    "Weingartia crispata (Rausch) F.H.Brandt",
+    "Weingartia crispata subsp. hertusii (Halda & Horácek) Lodé",
+    "Weingartia frankiana (Rausch) F.H.Brandt",
+    "Weingartia gemmae (Mosti & Rovida) Hentzschel & K.Augustin",
+    "Weingartia inflexiseta (Cárdenas) F.H.Brandt",
+    "Weingartia pulchera (Cárdenas) F.H.Brandt, 1978",
+    "Weingartia rauschii (Frank) F.H.Brandt",
+    "Weingartia tarabucina F.H.Brandt"
+   ],
+   "keys": [
+    {
+     "key": 3947359,
+     "name": "Weingartia pulchra (Cárdenas) F.H.Brandt",
+     "kew": "Kew's file holds it as Weingartia pulchra (Cárdenas) F.H.Brandt (synonym under Weingartia canigueralii (Cárdenas) F.H.Brandt)",
+     "n": 0,
+     "from": "download",
+     "slug": "weingartia-pulchra"
+    }
+   ]
+  },
+  "k2735922": {
+   "authorship": "F.Ritter",
+   "synonyms": [
+    "Copiapoa atacamensis var. calderana (F.Ritter) A.E.Hoffm.",
+    "Copiapoa calderana var. spinosior F.Ritter",
+    "Copiapoa lembckei Backeb.",
+    "Copiapoa boliviana (Pfeiff.) F.Ritter",
+    "Copiapoa atacamensis Middled.",
+    "Copiapoa calderana subsp. atacamensis (Middled.) D.R.Hunt",
+    "Copiapoa calderiana subsp. atacamensis (Middled.) D.R.Hunt",
+    "Echinocactus bolivianus Pfeiff."
+   ],
+   "keys": [
+    {
+     "key": 3959296,
+     "name": "Copiapoa boliviana (Pfeiff.) F.Ritter",
+     "kew": "Kew's file holds it as Copiapoa boliviana (Pfeiff.) F.Ritter (synonym under Copiapoa calderana F.Ritter)",
+     "n": 0,
+     "from": "download",
+     "slug": "copiapoa-boliviana"
+    }
+   ]
+  },
+  "k2778991": {
+   "authorship": "(Nutt.) Britton & Rose",
+   "synonyms": [
+    "Cotyledon peacockii (Croucher) Baker",
+    "Cotyledon pulverulenta (Nutt.) Baker",
+    "Dudleya pulverulenta subsp. pulverulenta",
+    "Dudleya pulverulenta subsp. typica Moran",
+    "Echeveria argentea Lem.",
+    "Echeveria farinosa VanHoutte",
+    "Echeveria peacockii Croucher ex T.Moore & Mast.",
+    "Echeveria pulverulenta Nutt.",
+    "Sedum pulverulentum (Nutt.)"
+   ],
+   "keys": []
+  },
+  "k2781125": {
+   "authorship": "De Smet ex É.Morren",
+   "synonyms": [
+    "Cotyledon desmetiana (De Smet ex É.Morren) Hemsl.",
+    "Echeveria desmetiana columnaris De Smet ex T.Moore & Mast.",
+    "Echeveria subsessilis Rose"
+   ],
+   "keys": [
+    {
+     "key": 4202274,
+     "name": "Echeveria desmetiana De Smet ex É.Morren",
+     "kew": "Kew's file holds it as Echeveria desmetiana De Smet ex É.Morren (accepted)",
+     "n": 33,
+     "from": "download"
+    },
+    {
+     "key": 5688475,
+     "name": "Cotyledon desmetiana (De Smet ex É.Morren) Hemsl.",
+     "kew": "Kew's file holds it as Cotyledon desmetiana (De Smet ex É.Morren) Hemsl. (synonym under Echeveria desmetiana De Smet ex É.Morren)",
+     "n": 0,
+     "from": "api"
+    },
+    {
+     "key": 7530398,
+     "name": "Echeveria peacockii",
+     "kew": "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)",
+     "n": 0,
+     "from": "download",
+     "slug": "echeveria-peacockii"
+    }
+   ]
+  },
+  "k2781299": {
+   "authorship": "Rose",
+   "synonyms": [
+    "Echeveria huehueteca Standl. & Steyerm.",
+    "Echeveria sessiliflora var. pinetorum (Rose) Poelln.",
+    "Echeveria sessiliflora Rose",
+    "Echeveria corallina Alexander"
+   ],
+   "keys": [
+    {
+     "key": 7334118,
+     "name": "Echeveria sessiliflora Rose",
+     "kew": "Kew's file holds it as Echeveria sessiliflora Rose (synonym under Echeveria pinetorum Rose)",
+     "n": 0,
+     "from": "download",
+     "slug": "echeveria-sessiliflora"
+    }
+   ]
+  },
+  "k2808164": {
+   "authorship": "(Muehlenpf.) Britton & Rose",
+   "synonyms": [
+    "Echinocactus hamatacanthus Muehlenpf.",
+    "Hamatocactus hamatacanthus (Muehlenpf.) F.M.Knuth"
+   ],
+   "keys": [
+    {
+     "key": 7281739,
+     "name": "Bisnaga hamatacantha",
+     "kew": "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)",
+     "n": 2000,
+     "from": "download",
+     "slug": "bisnaga-hamatacantha"
+    }
+   ]
+  },
+  "k3294939": {
+   "authorship": "(Engelm.) D.Aquino & Dan.Sánchez",
+   "synonyms": [
+    "Coryphantha macromeris (Engelm.) Lem."
+   ],
+   "keys": [
+    {
+     "key": 3084426,
+     "name": "Coryphantha macromeris (Engelm.) Lem.",
+     "kew": "Kew's file holds it as Coryphantha macromeris (Engelm.) Britton & Rose (synonym under Pelecyphora macromeris (Engelm.) D.Aquino & Dan.Sánchez)",
+     "n": 900,
+     "from": "api",
+     "slug": "coryphantha-macromeris"
+    }
+   ]
+  },
+  "k502875": {
+   "authorship": "N.E.Br.",
+   "synonyms": [
+    "Ceropegia kroboensis N.E.Br.",
+    "Ceropegia recurvata M.G.Gilbert",
+    "Ceropegia melanops H.Huber",
+    "Ceropegia microgaster M.G.Gilbert"
+   ],
+   "keys": [
+    {
+     "key": 3574291,
+     "name": "Ceropegia melanops H.Huber",
+     "kew": "Kew's file holds it as Ceropegia melanops H.Huber (synonym under Ceropegia nigra N.E.Br.)",
+     "n": 0,
+     "from": "download",
+     "slug": "ceropegia-melanops"
+    }
+   ]
+  },
+  "k505095": {
+   "authorship": "Hook.f.",
+   "synonyms": [
+    "Apteranthes cylindrica (Brongn.) Decne.",
+    "Apteranthes tessellata Decne.",
+    "Echidnopsis cereiformis var. brunnea A.Berger",
+    "Stapelia cylindrica Horkel ex Hook.f.",
+    "Ceropegia nubica (N.E.Br.) Bruyns",
+    "Ceropegia cereiformis (Hook.f.) Bruyns",
+    "Echidnopsis cereiformis var. obscura A.Berger",
+    "Echidnopsis cylindrica (Brongn.) K.Schum.",
+    "Echidnopsis nubica N.E.Br.",
+    "Echidnopsis tessellata (Decne.) K.Schum.",
+    "Boucerosia cylindrica Brongn."
+   ],
+   "keys": [
+    {
+     "key": 9574874,
+     "name": "Ceropegia cereiformis",
+     "kew": "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)",
+     "n": 227,
+     "from": "download",
+     "slug": "ceropegia-cereiformis"
+    },
+    {
+     "key": 9592399,
+     "name": "Ceropegia nubica",
+     "kew": "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)",
+     "n": 2,
+     "from": "api",
+     "slug": "ceropegia-nubica"
+    }
+   ]
+  },
+  "k64497": {
+   "authorship": "DC.",
+   "synonyms": [
+    "Drosera micrantha Lehm.",
+    "Drosera minutiflora Planch.",
+    "Drosera pygmaea Lehm.",
+    "Drosera secunda R.Br.",
+    "Drosera secunda R.Br. ex Diels",
+    "Drosera parvula Planch."
+   ],
+   "keys": [
+    {
+     "key": 3190985,
+     "name": "Drosera parvula Planch.",
+     "kew": "Kew's file holds it as Drosera parvula Planch. (synonym under Drosera paleacea DC.)",
+     "n": 0,
+     "from": "download",
+     "slug": "drosera-parvula"
+    }
+   ]
+  }
+ }
+}

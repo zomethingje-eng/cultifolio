@@ -37,7 +37,8 @@ describe('D4: the Wikidata names line over a name the page does not show', () =>
 describe("D1: /about/how says round eighty's repair as what it is until it is live", () => {
   const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
   it("the regions' shapes and the default points", () => {
-    expect(how).toMatch(/The regions' shapes and the default points above are round eighty's rules, applied to the live pages by a repair that reaches the site with the upload after the daily fill of cultivated photographs \(due at the end of October 2026\): until a page has been through it, its map, marker and climate may still take in a record at a default point or outside its regions' shapes/);
+    // Round eighty-three (C): the repair was uploaded on 29 October 2026; round eighty-three's corrections wait for a page's next derivation.
+    expect(how).toMatch(/The regions' shapes and the default points above are round eighty's rules, applied to the live pages by a repair uploaded on 29 October 2026; the corrections to both of round eighty-three \(the countries placed and the islets kept, and the records stated to within 10 km kept at a default point\) reach a page when it is next derived/);
   });
   it("Kew's older names in the search", () => {
     expect(how).toMatch(/Kew's older names reach the search with the index uploaded after the daily fill of cultivated photographs \(due at the end of October 2026\); until that upload, a search by one of Kew's names that GBIF's names do not hold finds nothing\./);

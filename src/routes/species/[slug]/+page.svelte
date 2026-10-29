@@ -422,6 +422,14 @@
     <!-- A name another species of the reference is accepted under is that species' name here, never this species' (round
          seventy-one; S-F3: ?was=Annona%20muricata on Annona montana). -->
     <p class="notice" id="was-synonym"><b>{data.was}</b> is the name of another species of the reference, {#each data.wasAcceptedBy as o, i (o.slug)}{i ? ', ' : ''}<a href="/species/{o.slug}"><i>{o.name}</i></a>{/each}; this species' GBIF record holds it only as an older name{wasAuthors.length ? ` (${wasAuthors.map((a) => `${data.was} ${a}`).join(', ')})` : ''}, so it is not this species' name.</p>
+  {:else if data.was && data.wasMerged && data.wasShared?.length}
+    <!-- The old name of a page merged into this one, which other species of the reference hold too: its old address leads
+         here, and the line names the others, each with the author under which its record holds the name (round eighty-three, A). -->
+    <p class="notice" id="was-synonym"><b>{data.was}</b> is the name of a page merged into this one. It is also an older name of {#each data.wasShared as o, i (o.slug)}{i ? (i === data.wasShared.length - 1 ? ' and of ' : ', of ') : ''}<a href="/species/{o.slug}"><i>{o.name}</i></a>{o.authors?.length ? `, by another author (${o.authors.map((a) => `${data.was} ${a}`).join(' and ')})` : ', with no author in its record'}{/each}.</p>
+  {:else if data.was && data.wasMerged}
+    <!-- The old name of a page merged into this one by the owner's decision, which no other page holds: said as that, not as
+         Kew's filing, which may hold no row of the name (Bisnaga hamatacantha; round eighty-three, M, on A's report). -->
+    <p class="notice" id="was-synonym"><b>{data.was}</b> is the name of a page merged into this one.</p>
   {:else if data.was && data.wasShared?.length}
     <!-- A name other species of the reference hold too is no one species' name: the line names them, and never says the
          backbone accepts this species as it (round seventy; triage-69 F1, S-F1). -->

@@ -102,6 +102,9 @@
  *   npx tsx scripts/build-dossiers.ts --list-range-shapes        # rebuild-shapes.txt (round eighty): every page with an open in-range record outside every
  *                                                                # native region's shape (scripts/tdwg3-shapes.json), for --keys … --offline; offline
  *   npx tsx scripts/build-dossiers.ts --list-no-reason           # rebuild-no-reason.txt (round eighty-two): every page with a row not ok and no reason
+ *   npx tsx scripts/build-dossiers.ts --list-r83-repair <copy or none> <shapes before>
+ *                                                                # rebuild-r83c.txt (round eighty-three): every page whose records the October 2026
+ *                                                                # repair took out that the regions' shapes or the default points now keep; offline
  *   npx tsx scripts/build-dossiers.ts --list-wikidata-retry      # rebuild-wd-retry.txt (round eighty): every page Wikidata did not answer at its build, and
  *                                                                # every page with a Kew id whose item a label refused, for --keys; offline
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
@@ -123,6 +126,7 @@ import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_SPECIES, MIN_UNDATED } from '../src/lib/dossier/default-points';
+import { repairList, changedRegions, type RepairPage } from '../src/lib/dossier/repair-r83';
 import { regionTester, outsideShapes, SHAPES_FILE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
@@ -2020,6 +2024,25 @@ async function main() {
     if (lines.length) writeFileSync('rebuild-shapes.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-shapes.txt')) unlinkSync('rebuild-shapes.txt');
     console.log(`  ${read} dossiers read; ${lines.length} pages with an open record outside every native region's shape (${recs} records) or at a default point${lines.length ? ' → rebuild-shapes.txt; run --keys rebuild-shapes.txt --offline --grid climate --bulk bulk' : ''}`);
+    return;
+  }
+  // Round eighty-three (C): the pages to derive again after the regions' shapes and the default points changed under the
+  // repair of October 2026 (`repair-r83.ts`): `--list-r83-repair <the copy as the fill left it> <the shapes file before>`.
+  if (args.includes('--list-r83-repair')) {
+    const at = args.indexOf('--list-r83-repair');
+    const copyDir = args[at + 1], beforeFile = args[at + 2];
+    // `none` for the copy: it was deleted, so the shapes' pages are those with a changed region and a record outside the range.
+    const noCopy = copyDir === 'none';
+    if (!regions || !copyDir || !beforeFile || copyDir.startsWith('--') || (!noCopy && !existsSync(copyDir)) || !existsSync(beforeFile)) { console.error(`  --list-r83-repair <the copy, backups/v3-<id>-filled, or none> <the shapes file before, as git gives it>: ${!regions ? `no ${SHAPES_FILE}` : !copyDir || copyDir.startsWith('--') || (!noCopy && !existsSync(copyDir)) ? `no folder ${copyDir ?? ''}` : `no file ${beforeFile ?? ''}`}; nothing was listed`); process.exit(2); }
+    const beforeFileJson = JSON.parse(readFileSync(beforeFile, 'utf8')) as ShapesFile;
+    const before = regionTester(beforeFileJson);
+    const changed = changedRegions(beforeFileJson, JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile);
+    const dir = `${outDir}/s/v${DOSSIER_V}`;
+    const readDir = function* (d: string) { for (const f of readdirSync(d).filter((x) => DOSSIER_FILE.test(x))) { try { yield JSON.parse(readFileSync(`${d}/${f}`, 'utf8')) as RepairPage & { upstream?: Record<string, { detail?: string }> }; } catch { /* half-written */ } } };
+    const { lines, regained, defaults } = repairList(readDir(dir), noCopy ? null : readDir(copyDir), before, regions, changed);
+    if (lines.length) writeFileSync('rebuild-r83c.txt', lines.join('\n') + '\n');
+    else if (existsSync('rebuild-r83c.txt')) unlinkSync('rebuild-r83c.txt');
+    console.log(`  ${lines.length} pages to derive again: ${regained} ${noCopy ? `with a record outside the range and a native region among the ${changed.size} whose shape changed` : "with a record inside a native region's shape now and outside them before"}, ${defaults} with records left out at a default point${lines.length ? ' → rebuild-r83c.txt; run --keys rebuild-r83c.txt --offline --grid climate --bulk bulk' : ''}`);
     return;
   }
   // Round eighty (A): the pages to build again for Wikidata (not answered, or refused by a label), for --keys.
