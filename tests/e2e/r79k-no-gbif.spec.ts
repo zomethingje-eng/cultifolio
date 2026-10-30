@@ -31,12 +31,15 @@ test('the species page says GBIF\'s records, the map, the climate and the neares
   await expect(page.locator('.note-slot')).toHaveAttribute('data-key', 'k457911');
   // The reason once, under the name card (round eighty-two; the independent review's 10: it was a pill here and the same
   // sentence in four sections); each section says "not checked" and points to it (r82u-pages.spec.ts).
-  await expect(page.locator('#records-unchecked')).toContainText(`GBIF's records not checked. ${WHY}`);
-  await expect(page.locator('#no-gbif-climate')).toContainText("Not checked. GBIF's records were not asked");
-  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked');
-  await expect(page.locator('.factgrid')).toContainText("GBIF's records not checked");
-  await expect(page.locator('.facts')).toContainText('not checked');
-  await expect(page.locator('#near-not-checked')).toContainText('Not checked');
+  // Round eighty-four (P7, A10): one line under the name with the reason behind "Why", and "not checked" said there alone.
+  await expect(page.locator('#records-unchecked > p')).toContainText("GBIF's records not checked. So this page has no record map, no habitat climate and no cultivation sheet");
+  await expect(page.locator('#records-unchecked details.why')).toContainText(WHY);
+  await expect(page.locator('#no-gbif-climate')).toContainText("No habitat climate: it is read only from GBIF's records (see under the name)");
+  await expect(page.locator('.mapcap').nth(1)).toContainText('No records drawn: see under the name.');
+  await expect(page.locator('.factgrid')).toContainText('No records, no map marker and no climate across the range: see under the name.');
+  await expect(page.locator('.facts')).toContainText('none read');
+  await expect(page.locator('#near-not-checked')).toContainText('None to compare');
+  expect((await page.locator('article.species').innerText()).match(/not checked/gi)?.length).toBe(1);
   // Kew's range and names stand; the registers are Kew's and Wikidata's, with no GBIF link; the older names are Kew's.
   await expect(page.locator('.factgrid')).toContainText('Mexico Central');
   const links = page.locator('#s-registers ~ .links a');

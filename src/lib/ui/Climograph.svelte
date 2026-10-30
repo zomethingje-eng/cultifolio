@@ -27,7 +27,10 @@
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
-  const g = $derived(climograph(climate, shown >= 340 ? Math.min(shown - 20, 960) : 720, units.current));
+  // Down to 260 px (a 288 px figure on a 320 px phone): below 340 it fell back to 720 and was shrunk, its labels 4.3 to 4.9 px
+  // tall at 320 and 360 px (round eighty-four; the phone review's P1). 720 only before the width is known (the server's
+  // markup, and a page with scripts off).
+  const g = $derived(climograph(climate, shown === 0 ? 720 : Math.max(260, Math.min(shown - 20, 960)), units.current));
   const range = (lo: number, hi: number) => (hi - lo < 0.5 ? lo.toFixed(0) : `${lo.toFixed(0)}–${hi.toFixed(0)}`);
   const rb = $derived(g.rain.top + g.rain.height);
 </script>
@@ -100,7 +103,7 @@
     <!-- The lines, the bars and the strip name their source where a reader sees them, not only in the <desc> (round sixty-one; visitor 3). -->
     {#if g.hasBand}<span class="key"><i class="sw band"></i>medians and 10th–90th percentile across {climate.cells} habitat cells, CHELSA</span>{:else if climate.cells > 1}<span class="key muted">medians across {climate.cells} habitat cells, CHELSA; no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, CHELSA, so no spread is drawn</span>{/if}
     <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest month's mean nightly low</span>
-    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, from NASA POWER, marked at the edge, in no month</span>{/if}
+    {#if climate.extremes}<span class="key"><i class="sw ext"></i>lowest night and 1-in-100 hot day over {climate.extremes.years} years at a typical spot in the range, NASA POWER; drawn at the right edge, as they belong to no one month</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>
 </figure>

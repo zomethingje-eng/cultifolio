@@ -21,7 +21,7 @@ import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription, SynonymOf } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
-import { authorKey, authorsAgree, ownByAuthor, inFamily, plainlyAnother, parentheticalAuthor } from './authors';
+import { authorKey, authorsAgree, ownByAuthor, inFamily, plainlyAnother, parentheticalAuthor, sameNameAuthor } from './authors';
 import { spellingKey } from './epithet';
 import type { RangeVia } from './range-via';
 
@@ -438,7 +438,7 @@ export class WcvpIndex {
    *     "Erythrina afra Thunb.", reached by "Erythrina fissa C.Presl".
    * Same-type names are not required: Erythrina caffra reaches Kew's E. afra only through heterotypic names (S-A1).
    */
-  viaOlderNames(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>): (WcvpRange & { via: string; rangeVia: RangeVia }) | { ambiguous: string } | null {
+  viaOlderNames(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>, own?: { name: string; authorship?: string | null }): (WcvpRange & { via: string; rangeVia: RangeVia }) | { ambiguous: string } | null {
     const hits = new Map<string, { entry: WcvpName; via: string }>(); // accepted id → the entry, and the older name it was reached by
     for (const o of older) {
       if (/pro.?parte/i.test(o.status ?? '')) continue;
@@ -455,9 +455,39 @@ export class WcvpIndex {
     }
     if (hits.size > 1) return { ambiguous: `the older names lead to ${hits.size} Kew entries (${[...hits.values()].map((h) => `${entryLabel(h.entry)}, reached by ${h.via}`).join('; ')})` };
     const [hit] = hits.values();
+    // The page's own basionym (round eighty-four; outside review A6b): the older name of its epithet published by the author
+    // its own name brackets ("Sarcocaulon lheritieri (DC.) Sweet" for Monsonia lheritieri (Sweet) Steud.) is its type. Where
+    // Kew's file holds that name as a record of its own, accepted or unplaced, or under another entry than the one the
+    // older names lead to, the plant is two of Kew's records, and no range is taken from either (rule 3, no guessing).
+    // Monsonia lheritieri took Sarcocaulon spinosum's range (Cape Provinces and Namibia) through Geranium spinosum, while
+    // Kew holds its basionym Sarcocaulon lheritieri Sweet apart, unplaced, in the Cape Provinces alone.
+    const basionym = hit && own ? this.basionymRecords(older, own) : [];
+    const other = basionym.filter((e) => e.entry.id !== hit!.entry.id);
+    if (other.length) return { ambiguous: `the older names lead to Kew's entry ${entryLabel(hit!.entry)}, reached by ${hit!.via}, and the page's basionym ${other[0].via} is Kew's ${entryLabel(other[0].entry)}${other[0].entry.status === 'Unplaced' ? ', unplaced' : ''}` };
     if (!hit || !/^species$/i.test(hit.entry.rank)) return null;
     const got = this.rangeOf(hit.entry);
     return got?.rows.some((r) => r.establishmentMeans !== 'DOUBTFUL') ? { ...got, via: hit.via, rangeVia: { kind: 'older-name', entry: entryLabel(hit.entry), name: hit.entry.name, row: hit.via, ...(this.fileDay ? { file: this.fileDay } : {}) } } : null;
+  }
+  /**
+   * The Kew records the page's basionym is (`viaOlderNames`): of the older names, those of the page's epithet (its ending
+   * aside) whose publishing author is the author its own name brackets, each Kew row of their words by that author, as the
+   * record it is (an accepted or unplaced row) or the entry it is filed under. None where the page's name brackets no author.
+   */
+  basionymRecords(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>, own: { name: string; authorship?: string | null }): Array<{ entry: WcvpName; via: string }> {
+    const bracket = /^\s*\(([^)]+)\)/.exec(own.authorship ?? '')?.[1];
+    const ep = (n: string) => (n.trim().split(/\s+/)[1] ?? '').toLowerCase().replace(/(?:us|um|a|is|e|es|i)$/, '');
+    const mine = ep(own.name);
+    if (!bracket || !mine) return [];
+    const out: Array<{ entry: WcvpName; via: string }> = [];
+    for (const o of older) {
+      if (ep(o.name) !== mine || o.name.trim().split(/\s+/).length !== 2 || !sameNameAuthor(o.authorship, bracket)) continue;
+      for (const r of this.rowsOf(o.name) ?? []) {
+        if (r.status === 'Misapplied' || !sameNameAuthor(r.authors, bracket)) continue;
+        const e = r.status === 'Accepted' || r.status === 'Unplaced' ? r : this.byId.get(r.acceptedId);
+        if (e && !out.some((x) => x.entry.id === e.id)) out.push({ entry: e, via: `${o.name} ${o.authorship ?? ''}`.trim() });
+      }
+    }
+    return out;
   }
   get size(): number {
     return this.byName.size;
@@ -980,7 +1010,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         const plainly = others.filter((r) => plainlyAnother(sp.authorship, r.authors)), cited = others.filter((r) => !plainly.includes(r));
         const otherAuthor = others.length ? [plainly.length ? `Kew holds ${sp.name} only under another author (${plainly.map(entryLabel).join('; ')}), which is another name` : '', cited.length ? `Kew cites ${sp.name} otherwise (${cited.map(entryLabel).join('; ')}), and its row is not read as this species' own` : ''].filter(Boolean).join('; ') : undefined;
         const syn = await readSynonyms(f, key);
-        const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? []) : null;
+        const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? [], sp) : null;
         if (via && 'ambiguous' in via) {
           stats.wcvp++;
           return { status: 'ok', data: { results: [], olderAmbiguous: via.ambiguous, ...(otherAuthor ? { otherAuthor } : {}) } as unknown as T };

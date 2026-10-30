@@ -31,7 +31,11 @@ describe('--fixtures from an empty folder', () => {
       const c = committed(f);
       expect(d.key).toBe(c.key);
       expect(d.ids.gbif).toBe(c.ids.gbif);
-      expect(d.name.kew).toEqual(f === 'g999.json' ? undefined : c.name.kew);
+      // Round eighty-four (N, decision 1): the build stores Kew's accepted row (`name.kew.accepted`), which heads a `k` page;
+      // the committed fixtures were written before it. The rest of the record is the committed one.
+      const { accepted, ...kew } = (d.name.kew ?? {}) as { accepted?: { name: string } };
+      expect(d.name.kew === undefined ? undefined : kew).toEqual(f === 'g999.json' ? undefined : c.name.kew);
+      if (f !== 'g999.json') expect(accepted?.name).toBe(d.name.scientific);
       expect(d.name.authorship).toBe(c.name.authorship);
     }
     const index = JSON.parse(readFileSync(join(dir, 'fixtures/dossiers/index.json'), 'utf8')) as Array<{ key: string; gbif: number }>;

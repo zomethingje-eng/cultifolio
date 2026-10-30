@@ -39,6 +39,7 @@
   import { readSetting } from '$lib/ui/stored';
   import { syncWords } from '$lib/ui/sync-words';
   import { countView, registerNow } from '$lib/ui/worker-gate';
+  import { frame } from '$lib/ui/frame.svelte';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
   // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
@@ -84,6 +85,8 @@
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
   const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
+  /** The pages that pick species to compare: the species pages (the Compare page shows its picks itself). */
+  const comparePage = $derived(page.url.pathname.startsWith('/species/'));
   // Hover preloading off on these pages everywhere, not only inside <main>: the compare tray, the top bar, the frost and
   // clock lines and the footer sit outside it, and a hover on the tray's "Compare 2" sent both species to the server before
   // any click (round sixty-seven; triage-66 P3, S-F6, R45-7). The body's attribute is the one the router reads last.
@@ -442,6 +445,8 @@
   </nav>
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
+<!-- Another tab's change that this tab could not read in: said, with the reload that reads it (round eighty-four; A16). -->
+{#if collection.readBehind && !vaultNote}<p class="vaultnote" role="alert" id="read-behind">{collection.readBehind} <button class="reloadbtn" type="button" onclick={() => location.reload()}>Reload</button></p>{/if}
 <!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
 <!-- This device's clock reads earlier than its own last change (round fifty-nine): said, not acted on. Two readings, by
      whether a sync answer has confirmed the clock: confirmed, the changes were made under a fast clock; not, the clock
@@ -459,15 +464,19 @@
   {@render children()}
 </main>
 
-<CompareBar low={tabAway} preload={privateRoute ? 'off' : 'hover'} />
+<!-- The compare tray and its pill on the species pages, where species are picked, only (round eighty-four; P4): on a
+     plant's page, a space and Today it stood over the grower's own lines ("Since watered"), and the menu, the footer and
+     the Compare page itself reach the picks from anywhere. -->
+{#if comparePage}<CompareBar low={tabAway} preload={privateRoute ? 'off' : 'hover'} />{/if}
 
 <!-- Three lines, about the reader: the sources, every one, then what is kept, then the links (round fifty-eight; it was eight lines on a phone, about the server, and its list left four sources out). -->
 <!-- On a page about your own plants the footer waits for the collection: drawn mid-screen under "Opening…" and then
      pushed off by the list, it was a layout shift of 0.2 to 0.29 on every load of /plants and /today (round sixty; the
-     accessibility review, 2). -->
-{#if !privateRoute || collection.ready}
+     accessibility review, 2). And for the page's own content, when the page holds it (`frame.hold`): with 400 plants
+     the collection was open before the list was drawn, and the shift came back (round eighty-four; P2, A12, B4). -->
+{#if (!privateRoute || collection.ready) && (!frame.holding || !!collection.failed)}
 <footer class="credits">
-  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
+  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia; each figure and photograph names its own, with its licence.</p>
   <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
   <!-- Compare and About from every page, now that the phone's tabs are the grower's five for everyone (round sixty-three, V1). -->
   <p><a href="/compare">Compare species</a> · <a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
@@ -513,6 +522,7 @@
 <style>
   .iconbtn.sync { color: var(--ink3); }
   .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: var(--fs-md); }
+  .reloadbtn { background: none; border: 1px solid currentColor; border-radius: var(--r); color: inherit; font: inherit; font-weight: 600; padding: 0 12px; min-height: var(--tap); margin-left: 6px; cursor: pointer; }
   .clockbar { margin: 0; padding: 7px 16px; background: var(--warm-soft); color: var(--warm-ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); }
   .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
   .frostbar:hover { text-decoration: underline; }
@@ -541,7 +551,15 @@
   .crumb .last { color: var(--ink); }
   #topbar .topseg { margin: 0 6px; flex: none; }
   #topbar .topseg > a { padding: 5px 12px; font-size: var(--fs-md); }
+  /* Closer set where the bar is narrow: in landscape on a notched iPhone (750 px, 47 px insets) the five places and the
+     back button ran 27 px into the right inset, "Add a plant" under the rounded corner (round eighty-four; P3). */
+  @media (max-width: 960px) { #topbar .topseg { margin: 0 2px; } #topbar .topseg > a { padding: 5px 9px; font-size: var(--fs-sm); } }
   @media (max-width: 700px) { #topbar .topseg { display: none; } }
+  /* Short and narrow (a phone in landscape, a laptop at 200% zoom: 640 x 400) has no tab bar either, which steps away
+     under 480 px tall: the places are in the top bar there, or only the menu reached them (round eighty-four; A17). */
+  @media (max-width: 700px) and (max-height: 480px) { #topbar .topseg { display: inline-flex; } #topbar .topseg > a { padding: 5px 7px; } }
+  /* The smallest phone in landscape (568 x 320): the places closer still, and the crumb, which the places name, gives way. */
+  @media (max-width: 600px) and (max-height: 480px) { #topbar { gap: 4px; } #topbar .topseg > a { padding: 5px 5px; } }
   .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: max(40px, var(--tap)); min-height: max(40px, var(--tap)); display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .iconbtn.brand { color: var(--accent); cursor: pointer; }

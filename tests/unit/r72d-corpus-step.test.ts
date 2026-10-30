@@ -99,8 +99,10 @@ describe('the run', () => {
     expect(await go()).toBe(EXIT.review);
     expect(calls).toEqual([]);
     expect(await go(['--go-on'])).toBe(EXIT.done);
-    expect(calls.map((c) => `${c.cmd} ${c.args[0]}`)).toEqual(['rclone copy', 'rclone check', 'rclone copy', 'rclone lsf', `${process.execPath} scripts/live-check.mjs`]);
-    expect(calls[2].args.slice(1, 3)).toEqual(['static/s/v3/manifest.json', 'r2:cultifolio/s/v3']); // the manifest last
+    // Round eighty-four (G, A21): the upload asks first whether the index is the one the dossiers on disk would write.
+    expect(calls.map((c) => `${c.cmd} ${c.args[0]}`)).toEqual([`${process.execPath} --import`, 'rclone copy', 'rclone check', 'rclone copy', 'rclone lsf', `${process.execPath} scripts/live-check.mjs`]);
+    expect(builderSteps()).toEqual(['--index-ready']);
+    expect(calls[3].args.slice(1, 3)).toEqual(['static/s/v3/manifest.json', 'r2:cultifolio/s/v3']); // the manifest last
     expect(state().steps.every((s: { status: string }) => s.status === 'done')).toBe(true);
     expect(readFileSync(join(root, 'corpus-step.log'), 'utf8')).toMatch(/step 2 of 7: dossier --fill gbif-open[\s\S]*every step is done/);
   });
@@ -147,7 +149,7 @@ describe('the run', () => {
     await go([], exec);
     calls = [];
     expect(await go(['--go-on'], exec)).toBe(EXIT.failed);
-    expect(calls.map((c) => `${c.cmd} ${c.args[0]}`)).toEqual(['rclone copy', 'rclone check']);
+    expect(calls.map((c) => `${c.cmd} ${c.args[0]}`)).toEqual([`${process.execPath} --import`, 'rclone copy', 'rclone check']);
     expect(out).toMatch(/the manifest was not uploaded, so the site still serves the corpus before/);
   });
 

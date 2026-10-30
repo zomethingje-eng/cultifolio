@@ -6,6 +6,7 @@
  */
 import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { MAX_LAPSE_M, lapseSetAside } from '$core/lapse';
+import { sentenceCut } from '$core/text';
 import { dedupePhotos } from './dedupe';
 import { shownPhotos, kindNamesOf, type HeldNames } from './photo-kind';
 import * as v from 'valibot';
@@ -63,8 +64,27 @@ export const NameBlock = v.object({
    * Kew's names for the page's plant, read offline from Kew's file by `--fill kew-names` (round seventy-two, A): the entry
    * Kew accepts (plant_name_id, or '' where Kew's rows do not decide), Kew's other names for it (words only), the stored
    * older names Kew accepts as species of their own, and the day of Kew's file. Absent: not read, never "none".
+   * `accepted` (round eighty-four): Kew's row for the entry, its name with Kew's sign, its authors and its rank, which
+   * heads the page while its id is `k<entry>` (`kew-heading.ts`).
    */
-  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()) })),
+  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()), accepted: v.optional(v.object({ name: v.string(), authors: v.string(), rank: v.string(), other: v.optional(v.string()) })) })),
+  /**
+   * GBIF's name for the page's key, where Kew's accepted name heads the page (round eighty-four, the owner's decision 1;
+   * `kew-heading.ts`): what the derivation reads, and what the page gives back if it loses its `k` id. `added`: the older
+   * name the heading put in `synonyms`. Absent on a page headed by GBIF's own name, and in a dossier written before.
+   */
+  gbif: v.optional(v.object({ scientific: v.string(), authorship: v.optional(v.string()), rank: v.optional(v.string()), genus: v.optional(v.string()), slug: v.optional(v.string()), added: v.optional(v.string()) })),
+  /**
+   * The one-word English names the page does not head with or show (`nameKey`s; round eighty-four, review-d D9): another
+   * species of its genus is given them more often, or as often (`sharedHeadlines`), written by `--index`. Absent: none.
+   */
+  shared: v.optional(v.array(v.string())),
+  /**
+   * The names of species rank GBIF files under the species' own varieties and subspecies (round eighty-four; outside
+   * review A8: Trichocereus pachanoi under T. macrogonus var. pachanoi), written by `--fill gbif-infra` from GBIF's backbone
+   * export (`infra-names.ts`): searched as a name typed, never shown. Absent: not read, or none.
+   */
+  infra: v.optional(v.array(v.string())),
   /** Present when the page cites Kew's author for the number it links: the backbone's citation, and Kew's row cited (plant_name_id). */
   cited: v.optional(v.object({ gbif: v.string(), kew: v.string() }))
 });
@@ -139,6 +159,11 @@ export const Occurrences = v.object({
   nVague: v.optional(v.number()),
   /** False when there was no range to test against (the range source refused, or a country-level range): every record then counted as "in range" untested (round sixteen, 6). */
   rangeTested: v.optional(v.boolean()),
+  /**
+   * The rule of the regions' shapes the records were tested by (round eighty-four: `RANGE_RULE` in `tdwg-shapes.ts`, every
+   * record, open or restricted, tested by the shape or the buffered box). Absent: tested before it, or not by the shapes.
+   */
+  rangeRule: v.optional(v.string()),
   /** How far the centre would have moved had restricted records been used. */
   restrictedShiftKm: v.nullable(v.number()),
   thin: v.boolean(),
@@ -380,12 +405,13 @@ export function unchain(detail: string | undefined): string | undefined {
 export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
   // Extremes read at a POWER cell that is mostly sea are set aside (round thirty-five, R1-11): the cold floor then comes
   // from the range's coldest mean night, and the page says what the sea cell gave. So are extremes whose lapse correction
-  // is beyond what a lapse rate can bridge, or that came out impossible (round eighty, A: `setAsideExtremes`).
+  // is beyond what a lapse rate can bridge, or whose nights the habitat's months disagree with (round eighty, A: `setAsideExtremes`; the words, `lapseCause`).
   const climate = setAsideExtremes(d.climate);
   return {
     ...d,
     climate,
-    summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
+    // A summary stored before round eighty-four that does not end a sentence is shown cut, and marked (`sentenceCut`; A4).
+    summary: d.summary ? { ...d.summary, ...cutSummary(d.summary), url: webUrl(d.summary.url) ?? '' } : d.summary,
     // A Commons file that is not a photograph of the species, or whose licence or author the rules do not read, is left
     // out here, and the rest have Commons' credit cleaned, so the deploy corrects every page (round sixty-nine; triage-68 K1-K3).
     photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), kindNamesOf(d, held)),
@@ -394,6 +420,12 @@ export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),
     upstream: Object.fromEntries(Object.entries(d.upstream).map(([k, u]) => [k, u.detail?.startsWith('carried from build of') ? { ...u, detail: unchain(u.detail) } : u]))
   };
+}
+
+/** A stored summary's text and mark as `sentenceCut` reads them: the same object's fields where it ends a sentence. */
+function cutSummary(s: { text: string; cut?: true }): { text: string; cut?: true } {
+  const c = sentenceCut(s.text);
+  return c.cut ? { text: c.text, cut: true } : { text: s.text, ...(s.cut ? { cut: true as const } : {}) };
 }
 
 /** The climate with its extremes set aside where they are the sea's (round thirty-five) or beyond a lapse correction (round eighty). */

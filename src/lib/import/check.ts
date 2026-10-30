@@ -5,7 +5,7 @@
  * or a spelling one letter out. A name the reference does not hold can still be added as typed and is marked "not in the
  * reference"; a search that did not answer leaves the name "not checked", never "not in the reference" (rule 2).
  */
-import { parseName, speciesOf, speciesSlug, isNamedHybrid, withoutSign } from '$core/names';
+import { parseName, speciesOf, speciesSlug, isNamedHybrid, withoutSign, speciesNotStated } from '$core/names';
 
 export type NameCheck =
   /**
@@ -13,8 +13,8 @@ export type NameCheck =
    * rather than its species'): the page's GBIF key, which a plant files (round seventy-eight: never the page's id).
    */
   | { s: 'found'; slug: string; refName: string; key: number | null }
-  /** Not under this name; the search offers another, for the grower to take or not: never taken on its own. Its GBIF key, when the reference gives one. */
-  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'spelling' | 'similar' }
+  /** Not under this name; the search offers another, for the grower to take or not: never taken on its own. Its GBIF key, when the reference gives one, and its page's address (round eighty-four, for the plant page's older-name line). */
+  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'spelling' | 'similar'; slug?: string }
   | { s: 'missing' }
   /** The reference was not reached, or the search allowance was spent: not checked, which is not "missing". */
   | { s: 'unchecked' }
@@ -22,7 +22,12 @@ export type NameCheck =
    * A cross is filed under its genus, as the add form files it; there is no species to check. A named nothospecies
    * ("Mentha × piperita", "× Gasteraloe beguinii") is not one: it is checked as a species is (round eighty-one, H to S).
    */
-  | { s: 'hybrid' };
+  | { s: 'hybrid' }
+  /**
+   * A cultivar under its genus alone ("Echeveria 'Lola'"): filed under the genus, its species not stated; there is no
+   * species to check, and it is no cross (round eighty-four; review-w W5).
+   */
+  | { s: 'genus' };
 
 /** An entry as the check reads it: `gbif` is the page's GBIF key (round seventy-eight), what a plant files. */
 type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[]; kew?: string[] };
@@ -41,12 +46,26 @@ export interface Lookup {
  *   species, whose species the reference has (the check is then `found` with no key);
  * - `near`, `missing`, `hybrid`, `unchecked` as the check said; `waiting` while it is asked.
  */
-export type NameVerdict = 'found' | 'keyless' | 'near' | 'missing' | 'hybrid' | 'unchecked' | 'waiting';
+export type NameVerdict = 'found' | 'keyless' | 'near' | 'missing' | 'hybrid' | 'genus' | 'unchecked' | 'waiting';
 export function nameVerdict(c: NameCheck | undefined, typed: string): NameVerdict {
   if (!c) return 'waiting';
   if (c.s === 'near') return 'near';
   if (parseName(typed).qualifier || (c.s === 'found' && c.key === null)) return 'keyless';
   return c.s;
+}
+
+/**
+ * What a line's name says of itself, with nothing to ask (round eighty-four): a cross is filed under its genus, and a
+ * cultivar under a genus alone is filed there with its species not stated; null for a name the reference is asked about.
+ * Read from the line itself, never from the check of its genus, which a cross, a cultivar and the bare genus share
+ * (`checkKey` is the genus for all three). A kind the sheet states (`hybrid`, `cultivar`) is the line's.
+ */
+export function ownVerdict(typed: string, kind?: string | null): NameCheck | null {
+  const p = parseName(typed);
+  if (kind === 'hybrid' && !p.epithet) return { s: 'hybrid' };
+  if (p.kind === 'hybrid' && !isNamedHybrid(p)) return { s: 'hybrid' };
+  if (speciesNotStated(p)) return { s: 'genus' };
+  return null;
 }
 
 /** The part of a typed name the reference is asked about: the scientific name without the cultivar. */
@@ -59,7 +78,8 @@ export async function checkNames(typed: string[], look: Lookup, concurrency = 4)
     const p = parseName(t);
     const k = p.scientific;
     if (!k || out.has(k) || todo.has(k)) continue;
-    if (p.kind === 'hybrid' && !isNamedHybrid(p)) { out.set(k, { s: 'hybrid' }); continue; }
+    const own = ownVerdict(t);
+    if (own) { out.set(k, own); continue; }
     // A named hybrid's species rank is read past its sign: "Mentha × piperita" is at species rank, as its page is (round eighty-one, H to S).
     const plain = withoutSign(k);
     todo.set(k, { scientific: k, slug: speciesSlug(k), rankSpecies: speciesOf(plain) === plain });
@@ -102,10 +122,10 @@ export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry
   // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
   // And Kew's older names, which the search reads too (round eighty; review-d 5).
   const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].some((n) => n.toLowerCase() === want));
-  if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name' };
+  if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name', slug: older.slug };
   const genus = want.split(' ')[0];
   const close = hits.find((h) => plain(h.name).split(' ')[0] === genus && editDistance(plain(h.name), want) <= 2);
-  if (close) return { s: 'near', suggestion: close.name, key: close.gbif ?? null, why: 'spelling' };
+  if (close) return { s: 'near', suggestion: close.name, key: close.gbif ?? null, why: 'spelling', slug: close.slug };
   return { s: 'missing' };
 }
 

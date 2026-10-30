@@ -33,7 +33,7 @@ const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
 
 describe("/about/how says GBIF's FUZZY rule as judgeTaxon keeps it (review 1's 5, the revert)", () => {
   it('names the correction of a misspelling to this very species among the ways a taxon of another name is taken', () => {
-    expect(how).toContain("or GBIF's backbone holds the name as this species, or corrects it as a misspelling to this very species (GBIF's fuzzy match: Othonna linearifolia, as Kew and iNaturalist spell the page's Othonna lineariifolia), while a correction to another species is never read as this one's;");
+    expect(how).toContain("Or GBIF's backbone holds the name as this species, or corrects it as a misspelling to this very species (GBIF's fuzzy match: Othonna linearifolia, as Kew and iNaturalist spell the page's Othonna lineariifolia), while a correction to another species is never read as this one's.");
   });
   // The code the sentence is checked against (guards: so on r82pc too).
   const reference = referenceOf([{ key: 1, name: 'Othonna lineariifolia', family: 'Asteraceae' }, { key: 2, name: 'Othonna capensis', family: 'Asteraceae' }]);

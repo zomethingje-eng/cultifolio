@@ -189,19 +189,21 @@ describe('the search from key files (round seventy-seven)', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8'), formats = readFileSync('src/routes/about/formats/+page.svelte', 'utf8');
     const cap = SEARCH_CAP.toLocaleString('en-GB');
     expect(how).toContain(`more than ${cap} species would have to be looked through for every word`);
-    expect(how).toContain(`a beginning shared by more than ${cap} species has no file of its own`);
+    expect(how).toContain(`A beginning shared by more than ${cap} species has no file of its own`);
     expect(SEARCH_HITS).toBe(100);
     expect(how).toContain("the reference's own best hundred answers to that word alone");
     expect(how).toContain(`says "${narrowSentence('…')}"`);
-    expect(how).toContain('the server never reads or holds the whole index');
+    expect(how).toContain('The server never reads or holds the whole index');
     expect(how).not.toMatch(/which the server answers from its (?:own )?index/);
     expect(searchDirsFor(8947)).toBe(64);
-    expect(formats).toContain('sixty-four at the present size');
+    // Round eighty-four (review S's 6): the count by its rule, and at the live size, not round seventy-seven's sixty-four.
+    expect(formats).toContain('The number of directory files is sixty-four, doubled while the species count is more than 160 times it, up to 4,096: 512 at 48,357 species.');
+    expect(searchDirsFor(48_357)).toBe(512);
     expect(SEARCH_SPLIT).toBe(200);
-    expect(how).toContain(`a beginning shared by more than ${SEARCH_SPLIT} species has the files of the beginnings one letter longer too`);
-    expect(formats).toContain(`every key of more than ${SEARCH_SPLIT} species)`);
-    expect(formats).toContain(`begins words of more than ${cap} species, or a typing error's similar spellings would mean reading more than ${NEAR_CAP.toLocaleString('en-GB')} species or ranking more than ${RANK_CAP.toLocaleString('en-GB')}, the answer is empty and carries <code>X-Search-Narrow: 1</code>`);
-    expect(how).toContain(`would have it look through more than ${NEAR_CAP.toLocaleString('en-GB')} species, or put more than ${RANK_CAP.toLocaleString('en-GB')} in order`);
+    expect(how).toContain(`A beginning shared by more than ${SEARCH_SPLIT} species has files one letter longer too`);
+    expect(formats).toContain(`every key of more than ${SEARCH_SPLIT} species.`);
+    expect(formats).toContain(`begins words of more than ${cap} species, the answer is empty and carries <code>X-Search-Narrow: 1</code>. So it is when a typing error's similar spellings would mean reading more than ${NEAR_CAP.toLocaleString('en-GB')} species or ranking more than ${RANK_CAP.toLocaleString('en-GB')}.`);
+    expect(how).toContain(`would mean looking through more than ${NEAR_CAP.toLocaleString('en-GB')} species or putting more than ${RANK_CAP.toLocaleString('en-GB')} in order`);
     expect(how).toContain(`kept apart, ${PHOTO_BLOCK.toLocaleString('en-GB')} to a file`);
     expect(how).toContain(`from files of ${SHOW_BLOCK} species each`);
     expect(formats).toContain(`${PHOTO_BLOCK.toLocaleString('en-GB')} to a file (<code>[count, …]</code>)`);

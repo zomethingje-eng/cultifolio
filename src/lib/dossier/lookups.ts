@@ -29,7 +29,7 @@ import { genusOf, slugify, canonicalSynonym, nameOrder } from '$core/names';
 import { prepare, search } from '$core/search';
 import type { IndexEntry } from './index-entry';
 import { gbifAlias, type PageId } from '$core/page-id';
-import { BYS, catalogueItems, rowGroupsOf, featuredPoolOf, featuredOf, type By, type Item, type Featured } from './catalogue';
+import { BYS, catalogueItems, rowGroupsOf, featuredPoolOf, featuredOf, type By, type Item, type Featured, type GrownRule } from './catalogue';
 
 /* ---------- the maps over the whole index, as the Worker built them per isolate until round seventy-six ---------- */
 
@@ -217,7 +217,7 @@ export function generaOfIndex(index: readonly IndexEntry[]): Array<[string, numb
   return [...m];
 }
 /** The strip's species, as `featured.json` holds them. */
-export const featuredFile = (index: IndexEntry[]): Featured[] => featuredPoolOf(catalogueItems(index)).map(featuredOf);
+export const featuredFile = (index: IndexEntry[], grown?: GrownRule): Featured[] => featuredPoolOf(catalogueItems(index), grown).map(featuredOf);
 
 /** The card files, the files of names, the row files, the genera, the strip and the sitemap a manifest must name for the Worker to read names from them. */
 export function lookupFileNames(species: number, sitemaps = 1): string[] {

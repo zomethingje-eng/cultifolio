@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Photo } from '$dossier/schema';
-  import { heroOf } from '$dossier/dedupe';
+  import { heroOf, spreadByObserver } from '$dossier/dedupe';
   import { photoCredit, shownAttribution } from '$lib/ui/ref/head';
   let { photos, name, strip = false }: { photos: Photo[]; name: string; strip?: boolean } = $props();
   // "Wild" is what a source says, not what it leaves unsaid: iNaturalist marks each photograph; Commons and GBIF media
@@ -8,7 +8,8 @@
   const wild = $derived(photos.filter((p) => !p.captive));
   const cult = $derived(photos.filter((p) => p.captive));
   const hero = $derived(heroOf(photos));
-  const rest = $derived(photos.filter((p) => p !== hero));
+  // The first row from as many observers as there are (round eighty-four; W2).
+  const rest = $derived(spreadByObserver(photos.filter((p) => p !== hero), 6));
   let showAll = $state(false);
   const LIMIT = 6;
   const shown = $derived(showAll ? rest : rest.slice(0, LIMIT));

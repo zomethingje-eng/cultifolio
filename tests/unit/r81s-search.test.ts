@@ -121,9 +121,11 @@ describe('a word typed whole before a genus that only begins with it (review-c 2
     expect(at('Rosa canina')).toBeGreaterThanOrEqual(0);
     expect(at('Rosa canina')).toBeLessThan(at('Rosenbergiodendron formosum')); // base: Rosenbergiodendron first
     expect(at('Rosa gallica')).toBeLessThan(at('Roseodendron chryseum'));
-    // "Rose" alone, a name of a Cotoneaster and of a rose: after the roses headed "… rose".
+    // "Rose" alone, a name of a Cotoneaster and of a rose: the Cotoneaster's after the roses headed "… rose". The rose's,
+    // whose headline holds the word ("Soft downy-rose"), counts since round eighty-four (review-s S2): a rose a source calls
+    // plain "Rose" is a rose.
     expect(at('Rosa canina')).toBeLessThan(at('Cotoneaster sylvestrii')); // base: the Cotoneaster first of the common names
-    expect(at('Rosa gallica')).toBeLessThan(at('Rosa mollis'));
+    expect(at('Rosa mollis')).toBeLessThan(at('Cotoneaster sylvestrii'));
   });
 
   it('a genus typed whole, or still being typed with no such common name, keeps its place', () => {

@@ -126,9 +126,11 @@ describe('the cached 404 and 302 of a species address (R46-8)', () => {
     expect(short.text).not.toMatch(/answered "not found", for five minutes/);
     const before = said('how', 'The edge keeps no copy of an error or of a redirect to another page');
     expect(before.text).toMatch(/The edge keeps no copy of an error or of a redirect to another page: an address the reference does not hold is answered "not found" anew each time/);
-    expect(before.text).toMatch(/your browser may keep the page for five minutes, not when GBIF could not be asked/);
-    expect(before.text).toMatch(/an older name's redirect to its species is made anew each time too, your browser keeping it for a day/);
-    const full = said('how', 'The edge keeps no error answer and no redirect to another page');
+    expect(said('how', "The server keeps GBIF's answer on whether it is an older name").text).toMatch(/your browser may keep the page for five minutes, not when GBIF could not be asked/);
+    expect(said('how', "An older name's redirect to its species is made anew").text).toMatch(/An older name's redirect to its species is made anew each time too, your browser keeping it for a day/);
+    expect(said('how', 'The edge keeps no error answer and no redirect to another page').text).toBe('The edge keeps no error answer and no redirect to another page.');
+    expect(said('how', 'A species address the reference does not hold is answered "not found"').text).toMatch(/anew each time, from the server's day-old copy of the old-name check/);
+    const full = said('how', 'Your browser keeps the "not found" for five minutes');
     expect(claim(full, /the "not found" for five minutes \((public, max-age=\d+)/)).toBe('public, max-age=300');
     expect(claim(full, /the redirect for a day \((public, max-age=\d+)\)/), full.where).toBe('public, max-age=86400');
     expect(full.text).toMatch(/not at all when GBIF could not be asked or a species' record could not be read/);
@@ -148,7 +150,7 @@ describe("the browser's year-long cache of the sealed batches and photographs (S
     for (const f of ['src/routes/api/sync/log/[key]/+server.ts', 'src/routes/api/sync/photo/[id]/+server.ts']) expect(raw(f), f).toMatch(/'cache-control': 'private, max-age=31536000, immutable'/);
   });
   it('/about/how lists them under the browser\'s HTTP cache', () => {
-    expect(clause(how, "in the browser's own HTTP cache", '; and, while a page is open')).toMatch(/each sealed batch of your log and each sealed photograph this browser fetched from the vault \(encrypted, as the server holds them\), for a year/);
+    expect(clause(how, "in the browser's own HTTP cache", 'and, while a page is open')).toMatch(/each sealed batch of your log and each sealed photograph this browser fetched from the vault \(encrypted, as the server holds them\): for a year/);
   });
 });
 
@@ -159,8 +161,8 @@ describe("/about/formats on the server's sweep and listings, and the example (S-
     expect(s.text).toMatch(/the mark stays until a listing that reached the end finds nothing unnamed/);
   });
   it('the seventh night is counted as a fault, and no log keeps it', () => {
-    const s = said('formats', 'A photograph the sweep cannot read');
-    expect(numberWord(claim(s, /after (\w+) such nights its mark is dropped/)), s.where).toBe(MARK_FAULT_NIGHTS);
+    const s = said('formats', 'After seven such nights');
+    expect(numberWord(claim(s, /After (\w+) such nights its mark is dropped/)), s.where).toBe(MARK_FAULT_NIGHTS);
     expect(raw('src/lib/server/counters.ts')).toMatch(/await this\.faultThere\('sweep', now\);/);
     expect(raw('wrangler.jsonc')).toMatch(/"observability"\s*:\s*\{\s*"enabled"\s*:\s*false\s*\}/);
     expect(s.text).toMatch(/by kind alone \(Cloudflare's request logs are off, so no log keeps its name\)/);
@@ -169,7 +171,7 @@ describe("/about/formats on the server's sweep and listings, and the example (S-
   it('the example is set out in one commit, refused over anything of yours', () => {
     const s = said('formats', 'It is set out in one commit');
     expect(claim(s, /^It is set out in (one commit) \(one transaction of the database/), s.where).toBe('one commit');
-    expect(s.text).toMatch(/when its log already holds anything of yours \(read in that same transaction\)/);
+    expect(said('formats', 'The commit is refused, setting out nothing').text).toMatch(/when its log already holds anything of yours \(read in that same transaction\)/);
     const seed = raw('src/lib/ui/grow/demo-seed.ts');
     expect(seed).toMatch(/requireEmpty/);
   });

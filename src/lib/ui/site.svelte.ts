@@ -9,6 +9,22 @@ import { readSetting, sampleTab, writeSetting } from '$lib/ui/stored';
 import { secureAttr } from './cookie';
 
 const KEY = 'cultifolio.frost.site';
+/**
+ * The longest site name kept, from Settings or a file's `device.json` (round eighty-four; outside review A16): a place's name, as
+ * Settings writes it from a search, is a few words. A 3 MB name in a file was read whole, stored and drawn on every page
+ * that names the site. A longer one is cut at a word and marked; control characters and runs of spaces go.
+ */
+export const SITE_NAME_MAX = 120;
+export function siteName(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const flat = v.slice(0, SITE_NAME_MAX * 4).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!flat) return null;
+  if (flat.length <= SITE_NAME_MAX) return flat;
+  const cut = flat.slice(0, SITE_NAME_MAX - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > SITE_NAME_MAX / 2 ? cut.slice(0, at) : cut).trimEnd()}…`;
+}
+
 export interface Site {
   lat: number;
   lon: number;
@@ -23,7 +39,7 @@ class SiteStore {
     try {
       const s = readSetting(KEY, 'collection'); // the sample's own, never the grower's (round sixty-one)
       const v = s ? (JSON.parse(s) as Partial<Site>) : null;
-      this.current = v && typeof v.lat === 'number' && typeof v.lon === 'number' && Math.abs(v.lat) <= 90 && Math.abs(v.lon) <= 180 ? { lat: v.lat, lon: v.lon, name: typeof v.name === 'string' ? v.name : undefined } : null;
+      this.current = v && typeof v.lat === 'number' && typeof v.lon === 'number' && Math.abs(v.lat) <= 90 && Math.abs(v.lon) <= 180 ? { lat: v.lat, lon: v.lon, name: siteName(v.name) ?? undefined } : null; // bounded as a restored one is (round eighty-four; A16)
     } catch {
       this.current = null;
     }

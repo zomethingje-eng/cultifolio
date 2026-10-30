@@ -22,12 +22,15 @@ const KIND = /\b(cact(us|i|uses)|succulents?|bulbs?|caudex|caudices|caudiciforms
 const ALLOWED: Array<[string, RegExp]> = [
   // the care groups, a table of convention the species page and the about page name as such
   ['src/lib/core/arch.ts', /Cactus or succulent|cacti and succulents|Bulb, tuber or caudex|bulbs, tubers and caudiciforms/],
-  ['src/routes/about/how/+page.svelte', /care groups \(cactus or succulent; bulb, tuber or caudex;/],
   // the groups' agreement with Kew's lifeform, and Kew's own words quoted (round eighty-one, the owner's decision on D2)
-  ['src/routes/about/how/+page.svelte', /agrees: "succulent" or "semisucculent" for a cactus or succulent; a geophyte, bulb, corm, tuber or caudex for a bulb, tuber or caudex;|groundsel was "a cactus or succulent" by its genus, Senecio, and bitter melon "a bulb, tuber or caudex"|Kew describes it as “succulent subshrub”/],
   // the search's generic nouns, listed
   ['src/lib/core/search.ts', /^(bulb|cactus|succulent)$/],
-  ['src/routes/about/how/+page.svelte', /one-word names for a whole genus or family \(bulb, buttercup, cactus,|shrub, snowdrop, succulent, sumac|lily, daisy, palm, fern, cactus or orchid|"Pariette Cactus"|so "cactus" is the named cacti first/],
+  // Round eighty-four: /about/how rewritten as lists; the same facts, each pattern its own.
+  ['src/routes/about/how/+page.svelte', /care groups, such as "cactus or succulent"|The groups: cactus or succulent; bulb, tuber or caudex;/],
+  ['src/routes/about/how/+page.svelte', /"Succulent" or "semisucculent" for a cactus or succulent\. A geophyte, bulb, corm, tuber or caudex for a bulb, tuber or caudex\.|Groundsel would be "a cactus or succulent" by its genus, Senecio, and bitter melon "a bulb, tuber or caudex"/],
+  ['src/routes/about/how/+page.svelte', /The list: bulb, buttercup, cactus,|shrub, snowdrop, succulent, sumac|lily, daisy, palm, fern, cactus or orchid|"Pariette Cactus"/],
+  ['src/routes/about/how/+page.svelte', /of 173 collector genera taken whole: the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs and their like/],
+  ['src/routes/about/how/+page.svelte', /"Trichocereus pachanoi", the San Pedro cactus,/],
   // a caudex's diameter, a measurement a grower records
   ['src/lib/db/types.ts', /caudex|Caudex/],
   ['src/routes/plants/[acc]/+page.svelte', /^caudex$/],
@@ -36,7 +39,6 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['src/lib/ui/grow/demo-seed.ts', /The cacti, in full sun\./],
   // how today's species list was derived: a fact about the corpus, worded as how it was built
   // (and round seventy-nine's, docs/PENDING-ABOUT-HOW-R79.md, once scripts/about-how-r79.mjs writes it)
-  ['src/routes/about/how/+page.svelte', /(?:The species list was derived, not chosen by hand: every accepted species, as WCVP lists them, of 173 collector genera|plus every species Kew accepts of [\d,]+ collector genera taken whole) \(the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs/]
 ];
 
 function files(dir: string): string[] {

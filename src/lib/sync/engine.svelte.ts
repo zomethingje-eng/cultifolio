@@ -118,6 +118,18 @@ const META = 'sync';
  * past its limit is said as a server that did not answer, as a dropped connection is (a TypeError), not as a refusal.
  * Photographs and batches get longer, for a slow line.
  */
+/**
+ * The one error the engine reads as "the server was not reached" (round eighty-four; outside review A16, A23): a request
+ * that failed on the way (the browser's TypeError from fetch: "Failed to fetch", "Load failed"), an answer cut off while
+ * it was being read, or none within the time limit (`timedOut`). Until now any TypeError a run met was read so, and a
+ * programming error (a property of undefined) was shown as "offline" and retried every minute, for good.
+ */
+export class NotReached extends Error {
+  constructor(message: string, readonly timedOut = false) {
+    super(message);
+    this.name = 'NotReached';
+  }
+}
 async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Promise<Response> {
   try {
     // Every sync request carries a header of its own, which a page on another site cannot send without a preflight the
@@ -125,9 +137,15 @@ async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Prom
     // sixty-two; A31, the server's half in hooks.server.ts).
     const headers = new Headers(init.headers);
     headers.set(SYNC_HEADER, '1');
-    return await fetch(url, { ...init, headers, signal: AbortSignal.timeout(ms) });
+    const r = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(ms) });
+    // The answer read whole here, inside the time limit and under the same rule: a connection that drops mid-answer is a
+    // server not reached, as one that drops before it (every caller reads the whole body anyway).
+    const empty = r.status === 204 || r.status === 304 || (init.method ?? 'GET').toUpperCase() === 'HEAD';
+    const body = empty ? null : await r.arrayBuffer();
+    return new Response(body, { status: r.status, statusText: r.statusText, headers: r.headers });
   } catch (e) {
-    if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw Object.assign(new TypeError(`the server did not answer within ${Math.round(ms / 1000)} seconds`), { timedOut: true });
+    if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new NotReached(`the server did not answer within ${Math.round(ms / 1000)} seconds`, true);
+    if (e instanceof TypeError) throw new NotReached(e.message || 'the server was not reached');
     throw e;
   }
 }
@@ -213,6 +231,8 @@ class Sync {
   private gen = 0;
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
+  /** Photographs the last run asked for and the server failed to hand over (a 5xx): asked again next run (round eighty-four; A16). */
+  photosLater = $state(0);
   lastError = $state<string | null>(null);
   /**
    * The server's own refusal of this vault's uploads, as it said it, and when the device asks again: a vault past the
@@ -725,9 +745,10 @@ class Sync {
       if (wait) { if (got) wait.message = `received ${got} batch${got === 1 ? '' : 'es'}; ${wait.message}`; throw wait; }
     } catch (e) {
       if (g === this.gen) {
-        // A fetch that never reached the server throws a TypeError ("Failed to fetch", "Load failed"); the browser's own
-        // offline flag says so more plainly when it is set. Either way the page says offline, not failed (round twenty-four, 9).
-        this.offline = e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
+        // A request that never reached the server is a `NotReached` (syncFetch's, and only syncFetch's: round eighty-four,
+        // A16); the browser's own offline flag says so more plainly when it is set. Either way the page says offline, not
+        // failed (round twenty-four, 9). Any other error is a failure, said as one, and not retried every minute.
+        this.offline = e instanceof NotReached || (typeof navigator !== 'undefined' && navigator.onLine === false);
         this.unreached = !this.offline ? null : typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'server';
         this.lastError = (await storageErrorText(e)) ?? (e instanceof Error ? e.message || e.name || 'the run stopped' : String(e));
         const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
@@ -988,7 +1009,7 @@ class Sync {
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
       // The upload leaves the proof its removal must repeat: a token-holder without the key can add, never destroy (round fifty-one, 2).
       const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit }, PHOTO_MS)
-        .catch((e: unknown) => { if (e instanceof TypeError && (e as { timedOut?: boolean }).timedOut) (e as { photoTimedOut?: boolean }).photoTimedOut = true; throw e; });
+        .catch((e: unknown) => { if (e instanceof NotReached && e.timedOut) (e as { photoTimedOut?: boolean }).photoTimedOut = true; throw e; });
       this.photoTimeouts = 0; // answered, whatever the answer: the link carries a photograph
       const full = await this.fullFrom(r);
       if (full) {
@@ -1378,6 +1399,7 @@ class Sync {
     // Photos that records mention and we lack.
     const have = new Set(await photoBlobIds());
     const missing = collection.knownPhotos().filter((p) => !have.has(p.id));
+    let photosLater = 0;
     for (let i = 0; i < missing.length; i++) {
       this.step(m, `Receiving photo ${i + 1} of ${missing.length}…`);
       const p = missing[i];
@@ -1390,6 +1412,10 @@ class Sync {
       // Being stored or removed by another device this moment, or its record on the server could not be read: asked again
       // next run, and the vault's other photographs still come (round sixty-seven; triage-66 S1).
       if (r.status === 503) continue;
+      // Any other answer of the server's own failing (500, 502, 520 and the rest) is the same: this photograph waits for
+      // the next run, and the run goes on to the others and to the removals (round eighty-four; outside review A16: the
+      // first photograph answered 500 ended the run, and every photograph after it and `dropRemoved` waited behind it).
+      if (r.status >= 500) { photosLater++; continue; }
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer()); // read whole before it is judged: a dropped connection stops the run and it is fetched again
       let pixels: { full: Uint8Array; thumb: Uint8Array } | null = null;
@@ -1409,6 +1435,9 @@ class Sync {
       await this.save(m);
     }
     await this.dropRemoved(m, have);
+    // Said, not thrown: the run's records arrived, and the photographs the server could not hand over are asked for again.
+    this.photosLater = photosLater;
+    if (photosLater) console.warn(`${photosLater} photograph${photosLater === 1 ? '' : 's'} not received this run (the server failed to answer); asked again next run`);
     return got;
   }
 

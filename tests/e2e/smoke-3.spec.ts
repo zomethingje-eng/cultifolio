@@ -1606,7 +1606,10 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   const C = await browser.newContext({ serviceWorkers: 'block' });
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
-  const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days: [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: '2026-11-02' }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
+  // The frosty night is tomorrow, read now: the bar shows a night within 72 hours of now (round eighty-four, U; outside
+  // review A16), and the fixture's fixed 2 November fell outside that window when this ran before about 10:00 UTC on 30 October.
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: new Date().toISOString(), days: [{ date: tomorrow, tmin: -2, tmax: 9, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: tomorrow }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: `Frost forecast: -2.0 °C around 05:00 solar time (${tomorrow}, MET Norway).` }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
   let asked = 0;
   await page.route(/\/api\/forecast/, (r) => { asked++; void r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(frosty) }); });
   // two plants, no site yet: no bar anywhere
@@ -1840,10 +1843,14 @@ test('round fifty-nine: a control reached by the keyboard is never left under a 
     }
     return out;
   };
+  /** End scrolls by an animation in Chromium; a Shift+Tab pressed while it runs focuses an element the animation then carries
+   *  on scrolling past (seen under load on /about/how, 54,000 px tall at 390, round eighty-four). Wait for the page to stop. */
+  const settle = () => page.waitForFunction(() => new Promise<boolean>((res) => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => res(scrollY === y))); }));
   await page.goto('/about/how');
   await ready(page);
   expect(await hidden(30, false)).toEqual([]);
   await page.keyboard.press('End');
+  await settle();
   expect(await hidden(30, true)).toEqual([]);
   await page.goto('/species/copiapoa-cinerea');
   await ready(page);

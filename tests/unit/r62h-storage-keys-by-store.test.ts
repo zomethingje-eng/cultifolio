@@ -47,6 +47,14 @@ function keysByStore() {
       (m[1] === 'localStorage' ? local : session).add(k);
       if (m[1] === 'localStorage' && m[2] !== 'getItem') direct.set(k, [...(direct.get(k) ?? []), f]);
     }
+    // A store passed in, defaulting to one of the browser's (round eighty-four; outside review A's 15: offline-kept.ts keeps
+    // cultifolio.offline-tried through `store`, sessionStorage by default, and no walk read it).
+    for (const d of s.matchAll(/(\w+)\??\s*:\s*Pick<Storage[^=]*=\s*typeof (sessionStorage|localStorage) === 'undefined'/g)) {
+      for (const m of s.matchAll(new RegExp(`\\b${d[1]}\\.(getItem|setItem|removeItem)\\(\\s*([^,)]+)`, 'g'))) {
+        const k = key(m[2]);
+        if (k) (d[2] === 'localStorage' ? local : session).add(k);
+      }
+    }
     // The scope says the store: 'tab' is sessionStorage, any other localStorage outside the sample (round sixty-two).
     for (const m of s.matchAll(/(?:readSetting|writeSetting)\(\s*([^,)]+),\s*['"`](\w+)['"`]/g)) { const k = key(m[1]); if (k) { (m[2] === 'tab' ? session : local).add(k); viaHelper.add(k); } else unresolved.push(`${f}: ${m[1].trim()}`); }
   }

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,6 +33,9 @@ const LIST = [LIST_MAGIC, '# A list of one species without a GBIF key, for a tes
 
 function folder(): string {
   const dir = mkdtempSync(join(tmpdir(), 'r79k-list-'));
+  // Round eighty-four (G): a build reads the regions' shapes or does not start; the merge gives this folder the file.
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  copyFileSync(resolve('scripts/tdwg3-shapes.json'), join(dir, 'scripts/tdwg3-shapes.json'));
   mkdirSync(join(dir, 'bulk'));
   writeFileSync(join(dir, 'bulk/wcvp_names.csv'), NAMES);
   writeFileSync(join(dir, 'bulk/wcvp_distribution.csv'), DIST);
@@ -99,7 +102,7 @@ describe('the owner\'s decision on K\'s offer (round seventy-nine, M): the keys 
   // FAILED on the merge head d47d3e9: the build read no extra keys for a page without a GBIF key (records "not checked").
   it('reads the records of GBIF\'s key for Kew\'s homotypic synonym from the download, and the page keeps no GBIF key', () => {
     const dir = folder();
-    mkdirSync(join(dir, 'scripts'));
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
     // GBIF's "Cupressus lusitanica Mill.", which GBIF holds as a synonym and Kew files, homotypic, under Hesperocyparis lusitanica.
     writeFileSync(join(dir, 'scripts/extra-keys-kew.txt'), ['# a test', ['k457911', '2684069', 'Cupressus lusitanica Mill.', 'SYNONYM', '1001', 'Cupressus lusitanica Mill. (synonym under Hesperocyparis lusitanica (Mill.) Bartel)', 'filed', '-', '-'].join('\t'), ''].join('\n'));
     const head = ['gbifID', 'decimalLatitude', 'decimalLongitude', 'coordinateUncertaintyInMeters', 'year', 'countryCode', 'basisOfRecord', 'license', 'datasetKey', 'speciesKey', 'taxonKey', 'acceptedTaxonKey'];

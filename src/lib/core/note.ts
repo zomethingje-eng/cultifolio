@@ -47,7 +47,7 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
   const why = input.climateStatus === 'unchecked' ? "the habitat climate was not checked (GBIF's records were not asked for this name)" : input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
   if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)}, ${arch.why}${year ? '.' : `; ${why}.`}`);
-  if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: 'archetype table' });
+  if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: "growers' groups" });
   else if (!year) items.push({ lead: `${why[0].toUpperCase()}${why.slice(1)}.`, rule: 'the dossier' });
   for (const r of picked) {
     s.push(r.short!);

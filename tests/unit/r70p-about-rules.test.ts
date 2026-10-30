@@ -48,23 +48,23 @@ const wclaim = (v: unknown) => [{ mainsnak: { datavalue: { value: v } } }];
 const item = (name: string, keys: string[] = [], ipni: string[] = [], p31 = 'Q16521') => ({ claims: { P225: wclaim(name), ...(keys.length ? { P846: keys.flatMap(wclaim) } : {}), ...(ipni.length ? { P961: ipni.flatMap(wclaim) } : {}), P31: wclaim({ id: p31 }) } });
 
 describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
-  const s = said('how', 'When Wikidata finds no item that does');
+  const s = said('how', 'When Wikidata finds no item that carries the key');
   it('the answers read and the GBIF keys read are the counts the sentence gives', () => {
-    expect(numberWord(claim(s, /the items in the first (\w+) answers to the name/)), s.where).toBe(5);
-    expect(numberWord(claim(s, /one of its GBIF keys \(up to (\w+) are read\)/))).toBe(LABEL_KEYS);
+    expect(numberWord(claim(s, /the items in its first (\w+) answers to the name/)), s.where).toBe(5);
+    expect(numberWord(claim(said('how', 'Or, with no IPNI identifier'), /one of its GBIF keys \(up to (\w+) are read\)/))).toBe(LABEL_KEYS);
     expect(raw('src/lib/dossier/sources/wikimedia.ts')).toMatch(/wbsearchentities&format=json&language=en&type=item&limit=5&/);
   });
   it('"each a taxon by what Wikidata says it is (a print of the plant is passed over)"', () => {
-    expect(s.text).toMatch(/each a taxon by what Wikidata says it is \(a print of the plant is passed over\)/);
+    expect(said('how', 'Each is a taxon by what Wikidata says it is').text).toMatch(/a taxon by what Wikidata says it is \(a print of the plant is passed over\)/);
     expect(isTaxonItem(item('Peperomia monticola') as never)).toBe(true);
     expect(isTaxonItem(item('Peperomia monticola', [], [], 'Q11060274') as never)).toBe(false); // a print, with the plant's taxon name
   });
   it('"an IPNI identifier that is Kew\'s for another author\'s name of these words refuses it": Peperomia monticola Miq.', async () => {
-    expect(s.text).toMatch(/an IPNI identifier that is Kew's for another author's name of these words refuses it/);
+    expect(said('how', "An IPNI identifier that is Kew's for another author's name").text).toMatch(/An IPNI identifier that is Kew's for another author's name of these words refuses an item/);
     // Round seventy-c: the GBIF key of another author's name refuses too, which keeps the six whose own IPNI and GBIF
     // record name another author refused (Raphionacme linearis: B's r70c-wikidata-86), and IPNI is asked itself.
-    expect(s.text).toMatch(/as does a GBIF key of another author's name, unless its POWO identifier proves it, and any other identifier proves nothing either way/); // round seventy-one: B's POWO proof
-    expect(claim(s, /the build asks IPNI itself, (www\.ipni\.org), for the record of an identifier Kew does not hold, and of the identifiers a Wikipedia title's Wikidata item carries, at most once a second/)).toBe('www.ipni.org');
+    expect(said('how', "A GBIF key of another author's name refuses it too").text).toMatch(/A GBIF key of another author's name refuses it too, unless its POWO identifier proves it, and any other identifier proves nothing either way/); // round seventy-one: B's POWO proof
+    expect(claim(said('how', 'The build asks IPNI itself'), /The build asks IPNI itself, (www\.ipni\.org), for the record of an identifier Kew does not hold, and of the identifiers a Wikipedia title's Wikidata item carries, at most once a second/)).toBe('www.ipni.org');
     expect(raw('src/lib/dossier/fetch.ts')).toMatch(/'www\.ipni\.org': 1100,/);
     expect(raw('src/lib/dossier/sources/wikimedia.ts')).toMatch(/https:\/\/www\.ipni\.org\/api\/1\/n\//);
     const f = fixtureFetcher({
@@ -83,30 +83,34 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
 /* ---- Summaries (A1, A2) ---- */
 describe('the summary under another title (/about/how)', () => {
   const s = said('how', "A summary under any title but the species' name");
+  const sameType = said('how', 'Or when another item has the same type');
+  const product = said('how', "Or when the title's item names this species");
+  const genus = said('how', 'Or when the title is a genus');
+  const sitelink = said('how', 'Or when the title is the English article');
   const who = { name: 'Ceropegia zebrina', synonyms: ['Huernia zebrina'], item: 'Q100' };
   const sp = (o: Partial<{ sitelink: string; parents: string[]; basionyms: string[]; sourceOf: string[] }> = {}) => ({ id: 'Q100', parents: [], basionyms: [], sourceOf: [], ...o });
   const ti = (o: Partial<{ id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[] }> = {}) => ({ id: 'Q200', productOf: [], taxonNames: [], ranks: [], basionyms: [], ...o });
   it('a title whose item has the same type, by Wikidata\'s basionym statements, is proved ("Huernia zebrina" for Ceropegia zebrina)', () => {
-    const [title, of] = [claim(s, /\("([A-Z][a-z]+ [a-z]+)" for [A-Z][a-z]+ [a-z]+\)/), claim(s, /\("[A-Z][a-z]+ [a-z]+" for ([A-Z][a-z]+ [a-z]+)\)/)];
+    const [title, of] = [claim(sameType, /\("([A-Z][a-z]+ [a-z]+)" for [A-Z][a-z]+ [a-z]+\)/), claim(sameType, /\("[A-Z][a-z]+ [a-z]+" for ([A-Z][a-z]+ [a-z]+)\)/)];
     const w = { name: of, synonyms: [], item: 'Q100' };
     expect(proofByItem(title, w, { species: sp({ basionyms: ['Q200'] }), title: ti({ ranks: [SPECIES_RANK] }) })?.proof, s.where).toBe('older-name');
     expect(proofByItem(title, w, { species: sp(), title: ti({ ranks: [SPECIES_RANK] }) })).toBeNull(); // no shared type, no proof
   });
   it('a product "naming no other plant but its genus" ("Apple"), and not one naming another plant', () => {
-    expect(s.text).toMatch(/the title's item names this species as the plant it is a product of, and no other plant but its genus \("Apple"\)/); // round seventy-one, A's sentence
+    expect(product.text).toMatch(/the title's item names this species as the plant it is a product of, and no other plant but its genus \("Apple"\)/); // round seventy-one, A's sentence
     const malus = { name: 'Malus domestica', synonyms: [], item: 'Q100' };
     expect(proofByItem('Apple', malus, { species: sp({ parents: ['Q300'] }), title: ti({ productOf: ['Q100', 'Q300'] }) })?.proof).toBe('product');
     expect(proofByItem('Plum', malus, { species: sp({ parents: ['Q300'] }), title: ti({ productOf: ['Q100', 'Q400'] }) })).toBeNull();
   });
   it('a genus in which Kew holds one accepted species, this one ("Welwitschia")', () => {
-    expect(numberWord(claim(s, /holds (\w+) accepted species, and that species is this one/))).toBe(1);
+    expect(numberWord(claim(genus, /holds (\w+) accepted species, and that species is this one/))).toBe(1);
     const w = { name: 'Welwitschia mirabilis', synonyms: [], item: 'Q100' };
     const facts = (accepted: number) => ({ species: sp({ parents: ['Q200'] }), title: ti({ ranks: [GENUS_RANK], taxonNames: ['Welwitschia'] }), genus: { name: 'Welwitschia', accepted, only: accepted === 1 ? 'Welwitschia mirabilis' : undefined } });
     expect(proofByItem('Welwitschia', w, facts(1))?.proof).toBe('monotypic-genus');
     expect(proofByItem('Welwitschia', w, facts(2))).toBeNull();
   });
   it('the species\' own sitelink, but not a binomial GBIF holds as another species (Drosera tomentosa on Drosera montana)', () => {
-    expect(s.text).toMatch(/but not when that title is a binomial, neither its name nor an older name, that GBIF holds as another species or under a variety or subspecies of this one/);
+    expect(sitelink.text).toMatch(/but not when that title is a binomial, neither its name nor an older name, that GBIF holds as another species or under a variety or subspecies of this one/);
     const montana = { name: 'Drosera montana', synonyms: [], item: 'Q100' };
     // GBIF's answer for the title, as A's round-seventy-b rule reads it (round seventy-b; A's need): the facts are typed by
     // `proofByItem` itself, so the field is the rule's wherever the merge puts it.
@@ -124,9 +128,12 @@ describe('the summary under another title (/about/how)', () => {
 
 /* ---- Commons files (C1, C6, C7) ---- */
 describe('the Commons file rules (/about/how)', () => {
-  const s = said('how', "Another spelling of the species' epithet is the species'");
-  const b = said('how', 'Every binomial in the name, of the species');
-  const y = said('how', 'A credit naming a lithographer or draughtsman');
+  const s = said('how', 'So is an uploader\'s slip of five letters or more');
+  const until = said('how', 'Kew and GBIF are asked by the build or the fill');
+  const ex = said('how', 'So "Mammillaria mabudae" is');
+  const b = said('how', "An older name's epithet counts only with that name's genus");
+  const y = said('how', 'So does a year from 1500 to 1899');
+  const y2 = said('how', 'A year cited after a page');
   const HELD = heldNamesOf([
     { key: gbifPage(7284127), name: 'Mammillaria matudae' },
     { key: gbifPage(7283175), name: 'Echinocereus scheeri' },
@@ -139,17 +146,17 @@ describe('the Commons file rules (/about/how)', () => {
   // as no species (`Photo.slips`); until then the file is not shown. Kew's synonym of another plant is no slip, and GBIF's
   // second spelling of the same name by the same author is one name.
   it('an uploader\'s slip is the species\' only once Kew and GBIF were asked of it: the sentence\'s own cases', () => {
-    const [slipped, species] = [claim(s, /"(Mammillaria \w+)" is Mammillaria \w+;/), claim(s, /"Mammillaria \w+" is (Mammillaria \w+);/)];
+    const [slipped, species] = [claim(ex, /"(Mammillaria \w+)" is Mammillaria \w+;/), claim(ex, /"Mammillaria \w+" is (Mammillaria \w+);/)];
     const shownWith = (slips: string[]) => commonsKind(`File:${slipped}.jpg`, { scientific: species, key: gbifPage(7284127), held: HELD }, { slips: slips.map((x) => x.toLowerCase()) }) === null;
-    expect(s.text, s.where).toMatch(/until then the file is not shown/);
+    expect(until.text, until.where).toMatch(/until then the file is not shown/);
     expect(shownWith([]), s.where).toBe(false); // not yet asked
     expect(shownWith([slipped])).toBe(true); // asked, and held as no species
-    const own = claim(s, /"(Echinocereus \w+)" is a species of its own/);
+    const own = claim(ex, /"(Echinocereus \w+)" is a species of its own/);
     expect(commonsKind(`File:${own}.jpg`, { scientific: 'Echinocereus scheeri', key: gbifPage(7283175), held: HELD }, { slips: [own.toLowerCase()] })).not.toBeNull();
     expect(numberWord(claim(s, /an uploader's slip of (\w+) letters or more/))).toBe(5);
-    const [mariae, scut] = [claim(s, /"(Ceropegia mariae)" Kew's synonym of/), claim(s, /"Ceropegia mariae" Kew's synonym of (Echidnopsis scutellata)/)];
+    const [mariae, scut] = [claim(ex, /"(Ceropegia mariae)" Kew's synonym of/), claim(ex, /"Ceropegia mariae" Kew's synonym of (Echidnopsis scutellata)/)];
     expect(slipStanding(mariae, { scientific: 'Ceropegia maritae' }, [{ canonicalName: mariae, scientificName: `${mariae} Lavranos`, taxonomicStatus: 'SYNONYM', accepted: `${scut} (Deflers) A.Berger` }], null).own).toBe(false);
-    expect(s.text).toMatch(/the same name by the same author spelt otherwise is one name/);
+    expect(said('how', 'The same name by the same author spelt otherwise is one name').text).toMatch(/The same name by the same author spelt otherwise is one name/);
     const gbif = (author: string) => ({ matchType: 'EXACT', status: 'ACCEPTED', rank: 'SPECIES', canonicalName: 'Othonna cakilifolia', scientificName: `Othonna cakilifolia ${author}`, authorship: author, usageKey: 1 });
     expect(slipStanding('Othonna cakilifolia', { scientific: 'Othonna cakilefolia', authorship: 'DC.', key: 2 }, [], gbif('DC.')).own).toBe(true);
     expect(slipStanding('Othonna cakilifolia', { scientific: 'Othonna cakilefolia', authorship: 'DC.', key: 2 }, [], gbif('Harv.')).own).toBe(false);
@@ -170,7 +177,7 @@ describe('the Commons file rules (/about/how)', () => {
     // A book's word in the name ("vol"), with the year and without it, and the citation's year with it.
     expect(shown(`Dasylirion graminifolium Zuccarini ${year} vol 2`, 'Dasylirion graminifolium', 9)).toBe(false);
     expect(shown(`Dasylirion graminifolium Zuccarini ${to + 101} vol 2`, 'Dasylirion graminifolium', 9)).toBe(true);
-    const cited = claim(y, /a year cited after a page \("([^"]+)"\) is no year/);
+    const cited = claim(y2, /A year cited after a page \("([^"]+)"\) is no year/);
     expect(shown(`Dasylirion graminifolium Ecklon${cited} vol 2`, 'Dasylirion graminifolium', 9)).toBe(true);
     // A licence for old works is evidence too.
     expect(commonsKind(`File:Dasylirion graminifolium Zuccarini ${year}.jpg`, { scientific: 'Dasylirion graminifolium', key: gbifPage(9), held: HELD }, { credit: 'Zuccarini, PD-old, via Wikimedia Commons' })).not.toBeNull();
@@ -193,7 +200,8 @@ describe('the Commons sizes, slot by slot (/about/how)', () => {
   ];
   for (const [re, size, file, call] of SLOTS) {
     it(`${String(re).slice(1, 40)}…: asked as '${size}', and that is the width the sentence gives`, () => {
-      const w = Number(claim(s, re));
+      // Round eighty-four: the sizes in two sentences of one list item, the second "It is loaded at 250 …".
+      const w = Number(re.test(s.text) ? claim(s, re) : claim(said('how', 'It is loaded at 250'), re));
       expect(raw(file), file).toMatch(call);
       expect(photoAt(T(960), size), s.where).toBe(T(w));
     });
@@ -202,16 +210,17 @@ describe('the Commons sizes, slot by slot (/about/how)', () => {
     expect(Number(claim(s, /(\d+) on the compare page/))).toBe(500);
     expect(raw('src/routes/compare/+page.svelte')).toMatch(/<img src=\{c\.hero\.thumb \?\? c\.hero\.url\}/);
   });
-  const o = said('how', 'It is never loaded as the original upload where Commons has a version');
+  const o = said('how', 'An upload from 501');
+  const o2 = said('how', 'One no wider than 500 is loaded');
   it('an original: 501 to 960 leads at its own width; no wider than 500, at Commons\' largest version below it; 120 or less, whole', () => {
     const O = 'https://upload.wikimedia.org/wikipedia/commons/a/ab/F.jpg';
-    const [lo, hi] = [Number(claim(o, /an upload from (\d+) to \d+ pixels wide leads at its own width/)), Number(claim(o, /an upload from \d+ to (\d+) pixels wide leads at its own width/))];
+    const [lo, hi] = [Number(claim(o, /An upload from (\d+) to \d+ pixels wide leads at its own width/)), Number(claim(o, /An upload from \d+ to (\d+) pixels wide leads at its own width/))];
     expect(shownAt({ url: O, thumb: T(500), width: lo })).toBe(O);
     expect(shownAt({ url: O, thumb: T(500), width: hi })).toBe(O);
     expect(shownAt({ url: O, thumb: T(500), width: hi + 1 })).toBe(T(500));
-    const tops = claim(o, /loaded at Commons' largest version below its own width, (\d+ or \d+)/).split(' or ').map(Number);
+    const tops = claim(o2, /loaded at Commons' largest version below its own width, (\d+ or \d+)/).split(' or ').map(Number);
     expect([commonsTileOf(O, 400), commonsTileOf(O, 200)]).toEqual(tops.map((w) => T(w)));
-    expect(commonsTileOf(O, Number(claim(o, /whole only where it is (\d+) pixels wide or less/)))).toBe(O);
+    expect(commonsTileOf(O, Number(claim(o2, /whole only where it is (\d+) pixels wide or less/)))).toBe(O);
     expect(commonsTileOf(O, null)).toBe(O); // "or its width is not known"
   });
 });
@@ -274,7 +283,7 @@ describe('the hour of uploads (/about/formats)', () => {
 /* ---- iNaturalist's own names (B7) ---- */
 describe('the species\' own names for iNaturalist (/about/how)', () => {
   it('another name GBIF holds as its synonym is its own, unless a species of the reference holds it as its own', () => {
-    const s = said('how', 'An id iNaturalist has made inactive is followed');
+    const s = said('how', "Its name is one of the species' own");
     expect(s.text, s.where).toMatch(/or another name GBIF holds as its synonym that no species of this reference holds as its own/);
     expect(ownNames({ scientific: 'Ceropegia pulvinata', synonyms: ['Stapelia hirsuta L.'], heldElsewhere: () => false }).own.has('stapelia hirsuta')).toBe(true);
     expect(ownNames({ scientific: 'Pinguicula chilensis', synonyms: ['Pinguicula antarctica Vahl'], heldElsewhere: (n) => n === 'Pinguicula antarctica' }).own.has('pinguicula antarctica')).toBe(false);
@@ -285,7 +294,7 @@ describe('the species\' own names for iNaturalist (/about/how)', () => {
 describe('the order of English names (/about/how)', () => {
   it('names given by as many sources, neither preferred, keep the order of GBIF\'s list', () => {
     const s = said('how', 'Names are put in order by a fixed rule');
-    expect(s.text, s.where).toMatch(/then the order in which GBIF's list gives the names, which is not always the alphabet;/);
+    expect(s.text, s.where).toMatch(/then the order in which GBIF's list gives the names, which is not always the alphabet\./);
     expect(englishNames([{ name: 'Swamp Mahogany', lang: 'eng', source: 'IUCN' }, { name: 'Bastard mahogany', lang: 'eng', source: 'B' }]).common).toBe('Swamp Mahogany'); // base page: "the alphabet"
   });
 });
@@ -295,8 +304,8 @@ describe('the clock\'s day and two days (/about/formats)', () => {
   it('a positive correction of more than a day waits for a reading; one of two days or more needs two readings', () => {
     const s = said('formats', 'At a page load after the device clock has moved at least the correction');
     expect(spanWords(claim(s, /a positive correction of more than (a day|\w+ days) is not in force until a reading confirms it/)), s.where).toBe(WAIT_PAST_MS);
-    const t = said('formats', "That clock is the device's corrected by the server's");
-    expect(spanWords(claim(t, /a correction of (\w+ days) or more is taken only when two readings/)), t.where).toBe(TRUST_SERVER_TWICE_PAST_MS);
+    const t = said('formats', 'A correction of two days or more is taken only');
+    expect(spanWords(claim(t, /A correction of (\w+ days) or more is taken only when two readings/)), t.where).toBe(TRUST_SERVER_TWICE_PAST_MS);
     expect(part(said('formats', 'Offline, a slow device whose clock was set right'), 'when that correction was')).toMatch(/^when that correction was a day or less; one of more than a day is not in force until a reading/);
   });
 });

@@ -17,6 +17,7 @@
  * rows. Nothing here asks a source.
  */
 import { ownByAuthor, plainlyAnother } from './authors';
+import { headWithKew, unhead, kewAcceptedOf, type KewAccepted, type GbifName } from './kew-heading';
 /** The record's words of a homonym key (`build.ts` `KEW_NAME`), kept here so a reader of `name.kew` need not load the builder. */
 const KEW_NAME = /is cited as Kew (?:accepts|cites) it/;
 
@@ -32,6 +33,8 @@ export interface KewRow {
   powo: string; // powo_id: the IPNI number where IPNI holds the name, else Kew's own "-4"
   /** homotypic_synonym: Kew marks the name as of the same type as the entry it is filed under (round seventy-three). */
   homotypic?: boolean;
+  /** ipni_id (round eighty-four): IPNI's number for the name, where IPNI holds it; absent in rows read before. */
+  ipni?: string;
 }
 
 /**
@@ -40,7 +43,7 @@ export interface KewRow {
  * is then not this page's, so `entry` is '' and `synonyms` empty (they are the other page's plant's names), and the
  * page keeps its GBIF id. Echeveria peacockii (g7530398) read to Dudleya pulverulenta's 2778991, page k2778991's.
  */
-export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string }
+export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string; accepted?: KewAccepted }
 /** `name.cited`: the page cites Kew's author; `gbif` is the backbone's citation, `kew` the Kew row cited. */
 export interface KewCited { gbif: string; kew: string }
 
@@ -78,8 +81,10 @@ export function splitName(s: string): { name: string; author: string } | null {
 
 type Page = {
   key: number;
-  name: { scientific: string; authorship?: string | null; synonyms?: string[]; vernacular?: Array<{ name: string; lang?: string; source?: string }>; kew?: KewNames; cited?: KewCited };
+  slug?: string;
+  name: { scientific: string; authorship?: string | null; rank?: string | null; genus?: string | null; synonyms?: string[]; vernacular?: Array<{ name: string; lang?: string; source?: string }>; kew?: KewNames; cited?: KewCited; gbif?: GbifName | null };
   ids: { powo?: string | null; ipni?: string | null };
+  links?: Record<string, string>;
   upstream?: Record<string, { status: string; at: string; detail?: string } | undefined>;
 };
 
@@ -138,8 +143,51 @@ export function kewNames(d: Page, idx: KewNamesIndex, file: string): KewNames {
     const acc = idx.rowsOf(sp.name).filter((r) => r.rank === 'Species' && r.status === 'Accepted');
     return ownByAuthor(acc, sp.author, (r) => r.authors).some((r) => !plant.has(r.id));
   });
-  return { entry, synonyms: [...synonyms].sort(), acceptedElsewhere, file };
+  // Kew's row for the entry, which heads the page while its id is `k<entry>` (round eighty-four, decision 1; `kew-heading.ts`).
+  // GBIF's name for the key, where Kew files it under another plant only (k3313620: GBIF's Ceropegia tanzaniensis, which
+  // Kew's file holds as a synonym of Ceropegia cordiloba, on the page of Kew's Ceropegia dodomaensis), is not made an
+  // older name of the page by the heading: `other` names that plant.
+  let other: string | undefined;
+  if (e && words(e.name) !== own) {
+    const rank = (d.name.rank ?? 'SPECIES').toLowerCase();
+    const held = idx.rowsOf(d.name.scientific).filter((r) => r.status !== 'Misapplied' && r.rank.toLowerCase() === rank);
+    const to = [...new Set(held.map((r) => (r.status === 'Accepted' ? r.id : r.accepted)).filter(Boolean))];
+    if (to.length && !to.includes(entry)) other = idx.byId.get(to[0])?.name ?? `Kew's entry ${to[0]}`;
+  }
+  return { entry, synonyms: [...synonyms].sort(), acceptedElsewhere, file, ...(e ? { accepted: { ...kewAcceptedOf(e), ...(other ? { other } : {}) } } : {}) };
 }
+
+/** POWO's address and IPNI's number of a Kew row: Kew's `powo_id`, and IPNI's `ipni_id` (else the `powo_id`) unless it is Kew's own number ("-4"), which IPNI does not hold. */
+export function kewNumbers(r: Pick<KewRow, 'powo' | 'ipni'>): { powo?: string; ipni?: string } {
+  const ipni = r.ipni || r.powo;
+  return { ...(r.powo ? { powo: `urn:lsid:ipni.org:names:${r.powo}` } : {}), ...(ipni && !/-4$/.test(ipni) ? { ipni } : {}) };
+}
+
+/**
+ * A `k` page's POWO and IPNI links from its Kew entry (round eighty-four; review-d D5: four of 22 sampled hybrids had no
+ * POWO link, though Kew's file numbers each, since the name was asked without its sign; and with decision 1 the page is
+ * that entry, so it links that entry's pages, not a synonym's: Ceropegia alstonii linked IPNI's record of that name, where
+ * the page is Kew's Hoodia alstonii). In the page's order of links: GBIF, then POWO and IPNI, then the rest. True when it
+ * changed.
+ */
+export function linkKewEntry(d: Page, r: Pick<KewRow, 'powo' | 'ipni'>): boolean {
+  const n = kewNumbers(r);
+  if (!n.powo && !n.ipni) return false;
+  const before = JSON.stringify([d.ids, d.links]);
+  const ids = d.ids as Record<string, unknown>;
+  if (n.powo) ids.powo = n.powo; else delete ids.powo;
+  if (n.ipni) ids.ipni = n.ipni; else delete ids.ipni;
+  if (d.links) {
+    const { gbif, powo: _p, ipni: _i, ...rest } = d.links;
+    d.links = { ...(gbif ? { gbif } : {}), ...(n.powo ? { powo: `https://powo.science.kew.org/taxon/${n.powo}` } : {}), ...(n.ipni ? { ipni: `https://www.ipni.org/n/${n.ipni}` } : {}), ...rest };
+  }
+  return JSON.stringify([d.ids, d.links]) !== before;
+}
+
+/** The record's words for a page Kew's accepted name heads, where GBIF names its key otherwise (`kew.names`). */
+export const headedWords = (entry: string, acc: KewAccepted, gbif: GbifName) =>
+  `this page is Kew's entry ${entry}, ${acc.name}${acc.authors ? ` ${acc.authors}` : ''}, Kew's accepted name, which heads it; GBIF names its key ${gbif.scientific}${gbif.authorship?.trim() ? ` ${gbif.authorship.trim()}` : ''}${gbif.added ? ', an older name of the page here' : acc.other ? `, a name Kew's file holds under ${acc.other}, so not an older name of this page` : ''}`;
+const HEADED_WORDS = /^this page is Kew's entry \d+, .*, Kew's accepted name, which heads it/;
 
 /** A common name that is a binomial Kew or the reference holds (A8): "Babiana odorata", "Salvia mexicana". */
 export const BINOMIAL = /^[A-Z][a-z]+(?:-[a-z]+)? ×?[a-z][a-z-]+$/;
@@ -179,6 +227,8 @@ export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; 
     c.read++;
     const before = JSON.stringify(d);
     const what: string[] = [];
+    // Kew's entry is read by GBIF's name for the key, as the build read it (round eighty-four): a heading of an earlier fill is taken off first, and put back by the rule below.
+    unhead(d);
     d.name.kew = kewNames(d, idx, file);
     // One Kew entry, one page (round eighty-two, F; review 1's 4): an entry another page holds is not given to this one.
     const holder = d.name.kew.entry ? o.heldBy?.(d.name.kew.entry, String(d.key)) : undefined;
@@ -219,6 +269,23 @@ export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; 
       if (row) up['gbif.vernacular'] = { ...row, detail: [row.detail, note].filter(Boolean).join('; ') };
       what.push(`common names dropped: ${drop.map((v) => v.name).join(', ')}`);
     }
+    // Kew's accepted name heads the page while its id is `k<entry>` (round eighty-four, decision 1), and the page links that entry.
+    const id = String(d.key);
+    const wasName = d.name.scientific;
+    headWithKew(d, id);
+    const entryRow = d.name.kew.entry && id === `k${d.name.kew.entry}` ? idx.byId.get(d.name.kew.entry) : undefined;
+    if (entryRow && linkKewEntry(d, entryRow)) {
+      what.push(`linked Kew's entry ${d.name.kew.entry}`);
+      // A record that said there was no POWO link says where the link now comes from.
+      const wd0 = up.wikidata;
+      const note = `POWO and IPNI linked from Kew's entry ${d.name.kew.entry}`;
+      if (wd0?.detail && /no POWO link|linked by Kew's number, none/.test(wd0.detail) && !wd0.detail.includes(note)) up.wikidata = { ...wd0, detail: `${wd0.detail}; ${note}` };
+    }
+    if (d.name.gbif && d.name.kew.accepted && entryRow) {
+      const words = headedWords(d.name.kew.entry, d.name.kew.accepted, d.name.gbif);
+      if (up['kew.names']?.detail !== words) up['kew.names'] = { status: 'ok', at: new Date().toISOString(), detail: words };
+      if (d.name.scientific !== wasName) what.push(`headed ${d.name.scientific} (GBIF: ${wasName})`);
+    } else if (HEADED_WORDS.test(up['kew.names']?.detail ?? '')) delete up['kew.names'];
     // The links none because Kew holds the name only under another author: the record says so (A5).
     const wd = up.wikidata;
     if (wd?.detail && !d.ids.powo && /IPNI and POWO linked by Kew's number, none/.test(wd.detail)) {

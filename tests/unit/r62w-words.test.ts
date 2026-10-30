@@ -94,10 +94,10 @@ describe('the groups (A4)', () => {
     expect(listedFor('Phalaenopsis amabilis', 'Orchidaceae')?.arch.key).toBe('orchid'); // the rest of the group stays
   });
   it('the why text says what the table lists, not what the plant is', () => {
-    expect(listedFor('Copiapoa cinerea', 'Cactaceae')!.why).toBe('listed under the genus Copiapoa in the archetype table');
+    expect(listedFor('Copiapoa cinerea', 'Cactaceae')!.why).toBe('listed under the genus Copiapoa in the reference\'s list of growers\' groups');
     const sheet = cultivationSheet({ scientific: 'Monstera deliciosa', family: 'Araceae', kew: { lifeform: 'climber', climate: 'wet tropical' } });
     expect(sheet.arch!.why).not.toMatch(/reliably one kind of plant/);
-    expect(sheet.arch!.why).toBe('listed under the genus Monstera in the archetype table, and Kew describes it as “climber”, “wet tropical”'); // round eighty-one: with Kew's words
+    expect(sheet.arch!.why).toBe('listed under the genus Monstera in the reference\'s list of growers\' groups, and Kew describes it as “climber”, “wet tropical”'); // round eighty-one: with Kew's words
   });
 });
 
@@ -217,7 +217,7 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
     expect(home).not.toMatch(/class="feature"|featureBlock|<Climograph|<Glance|cultivationSheet|climograph\(/);
     expect(code('src/routes/+page.server.ts')).not.toMatch(/getDossier|feature\b/);
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toMatch(/<p id="feature">The front page's photographs are chosen by rule/);
+    expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);
     expect(how).not.toMatch(/shown whole/);
   });
   it('the phone search placeholder fits', () => {

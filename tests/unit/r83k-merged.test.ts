@@ -228,8 +228,9 @@ describe('1. the mark, on the real builder', () => {
 describe('the about pages say it', () => {
   it('/about/how gives the order and the row\'s words; /about/formats names the field', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toContain('lists the page it was merged into first, before every other species that holds the name as an older name (Echeveria peacockii is Echeveria desmetiana, then Dudleya pulverulenta'); // base: not said
+    expect(how).toContain('lists the page it was merged into first, before every other species that holds the name as an older name: '); // base: not said
+    expect(how).toMatch(/>"Echeveria peacockii" is Echeveria desmetiana, then Dudleya pulverulenta</);
     expect(how).toContain('says "Echeveria peacockii is merged into this page"');
-    expect(readFileSync('src/routes/about/formats/+page.svelte', 'utf8')).toContain('<code>merged</code>, the names of the pages merged into this one');
+    expect(readFileSync('src/routes/about/formats/+page.svelte', 'utf8')).toContain('<code>merged</code>: the names of the pages merged into this one');
   });
 });

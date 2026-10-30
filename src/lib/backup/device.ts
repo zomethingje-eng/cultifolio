@@ -5,7 +5,7 @@
  * exported the file (round twenty-two, 5). Read and written through the same stores the pages use.
  */
 import { browser } from '$app/environment';
-import { site } from '$lib/ui/site.svelte';
+import { site, siteName } from '$lib/ui/site.svelte';
 import { units } from '$lib/ui/units.svelte';
 import { prefs } from '$lib/ui/prefs.svelte';
 import { parseUnits } from '$core/units';
@@ -44,7 +44,8 @@ function labelsShape(v: Record<string, unknown>): Record<string, unknown> | null
 }
 const siteShape = (s: unknown): { lat: number; lon: number; name?: string } | null => {
   const o = s as { lat?: unknown; lon?: unknown; name?: unknown } | undefined;
-  return o && typeof o.lat === 'number' && typeof o.lon === 'number' && Math.abs(o.lat) <= 90 && Math.abs(o.lon) <= 180 ? { lat: o.lat, lon: o.lon, ...(typeof o.name === 'string' && o.name ? { name: o.name } : {}) } : null;
+  const name = o ? siteName(o.name) : null;
+  return o && typeof o.lat === 'number' && typeof o.lon === 'number' && Number.isFinite(o.lat) && Number.isFinite(o.lon) && Math.abs(o.lat) <= 90 && Math.abs(o.lon) <= 180 ? { lat: o.lat, lon: o.lon, ...(name ? { name } : {}) } : null;
 };
 
 /** What a restore would apply, without applying it: the settings in the file that this device lacks (round twenty-three, 9). */

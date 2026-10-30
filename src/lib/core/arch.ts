@@ -63,7 +63,7 @@ export interface ArchGuess {
   tier: 'species' | 'genus' | 'family';
   of: string;
   /**
-   * Where the table lists it and what Kew says, as a phrase: "listed under the genus Copiapoa in the archetype table, and
+   * Where the table lists it and what Kew says, as a phrase: "listed under the genus Copiapoa in the reference's list of growers' groups, and
    * Kew describes it as “succulent subshrub”" (round sixty-two; round eighty-one).
    */
   why: string;
@@ -100,14 +100,14 @@ export function listedFor(scientific: string, family?: string | null): ArchGuess
   const name = scientific.trim().toLowerCase();
   const genus = name.split(/\s+/)[0];
   const sp = bySpecies.get(name.split(/\s+/).slice(0, 2).join(' '));
-  if (sp) return { arch: ARCH[sp], tier: 'species', of: scientific, why: `listed by name in the archetype table, apart from its genus` };
+  if (sp) return { arch: ARCH[sp], tier: 'species', of: scientific, why: `listed by name in the reference's list of growers' groups, apart from its genus` };
   if (ungrouped.has(genus)) return null;
   const g = byGenus.get(genus);
   // What the table says, not a claim about the plant: "the genus X, which is reliably one kind of plant" was an authored
   // claim on a species page (round sixty-two; outside review A4). The tier still says how wide the listing is.
-  if (g) return { arch: ARCH[g], tier: 'genus', of: genus, why: `listed under the genus ${genus[0].toUpperCase() + genus.slice(1)} in the archetype table` };
+  if (g) return { arch: ARCH[g], tier: 'genus', of: genus, why: `listed under the genus ${genus[0].toUpperCase() + genus.slice(1)} in the reference's list of growers' groups` };
   const f = family ? byFamily.get(family.toLowerCase()) : undefined;
-  if (f) return { arch: ARCH[f], tier: 'family', of: family!, why: `listed under the family ${family} in the archetype table` };
+  if (f) return { arch: ARCH[f], tier: 'family', of: family!, why: `listed under the family ${family} in the reference's list of growers' groups` };
   return null;
 }
 

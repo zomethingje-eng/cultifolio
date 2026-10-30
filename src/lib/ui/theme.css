@@ -475,7 +475,7 @@ details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-h
   nav.tabs a { font-size: var(--fs-sm); padding: 0 11px; }
   table.wx td, table.wx th { padding: 6px 8px; }
   /* Fingers: the tap token on anything tappable (44 px under a coarse pointer; round fifty-eight). */
-  .btn, .chipbtn, .linkish { min-height: var(--tap); }
+  .btn, .chipbtn { min-height: var(--tap); } /* .linkish takes its height as a margin instead (round eighty-four; P8, below) */
   .btn { padding-top: 9px; padding-bottom: 9px; }
   .chipbtn { padding: 9px 14px; }
   .quickbar { gap: 8px; }
@@ -521,7 +521,13 @@ input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; accent-
    plant's number chip 25 px (round eighty-one; the phone review's 10). The chips keep their look and take the finger's
    height as an invisible margin around them, over what is the same link or nothing to press. */
 @media (pointer: coarse) {
-  .btn, .chipbtn, .linkish, .searchbar { min-height: var(--tap); }
+  .btn, .chipbtn, .searchbar { min-height: var(--tap); }
+  /* A link-like button in running text ("Write what you know", "Not now") keeps its line's height and takes the finger's
+     44 px as an invisible margin around it, as the number chips do: a min-height made its line 44 px tall and opened a
+     20 px gap in the sentence on every species page (round eighty-four; P8). A page that sets one apart on its own row
+     still gives it its own height. */
+  .linkish { position: relative; }
+  .linkish::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; min-height: 100%; height: var(--tap); transform: translateY(-50%); }
   .btn { min-width: var(--tap); justify-content: center; }
   a.accno { position: relative; } /* the credit is placed already, absolute or relative, which holds its margin too */
   a.accno::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: var(--tap); transform: translateY(-50%); }

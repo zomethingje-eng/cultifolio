@@ -551,6 +551,275 @@ The second form only when the first refuses. It says `written into src/routes/ab
 
 **Nothing to run for the pages.** With the reference's photographs switched on, a plant page now keeps the species photograph's room while it asks for the sheet, so the photograph's arrival moves neither the card nor the buttons under a finger; a species page keeps "Your notes: none yet"'s line while the collection opens, so the cultivation cards do not move. In the owner's WebKit runs a press made in that moment was lost (r69p P5, and r73p keys 1 on the front page, whose test now waits for the collection).
 
+### Round eighty-four: the owner's walk
+
+This is the whole of round eighty-four for you, in order, from where your PC is now: round eighty-three's Worker (`ba78fb9`) deployed over corpus `e8885155673882ba` (48,357 species), the full plan finished, no `corpus-step.lock`, nothing running. The agents' sections after it are notes, for reference; where one says otherwise about when to run something, this walk is the one to follow.
+
+**The rule for every step: one thing at a time.** Nothing else runs while a step runs: no second window with a script, no `predeploy` beside a corpus step, no game or backup software filling the disk. Every `corpus-step.mjs` run but `--status` and `--compare`, and every `npm run dossier -- …` typed by hand, takes `corpus-step.lock`; a second refuses with `Another run holds corpus-step.lock in this folder … Nothing was run.` (exit 2). If that appears with no other window running a script, delete `corpus-step.lock` and type the command again. The long steps are chained with `&&` on one line, so a failure stops the rest.
+
+**What each step brings.** (a) brings every page and app change at once, right over today's corpus: the search's order, the picker, the plant page, the species page's words, the maps' shapes, the phone's habitat line, the about pages, the collection's dates, the frame, sync. (c) to (e) bring what is read when a page is derived or indexed: Kew's names as headings, the regions' shapes for every record, the varieties' names in the search, the shared one-word names, the front page's strip, the merged pages' words, the tiles' leads.
+
+**(a) The delivery and the deploy** (one evening; about two hours, most of it the tests).
+
+1. **The delivery.** Extract the round's zip over the project folder, replacing files when asked. It holds the 225 files added or changed since your tree `ba78fb9` (listed in `docs/REVIEW-ROUND-84.md`, section 6). This round deletes and renames nothing, so there is nothing to delete by hand. It does not hold `scripts\corpus-plan-full.txt`, `scripts\default-points.txt` or anything a plan wrote. A few seconds.
+2. **The tests, every engine, strict:**
+
+   ```
+   node scripts\predeploy.mjs --tier=app
+   ```
+
+   About as long as your last `--tier=app` run plus ten minutes: this round adds 6 browser spec files and changes 14. Good: its last line is `predeploy: every test passed first time in every engine; the deploy may go ahead`. Any other last line names what the run proved and what it did not: do not deploy then. If a test fails, paste the end back and do not deploy. The specs that have run only in Chromium here and lean most on WebKit are `r84k-picker` (the Add press, the WebKit labels failure's state), `r84k-plant`, `r84u-frame` (My plants' positions, frame by frame) and `r84e-species` (print); if one fails only in WebKit or Firefox, send its trace (`test-results\…\trace.zip`).
+3. **The deploy:**
+
+   ```
+   node scripts\corpus-ready.mjs && npm run deploy
+   ```
+
+   The gate runs svelte-check and the unit tests again (about ten minutes), then the build and `wrangler deploy` (a few minutes), then the live check. Good: `corpus-ready: the bucket holds corpus e8885155673882ba …`, and every live-check line passing, among them `ok  index: cached as the route says (public, max-age=300 …)`. **If the live check stops at the index** (`/api/index's cache lifetime: it says max-age=14400`), do not roll back: it is Cloudflare's zone setting, not this Worker. In the dashboard, zone `cultifolio.com`, Caching, Configuration, Browser Cache TTL: "Respect Existing Headers"; then Purge Cache, Custom Purge, `https://cultifolio.com/api/index`; then `npm run live-check` again.
+4. **On the site, after the deploy** (about ten requests, a few minutes):
+
+   ```
+   curl -s "https://cultifolio.com/api/search?q=snowdrop&shape=2&n=3"
+   curl -s "https://cultifolio.com/api/search?q=lithops%20lesleyi&shape=2&n=3"
+   curl -s "https://cultifolio.com/api/counts"
+   ```
+
+   Good: Galanthus nivalis first; Lithops lesliei with `"relaxed":{"query":"lithops lesle"}`; `{"corpus":"e8885155673882ba","species":48357,…}`. Then in a browser: `/species/eulychnia-acida`'s Temperature card reads "extremes set aside: two sources disagree"; `/species/echinopsis-thelegona`'s "extremes set aside: weather cell 1,257 m higher"; `/species/aloe-framesii`'s map draws the Cape Provinces as their coast, not a box; on the iPhone, `/species/copiapoa-cinerea` shows "Habitat in short" above the photographs, and its climate chart's labels are readable; printing `/species/sempervivum-tectorum` (Save as PDF is enough) shows Seasons, Rain, Light and Warmth and air open; on Add a plant type `Haworthia`, put the keyboard away, wait two seconds: no list over Space; type `Crassula ovata ’Gollum’` with the iPhone's own quotes: the pills read "cultivar"; `/about/how` opens with three short sentences per section and its counts line reads "The reference now holds 48,357 species pages…".
+
+**(b) Round eighty-three's prune, if not yet run** (one evening; about ten minutes, nothing else running). Two parts; skip either you have already run since round eighty-three's upload.
+
+1. **The products no manifest names** (the corpus before `e8885155673882ba`, under `s/v3/p/`). The prune deletes only what the live manifest does not name, and stops before deleting anything when the site serves another corpus than the bucket's manifest:
+
+   ```
+   node scripts\corpus-step.mjs --prune
+   ```
+
+   Good: `The prune's dry run: the bucket's p/ holds … files; keep.txt keeps …; named by none: …, of which N more than a day old would be deleted now. Every file the live manifest e8885155673882ba … names is in the bucket.` Then, having read it:
+
+   ```
+   node scripts\corpus-step.mjs --prune --go-on
+   ```
+
+   Good: `The prune is done: files no manifest names and more than a day old are deleted from the bucket.`
+2. **The 18 dossiers no index lists** (`bucket-unlisted.txt`, from round eighty-three's upload). The prune does not touch them (it deletes under `p/` only); the site answers each with a 404 already. In **PowerShell**, in the project folder, one line at a time:
+
+   ```
+   Get-Content bucket-unlisted.txt | Where-Object { Test-Path "static\s\v3\$_.json" }
+   Get-Content bucket-unlisted.txt | ForEach-Object { "$_.json" } | Set-Content -Encoding ascii unlisted-files.txt
+   rclone delete r2:cultifolio/s/v3 --files-from-raw unlisted-files.txt --dry-run
+   rclone delete r2:cultifolio/s/v3 --files-from-raw unlisted-files.txt
+   rclone lsf r2:cultifolio/s/v3 --files-only --files-from-raw unlisted-files.txt
+   ```
+
+   Good: the first prints nothing (a key it prints is still on disk: stop and paste it back); the dry run names the 18 files (`g2695104.json`, `g2747305.json`, …) and nothing else; the last prints nothing. Seconds.
+
+Run (b) before (c): after (e) the round eighty-three corpus's own files are unnamed too, and (f) prunes them.
+
+**(c) The walk: every page derived again** (one evening and the night; about nine hours; nothing else running, the PC kept from sleeping). First, three files the walk reads, each must be listed:
+
+```
+dir bulk\backbone\simple.txt.gz bulk\wcvp_names.csv scripts\default-points.txt
+```
+
+GBIF's backbone export (`simple.txt.gz`, 489 MB, of 2023-08-28) is read only for the names GBIF files under a species' varieties and subspecies (San Pedro's "Trichocereus pachanoi"). Its age means: a name GBIF filed so after 2023-08-28 is not among them, so the search does not find the species by it. Nothing a page shows comes from the file, and a name in it that is another page's own name is left out. Then, with nothing else running:
+
+```
+node scripts\corpus-step.mjs --plan scripts\corpus-plan-r84-walk.txt
+```
+
+It runs, in order, each step saying its progress, and stops at the review:
+
+| Step | Good output | Time |
+|---|---|---|
+| `backup` | `done: backups\v3-e8885155673882ba-…` | 5 to 15 minutes |
+| `dossier --walk --offline --grid climate --bulk bulk` | `the walk begins … : 0 pages derived since, 48357 to derive → rebuild-walk.txt`; the download read once; then a line a page (`[n/48357] ✓ …`); at its end Kew's names over what it built (`… headed …`, about 500, and `linked Kew's entry …`) and the varieties' names | about an hour for the download, then six to seven hours |
+| `dossier --fill kew-names --bulk bulk` | `48357 dossiers read, 0 changed …` after a walk that ran in one go; after a walk that stopped and resumed, the pages of the first run headed now | 5 to 15 minutes |
+| `dossier --fill gbif-infra --bulk bulk` | `… N names of species rank filed under them on M pages, searched as a name typed (name.infra)`, then `0 changed` after a walk in one go | 10 to 20 minutes |
+| `dossier --index` | the index written (the first time in full: `… not headed by a one-word name another species of the genus is given more often …`, `the front page's strip: from the 118 popular genera …`) | about 17 minutes |
+| `dossier --check-ranges` | see (d) | a few minutes |
+| `review` | the stop: see (d) | |
+
+**If it stops.** Type the same command again: every step resumes where it stopped (the walk lists only the pages not derived since it began, `walk.json`; `rebuild-walk.txt` is what is left). A stop that says `a source did not answer` (exit 3) is a page whose record GBIF's download lacks; the same command again later carries on. A stop at `drops.txt` (exit 2: a page lost photographs, an identifier, the summary or the range, or a source turned refused) is not expected: paste its first twenty lines back and do not go on. Do not start the walk again from the beginning (`--again`) unless asked.
+
+**(d) The checks before the upload** (the review stop; ten minutes of reading).
+
+1. **`--check-ranges`**, printed by the plan's step before the stop. Good, at the end of (d): `48357 dossiers read (shapes rule r84, 366 regions with a shape): 0 with a typical cell outside every native region, 0 whose records were not tested by rule r84, 0 with an open record outside every native region`, then five lines each starting `fixed:` (Aloe vera k298116, Ficus elastica k2810307, Galanthus nivalis k307568, Melissa officinalis k124103, Indigofera taiwaniana k2864797), then `ready to upload`.
+
+   **Expected the first time: some pages listed** as `records not tested by shapes rule r84 (carried from a build before)`. These are pages whose range comes through GBIF's older names (Monsonia lheritieri), which an offline build does not ask, so the walk carried their range and records as they were: on the 617 live pages the merge walked, 2 (Conophytum tomasii and Monsonia lheritieri), so about 150 of 48,357. They are derived again **online** (GBIF's API for their names, the download for their records; about two seconds a page, so a few minutes), then the index and the check again, one line:
+
+   ```
+   npm run dossier -- --keys check-ranges.txt --grid climate --bulk bulk --skip inat && npm run dossier -- --index && npm run dossier -- --check-ranges
+   ```
+
+   If the first part stops at `drops.txt` (exit 1), read it: lines `native range lost` with `wcvp.distribution turned ambiguous … the page's basionym …` are the rule for a page whose basionym Kew holds apart (outside review A6b: Monsonia lheritieri loses Sarcocaulon spinosum's range), expected; then type the rest, `npm run dossier -- --index && npm run dossier -- --check-ranges`. Any other line in `drops.txt`: paste it back and stop. Then the plan command again. If `NOT FIXED:` remains, or the counts are not 0 after this, paste the check's lines back and do not upload.
+2. **The compare with the backup**, printed at the stop: up to every dossier differs (each says it was derived again). A count of dossiers that cannot be read, or fewer species than 48,357, is never passed by `--go-on`: paste it back.
+3. **By hand, offline** (a few seconds each), the five cases and the headings:
+
+   ```
+   node -e "const d=require('./static/s/v3/k298116.json');console.log(d.name.scientific,d.climate.status,d.climate.at)"
+   node -e "const d=require('./static/s/v3/k506502.json');console.log(d.name.scientific,d.slug,d.name.synonyms.includes('Ceropegia alstonii'))"
+   node -e "const d=require('./static/s/v3/k307568.json');console.log(d.name.scientific,d.occurrences.rangeRule,d.climate.at)"
+   ```
+
+   Good: `Aloe vera ok { lat: 2…, lon: 5… }` with the spot in Oman (south of 26.4 N and east of 52 E, not 25.4 N 56.2 E), or `none`; `Hoodia alstonii hoodia-alstonii true`; `Galanthus nivalis r84` with a spot outside Belgium (not 50 to 51.5 N, 2.5 to 6.4 E).
+
+**(e) The upload and the live check** (half an hour to an hour; nothing else running). Having read (d):
+
+```
+node scripts\corpus-step.mjs --plan scripts\corpus-plan-r84-walk.txt --go-on
+```
+
+The upload first asks whether the index on disk is the one the dossiers on disk would write (`--index-ready`) and uploads nothing when it is not; then it copies, checks, and sends the manifest last; the live check names the new corpus. Good: `upload: … the manifest last`, then every live-check line passing with the new corpus id. Then on the site (about eight requests):
+
+```
+curl -sI https://cultifolio.com/species/ceropegia-alstonii
+curl -s "https://cultifolio.com/api/search?q=Trichocereus%20pachanoi&shape=2&n=3"
+curl -s https://cultifolio.com/api/dossier/k298116
+curl -s https://cultifolio.com/api/dossier/k3313620
+curl -s https://cultifolio.com/ | findstr /c:"Rosa mollis" /c:"Carex appressa" /c:"Rubus arcticus"
+```
+
+Good: a 302 to `/species/hoodia-alstonii?was=Ceropegia%20alstonii`; Echinopsis macrogona first (Kew's name for GBIF's Trichocereus macrogonus); Aloe vera's `climate.at` not in the UAE; k3313620 headed Ceropegia dodomaensis Heiduk & D.Styles; the last prints nothing (the strip's species now come from the Popular genera). In a browser: `/species/indigofera-taiwaniana` has its Kenting records inside the range and a climate; `/species/ferocactus-hamatacanthus`'s record of sources says its records are read "under the GBIF key of a page merged into this one"; `/about/how`'s counts line names the new corpus.
+
+**Going back.** Before (e): nothing is live; copy `backups\v3-e8885155673882ba-…` back over `static\s\v3`. After (e): the same copy back, then `npm run dossier -- --index && node scripts\corpus-step.mjs --plan scripts\corpus-plan-upload.txt`. The Worker of (a) reads either corpus.
+
+**(f) Cleaning up** (a day after (e), with its live check passed; ten minutes).
+
+1. **The bucket**, the round eighty-three corpus's files no manifest names now:
+
+   ```
+   node scripts\corpus-step.mjs --prune
+   ```
+
+   then, having read the dry run, `node scripts\corpus-step.mjs --prune --go-on`. If (e)'s upload said the bucket holds dossiers no index lists (a page whose id the walk moved), its `bucket-unlisted.txt` names them: the same PowerShell lines as (b) 2, the count being the upload's.
+2. **The backups.** Keep this round's `backups\v3-e8885155673882ba-…` (the corpus before the walk) until the next round. Delete the two older ones once (e)'s live check has passed: `rmdir /s /q backups\v3-7a1b94be6920ef3f-r83c` and `rmdir /s /q backups\v3-9f88d4de481d58f3-filled` (several GB each).
+3. **Scratch files** the steps wrote and nothing reads again: `del rebuild-walk.txt check-ranges.txt keep.txt prune.txt`. Keep `walk.json` until the next round (it says when this walk began), `corpus-step.json` and `corpus-step.log`.
+4. **GBIF's occurrence download** (`bulk\occurrence.zip`, 65 GB, of 2026-10-21) stays: the next derivation reads it.
+
+### Round eighty-four: geography (agent G)
+
+**What changes.**
+
+1. **The regions' shapes** (`scripts\tdwg3-shapes.json`, made by `scripts\dev\r80a-tdwg-shapes.py`). 366 of Kew's 369 regions now have a shape, against 244: 122 of the 125 regions tested by their box get one. One remote island no longer keeps a whole region out (Marion Island goes to its own region, not the Cape Provinces; the Bonin Islands to Ogasawara-shoto, not Japan; Socotra, Svalbard, Labrador, Easter Island and the Aleutians the same), and the provinces that were not placed are placed (TDWG's own gazetteer for Russia's oblasts and for Jersey, Guernsey, Sint Maarten and Navassa; the area each box holds for Great Britain's south coast, Taiwan's cities, Turkey's Thrace and Sinai). Latvia and Belarus, which TDWG's tables file under Russia's code, were in no shape and now are. The three left are Cocos (Keeling) and Christmas Islands, which Natural Earth's provinces do not draw, and the South China Sea, whose Spratly Islands TDWG gives no country. So France's shape no longer holds Belgium (the snowdrop), Japan's no longer holds Korea, the Cape Provinces' no longer hold Namibia.
+2. **A box is tested with the same 0.05° margin as a shape**, so a record on Taiwan's southern tip (Indigofera taiwaniana's, at 21.927° N) is no longer outside Taiwan's box, which ends at 21.928° N. **And a record at sea, or on an islet Natural Earth does not draw** (the Iles d'Hyeres, the Frioul islands, the skerries off Finland), counts for the region whose coast is nearest, when that coast is within about 17 km; a record on another region's land never does.
+3. **Every record is tested by the shapes, restricted ones included, and each page says so**: its record of the occurrences reads "records tested against the native regions' shapes, openly licensed and restricted alike (…; shapes rule r84)", and the dossier carries `occurrences.rangeRule: "r84"`. No page is built without the shapes file.
+4. **The maps draw the regions' shapes**, not rectangles, from two files kept a day like the coastline (`static\app\maps\regions110.svg` and `regions50.svg`); a close-up whose whole view lies in one region says "Inside …".
+5. **Smaller:** a page that loses its GBIF key keeps none of the records read under it (Xanthoceras sorbifolium); "N in-range records, none placed to within 10 km" counts records, not places, and says it is the rule's reading; every listing stops, writing nothing, at a dossier it cannot read; an upload refuses an index older than the dossiers it would publish.
+
+**Which step brings what.** The deploy (step 1) brings the maps: they read the boxes today's dossiers already hold, so they are right over the live corpus. Everything else reaches the pages only by the walk below (step 2): until then the live pages are as they are.
+
+**Keep your `scripts\default-points.txt`** (5,187 points): the delivery does not carry it, and the walk reads it.
+
+**The walk** (the owner's decision 2: every page derived again offline by this round's code). One evening and the night with nothing else running: about an hour to read the download, six to seven hours for the 48,357 pages, then the index, the check and the upload. In the project folder, after this round's delivery is extracted and deployed:
+
+```
+node scripts\corpus-step.mjs --plan scripts\corpus-plan-r84-walk.txt
+```
+
+It runs, in order, and says each step's progress:
+
+| Step | Good output | Time |
+|---|---|---|
+| `backup` | `done: backups/v3-<id>-…`, the corpus live now | 5 to 15 minutes |
+| `dossier --walk --offline --grid climate --bulk bulk` | `the walk begins … : 0 pages derived since, 48357 to derive → rebuild-walk.txt`, the download read once, then a line a page; it ends with the index | about an hour, then six to seven hours |
+| `dossier --index` | `not written again`, or the index | seconds to 17 minutes |
+| `dossier --check-ranges` | `48357 dossiers read (shapes rule r84, 366 regions with a shape): 0 with a typical cell outside every native region, 0 whose records were not tested by rule r84, 0 with an open record outside every native region`, then five lines, each starting `fixed:` (Aloe vera, Ficus elastica, Galanthus nivalis, Melissa officinalis, Indigofera taiwaniana), then `ready to upload` | a few minutes |
+| `review` | it stops: read the five lines and the count of dossiers that differ from the backup (nearly all: each page says it was derived again). Then `node scripts\corpus-step.mjs --plan scripts\corpus-plan-r84-walk.txt --go-on` | |
+| `upload`, `live-check` | the upload asks first whether the index is the one the dossiers on disk would write, then copies, checks, sends the manifest last; the live check names the new corpus | half an hour to an hour |
+
+**If it stops.** Type the same command again: a stopped walk resumes with the pages not derived since it began (`walk.json` keeps when it began; `rebuild-walk.txt` is what is left). If `--check-ranges` stops the run (exit 2), `check-ranges.txt` lists each page and why; derive those again online, as the owner's walk (d) 1 says (`npm run dossier -- --keys check-ranges.txt --grid climate --bulk bulk --skip inat`: the merge found that a page whose range comes through GBIF's older names is carried by an offline build), then `npm run dossier -- --index` and `npm run dossier -- --check-ranges`, then the same plan command. A page whose records GBIF did not answer for keeps its last build's records ("carried"), and the check lists it: that list is the one to paste back if it does not empty. A listing that meets a dossier it cannot read now stops and names it: rebuild it with `--keys` and its id, or copy it back from the backup.
+
+**By hand instead** (the same steps, without the review stop): `npm run dossier -- --walk --offline --grid climate --bulk bulk` (again after a stop), `npm run dossier -- --index`, `npm run dossier -- --check-ranges`, then `node scripts\corpus-step.mjs --plan scripts\corpus-plan-upload.txt`. The plan sizes the builder's heap from your PC; `npm run dossier` gives it 8 GB, which the full build did not always have room in.
+
+**Then on the site** (about six requests): `https://cultifolio.com/api/dossier/k298116` (Aloe vera) has its `climate.at` in Oman (about 23 N, 57 E) or no climate; `/api/dossier/k307568` (Galanthus nivalis) has no cell in Belgium; `/species/indigofera-taiwaniana` shows the Kenting records inside the range; `/species/aloe-framesii` draws the Cape Provinces as their coast, not a box over the sea. A day later, the prune (`node scripts\corpus-step.mjs --prune`, then `--prune --go-on`).
+
+**Going back:** copy `backups\v3-<id>-…` back over `static\s\v3`, `npm run dossier -- --index`, then `node scripts\corpus-step.mjs --plan scripts\corpus-plan-upload.txt`.
+
+**Nothing else to run.** The shapes and the maps' files are committed. To make them again from the sources (TDWG's `tblLevel3.txt`, `tblLevel4.txt` and `tblGazetteer.txt` of github.com/tdwg/wgsrpd, Natural Earth's `ne_10m_admin_1_states_provinces.geojson` 5.1.1): `python scripts\dev\r80a-tdwg-shapes.py tblLevel3.txt tblLevel4.txt ne_10m_admin_1_states_provinces.geojson scripts\tdwg3-shapes.json tblGazetteer.txt --report shapes-report.json --draw draw.json`, then `python scripts\dev\r84g-region-maps.py draw.json`; `--r83` in place of the gazetteer writes round eighty-three's file byte for byte. The report names how each province and island was placed, moved, cut to its region's box or left out.
+
+**The tests:** `tests\unit\r84g-shapes.test.ts` (46), `r84g-records.test.ts` (8), `r84g-walk-check.test.ts` (11), `r84g-maps.test.ts` (6), `tests\e2e\r84g-maps.spec.ts` (Chromium and the phone; WebKit and Firefox on your PC). Every one fails on the tree before this round.
+
+### Round eighty-four: names, the index and search (agent N)
+
+**What changes, and when.**
+
+- **With the deploy (step 1), over the live corpus:** the search's order for the names growers type ("snowdrop" is Galanthus nivalis, "saffron" Crocus sativus within the first two, "pepper" Capsicum annuum then Piper nigrum, "century plant" Agave americana, "houseleek" Sempervivum tectorum, "lithop" Lithops before Lithophragma); a query that finds nothing is read again from fewer letters of its last word ("lithops lesleyi" answers Lithops lesliei, and the page says "Showing results for “lithops lesle”"); "aster" no longer offers Easter Is.; a pasted sentence is not retried on "this is"; a hybrid page that links IPNI alone links POWO too; a quoted summary that stops mid-sentence ends "…" with "More on Wikipedia"; an English name in another script is not shown on a species page.
+- **With the re-derivation and its index (step 2):** Kew's accepted name heads every `k` page (decision 1: about 500 headings change, Hoodia alstonii for Ceropegia alstonii, Manfreda for Agave, Weingartia fidana), each with its slug, and GBIF's name for the key is an older name of the page, so its old address moves to it; every `k` page links its Kew entry's POWO and IPNI pages; a one-word name several species of a genus share heads only the one its sources give it most (D9); a page whose basionym Kew holds apart takes no range (A6b); the names GBIF files under a species' varieties are searched (San Pedro: "Trichocereus pachanoi", "Echinopsis pachanoi"); the front page's strip comes from the Popular genera (decision 4: Rosa rugosa, Salvia rosmarinus, Prunus serrulata, Acer palmatum … where it was Carex appressa, Eucalyptus resinifera …).
+
+**Nothing extra to run.** Decision 2's pass reaches all of it: the `--keys … --offline --grid climate --bulk bulk` build runs Kew's names over what it built (which heads the pages and links their entries), and, where `bulk\backbone\simple.txt.gz` is there (the file `--list-extra-keys` reads), the names under the varieties; `--index` then writes D9's marks into the few dossiers they change and the strip from `scripts\most-grown-genera.txt` and `scripts\species-list.txt`. Check the file is there before the pass:
+
+```
+dir bulk\backbone\simple.txt.gz
+```
+
+If it is elsewhere, add `--backbone <path>` to the `--keys` command. If it is missing, everything else still happens; then, after the pass and before `--index`:
+
+```
+npx tsx scripts/build-dossiers.ts --fill gbif-infra --backbone <path to simple.txt.gz>
+```
+
+**Good output.**
+
+- The build's Kew step lists one line a page whose heading changed, `Hoodia alstonii [k506502]: linked Kew's entry 506502; headed Hoodia alstonii (GBIF: Ceropegia alstonii)`: about 500 "headed", and some 5,800 "linked" (pages that linked a synonym's number, or none: 73 of the 603 `k` pages among the 617 live dossiers the reviewers read, where 8 headings changed).
+- With the export: `… varieties and subspecies of the pages' species; N names of species rank filed under them on M pages, searched as a name typed (name.infra)`.
+- `--index`: `K pages not headed by a one-word name another species of the genus is given more often, or as often (name.shared)` (on round seventy-seven's 8,947 pages, 129, of which 10 headlines change), and `the front page's strip: from the 118 popular genera, each by its species most observed in cultivation (43541 species counted in scripts/species-list.txt)`.
+- `kew-shared.txt` stays empty: a heading never gives two pages one name (none on the live index).
+
+**After the upload, on the site** (seven requests):
+
+```
+curl -sI https://cultifolio.com/species/ceropegia-alstonii
+curl -s "https://cultifolio.com/api/search?q=Trichocereus%20pachanoi&shape=2&n=3"
+curl -s "https://cultifolio.com/api/search?q=snowdrop&shape=2&n=3"
+curl -s "https://cultifolio.com/api/search?q=pepper&shape=2&n=3"
+curl -s "https://cultifolio.com/api/search?q=lithops%20lesleyi&shape=2&n=3"
+curl -s https://cultifolio.com/api/dossier/k3313620
+curl -s https://cultifolio.com/ | findstr /c:"Rosa mollis" /c:"Carex appressa" /c:"Rubus arcticus"
+```
+
+Good: the first answers 302 to `/species/hoodia-alstonii?was=Ceropegia%20alstonii`; the second's first hit is Echinopsis macrogona (Kew's name for GBIF's Trichocereus macrogonus); the third's Galanthus nivalis; the fourth's Capsicum annuum, then Piper nigrum within the three; the fifth's Lithops lesliei with `"relaxed":{"query":"lithops lesle"}`; the dossier is headed Ceropegia dodomaensis Heiduk & D.Styles, with no older name Ceropegia tanzaniensis (Kew holds that name under Ceropegia cordiloba) and a `kew.names` row saying so; the last prints nothing (the strip shows twelve of its 48 a day, each the most grown species of a popular genus, and none of the wild ones it showed).
+
+**A grower's plants filed under an old heading.** Nothing in their records changes: a plant keeps the name it was filed under and its GBIF key, and its page finds the species by the key, now headed by Kew's name; its link to the species goes by the old address, which moves to the page. The one page whose old address is no older name of it is k2734813 (GBIF's "Conophytum calculus vanzylii", now "Conophytum calculus subsp. vanzylii"): its old address is moved by GBIF's name service, as an address no page holds is.
+
+### Round eighty-four: the add form and the names a grower types (agent K)
+
+What changes, all in the app (step 1, the deploy; nothing for the corpus, and right over today's corpus and the re-derived one alike): the species picker's list opens only while its field has focus and closes on a tap outside it; Add waits for the reference's own search before it asks "Add as typed"; the words under the field hold their height under a press, so Add never moves from under a finger. A cultivar in any quotes (’Gollum’, “Gollum”) is a cultivar, and one under a genus alone ("Echeveria ’Lola’") is "a cultivar, species not stated", never a hybrid; a plant an earlier version filed as a hybrid that way is read as written and its page offers "File it as a cultivar". A name that is an older name of a reference page is asked about once on Add, naming the page, and a plant already filed under one says so when the grower asks ("Is it an older name?") and files it there in one tap. Back with Record open keeps what was typed. A blank field number reads "not stated".
+
+1. **The tests in every engine** (about two minutes):
+
+   ```
+   npx playwright test tests/e2e/r84k-picker.spec.ts tests/e2e/r84k-plant.spec.ts --project webkit --project phone-webkit --project firefox
+   ```
+
+   They block the service worker, answer `/api/search` and `/api/names` by routes, and wait on the line they read. `r84k-picker` 2 is the state of the WebKit labels failure: Add pressed with the name service answered and the reference's search held back; it must add the plant on one press. `r84k-picker` 3 holds a mouse press on Add while the check's words arrive; Safari's engine reads the same rule.
+2. **After the deploy, on the phone** (no request of the test's own): on Add a plant type `Haworthia`, put the keyboard away, wait two seconds: no list over Space. Type `Crassula ovata ’Gollum’` with the iPhone's own quotes: the pills read "cultivar" and the plant's page heads "Crassula ovata ‘Gollum’".
+
+### Round eighty-four: the species page and the climate's words (agent E)
+
+**What changes.** A species page whose daily extremes were set aside says which of the three checks set them aside, on the habitat card (a link to the climate section's notice), the sheet, a plant's page, compare and the share card: a weather cell over 1,000 m above or below the typical spot, or the cell's nights and the habitat's monthly lows disagreeing (a record low, or a 1-in-100 night, warmer than the coldest month's mean nightly low), said as a check that two sources disagree, not a proof. The climate chart is drawn at a phone's own width down to 260 px. On a desktop the four habitat figures fill their row, the season card under them. On a phone a "Habitat in short" box (cold figure, rain, open-sky light, season, each with its source) sits above the photograph strip. Print opens the four cultivation sheets and the table of figures and leaves the screen's buttons off. "Not checked" is said once per source; the box under the name of a page without GBIF's records is one line with "Why" behind it. Sentences written for the author are reworded; Wikidata's names line moves to "Names & registers". The maps are described by their captions; "Where this page came from" shows that it opens. The lead photograph is never one its source states under 640 px on its long side where a larger one exists; the first row of photographs takes one per observer first; the hero's credit says the licence once.
+
+**What reaches the corpus.** Three rules are read at derive or index time as well as by the pages: the words of a merged page's key (`extraWhy`, "the key of a page merged into this one", no repository path), a plant's sheet carrying the extremes set aside (`sheetOf`, so a plant's page names the cause), and the lead photograph (`heroOf`, the tiles' thumbnails). Before the re-derivation the Worker says all three right over today's corpus: it rewords the old merged-key words where it shows them, a plant's page says "set aside (the species page says why)" from an old sheet, and the page's own lead follows the new rule at once. The re-derivation and `--index` (decision 2) bring them into the files.
+
+**What you run.** Nothing of its own: the merged deploy (step 1) and the whole re-derivation (step 2).
+
+**What good looks like.** After step 1: `/species/eulychnia-acida`'s card reads "extremes set aside: two sources disagree", linking to the notice; `/species/echinopsis-thelegona`'s reads "extremes set aside: weather cell 1,257 m higher"; at 360 px its chart's labels are readable; `/species/ferocactus-hamatacanthus` shows no "scripts/"; printing `/species/sempervivum-tectorum` shows Seasons, Rain, Light and Warmth and air open. The new spec `tests/e2e/r84e-species.spec.ts` has not run in WebKit or Firefox here: predeploy runs it there.
+
+### Round eighty-four: the about pages and NOTICE (agent A)
+
+**What changes (step 1, the deploy; nothing for the corpus).** /about/how and /about/formats are rewritten for a grower: each section opens with a plain summary of three sentences, the rules follow as lists of short sentences, the long technical lists fold away (print opens them), and a glossary defines every word of art. They say the round's rules as the merged code has them, with no "until the upload" left. The counts at the top of /about/how are the live reference's, read from a new route, `/api/counts` (the catalogue's genus rows: species, genera, and pages with a climate); before it answers, or offline, the page says the counts of 29 October 2026, as that day's. `NOTICE` names every source with its licence and the licences' addresses, ETOPO 2022, Wikidata, TDWG's tables and the frost watch's forecasts among them.
+
+**Nothing to run on the PC.** After step 2 (the re-derivation and its upload), open https://cultifolio.com/about/how: the line under "In brief" should read "The reference now holds 48,357 species pages in …" with the new corpus's counts. The page's dated sentences ("On the reference of 29 October 2026, 4,839 of the 37,727 pages …") stay true as dated; to restate them for the new corpus, change `COUNTS_ON` in `src\lib\ui\about-counts.ts` and the few-records sentence together, with `tests\unit\r84a-about.test.ts`.
+
+### Round eighty-four: the collection, the frame and operations (agent U)
+
+**What changes.** All Worker-side and device-side; nothing in the corpus. Today, the backup page and "synced N d ago" read every instant on the device's own calendar ("backup -1 d ago" after 8 pm in Pittsburgh is gone). A restore that counts as a backup says so on /backup at once. A Replace from a backup writes the plant and batch numbers given on this device that the file does not carry into the log, as one `setting` record (`numbers-kept-…`), so they are never given again even if `meta['issued:accession']` is lost. Sync reads only a request that failed on the way as "not reached"; a photograph the server answers with a 5xx waits for the next run instead of ending this one. The frost bar's 72 hours count from now. A restored site name is cut to 120 characters. My plants holds its footer until its list is drawn, and its backup line is drawn under the search with the list, not above the title. The five places are in the top bar at 640 x 400 and on short phones in landscape, set closer under 960 px so the bar clears the notch. The compare tray is shown on species pages only. A link-like button in a sentence takes a finger's height without making its line taller. The app's icons carry no C2PA manifest, and the web manifest names the PNGs only. `node scripts/predeploy.mjs` ends with a sentence that says what the run proved: only the whole suite in every engine says "the deploy may go ahead". The live check fails when `/api/index` is answered with a lifetime over five minutes.
+
+**What you run.** Nothing of its own: the round's `npm run deploy` (section 3), before the re-derivation (step 1 of the round's order). None of it needs the new corpus, and none of it changes what the corpus step reads.
+
+**If the live check stops at the index.** `live-check FAILED: /api/index's cache lifetime: it says max-age=14400` is Cloudflare's zone setting overriding the Worker's five minutes on an answer from its cache (outside review B9), not the Worker just deployed: do not roll back. In the Cloudflare dashboard, open the zone `cultifolio.com`, then Caching, Configuration, Browser Cache TTL, and choose "Respect Existing Headers". Then Caching, Configuration, Purge Cache, Custom Purge, and purge `https://cultifolio.com/api/index`. Run `npm run live-check` again; it reads `ok  index: cached as the route says (public, max-age=300, …)`.
+
+**What good looks like.** After the deploy: on Today in the evening the keeping line says "backup today" for a backup taken that evening; My plants with five or more plants and no backup shows "N plants and no backup yet" under the search, and nothing moves as it opens; at 640 x 400 the top bar shows Species, My plants, My spaces, Propagation and Today; a plant's page and Today show no compare pill. The new specs `tests/e2e/r84u-frame.spec.ts` have run in Chromium and its phone only here; predeploy runs them in WebKit and Firefox.
+
 ### Round eighty-three: a merged page first for its old name (agent K)
 
 What changes: searching "Echeveria peacockii" lists Echeveria desmetiana first, the page Echeveria peacockii was merged into, and Dudleya pulverulenta (under which Kew's file holds the name) second, where the alphabet put Dudleya first; "Bisnaga hamatacantha" lists Ferocactus hamatacanthus first; and so for every merge of `scripts\merged-pages.txt`, the name typed as a name or being typed ("Echeveria peacoc"), never a word alone or a similar spelling. The kept page's row says why, in the catalogue and in the species picker: "Echeveria peacockii is merged into this page". The mark is the index's (`merged` on the kept page's entry, from the keys it reads with an old address), carried in the search's key files.

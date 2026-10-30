@@ -174,8 +174,8 @@ describe("Kew's reading of descendants, in the fill itself", () => {
 describe('/about/how', () => {
   it("says an API-era set is read again, that an iNaturalist photograph's author is its observer under CC0 too, and when an id is checked", () => {
     const page = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(page).toContain("a set iNaturalist's API gave before the build read its open data is read again by this rule when the daily fill reaches the page, and until then is the 24 iNaturalist put first by votes the day it was asked, each with the locality iNaturalist names and its page by the observation's number");
-    expect(page).toContain("an iNaturalist photograph's author is its observer, by name or, where there is none, login, under CC0 too");
+    expect(page).toContain("A set iNaturalist's API gave before the build read its open data is read again by this rule when the daily fill reaches the page, and until then is the 24 iNaturalist put first by votes the day it was asked, each with the locality iNaturalist names and its page by the observation's number");
+    expect(page).toContain("An iNaturalist photograph's author is its observer, by name or, where there is none, login, under CC0 too");
     expect(page).toContain('where the build left iNaturalist to the daily fill, by the fill, thirty ids a request, before it asks iNaturalist for any photograph of the taxon');
     expect(page).toContain('A build that leaves iNaturalist to the fill keeps the id the page had');
   });

@@ -2,6 +2,20 @@
 
 /** The synced record that holds the accession numbering scheme: kind 'setting', id 'numbering', field 'scheme' (a NumberingScheme). */
 export const NUMBERING_SETTING = 'numbering';
+/**
+ * The numbers a Replace kept from being given again (round eighty-four; outside review B5): kind 'setting', an id that
+ * starts with this (one record per Replace, so two never overwrite each other), fields 'accession' and 'sowing', each a
+ * list of numbers. A Replace makes the device the file, and numbers given here after the file was taken are in no record
+ * of it: they were remembered only in `meta['issued:…']`, which the log's promise says may be dropped. Written into the
+ * replacement's log, they are read back from it like any record.
+ */
+export const KEPT_NUMBERS = 'numbers-kept';
+/** The numbers of one kind a setting record keeps, when it is a kept-numbers record; none otherwise. */
+export function keptNumbers(r: { kind: string; id: string; _deleted?: boolean; [k: string]: unknown }, kind: 'accession' | 'sowing'): string[] {
+  if (r.kind !== 'setting' || r._deleted || !r.id.startsWith(KEPT_NUMBERS)) return [];
+  const v = r[kind];
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
 
 import type { NameKind } from '$core/names';
 export type { NameKind };

@@ -40,7 +40,7 @@ const range = (w: WcvpIndex, name: string, author: string, family?: string) => {
 describe('"The native range comes from the World Checklist" (70b): the author, read in turn', () => {
   // The sentence holds "(Engelm.) Lem.", whose ") L" `said` reads as a sentence's end: read to its last clause instead.
   const whole = aboutText('how');
-  const a = whole.indexOf('The native range comes from the');
+  const a = whole.indexOf("An entry of Kew's is the page's own when its author is the backbone's");
   const s = { text: whole.slice(a, whole.indexOf('never counts.', a) + 'never counts.'.length), line: 0, where: '/about/how, the native range sentence' };
   const own = (rows: string[], a: string) => ownByAuthor(rows.map((x) => ({ x })), a, (r) => r.x).map((r) => r.x);
   it('read loosely, with or without initials, "ı" as "i", the basionym\'s author: the sentence\'s own pairs', () => {
@@ -50,7 +50,7 @@ describe('"The native range comes from the World Checklist" (70b): the author, r
     expect(own([h2, 'Lindl.'], h1)).toEqual([h2]);
     expect(s.text).toMatch(/letters such as "ı" read as "i"/);
     expect(own(['Yıldırım'], 'Yildirim')).toEqual(['Yıldırım']);
-    const [b1, b2] = [claim(s, /\("(\(Engelm\.\) Lem\.)" and/), claim(s, /and "(\(Engelm\.\) Britton & Rose)" are one name\)/)];
+    const [b1, b2] = [claim(s, /"(\(Engelm\.\) Lem\.)" and/), claim(s, /and "(\(Engelm\.\) Britton & Rose)" are one name/)];
     expect(own([b2, 'Lindl.'], b1)).toEqual([b2]);
   });
   it('"an author before "ex" alone never counts"', () => {
@@ -63,18 +63,21 @@ describe('"The native range comes from the World Checklist" (70b): the author, r
 describe('"Where Kew cites the author otherwise" (70b, 70c): the accepted entry, the family, another author\'s name', () => {
   const s = said('how', 'Where Kew cites the author otherwise');
   it('Datura metel L., listed twice by one author, takes the entry Kew accepts', () => {
+    const s = said('how', 'Where Kew lists the name twice by one author');
     const name = claim(s, /\((Datura metel) L\.\)/);
     const w = kew([row('2', 'Synonym', 'Solanaceae', name, 'L.', '3'), row('1', 'Accepted', 'Solanaceae', name, 'L.', '1'), row('3', 'Accepted', 'Solanaceae', 'Datura innoxia', 'Mill.', '3')], [['1', 'India'], ['3', 'Mexico']]);
     expect(range(w, name, 'L.', 'Solanaceae'), s.where).toEqual(['India']);
   });
   it('Ceropegia macrocarpa (Sprenger) Bruyns is not Kew\'s unplaced J.N.Haage & E.Schmidt: no range of that name', () => {
-    const [ours, theirs] = [claim(s, /is not (Ceropegia macrocarpa \(Sprenger\) Bruyns)\)/), claim(s, /Kew's unplaced Ceropegia macrocarpa (J\.N\.Haage & E\.Schmidt)/)];
+    const s = said('how', "Kew's unplaced Ceropegia macrocarpa");
+    const [ours, theirs] = [claim(s, /is not (Ceropegia macrocarpa \(Sprenger\) Bruyns)/), claim(s, /Kew's unplaced Ceropegia macrocarpa (J\.N\.Haage & E\.Schmidt)/)];
     const w = kew([row('9', 'Unplaced', 'Apocynaceae', 'Ceropegia macrocarpa', theirs, '9')], [['9', 'Kenya']]);
     expect(range(w, 'Ceropegia macrocarpa', ours.replace('Ceropegia macrocarpa ', ''), 'Apocynaceae') ?? null, s.where).toBeNull(); // no range of its own, never Kenya
   });
   // Kew's own rows (the file gives a synonym the family of its genus): round seventy's rule read GBIF's copy's family and
   // never fired here, and the live page showed Chile. B's r71 reads the family of the entry each row is filed under.
   it('Ixora coccinea "Comm. ex Lam.", on Kew\'s own rows, is Kew\'s Ixora coccinea L., not Embothrium coccineum', () => {
+    const s = said('how', `GBIF's Ixora coccinea "Comm. ex Lam." is a name Kew files`);
     const [name, author] = [claim(s, /GBIF's (Ixora coccinea) "Comm\. ex Lam\."/), claim(s, /GBIF's Ixora coccinea "(Comm\. ex Lam\.)"/)];
     const other = claim(s, /(Embothrium coccineum)/);
     const w = kew([row('103355', 'Invalid', 'Rubiaceae', name, author, '2788267'), row('103356', 'Accepted', 'Rubiaceae', name, 'L.', '103356'), row('2788267', 'Accepted', 'Proteaceae', other, 'J.R.Forst. & G.Forst.', '2788267')], [['2788267', 'Chile South'], ['103356', 'India']]);
@@ -83,10 +86,10 @@ describe('"Where Kew cites the author otherwise" (70b, 70c): the accepted entry,
 });
 
 describe('"Photographs come first from the media that GBIF\'s occurrence download carries" (70b)', () => {
-  const s = said('how', "Photographs come first from the media that GBIF's occurrence download carries");
+  const s = said('how', "Where the records came as GBIF's SQL download");
   const MEDIA = (key: number) => `https://api.gbif.org/v1/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`;
   it('"for a species the download was not asked for, asked of GBIF instead"', async () => {
-    expect(s.text, s.where).toMatch(/for a species the download was not asked for, asked of GBIF instead/);
+    expect(s.text, s.where).toMatch(/for a species that download did not ask for, GBIF is asked instead/);
     const asked: string[] = [];
     const api = (async (u: string) => { asked.push(u); return { status: 'ok', data: { results: [], endOfRecords: true, count: 0 } }; }) as unknown as JsonFetcher;
     const f = bulkFetcher(api, { media: new MediaIndex(new Map()), covered: new Set([1]) });
@@ -101,12 +104,12 @@ describe('"A Commons file is shown only as a JPEG or WebP photograph" (70b): the
   const names = { scientific: 'Aloe vera', key: gbifPage(1), held: heldNamesOf([{ key: gbifPage(1), name: 'Aloe vera' }, { key: gbifPage(2), name: 'Aloe ferox' }]) };
   it('a map, and seeds, are not shown; "a pod on the plant is the plant"', () => {
     expect(commonsKind('File:Aloe vera map.jpg', names), s.where).not.toBeNull();
-    expect(s.text).toMatch(/seeds \(a pod on the plant is the plant\)/);
+    expect(said('how', 'Not seeds').text).toMatch(/seeds \(a pod on the plant is the plant\)/);
     expect(commonsKind('File:Aloe vera seeds.jpg', names)).not.toBeNull();
     expect(commonsKind('File:Aloe vera seed pod.jpg', names)).toBeNull();
   });
   it('"where Commons got a file, GBIF or iNaturalist, is not read"; a living plant in a garden is shown, whatever its category', () => {
-    expect(s.text).toMatch(/where Commons got a file, GBIF or iNaturalist, is not read/);
+    expect(said('how', 'A living plant in a garden is shown, whatever its category').text).toMatch(/where Commons got a file, GBIF or iNaturalist, is not read/);
     expect(commonsKind('File:Aloe vera 1.jpg', names, ['Media from GBIF', 'Aloe vera'])).toBeNull();
     expect(commonsKind('File:Aloe vera 1.jpg', names, ['Specimens in the Huntington Desert Garden'])).toBeNull();
   });
@@ -127,16 +130,17 @@ describe('"Another spelling of the species\' epithet is the species\'" (70b): ea
   it('an adjective in -er that keeps its e, "ai" for "ae" after a consonant, "afr-" for "caffr-"', () => {
     const [a, b] = [claim(s, /\("(stolonifer)", "stolonifera"\)/), claim(s, /\("stolonifer", "(stolonifera)"\)/)];
     expect(spellingKey(a), s.where).toBe(spellingKey(b));
-    expect(s.text).toMatch(/"ai" for a genitive "ae" after a consonant/);
+    const also = said('how', 'Also "ae" for "e" within a word');
+    expect(also.text).toMatch(/"ai" for a genitive "ae" after a consonant/);
     expect(spellingKey('kanehirai')).toBe(spellingKey('kanehirae'));
     expect(spellingKey('bihai')).not.toBe(spellingKey('bihae')); // after a vowel, no
-    expect(s.text).toMatch(/"afr-" for the "caffr-" the Code replaced in 2024/);
+    expect(also.text).toMatch(/"afr-" for the "caffr-" the Code replaced in 2024/);
     expect(spellingKey('caffra')).toBe(spellingKey('afra'));
   });
 });
 
 describe('"An article Wikipedia reaches through a redirect is quoted only when" (70b): Kew\'s combinations of one basionym', () => {
-  const s = said('how', "A summary under any title but the species' name");
+  const s = said('how', 'Or when GBIF holds the title as a synonym of this species');
   it('"Zephyranthes formosissima" for Sprekelia formosissima, by Kew\'s rows', () => {
     const [title, of] = [claim(s, /\("(Zephyranthes formosissima)" for Sprekelia formosissima\)/), claim(s, /\("Zephyranthes formosissima" for (Sprekelia formosissima)\)/)];
     const who = { name: of, synonyms: [], item: 'Q1' };
@@ -158,8 +162,8 @@ async function item(key: number) {
 }
 describe('"When Wikidata finds no item that does" (70b, 70c), "Failing these" and "Two items that qualify" (70b)', () => {
   it('an alias counts as a label, and Kew\'s IPNI proves it: Scilla siberica\'s item, labelled "Siberian squill"', async () => {
-    const s = said('how', 'When Wikidata finds no item that does');
-    expect(s.text, s.where).toMatch(/or that give it as an alias/);
+    const s = said('how', 'An item counts when its label is the name exactly');
+    expect(s.text, s.where).toMatch(/or it gives the name as an alias/);
     const f = said('how', 'Failing these, the item that carries');
     const label = claim(f, /\(Scilla siberica's item, labelled "([^"]+)", carries it\)/);
     const r = await item(8080743);
@@ -167,12 +171,12 @@ describe('"When Wikidata finds no item that does" (70b, 70c), "Failing these" an
     expect(r.status === 'ok' && r.detail, `${f.where} (${label})`).toMatch(/^found by its alias; its IPNI identifier 927545-1 is Kew's for Scilla siberica Andrews/);
   });
   it('"a name with the same author before "ex"" is not another author\'s: Hibiscus acetosella Welw. ex Ficalho takes Q5750828', async () => {
-    const s = said('how', 'When Wikidata finds no item that does');
-    expect(claim(s, /as Kew's "(Welw\. ex Hiern)" for GBIF's "Welw\. ex Ficalho"/)).toBe('Welw. ex Hiern');
+    const s = said('how', 'A name with the same author before "ex"');
+    expect(claim(s, /\("(Welw\. ex Hiern)" for "Welw\. ex Ficalho"\)/)).toBe('Welw. ex Hiern');
     expect(await item(7802717)).toMatchObject({ status: 'ok', data: { wikidata: 'Q5750828' } });
   });
   it('of two items found by the older names, the one carrying the IPNI of Kew\'s accepted entry: Parrycactus flavovirens', async () => {
-    const s = said('how', 'Two items that qualify are no answer');
+    const s = said('how', 'Of two items found by the older names');
     expect(claim(s, /\((Parrycactus flavovirens), Kew's synonym of Ferocactus flavovirens\)/), s.where).toBe('Parrycactus flavovirens');
     expect(await item(3946677)).toMatchObject({ status: 'ok', data: { wikidata: 'Q309595' } });
   });
@@ -207,7 +211,7 @@ function fixtureFill(file: string) {
 describe('"An id iNaturalist has made inactive is followed" (70b, 70c), "A taxon GBIF holds" and "A variety that is" (70b)', () => {
   const follow42 = fixtureFill('r70b-follow-42.json');
   const slip = fixtureFill('r70c-slip.json');
-  const s = said('how', 'An id iNaturalist has made inactive is followed');
+  const s = said('how', 'Or, where neither places it in this reference');
   it('Kew holding this species under the other genus: Zephyranthes formosissima for Sprekelia formosissima', async () => {
     const species = claim(s, /\(Zephyranthes formosissima for (Sprekelia formosissima)\)/);
     const d = await follow42(species, 1640238);
@@ -236,10 +240,10 @@ describe('"An id iNaturalist has made inactive is followed" (70b, 70c), "A taxon
 });
 
 describe('"When Wikidata does not answer" (70c, then 72): no lag waited for, a refusal asked again', () => {
-  const s = said('how', 'When Wikidata does not answer');
+  const s = said('how', "Wikidata's items are read without waiting");
   it('the sentence says what the merged reads do: no maxlag on a Wikidata read, a refusal or a busy answer asked again up to five times', () => {
     // Round seventy-two (triage maxlag, F14): the sentence is D's; the reads themselves are driven by r72d-wikidata-unlagged.
-    expect(s.text, s.where).toMatch(/its items are read without waiting on the lag of its query service, which no read of an item depends on, and a refusal or a busy answer is asked again after the wait it names, up to five times/);
+    expect(s.text, s.where).toMatch(/items are read without waiting on its query service's lag, which no read of an item depends on, and a refusal or a busy answer is asked again after the wait it names, up to five times/);
     expect(s.text, s.where).not.toMatch(/waits the lag out/);
     expect(readFileSync('src/lib/dossier/fetch.ts', 'utf8')).toMatch(/RETRIES = 5\b/);
     for (const f of ['src/lib/dossier/sources/wikimedia.ts', 'src/lib/dossier/corpus-fills.ts']) {

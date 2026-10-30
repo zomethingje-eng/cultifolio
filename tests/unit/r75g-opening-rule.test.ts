@@ -84,17 +84,20 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
 
   it('/about/how says the source, the day and the rule, true of the code and the file', () => {
     expect(SHARE).toBe(0.5);
-    expect(about).toContain(`The front page's catalogue is the same on every device, every genus and every species, and its chip “Popular genera”, off until chosen, narrows it to the species of the popular genera, a measure of genera and not of species or of growers: the fewest genera of the reference that, taken from the most observed down, together hold half of iNaturalist's observations of plants marked captive or cultivated across all the reference's genera that were counted, each genus counted with every taxon under it, on ${longDay(m.day)} (<code>scripts/most-grown-genera.txt</code> in the source holds every count, the query and iNaturalist's terms).`);
-    expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip, and nor is a genus that joins the reference after the count, until it is made again.');
+    // Round eighty-four: the rule in a list of short sentences, each read here.
+    expect(about).toContain("The front page's catalogue is the same on every device: every genus and every species.");
+    expect(about).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist\'s observations of plants marked captive or cultivated, across the reference\'s genera that were counted.');
+    expect(about).toContain('It is a measure of genera, not of species or of growers. Each genus is counted with every taxon under it.');
     // Round eighty (review-w 1): the count is the full list's, and the page says over which genera it was made.
     // Asked with the live index's names and the species list's (scripts/species-list.txt), whose genera differ by a few.
     const [, genera, nCounted] = /^index\t\d+ species in (\d+) genera; (\d+) counted/m.exec(text)!;
     const n = (x: string) => Number(x).toLocaleString('en-GB');
-    expect(about).toContain(`That count was made over ${n(genera)} genera, every genus of the reference's 48,361 pages and of the species list they were built from, and ${n(nCounted)} of them were counted.`);
-    expect(about).toContain('unfiltered and under each climate chip (the rows under “Popular genera” are worked out by the server from the genus rows\' files and the counts\' file, once for each corpus)'); // round seventy-six: no longer from the index
+    expect(about).toContain(`The count was made on ${longDay(m.day)}, over the ${n(genera)} genera the reference and its species list then held; ${n(nCounted)} of them were counted. <code>scripts/most-grown-genera.txt</code> holds every count, the query and iNaturalist's terms.`);
+    expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip, and nor is a genus that joins the reference after the count, until it is made again.');
+    expect(about).toContain('The rows under "Popular genera" are worked out by the server from the genus rows\' files and the counts\' file, once for each reference.'); // round seventy-six: no longer from the index
     expect(about).not.toMatch(/On a phone the front page's catalogue opens|opens on the most-grown|opens on the genera of that list/);
     // The examples it names are refused in the file, as old names iNaturalist holds only inactive.
-    expect(about).toContain('such as Callistemon or Mahonia, which it holds only as an old name');
+    expect(about).toContain('One it holds only as an old name, such as Callistemon or Mahonia');
     for (const g of ['Callistemon', 'Mahonia']) expect(m.refused.get(g)).toMatch(/only as an inactive taxon/);
     // The derivation still names the collector genera: true until the corpus is rebuilt.
     expect(about).toContain('of 173 collector genera');

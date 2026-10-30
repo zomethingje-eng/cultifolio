@@ -13,6 +13,10 @@
 //
 // One run at a time (round eighty-one): every run but --status and --compare takes corpus-step.lock in the project folder
 // (`run-lock.mjs`), and a second refuses, saying which run holds it; so does a builder step typed by hand meanwhile.
+//   node scripts/corpus-step.mjs --plan scripts/corpus-plan-upload.txt
+//                                             the upload alone, then the live check (round eighty-four): the upload step
+//                                             first asks the builder whether the index on disk is the one the dossiers on
+//                                             disk would write (`--index-ready`), and uploads nothing when it is not
 //   node scripts/corpus-step.mjs --prune      the bucket's prune (DEPLOY.md section 5): a dry run, a review stop, then
 //                                             `--prune --go-on` deletes
 //
@@ -32,6 +36,8 @@
 //     right, and the next run runs that step again (exit 2);
 //   - the upload of a corpus holding a page without a GBIF key, while the live Worker does not say it reads one (round
 //     seventy-nine): deploy this round's Worker first, then the same command uploads (exit 2);
+//   - the upload of an index older than the dossiers on disk (round eighty-four, review A21): run --index, then the same
+//     command (exit 2);
 //   - a step failed: paste the end of corpus-step.log back (exit 1);
 //   - you pressed Ctrl-C: run the same command to carry on (exit 130).
 import { spawn } from 'node:child_process';
@@ -135,6 +141,7 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
       if (result.why === 'drops') return `Stopped at "${step.line}": some species lost what the build before had; drops.txt in the project folder lists them. Read every line. When each one is expected, carry on with: ${cmd} --go-on`;
       if (result.why === 'unreadable') return `Stopped at "${step.line}": a dossier on disk could not be read (the line above names it), so the index left it out. Do not upload. Paste the end of corpus-step.log back.`;
       if (result.why === 'deploy first') return `Stopped at "${step.line}": the corpus on disk holds ${result.keyless} page${result.keyless === 1 ? '' : 's'} without a GBIF key, and the live Worker ${result.live ? 'does not say it reads one (round seventy-eight\'s answers 503 for such a page)' : 'could not be asked whether it reads one'}. Nothing was uploaded. Deploy this round's Worker first, on the corpus live now (node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs && npm run deploy), then run: ${cmd}`;
+      if (result.why === 'index older') return `Stopped at "${step.line}": the index on disk is older than the dossiers it would publish (or the builder's code changed after it was written; the line above says which). Nothing was uploaded. Write it again with npm run dossier -- --index, then run: ${cmd}`;
       if (/^index/.test(result.why)) return `Stopped at "${step.line}": the index now holds fewer species than before (${result.why.replace('index ', '').replace(' < ', ', was ')}). Do not upload. Paste the end of corpus-step.log back.`;
       return `Review: ${result.why}. When it is as expected, carry on with: ${cmd} --go-on`;
     // The upload (round eighty-one, review B7): the dossiers are overwritten in place, and the site reads each species
@@ -318,6 +325,14 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
           const live = await fetchLive().catch(() => null);
           if (live?.keyless !== true) result = { status: 'blocked', why: 'deploy first', keyless, live: !!live };
           else say(`  the live Worker reads pages without a GBIF key (${keyless} in this corpus): uploading.\n`);
+        }
+        // Round eighty-four (G; review A21): never an index older than the dossiers it would publish. The builder says
+        // whether the index on disk is the one the dossiers and the code on disk would write (`--index-ready`); when it
+        // is not, nothing goes up, and the stop names --index.
+        if (result.status === 'done') {
+          const code = await exec(process.execPath, ['--import', 'tsx', 'scripts/build-dossiers.ts', '--index-ready'], say, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } });
+          if (interrupted) break;
+          if (code !== 0) result = { status: 'blocked', why: 'index older' };
         }
         if (result.status === 'done') say(`  the dossiers go up first and the manifest last: until the manifest is up, the site serves each new dossier as it arrives under the old corpus's index and search. Leave it to finish; if it stops, run the same command again at once.\n`);
         for (const [cmd, args] of result.status === 'done' ? uploadCommands() : []) {

@@ -53,7 +53,7 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   // it (round 83's merge, one flake in a whole run).
   await Promise.all([
     expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) }),
-    expect(page.locator('.toast')).toContainText('This browser has not promised to keep your data', { timeout: writeWait(15_000, 50) })
+    expect(page.locator('.toast')).toContainText('This browser may clear your plants to free space', { timeout: writeWait(15_000, 50) })
   ]);
   expect(await reminders(page)).toEqual(['nudge']);
   await expect(page.locator('.toast')).not.toContainText('take a backup');

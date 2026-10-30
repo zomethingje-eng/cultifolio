@@ -136,7 +136,7 @@ describe('the names, against the reference', () => {
   });
   it('offers the accepted name for an older one and a near spelling, never taking either on its own', async () => {
     const got = await checkNames(['Copiapoa columna-alba', 'Copiapoa cinera', 'Notagenus fakeus'], look());
-    expect(got.get('Copiapoa columna-alba')).toEqual({ s: 'near', suggestion: 'Copiapoa cinerea', key: 5384013, why: 'older name' });
+    expect(got.get('Copiapoa columna-alba')).toEqual({ s: 'near', suggestion: 'Copiapoa cinerea', key: 5384013, why: 'older name', slug: 'copiapoa-cinerea' }); // the page's address too (round eighty-four, W6)
     expect(got.get('Copiapoa cinera')).toMatchObject({ s: 'near', suggestion: 'Copiapoa cinerea', why: 'spelling' });
     expect(got.get('Notagenus fakeus')).toEqual({ s: 'missing' });
   });

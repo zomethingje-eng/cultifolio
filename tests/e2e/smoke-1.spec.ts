@@ -587,7 +587,7 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   // since round sixty the season card in the first screen carries the reading, fact first and its rule and source after
   const season = page.locator('.glance .card.season');
   await expect(season).toContainText("72 mm of rain in the median year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
-  await expect(season).toContainText('rain and temperature rules, CHELSA');
+  await expect(season).toContainText('How the rain and temperature rules read it');
   await expect(season).not.toContainText(/fog/);
   await expect(page.locator('.glance .card.cold')).toContainText('Record low 4.0 °C in 40 years');
   await expect(page.locator('.glance .card.cold')).toContainText('6.5');

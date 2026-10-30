@@ -16,6 +16,7 @@ import { buildSearchFiles } from '$core/search-files';
 import { prepare, search } from '$core/search';
 import { contentHash, SHORT_HITS, type Manifest } from './manifest';
 import { md5 } from './md5';
+import type { GrownRule } from './catalogue';
 import { catalogueOf, rowsOnly, catalogueFile, BYS, CHIPS } from './catalogue';
 import { buildCardFiles, buildOlderFiles, buildRowFiles, generaOfIndex, featuredFile, SITEMAP_CHUNK } from './lookups';
 import { sitemapUrls, sitemapDays } from '$lib/server/sitemap';
@@ -55,7 +56,7 @@ export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[
   return out;
 }
 
-export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: PageId) => readonly string[] | undefined, sink?: (hash: string, body: string) => void): Products {
+export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: PageId) => readonly string[] | undefined, sink?: (hash: string, body: string) => void, o: { grown?: GrownRule } = {}): Products {
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = md5(body); };
@@ -90,7 +91,8 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   for (const [f, body] of buildOlderFiles(index)) put(`older/${f}.json`, JSON.stringify(body));
   for (const by of BYS) for (const [f, body] of buildRowFiles(index, by)) put(`rows/${by}/${f}.json`, JSON.stringify(body));
   put('genera.json', JSON.stringify(generaOfIndex(index)));
-  put('featured.json', JSON.stringify(featuredFile(index)));
+  // The front page's strip from the popular genera (round eighty-four, the owner's decision 4), where the build reads their files.
+  put('featured.json', JSON.stringify(featuredFile(index, o.grown)));
   const urls = sitemapUrls(index), days = sitemapDays(index);
   for (let n = 1; (n - 1) * SITEMAP_CHUNK < urls.length; n++) put(`sitemap/${n}.json`, JSON.stringify({ urls: urls.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK), days: days.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK) }));
   // The id names everything in the directory, not the index alone: a dossier change that leaves its index entry as it was

@@ -134,16 +134,17 @@ describe('r82u: the close-up map names the regions and has a scale and a graticu
 describe('r82u: the about page is true of each change', () => {
   const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
   it('says "Popular genera", and no "Most grown" is left in any page', () => {
-    expect(how).toContain('its chip “Popular genera”, off until chosen, narrows it to the species of the popular genera, a measure of genera and not of species or of growers:'); // base: “Most grown”
+    expect(how).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera.'); // base: “Most grown”
+    expect(how).toContain('It is a measure of genera, not of species or of growers.');
     for (const f of ['src/routes/+page.svelte', 'src/routes/about/how/+page.svelte']) expect(readFileSync(f, 'utf8').replace(/"Most grown" until round eighty-two/, '')).not.toMatch(/Most grown/);
     expect(readFileSync('src/routes/+page.svelte', 'utf8')).toContain('>Popular genera<span class="sep0">');
   });
   it('says the few-records mark, its line and its count', () => {
-    expect(how).toContain('a habitat climate read from fewer than 12 records, or from fewer than 5 grid cells, is marked “from few records” on the page\'s figures and in its climate section');
+    expect(how).toContain('A habitat climate read from fewer than 12 records, or from fewer than 5 grid cells, is marked "from few records" on the page\'s figures and in its climate section');
     expect(how).not.toContain('under a dozen the page says the evidence is thin');
   });
   it('says a page built now has no Papers section, and why its record says so', () => {
-    expect(how).toContain('so a page built since has no Papers section, and its record of sources says OpenAlex was not asked, and why: papers are not yet asked for this reference, and a later fill takes them from OpenAlex\'s free snapshot.');
+    expect(how).toContain('so a page built since has no Papers section, and its record of sources says OpenAlex was not asked, and why.');
   });
   it('names the regions\' scheme where the species page links it', () => {
     expect(how).toMatch(/<span id="regions">A range is in Kew's units, the level-3 regions of the World Geographical Scheme/);

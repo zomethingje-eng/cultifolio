@@ -16,6 +16,7 @@
 import { NO_GBIF_CLIMATE } from './no-gbif';
 import { frostWording } from './extremes';
 import { MON3 } from './months';
+import { lapseCause, causeSentence, causeTag, causeShort, type LapseCause } from './lapse';
 import { archFor, type ArchGuess, type KewWords } from './arch';
 import { temp, deltaT, rain, ruleRain, ruleDeltaT, METRIC, type Units } from './units';
 
@@ -63,6 +64,11 @@ export interface SheetInput {
   extremes?: Extremes | null;
   /** Why there are no extremes, when there are none: 'refused' (the source did not answer when the dossier was built) is said as not checked, never as none on file (round sixteen, 7). */
   extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | 'lapse' | null;
+  /**
+   * The series set aside, when `extremesStatus` is 'lapse' (the dossier's `extremesLapse`, a sheet's copy of it): its
+   * cause is read from it and the months, and said (round eighty-four). Left out, the words say only that it was set aside.
+   */
+  extremesLapse?: { minAbs: number; minP01?: number; lapseAppliedM?: number } | null;
   /** Habitat latitude (the map marker's), for the hemisphere. */
   lat?: number | null;
   /** The grower's latitude, if known: the one-sentence shorts print months for that hemisphere. */
@@ -263,22 +269,27 @@ export interface ColdFloor {
   hab: boolean;
   plain: { lead: string; rule: string };
 }
-/** Why there is no daily extremes series, as its own sentence: a refusal is "not checked", never an absence (rule 2). */
-const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
-  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : exStatus === 'lapse' ? "The daily extremes were read at a weather cell whose ground is too far above or below the typical spot to correct for, and are not used." : 'No daily extremes are on file.';
+/**
+ * Why there is no daily extremes series, as its own sentence: a refusal is "not checked", never an absence (rule 2). A set
+ * of extremes set aside names the cause that applied (round eighty-four; D1, S1, A3, B2): `cause` from the dossier's
+ * `extremesLapse` (`lapseCause`); without it (a sheet built before) only that they were set aside.
+ */
+const extremesWhy = (exStatus?: SheetInput['extremesStatus'], cause?: LapseCause | null): string =>
+  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : exStatus === 'lapse' ? (cause ? `The daily extremes were read and set aside: ${causeSentence(cause, U)}.` : 'The daily extremes were read and set aside; the species page says why.') : 'No daily extremes are on file.';
 /**
  * Why a page, compare or the share card has no floor to print, in the few words the glance row gives beside the mean
  * nightly low (rule 2: a refusal is "not checked", a skip "not asked for"). One wording for every surface (round
- * sixty-two; visitor-words 11: the card gave no reason at all).
+ * sixty-two; visitor-words 11: the card gave no reason at all); a set-aside series by its own cause (round eighty-four).
  */
-export const extremesWhyTag = (exStatus?: string | null): string =>
-  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : exStatus === 'lapse' ? "extremes not used (the weather cell's ground is too far off)" : 'no extremes series';
-const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
-  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'lapse' ? "the daily extremes were read at a weather cell whose ground is too far above or below the typical spot, and are not used" : 'no daily extremes on file';
+export const extremesWhyTag = (exStatus?: string | null, cause?: LapseCause | null, units: Units = METRIC): string =>
+  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : exStatus === 'lapse' ? causeTag(cause ?? null, units) : 'no extremes series';
+/** The same as a clause for a sentence, in a grower's words; exported for a plant's page, which says it beside its own figures. */
+export const extremesWhyShort = (exStatus?: SheetInput['extremesStatus'], cause?: LapseCause | null, units: Units = U): string =>
+  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'lapse' ? causeShort(cause ?? null, units) : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 // The third and sixth places (the group, the climate status) are kept for callers written before round eighty-one: a
 // care group gives no figure since then, so neither changes the answer.
-export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus'], _climateStatus?: SheetInput['climateStatus']): ColdFloor | null {
+export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus'], _climateStatus?: SheetInput['climateStatus'], setAside?: SheetInput['extremesLapse']): ColdFloor | null {
   U = units;
   if (ex) {
     const f = ex.minP01;
@@ -293,7 +304,8 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchG
     const f = m[i].tmin;
     // Every month that ties for the coldest night, as printed (round sixty-one; visitor 5).
     const at = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
-    return { habitat: f, kind: 'mean', s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
+    const cause = exStatus === 'lapse' && setAside ? lapseCause({ months: m, extremes: setAside }) : null;
+    return { habitat: f, kind: 'mean', s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus, cause)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus, cause, U)}.`, rule: 'CHELSA' } };
   }
   return null;
 }
@@ -427,7 +439,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, T1));
     // Named as the labels name them, "mean nightly low" and "mean daily high" (round sixty-two; the words review's 5).
     bits.push(`Monthly means: the coldest month's mean nightly low ${T1(m[coldI].tmin)} in ${coldAt}${spread10}, the warmest month's mean daily high ${T1(m[hotI].tmax)} in ${hotAt} (${ENV}).`);
-    floorOut = coldFloor(m, ex, null, U, input.extremesStatus);
+    floorOut = coldFloor(m, ex, null, U, input.extremesStatus, undefined, input.extremesLapse);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
     // The series' own length, never a fixed "1981–2024" (round sixty; words 20); the convention is never part of the floor (round sixty).

@@ -66,18 +66,25 @@ export function signEntries<T extends { key: string; name: string }>(entries: T[
 }
 
 /**
- * A page's identifiers and links with Kew's numbers for a hybrid whose record links neither POWO nor IPNI (the species
- * route; round eighty-one, H), in the order the page lists its links (GBIF, then POWO and IPNI, then the rest). Any other
- * page's as they are, and `kew` false.
+ * A page's identifiers and links with Kew's numbers for a hybrid whose record lacks POWO's or IPNI's link (the species
+ * route; round eighty-one, H; round eighty-four, review-d D5: a hybrid whose record linked IPNI alone, as Aesculus ×
+ * woerlitzensis and Rhododendron × sochadzeae did, showed no POWO link, since only a record with neither was given Kew's),
+ * in the order the page lists its links (GBIF, then POWO and IPNI, then the rest): each one missing from Kew's entry, a
+ * stored one as it is. Any other page's as they are, and `kew` false. The re-derivation stores the entry's own on every
+ * `k` page (`linkKewEntry`), so this then finds nothing to add.
  */
 export function withKewLinks<I extends { ipni?: string; powo?: string }>(key: string | null | undefined, ids: I, links: Record<string, string>): { ids: I; links: Record<string, string>; kew: boolean } {
-  if (ids.ipni || ids.powo) return { ids, links, kew: false };
+  if (ids.ipni && ids.powo) return { ids, links, kew: false };
   const k = hybridLinks(key);
-  if (!k.ipni && !k.powo) return { ids, links, kew: false };
-  const { gbif, ...rest } = links;
+  const powo = ids.powo ? undefined : k.powo;
+  const ipni = ids.ipni ? undefined : k.ipni;
+  if (!powo && !ipni) return { ids, links, kew: false };
+  const { gbif, powo: p0, ipni: i0, ...rest } = links;
+  const P = powo ? `https://powo.science.kew.org/taxon/${powo}` : p0;
+  const I = ipni ? `https://www.ipni.org/n/${ipni}` : i0;
   return {
-    ids: { ...ids, ...k },
-    links: { ...(gbif ? { gbif } : {}), ...(k.powo ? { powo: `https://powo.science.kew.org/taxon/${k.powo}` } : {}), ...(k.ipni ? { ipni: `https://www.ipni.org/n/${k.ipni}` } : {}), ...rest },
+    ids: { ...ids, ...(powo ? { powo } : {}), ...(ipni ? { ipni } : {}) },
+    links: { ...(gbif ? { gbif } : {}), ...(P ? { powo: P } : {}), ...(I ? { ipni: I } : {}), ...rest },
     kew: true
   };
 }

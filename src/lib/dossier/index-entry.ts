@@ -74,6 +74,13 @@ export interface NameScope {
    * scientific name and is not shown (round eighty, A; review-d 7).
    */
   older?: readonly string[];
+  /**
+   * The one-word names this species does not head with (`nameKey`s; round eighty-four, review-d D9): another species'
+   * sources give the name more often, or as often (`sharedHeadlines`, which `--index` writes into the dossier as
+   * `name.shared`, so the species page reads the same). Such a name is not shown, as a generic noun is not; it stays
+   * searchable as a spelling.
+   */
+  shared?: readonly string[];
 }
 
 import { canonicalSynonym } from '../core/names';
@@ -241,6 +248,20 @@ export function namesOf(value: string): string[] {
   return [...new Set(parts.map((x) => x.trim().replace(/\s+/g, ' ')).filter(Boolean))];
 }
 
+/** A letter of a script other than the Latin alphabet's (the marks, punctuation and modifier letters such as ʻ apart). */
+const FOREIGN_LETTER = /(?![\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}/u;
+/**
+ * An English name as a source wrote it, read in the Latin alphabet (round eighty-four; review-s S12): letters of another
+ * script left at its end are taken off ("Asian Indian mallow ا", "Hairy phloxا" are "Asian Indian mallow", "Hairy
+ * phlox"), and a name with any inside is not an English name ("アマミナキリスゲ（Amami-nakirisuge）", "Китайски лептопус",
+ * "قهوة سنا", 23 of the live index's English names, 29 October 2026). Null for none. The Latin alphabet's own letters stay,
+ * whatever their accents ("Northern rātā", "ʻōhiʻa"): which language a name in it is cannot be read from its letters.
+ */
+export function latinName(name: string): string | null {
+  const t = name.trim().replace(/\s*(?:(?![\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}[\p{M}]*)+\s*$/u, '').trim();
+  return t && !FOREIGN_LETTER.test(t) ? t : null;
+}
+
 /**
  * Single words that name a kind of plant, not a species: shown only when no source gives a fuller name, as a bare genus
  * word is. One dataset's "Cherry" for Malpighia emarginata and one row's "Cactus" for two Copiapoa species were headlines
@@ -327,9 +348,11 @@ export function bareGenus(spelling: string, scope: NameScope = {}): boolean {
  * one source. The first letter is shown as a capital, and every name stays in the answer, so every alternative stays
  * searchable: `common` is the rule's choice, `commons` every other English name in the rule's order, one spelling each.
  */
-export function englishNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[] } {
+type NameGroup = { at: number; spellings: Map<string, { from: Set<string>; at: number }>; from: Set<string>; preferred: boolean; alone: boolean };
+/** The English names of a species' rows, one group a name (`nameKey`), each with its spellings and its sources (`englishNames`' rule 1), and every name's words with its sources. */
+function nameGroups(vernacular: VernacularName[]): { groups: Map<string, NameGroup>; across: Array<{ words: string[]; from: ReadonlySet<string> }> } {
   type Spelling = { from: Set<string>; at: number };
-  const groups = new Map<string, { at: number; spellings: Map<string, Spelling>; from: Set<string>; preferred: boolean; alone: boolean }>();
+  const groups = new Map<string, NameGroup>();
   // Every English name the species' sources give, as words, with its sources: how they write a word across all its names
   // decides a tie between spellings of one (round seventy; triage-69 N4).
   const across: Array<{ words: string[]; from: ReadonlySet<string> }> = [];
@@ -343,7 +366,7 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     const total = Number.isInteger(v.sources) && v.sources! > 0 ? v.sources! : 1;
     const own = new Set(named);
     for (let j = own.size; j < total; j++) own.add(`#${i}:${j}`);
-    const names = namesOf(v.name);
+    const names = namesOf(v.name).flatMap((n) => { const l = latinName(n); return l ? [l] : []; });
     for (const name of names) {
       const at = seq++;
       across.push({ words: spellingWords(name), from: own });
@@ -359,6 +382,50 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
       groups.set(k, g);
     }
   });
+  return { groups, across };
+}
+
+/**
+ * The one-word English names a species' sources give, by `nameKey`, with how many sources give each (round eighty-four;
+ * review-d D9): what `sharedHeadlines` compares across the reference. Generic nouns are left out (they head nothing).
+ */
+export function oneWordNames(vernacular: VernacularName[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [k, g] of nameGroups(vernacular).groups) {
+    const any = [...g.spellings.keys()][0];
+    if (tokensOf(any.trim()).length !== 1 || genericNoun(any)) continue;
+    out.set(k, g.from.size);
+  }
+  return out;
+}
+
+/**
+ * The one-word names each species does not head with (round eighty-four; review-d D9: "Fig" headed Ficus nymphaeifolia, F.
+ * prolixa and F. tinctoria beside Ficus carica, "Ginger" Zingiber collinsii and Z. gramineum beside Z. officinale, "Pepper"
+ * Piper ponapense, a page of no photograph, beside Piper nigrum, and "Bamboo" two Phyllostachys). A one-word name two
+ * species or more of one genus hold names the one whose sources give it most often; where two give it equally often, it
+ * names none of them. Every other holder of the genus does not head with it, nor show it: it stays searchable. Ficus
+ * carica keeps "Fig" (six sources against one), Zingiber officinale "Ginger". Holders of other genera are not compared:
+ * "Rose" on a Cotoneaster is the search's to set back (`$core/search`), and "Sycamore" names a maple in Britain and a plane
+ * in America. By page key, the names lost, sorted; a page that loses none is not listed.
+ */
+export function sharedHeadlines(pages: Iterable<{ key: string; genus: string; names: ReadonlyMap<string, number> }>): Map<string, string[]> {
+  const by = new Map<string, Array<{ key: string; n: number }>>();
+  for (const p of pages) for (const [k, n] of p.names) { const id = `${foldWord(p.genus)} ${k}`; const xs = by.get(id); if (xs) xs.push({ key: p.key, n }); else by.set(id, [{ key: p.key, n }]); }
+  const out = new Map<string, string[]>();
+  for (const [id, xs] of by) {
+    if (xs.length < 2) continue;
+    const max = Math.max(...xs.map((x) => x.n));
+    const winners = xs.filter((x) => x.n === max);
+    const k = id.slice(id.indexOf(' ') + 1);
+    for (const x of xs) if (winners.length > 1 || x.n < max) { const l = out.get(x.key) ?? []; l.push(k); out.set(x.key, l); }
+  }
+  for (const l of out.values()) l.sort();
+  return out;
+}
+
+export function englishNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[] } {
+  const { groups, across } = nameGroups(vernacular);
   if (!groups.size) return {};
   const ownWords = scope.genus ? scope.genus.trim().replace(/^(?:×\s*|x\s+)/i, '').split(/\s+/) : [];
   const own = ownWords.length ? foldWord(ownWords[0]) : '';
@@ -390,6 +457,8 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     const back = setBack(spelling);
     // A single word that names no species: a bare genus word, a generic noun, or a word only ever given inside a list.
     const single = bareGenus(spelling, scope) || genericNoun(spelling) || (!g.alone && tokensOf(spelling).length === 1);
+    // A one-word name another species of its genus is given more often (`scope.shared`; round eighty-four, D9): not shown.
+    if (scope.shared?.length && tokensOf(spelling.trim()).length === 1 && scope.shared.includes(nameKey(spelling))) return [];
     // 0 a name; 1 a single word that names no species (rule 2a); 2 set back.
     return [{ spelling, tier: back ? 2 : single ? 1 : 0, at: g.at, sources: g.from.size, preferred: g.preferred }];
   });
@@ -423,7 +492,7 @@ export function pooledSpellings(vernacular: VernacularName[], shown: string[]): 
   const out: string[] = [];
   for (const v of vernacular) {
     if (v.lang !== 'eng' || typeof v.name !== 'string') continue;
-    for (const name of namesOf(v.name)) {
+    for (const name of namesOf(v.name).flatMap((n) => { const l = latinName(n); return l ? [l] : []; })) {
       const k = searchWords(name).join(' ');
       if (!k || seen.has(k)) continue;
       seen.add(k);

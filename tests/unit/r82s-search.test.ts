@@ -102,8 +102,9 @@ describe("a species' own headline typed (review 1's 2)", () => {
   it('"peppermint" is Mentha × piperita first, whose headline it is, though a Eucalyptus is called "Peppermint" too', () => {
     const hits = names(search(prepare(IDX), 'peppermint'));
     expect(hits[0]).toBe('Mentha × piperita'); // base: after every "… peppermint" headline
-    // The Eucalyptus that holds "Peppermint" among its other names is still set back, after the headlines holding the word.
-    expect(hits.indexOf('Eucalyptus dives')).toBeGreaterThan(hits.indexOf('Eucalyptus amygdalina'));
+    // The Eucalyptus that holds "Peppermint" among its other names, and whose headline holds the word, is a peppermint
+    // (round eighty-four, review-s S2: `headlineHolds`), after Mentha × piperita and before the headlines merely holding it.
+    expect(hits.indexOf('Eucalyptus dives')).toBeLessThan(hits.indexOf('Eucalyptus amygdalina'));
   });
 
   it('"rosemary" is Salvia rosmarinus first; "Rose", a headline of neither species, is still set back', () => {
@@ -111,7 +112,9 @@ describe("a species' own headline typed (review 1's 2)", () => {
     expect(names(search(p, 'rosemary'))[0]).toBe('Salvia rosmarinus'); // base: Westringia rigida first
     const rose = names(search(p, 'rose'));
     expect(rose.indexOf('Rosa canina')).toBeLessThan(rose.indexOf('Cotoneaster sylvestrii'));
-    expect(rose.indexOf('Rosa canina')).toBeLessThan(rose.indexOf('Rosa mollis'));
+    // Rosa mollis, "Soft downy-rose", which a source also calls "Rose", is a rose: since round eighty-four (review-s S2) its
+    // exact name counts, its headline holding the word; the Cotoneaster's does not.
+    expect(rose.indexOf('Rosa mollis')).toBeLessThan(rose.indexOf('Rosa canina'));
   });
 });
 

@@ -263,6 +263,9 @@ describe('C5: among files of one rank, a lead at least 500 pixels wide (S-C12)',
     expect(leadOf([a, photo({ title: 'File:Aloe vera 2.jpg' })], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 1.jpg');
     // A landscape 300-pixel file (round eighty-two passes over an upright lead where one that is not is there; this
     // fixture's 2,000-pixel height had made it upright).
-    expect(leadOf([photo({ title: 'File:DSC_0001.jpg', width: 4000 }), { ...photo({ title: 'File:Aloe vera 3.jpg', width: 300 }), height: 200 }], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 3.jpg');
+    // Round eighty-four (E; the merge): a lead is never under 640 pixels on its long side where a larger one exists
+    // (`HERO_MIN_PX`), so the titled file leads at 900 by 600, and a 300 by 200 one yields to the larger file.
+    expect(leadOf([photo({ title: 'File:DSC_0001.jpg', width: 4000 }), { ...photo({ title: 'File:Aloe vera 3.jpg', width: 900 }), height: 600 }], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 3.jpg');
+    expect(leadOf([photo({ title: 'File:DSC_0001.jpg', width: 4000 }), { ...photo({ title: 'File:Aloe vera 3.jpg', width: 300 }), height: 200 }], { scientific: 'Aloe vera' })?.id).toBe('File:DSC_0001.jpg');
   });
 });

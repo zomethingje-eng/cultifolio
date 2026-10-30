@@ -36,7 +36,7 @@ describe('r80m merge', () => {
   it('/about/how is true of the family rule and of the plant notice', () => {
     const how = read('src/routes/about/how/+page.svelte');
     expect(how).toContain("or only under a genus it files in another order than Kew's family while its accepted genus of that name is in that order");
-    expect(how).toContain("a GBIF key a plant records for it is compared with the keys the page reads GBIF's records under, and the plant's page says whether it is one of them.");
+    expect(how).toContain("A GBIF key a plant records for it is compared with the keys the page reads GBIF's records under, and the plant's page says whether it is one of them.");
     expect(how).not.toContain('is compared with no page');
   });
 });

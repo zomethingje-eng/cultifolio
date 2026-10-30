@@ -7,7 +7,7 @@
  * On r82base `frost.bar` and `nightWords` did not exist, the line was red whatever the night, and every batch's first
  * count was "First seedlings up".
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { frost, nightWords, NEAR_H } from '$lib/ui/frost.svelte';
 import { firstUpWords } from '$lib/ui/grow/firsts';
 
@@ -19,6 +19,11 @@ const at = (fetched: string, days: ReturnType<typeof day>[], risk: { level: stri
   frost.risk = risk;
   frost.nights = { fetched, offsetH: -5, days, firstFrost, firstCold };
 };
+
+// Since round eighty-four the window is measured from now, not from the forecast's own time (A16): these forecasts are
+// read at the moment they were had.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(Date.parse('2026-10-23T12:00:00Z')); });
+afterEach(() => vi.useRealTimers());
 
 describe('the frost bar (the independent review\'s 18)', () => {
   it('a cold night above freezing nine days out: amber on the front page, dated, and no bar', () => {
@@ -80,5 +85,18 @@ describe('a batch\'s first count, by its method (review 2\'s 4)', () => {
     expect(firstUpWords('offset')).toBe('First offsets struck');
     expect(firstUpWords('graft')).toBe('First grafts struck');
     expect(firstUpWords('tissue')).toBe('First count');
+  });
+});
+
+describe('the bar\'s window is measured from now (round eighty-four; outside review A16)', () => {
+  it('a forecast read 90 minutes ago: a frost 71.5 hours after its reading is 70 hours from now, on the bar; one 73 hours from now is not', () => {
+    const fetched = '2026-10-23T10:30:00Z'; // read an hour and a half before now (12:00)
+    // 71.5 h after the reading would have been near by the old rule as well; 73.5 h after it was not near, though only 72 h from now.
+    at(fetched, [day('2026-10-26', -1, '10:00')], { level: 'frost', text: 'Frost forecast: -1 °C (2026-10-26, MET Norway).' });
+    expect(frost.line!.near).toBe(true); // 70 h from now
+    at(fetched, [day('2026-10-26', -1, '12:00')], { level: 'frost', text: 'Frost forecast: -1 °C (2026-10-26, MET Norway).' });
+    expect(frost.line!.near).toBe(true); // 72 h from now, 73.5 h after the reading: r84base said not near
+    at(fetched, [day('2026-10-26', -1, '13:00')], { level: 'frost', text: 'Frost forecast: -1 °C (2026-10-26, MET Norway).' });
+    expect(frost.line!.near).toBe(false); // 73 h from now
   });
 });

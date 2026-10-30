@@ -70,17 +70,18 @@ test('r82u 1: why GBIF\'s records were not asked is said once, under the name, a
   await noThirdParty(page);
   await page.goto('/species/hesperocyparis-lusitanica'); await ready(page);
   const note = page.locator('#records-unchecked');
-  await expect(note).toContainText(`GBIF's records not checked. ${WHY}`);
+  await expect(note).toContainText(`GBIF's records not checked.`);
+  await expect(note.locator('details.why')).toContainText(WHY); // round eighty-four (P7): behind "Why"
   // Under the name card, before the section row.
   expect(await note.evaluate((n) => !!(document.querySelector('.top')!.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(n.compareDocumentPosition(document.querySelector('nav.tabs')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   // Once in the page a reader reads (the record of sources, which lists each source's row, aside).
   const times = await page.evaluate((why) => { const a = document.querySelector('article.species')!.cloneNode(true) as HTMLElement; a.querySelectorAll('details.prov, .prov').forEach((x) => x.remove()); return a.textContent!.split(why).length - 1; }, WHY);
   expect(times).toBe(1);
-  // Each place made from the records says "not checked" and points to it.
-  await expect(page.locator('#no-gbif-climate')).toContainText("Not checked. GBIF's records were not asked");
-  await expect(page.locator('.note-slot .none')).toContainText('Not checked');
-  await expect(page.locator('#near-not-checked')).toContainText('Not checked');
-  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked');
+  // Each place made from the records points to it, and does not say "not checked" again (round eighty-four; A10).
+  await expect(page.locator('#no-gbif-climate')).toContainText('No habitat climate');
+  await expect(page.locator('.note-slot .none')).toContainText('No sheet');
+  await expect(page.locator('#near-not-checked')).toContainText('None to compare');
+  await expect(page.locator('.mapcap').nth(1)).toContainText('No records drawn');
   expect(await page.locator('article a[href="#records-unchecked"]').count()).toBeGreaterThanOrEqual(3);
 });
 
@@ -212,8 +213,9 @@ test('r82u 11: the chip is "Popular genera" @phone', async ({ page }) => {
 test('r82u 12: a climate from few records is marked on its figures and in its climate section, its figures kept @phone', async ({ page }) => {
   await noThirdParty(page);
   await humilis(page, (d) => { d.climate.records = 4; d.climate.cells = 4; });
-  await expect(page.locator('#few-records-mark')).toHaveText('from few records');
-  await expect(page.locator('#few-records-mark')).toHaveAttribute('title', '4 records in 4 grid cells');
+  // Round eighty-four (P9): the counts in the mark's own words, and the mark a link to the notice, not a hover title.
+  await expect(page.locator('#few-records-mark')).toHaveText('from few records: 4 in 4 cells');
+  await expect(page.locator('#few-records-mark')).toHaveAttribute('href', '#few-records');
   await expect(page.locator('#few-records-glance')).toContainText('From few records: 4 records in 4 grid cells.');
   await expect(page.locator('#few-records')).toHaveText('From few records: this habitat climate is read from 4 records in 4 grid cells; a page says so under 12 records or 5 cells, and shows the figures as read.');
   await expect(page.locator('.glance .card')).toHaveCount(5); // the figures are all there

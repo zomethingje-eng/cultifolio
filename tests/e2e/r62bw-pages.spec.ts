@@ -110,7 +110,7 @@ test.describe('the species page says a refusal as one (the grower review\'s 2)',
     expect(text).toContain('GBIF media refused');
     expect(text).not.toContain('occurrence source did not answer');
     expect(text).toContain('The occurrence source refused the request when this species page was built.');
-    expect(text).toContain('Records not checked: the occurrence source refused the request when this page was built.');
+    expect(text).toContain('No records drawn: the occurrence source refused the request when this page was built.'); // round eighty-four (A10): "not checked" once, by the record
     expect(text).toContain('GBIF occurrence records'); // Provenance names the source in plain words
     expect(text).not.toMatch(/did not answer\s+asked/); // its pill says "refused"
   });

@@ -20,16 +20,18 @@ export type AboutPage = 'how' | 'formats';
 const FILES: Record<AboutPage, string> = { how: 'src/routes/about/how/+page.svelte', formats: 'src/routes/about/formats/+page.svelte' };
 
 /** The page's markup without its script, style and comments, line breaks kept (so a sentence can be given its line). */
-function markup(page: AboutPage): string {
-  return readFileSync(FILES[page], 'utf8')
+function markup(page: AboutPage, prose = false): string {
+  const src = readFileSync(FILES[page], 'utf8');
+  return (prose ? src.replace(/<pre[\s\S]*?<\/pre>/g, (m) => m.replace(/[^\n]/g, ' ')) : src)
     .replace(/<script[\s\S]*?<\/script>/g, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/<style[\s\S]*?<\/style>/g, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ' '));
 }
+const BLOCK = /^<\/?(?:h[1-6]|p|li|dt|dd|th|td|tr|summary|div|section|ul|ol|dl|table|thead|tbody|nav|details|article)\b/i;
 const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
 /** The text a visitor reads, one space for any run of white space, and for each character the source line it came from. */
-function read(page: AboutPage): { text: string; lineAt: number[] } {
-  const src = markup(page);
+function read(page: AboutPage, prose = false): { text: string; lineAt: number[] } {
+  const src = markup(page, prose);
   let text = '';
   const lineAt: number[] = [];
   let line = 1;
@@ -39,6 +41,8 @@ function read(page: AboutPage): { text: string; lineAt: number[] } {
     if (ch === '<') {
       const end = src.indexOf('>', i);
       for (const c of src.slice(i, end + 1)) if (c === '\n') line++;
+      // In prose, a block's edge ends whatever runs to it: a heading, a cell or a list item is no part of the next sentence.
+      if (prose && BLOCK.test(src.slice(i, end + 1)) && text && !text.endsWith('¶')) { text += '¶'; lineAt.push(line); space = false; }
       i = end;
       continue;
     }
@@ -82,6 +86,32 @@ function page(p: AboutPage) {
   let r = cache.get(p);
   if (!r) cache.set(p, (r = read(p)));
   return r;
+}
+
+/**
+ * The page's prose, its sentences in order (round eighty-four; the reviews' S5 and A19): the visible text without the
+ * blocks of code a reader scrolls (`<pre>`), split where `said` ends a sentence. Each with its source line.
+ */
+export function sentences(p: AboutPage): Said[] {
+  const { text, lineAt } = read(p, true);
+  const out: Said[] = [];
+  const push = (a: number, b: number) => {
+    const t = text.slice(a, b).replace(/¶/g, ' ').trim();
+    if (t) out.push({ text: t, line: lineAt[a] ?? 0, where: `/about/${p} line ${lineAt[a] ?? 0}` });
+  };
+  const re = /[.?!]["”)]?(?= ?(?:[A-Z"“(/¶]|$))|[.?!]["”)]?$|¶/g;
+  let from = 0;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (m[0] !== '¶') {
+      const before = text.slice(Math.max(from, m.index - 6), m.index + 1);
+      if (/\b(?:e\.g|i\.e|St|cf|aff|var|subsp|nr|sp|spp|cv|fo|f|L|v)\.$/.test(before)) continue;
+    }
+    const end = m.index + m[0].length;
+    push(from, end);
+    from = end;
+  }
+  push(from, text.length);
+  return out;
 }
 
 /** The whole visible text of a page. */

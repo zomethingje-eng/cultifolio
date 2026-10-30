@@ -101,6 +101,6 @@ describe('/about/how says where the alerts are read (H229)', () => {
     expect(far.sort(), s.where).toEqual(Object.keys(ALASKA).sort());
     for (const p of far) expect(isUS(...ALASKA[p]), p).toBe(true);
     expect(isUS(52.9, 173.2)).toBe(true);
-    expect(s.text).toMatch(/a place it does not cover says its forecast is clear, never "All clear\."/);
+    expect(said('how', "The National Weather Service's are the only weather alerts read").text).toMatch(/a place it does not cover says its forecast is clear, never "All clear\."/);
   });
 });

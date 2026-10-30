@@ -33,7 +33,8 @@ describe('the daily extremes beyond a lapse correction', () => {
     expect(sea.extremesStatus).toBe('sea');
   });
   it('the pages word it as set aside, never as none on file (rule 2)', () => {
-    expect(extremesWhyTag('lapse')).toBe("extremes not used (the weather cell's ground is too far off)");
+    // Round eighty-four (D1): by the cause that applied; without the series, only that it was set aside.
+    expect(extremesWhyTag('lapse')).toBe('extremes set aside');
     const f = coldFloor(tomato.months, null, null, undefined, 'lapse');
     expect(JSON.stringify(f)).not.toContain('No daily extremes are on file');
   });

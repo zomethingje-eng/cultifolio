@@ -43,8 +43,8 @@ describe("r81m: the Wikidata names' line, A's and B's words (D4)", () => {
   const page = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
   it('says the names not shown where none is shown, and whose spelling it is where one is', () => {
     const line = page.split('\n').find((l) => l.includes('id="names-source"')) ?? '';
-    expect(line).toContain('which the search finds and this page does not show as the species\' English name');
-    expect(line).toContain('English names as Wikidata spells them');
+    expect(line).toContain('a search for it finds this page. It is not among the English names under the heading'); // round eighty-four (W12)
+    expect(line).toContain('<b>English names</b> as Wikidata spells them');
     expect(line).toContain('not corrected here');
     expect(line).not.toContain('English names from Wikidata,');
     expect(page.match(/id="names-source"/g)?.length).toBe(3);

@@ -160,8 +160,15 @@ test('r81u phone 5: under a finger in landscape, Follow, the search box, "Show a
   const follow = (await page.getByRole('button', { name: /^Follow/ }).boundingBox())!;
   expect(follow.width).toBeGreaterThanOrEqual(43.5);
   expect(follow.height).toBeGreaterThanOrEqual(43.5);
+  // "Show all" is a link-like button: since round eighty-four (P8) it takes the finger's 44 px as an invisible margin,
+  // as the number chips do, rather than a 44 px box, which opened gaps in running text. What a finger meets is read.
   const showAll = page.getByRole('button', { name: /^Show all/ });
-  if (await showAll.count()) expect((await showAll.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+  if (await showAll.count()) {
+    await showAll.first().scrollIntoViewIfNeeded();
+    const b = (await showAll.first().boundingBox())!;
+    const hits = await page.evaluate(([x, ys]) => ys.map((y) => !!document.elementFromPoint(x, y)?.closest('button')?.textContent?.trim().startsWith('Show all')), [b.x + b.width / 2, [b.y + b.height / 2 - 18, b.y + b.height / 2 + 18]] as [number, number[]]);
+    expect(hits).toEqual([true, true]);
+  }
   /** What a finger 18 px above and below a chip's middle presses. */
   const pressed = async (sel: string) => {
     const el = page.locator(sel).first();

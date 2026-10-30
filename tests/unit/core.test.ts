@@ -274,9 +274,11 @@ describe('cultivars and hybrids', () => {
     const p = parseName("Haworthia truncata 'Lime Green'");
     expect(p).toMatchObject({ scientific: 'Haworthia truncata', cultivar: 'Lime Green', kind: 'cultivar' });
   });
-  it('a genus with a cultivar name and no species is a hybrid of unstated parentage', () => {
+  // Round eighty-four (review-w W5, outside review A9): a cultivar of a genus is a cultivar whose species is not stated,
+  // filed under the genus, never a hybrid the grower did not say it was (tests/unit/r84k-names.test.ts).
+  it('a genus with a cultivar name and no species is a cultivar, species not stated', () => {
     const p = parseName("Echeveria 'Blue Curls'");
-    expect(p).toMatchObject({ scientific: 'Echeveria', genus: 'Echeveria', cultivar: 'Blue Curls', kind: 'hybrid' });
+    expect(p).toMatchObject({ scientific: 'Echeveria', genus: 'Echeveria', cultivar: 'Blue Curls', kind: 'cultivar' });
     expect(p.epithet).toBeUndefined();
     expect(p.parentage).toBeUndefined();
   });

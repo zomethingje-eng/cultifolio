@@ -7,13 +7,14 @@ import { site } from './site.svelte';
 import { units } from './units.svelte';
 import { getForecast, forecastRefusal, FORECAST_TTL_MS, REFUSED_TTL_MS } from '$lib/weather/client';
 import { temp } from '$core/units';
+import { nowMs } from '$core/hlc';
 
 export type Risk = { level: string; text: string };
 /** The parts of the forecast the line reads: its nights, when it was had, and the site's offset. */
 type Nights = { fetched?: string; offsetH?: number; firstFrost?: string; firstCold?: string; days?: Array<{ date: string; tmin: number; tminAt?: string }> };
 /** A space's cold floor, for the bar (round eighty-two): a night forecast below it is said whenever it falls. */
 export type Floor = { name: string; floorC: number };
-/** What the front page's Today line and the bar under the top bar say. `near`: the night is within `NEAR_H` hours of the forecast, or the line is an alert or a refusal. */
+/** What the front page's Today line and the bar under the top bar say. `near`: the night is within `NEAR_H` hours of now, or the line is an alert or a refusal. */
 export type FrostLine = { tone: 'warn' | 'bad'; text: string; near: boolean };
 /** How far ahead a forecast night is said under the top bar on every page (round eighty-two; the independent review's 18: a cold night nine days out was a red bar on every page). */
 export const NEAR_H = 72;
@@ -25,11 +26,14 @@ export function nightWords(date: string): string {
   if (!y || !m || !d) return date;
   return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
 }
-/** Hours from the forecast's own time to a night's minimum (its start, for a six-hour minimum; the day's start at the site without one). */
-function hoursTo(f: Nights, day: { date: string; tminAt?: string }): number {
-  const from = Date.parse(f.fetched ?? '');
+/**
+ * Hours from now to a night's minimum (its start, for a six-hour minimum; the day's start at the site without one). From
+ * now, by the corrected clock, not from the forecast's own time (round eighty-four; outside review A16): a forecast kept
+ * for its half hour, or an answer served from the session's copy, put a night up to an hour and a half late on the bar.
+ */
+function hoursTo(f: Nights, day: { date: string; tminAt?: string }, now = nowMs()): number {
   const at = day.tminAt ? Date.parse(day.tminAt.split('/')[0]) : Date.parse(`${day.date}T00:00:00Z`) - (f.offsetH ?? 0) * 3600_000;
-  return Number.isFinite(from) && Number.isFinite(at) ? (at - from) / 3600_000 : Infinity;
+  return Number.isFinite(at) ? (at - now) / 3600_000 : Infinity;
 }
 
 class FrostWatch {
@@ -100,8 +104,8 @@ class FrostWatch {
   /**
    * The line the front page shows: a refusal, or a risk that is not "none"; null when the nights are clear or nothing was
    * asked. Since round eighty-two (the independent review's 18) a forecast night has its date in words, is red
-   * only at or below freezing (a cold night above it is amber), and says whether it is within `NEAR_H` hours of the
-   * forecast, which is when the bar under the top bar carries it. An alert of the National Weather Service is red and near.
+   * only at or below freezing (a cold night above it is amber), and says whether it is within `NEAR_H` hours of now
+   * (round eighty-four; it was of the forecast's own time), which is when the bar under the top bar carries it. An alert of the National Weather Service is red and near.
    */
   get line(): FrostLine | null {
     if (this.unchecked) return { tone: 'warn', text: this.unchecked, near: false }; // a refusal is said on the front page and Today, not on every page
@@ -115,6 +119,7 @@ class FrostWatch {
     // keeps its own words before it: "Frost forecast: -2.0 °C around 05:00 Monday, your time (Monday 2 November,
     // 2026-11-02 in the table, MET Norway).").
     const text = r.text.replace(`(${day.date}`, `(${nightWords(day.date)}, ${day.date}`);
+    void this.readAt; // read again with each reading of the forecast, so "now" moves on with it
     return { tone: day.tmin <= 0 ? 'bad' : 'warn', text, near: hoursTo(f, day) <= NEAR_H };
   }
   /**

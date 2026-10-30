@@ -7,7 +7,8 @@
  * 2. On a phone, the pill "Compare 1, pick one more" stood over the add form's pinned bar, covering "Save and add another"
  *    and most of Add (and the batch form's bar). Now it steps aside while a page shows a pinned bar: what is at Add's
  *    centre is Add.
- * 3. On a phone, the toast after Water all ("Watered 1 plant. Undo") landed on the pill. Now it stands above it.
+ * 3. On a phone, the toast after Water all ("Watered 1 plant. Undo") landed on the pill. Now it stands above it. Since
+ *    round eighty-four (P4) the pill is on the species pages only, so a space has none and the toast is on the screen.
  *
  * On r81base: 1 FAILED (one column, `?s=copiapoa-humilis`); 2 FAILED (the pill's link at Add's centre); 3 FAILED (the toast
  * and the pill overlap).
@@ -21,7 +22,6 @@ async function trayOfOne(page: Page) {
   await page.addInitScript(() => { try { localStorage.setItem('cultifolio.compare', JSON.stringify([{ slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea' }])); } catch { /* none */ } });
 }
 const box = async (page: Page, sel: string) => (await page.locator(sel).first().boundingBox())!;
-const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 test("r81u compare 1: a species picked on the compare page joins the tray's one, which comes first @phone", async ({ page }) => {
   await trayOfOne(page);
@@ -51,9 +51,12 @@ test('r81u compare 2: on a phone the tray\'s pill steps aside for the add form\'
     expect(atCentre, to).toMatch(button);
     await expect(page.locator('.cmppill'), to).toBeHidden();
   }
-  // The tray itself is kept: the pill is back on a page with no pinned bar.
-  await page.goto('/plants'); await ready(page);
+  // The tray itself is kept: the pill is back on a species page. Since round eighty-four (P4) it is on the species pages
+  // only, so My plants has none.
+  await page.goto('/species/copiapoa-cinerea'); await ready(page);
   await expect(page.locator('.cmppill')).toBeVisible();
+  await page.goto('/plants'); await ready(page);
+  await expect(page.locator('.cmppill')).toHaveCount(0);
 });
 
 test("r81u compare 3: on a phone the toast after Water all stands above the tray's pill, not on it @phone-only", async ({ page }) => {
@@ -61,12 +64,11 @@ test("r81u compare 3: on a phone the toast after Water all stands above the tray
   await page.goto('/places'); await ready(page);
   await inject(page, [['location', 'gh', 'name', 'Greenhouse'], ['accession', 'r1', 'acc', '2026-0001'], ['accession', 'r1', 'taxonName', 'Copiapoa cinerea'], ['accession', 'r1', 'status', 'growing'], ['accession', 'r1', 'nameKind', 'species'], ['accession', 'r1', 'locationId', 'gh']], Date.now() - 86_400_000);
   await page.goto('/places/gh'); await ready(page);
-  await expect(page.locator('.cmppill')).toBeVisible();
+  // Since round eighty-four (P4) the pill is on the species pages only: a space has none for the toast to meet.
+  await expect(page.locator('.cmppill')).toHaveCount(0);
   await page.getByRole('button', { name: /^Water all/ }).first().click();
   const toast = page.locator('.toast:not(.quiet)');
   await expect(toast).toContainText(/Watered/);
   const t = await box(page, '.toast:not(.quiet)');
-  const p = await box(page, '.cmppill');
-  expect(overlap(t, p), `toast ${JSON.stringify(t)} pill ${JSON.stringify(p)}`).toBe(false);
-  expect(t.y + t.height).toBeLessThanOrEqual(p.y);
+  expect(t.y + t.height).toBeLessThanOrEqual(page.viewportSize()!.height);
 });

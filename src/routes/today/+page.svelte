@@ -37,6 +37,8 @@
   // An empty collection's Today offers the example collection under its own empty state; nothing opens it by itself (round seventy-four).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
+  import { frame } from '$lib/ui/frame.svelte';
+  import { onDestroy } from 'svelte';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   type Payload = { lat: number; lon: number; forecast: Forecast; alerts: Alert[]; alertsStatus: string; risk: { level: string; text: string }; attribution: string[] };
   let data = $state<Payload | null>(null);
@@ -102,6 +104,11 @@
   let sheetsSettled = $state(false);
   /** The sheets have answered once: the stops are drawn from then on, and a later re-read (a watering changed what is due) only holds the buttons, so a stop never vanishes under focus (round sixty-one). */
   let sheetsOnce = $state(false);
+  // The footer waits until the stops and the sections under them are drawn (round eighty-four; P2): under "Reading the
+  // species sheets…" it stood in view, and the stops pushed it off.
+  const releaseFooter = frame.hold();
+  onDestroy(releaseFooter);
+  $effect(() => { if (collection.ready && (!growing.length || sheetsOnce) && !example.entering && !(example.seeding && !growing.length)) releaseFooter(); });
   /** The species whose sheets were asked for and answered: a watering that only shrinks what is due asks again for nothing, so the stops' buttons do not wait on every tap (round sixty-one). A request that failed leaves its species unasked, so the next look, or "Check again", asks again (round sixty-two; the outside review's A6). */
   let sheetsAsked = new Set<string>();
   /**

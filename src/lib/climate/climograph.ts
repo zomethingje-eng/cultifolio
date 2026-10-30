@@ -160,10 +160,17 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const xsLabels: { x0: number; x1: number; y: number }[] = [];
   const edge = left + plotW - 14;
   const extW = (t: string) => t.length * 6.2;
+  // The extremes' labels as drawn: in full where they fit, and at a phone's width (a plot under 420 px) the figure and what
+  // it is alone, the years and the source being in the key under the chart: at 328 px the full labels ran across the
+  // whole panel (round eighty-four; the phone review's P1).
+  const narrow = plotW < 420;
+  const deg = (v: number) => temp(v, units, 1).replace(/ °[CF]$/, '°');
+  const minLabel = c.extremes ? (narrow ? `${deg(c.extremes.minAbs)} lowest night` : `${deg(c.extremes.minAbs)} lowest night in ${c.extremes.years} years, NASA POWER`) : '';
+  const maxLabel = c.extremes ? (narrow ? `${deg(c.extremes.maxP99)} hot day, 1 in 100` : `${deg(c.extremes.maxP99)} 99th-percentile day, NASA POWER`) : '';
   if (c.extremes) {
     const lab = (v: number, t: string) => xsLabels.push({ x0: edge - extW(t), x1: edge, y: ty(v) + 3.5 });
-    lab(c.extremes.minAbs, `${temp(c.extremes.minAbs, units, 1)} lowest night in ${c.extremes.years} years, NASA POWER`);
-    lab(c.extremes.maxP99, `${temp(c.extremes.maxP99, units, 1)} 99th-percentile day, NASA POWER`);
+    lab(c.extremes.minAbs, minLabel);
+    lab(c.extremes.maxP99, maxLabel);
   }
   if (tLo < 0 && tHi > 0) xsLabels.push({ x0: left + plotW - 2 - 40, x1: left + plotW - 2, y: ty(0) - 4 });
   const QW = 92; // "COLD QUARTER", upper case and spaced
@@ -240,7 +247,8 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
     left,
     plotW,
     monthX: monthX.map(r1),
-    months: MONTHS,
+    // A month's column under 26 px holds no three-letter name at 11 px: its initial, as the season card's strip writes it.
+    months: colW < 26 ? MONTHS.map((m) => m[0]) : MONTHS,
     temp: {
       top: tempTop,
       height: tempH,
@@ -252,8 +260,8 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       zeroY: tLo < 0 && tHi > 0 ? r1(ty(0)) : null,
       // Each extreme names its source on the chart itself, and "years", not "yrs" (round sixty; the round forty-two review, A9).
       // No "(undated)", which read as an error to a stranger: the mark's place at the edge, in no month, says it (round sixty-one; visitor 14).
-      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} years, NASA POWER` } : null,
-      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day, NASA POWER` } : null,
+      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: minLabel } : null,
+      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: maxLabel } : null,
       coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) },
       quarterLabel: { x: r1(quarterLabel.x), y: r1(quarterLabel.y) }
     },

@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -33,6 +33,9 @@ const KEY = '0036848-260928105237408';
 
 function folder(): string {
   const dir = mkdtempSync(join(tmpdir(), 'r80x-renew-'));
+  // Round eighty-four (G): a build reads the regions' shapes or does not start; the merge gives this folder the file.
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  copyFileSync(resolve('scripts/tdwg3-shapes.json'), join(dir, 'scripts/tdwg3-shapes.json'));
   mkdirSync(join(dir, 'bulk'));
   writeFileSync(join(dir, 'bulk/wcvp_names.csv'), NAMES);
   writeFileSync(join(dir, 'bulk/wcvp_distribution.csv'), DIST);

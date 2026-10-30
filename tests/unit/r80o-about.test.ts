@@ -24,7 +24,7 @@ describe('the hash groups are told by their rule, not by one size\'s count (revi
   });
   it('the bounds the pages give are the rule\'s, and the rule gives 256 groups of about 189 at the live 48,361', () => {
     expect(how).toContain(`groups of at most ${PER_BUCKET} species, and of at least about ${PER_BUCKET / 2} once it holds more than ${((BUCKETS * PER_BUCKET) / 2).toLocaleString('en-GB')}`);
-    expect(formats).toContain(`a power of two from ${BUCKETS}, the smallest that keeps a bucket at ${PER_BUCKET} species or fewer`);
+    expect(formats).toContain(`a power of two from ${BUCKETS}, the smallest that keeps a group at ${PER_BUCKET} species or fewer`);
     expect(bucketsFor(48_361)).toBe(256);
     expect(Math.round(48_361 / 256)).toBe(189);
   });

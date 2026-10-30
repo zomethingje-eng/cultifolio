@@ -5,20 +5,27 @@
   import { getMeta, setMeta, photoBlobIds, storageErrorText } from '$lib/db/vault';
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, BACKUP_FROM, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { ReplaceBegunError } from '$lib/backup/replace';
+  import { KEPT_NUMBERS } from '$lib/db/types';
   import { sync } from '$lib/sync/engine.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { heldWords } from '$lib/ui/held-words';
   import { listWords, plural, some } from '$lib/ui/words';
   import { keepWorking } from '$lib/ui/grow/example.svelte';
+  import { daysSince, localDateOf } from '$core/dates';
+  import { today as day } from '$lib/ui/day.svelte';
 
   let lastBackup = $state<string | null>(null);
   /** How the last backup came to be: a file taken here, or a file restored from, which counts as one (round eighty-two; the independent review's 15). */
   let lastFrom = $state<string | null>(null);
   let photoCount = $state<number | null>(null);
-  onMount(async () => {
-    await collection.load();
+  /** The last backup as the device holds it: read on load, and again after a restore, which may count as one (round eighty-four; W8: the header said "never" right after a restore that counted). */
+  async function readLast(): Promise<void> {
     lastBackup = (await getMeta<string>('lastBackup')) ?? null;
     lastFrom = (await getMeta<string>(BACKUP_FROM)) ?? null;
+  }
+  onMount(async () => {
+    await collection.load();
+    await readLast();
     photoCount = (await photoBlobIds()).length;
   });
   $effect(() => {
@@ -109,6 +116,7 @@
       if (r.settingsRestored.length) done += ` This device had no ${r.settingsRestored.length > 1 ? r.settingsRestored.slice(0, -1).join(', ') + ' or ' + r.settingsRestored.at(-1) : r.settingsRestored[0]} of its own, so the file's ${r.settingsRestored.length === 1 ? 'was' : 'were'} applied.`;
       opened = null;
       photoCount = (await photoBlobIds()).length;
+      if (r.countedAsBackup) await readLast();
     } catch (err) {
       // A replacement whose switch began: the device now holds part of the file and finishes it at the next open, so the
       // old collection on screen is only this tab's memory. Said, and the page reloads (round sixty-seven; triage-66 R1).
@@ -136,7 +144,7 @@
    */
   const addedWords = (m: Opened['merge']): string => {
     const k = m.addedByKind;
-    return listWords([some(k.accession, 'plant'), some(k.location, 'space'), some(k.sowing, 'propagation batch', 'propagation batches'), some(k.event, 'timeline entry', 'timeline entries'), some(k.photo, 'photo')]) || (k.taxon || k.setting ? 'only the app\'s own records' : m.added ? 'no record a page shows' : 'no records'); // not "the app's own" when the file adds only removed records or the lines of a removed plant (round sixty-three; the backlog audit, 20)
+    return listWords([some(k.accession, 'plant'), some(k.location, 'space'), some(k.sowing, 'propagation batch', 'propagation batches'), some(k.event, 'timeline entry', 'timeline entries'), some(k.photo, 'photo')]) || (k.taxon || k.setting || k[KEPT_NUMBERS] ? 'only the app\'s own records' : m.added ? 'no record a page shows' : 'no records'); // not "the app's own" when the file adds only removed records or the lines of a removed plant (round sixty-three; the backlog audit, 20)
   };
   /** The rest of what a merge adds, for the disclosure. */
   const addedDetail = (m: Opened['merge']): string[] => {
@@ -144,6 +152,7 @@
     return [
       k.taxon ? `${plural(k.taxon, 'species record')}: the app's own, one per species grown or followed` : '',
       k.setting ? 'the numbering scheme' : '',
+      k[KEPT_NUMBERS] ? 'the numbers another device had given before it was replaced from a backup, which are not given again here' : '',
       m.addedDeleted ? `${plural(m.addedDeleted, 'record')} removed on the other device, which ${m.addedDeleted === 1 ? 'stays' : 'stay'} removed here; nothing on this device is removed` : '',
       // The lines and photographs of a plant or batch removed (in the file or here) or not yet shown: counted apart, not as added (round sixty-three; the backlog audit, 20).
       m.addedOnRemoved ? `${listWords([some(m.addedOnRemovedByKind.event ?? 0, 'timeline entry', 'timeline entries'), some(m.addedOnRemovedByKind.photo ?? 0, 'photo')])} ${m.addedOnRemoved === 1 ? 'on a removed plant or batch (or one not shown yet): kept, and shown on its page only if it comes back' : 'on removed plants or batches (or ones not shown yet): kept, and shown on their pages only if they come back'}` : '',
@@ -157,9 +166,10 @@
     return [...by].map(([no, xs]) => `${no}: ${listWords(xs.map((x) => `${x.name.trim() || 'a plant'} ${x.here ? 'here' : 'from the file'}`))}`);
   };
   const mb = (n: number) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+  /** "today", "yesterday", "3 days ago": the instant read on this device's calendar (`daysSince`; round eighty-four, A14), not by 24-hour spans, which called a backup taken at 11 pm "today" at 1 am the next day. */
   const ago = (iso: string) => {
-    const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
-    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+    const d = daysSince(iso, day.current);
+    return d == null || d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
   };
 </script>
 
@@ -212,9 +222,9 @@
     {@const c = opened.counts}
     <div class="preview">
       <div class="factgrid">
-        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} space{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if c.taxa}{' · '}{c.taxa} species record{c.taxa === 1 ? '' : 's'}{/if}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
+        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} space{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if c.taxa}{' · '}{c.taxa} species record{c.taxa === 1 ? '' : 's'}{/if}{#if m}<span class="faint">{" · "}taken {localDateOf(m.exported) ?? m.exported}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
         <!-- The outcome first, in a grower's words: "40 plants, 6 places and 1 photo will be added. Nothing here is removed."; the rest one tap away (round sixty; the grower review, §3). -->
-        <div id="bk-preview"><b>Merging</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}Nothing changes: everything in the file is already here.{:else if opened.merge.fresh.length === 0}No records are added (everything in the file is already here); the file's {opened.settings.join(', ')} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{:else}{@const what = addedWords(opened.merge)}{what[0].toUpperCase() + what.slice(1)} will be added{#if opened.merge.changed}, and {plural(opened.merge.changed, 'record')} here updated from the file{/if}{#if opened.newPhotos - (opened.merge.addedByKind.photo ?? 0) - (opened.merge.addedOnRemovedByKind.photo ?? 0) > 0}, with the pixels of {plural(opened.newPhotos - (opened.merge.addedByKind.photo ?? 0) - (opened.merge.addedOnRemovedByKind.photo ?? 0), 'photograph')} already listed here{/if}. Nothing here is removed.{#if opened.settings.length} The file's {opened.settings.join(', ')} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{/if}{/if}{#if opened.missingPixels.length} {plural(opened.missingPixels.length, 'photo record')} in the file {opened.missingPixels.length === 1 ? 'has' : 'have'} no photograph in it or on this device.{/if}{#if opened.file.skipped.length} {plural(opened.file.skipped.length, 'change')} in the file cannot be read by this version and {opened.file.skipped.length === 1 ? 'is' : 'are'} kept as {opened.file.skipped.length === 1 ? 'it is' : 'they are'}, for a version that reads {opened.file.skipped.length === 1 ? 'it' : 'them'}.{/if}{#if opened.file.leftOut.length} {plural(opened.file.leftOut.length, 'change')} in the file cannot be read and {opened.file.leftOut.length === 1 ? 'is' : 'are'} left out ({opened.file.leftOut[0]}).{/if}</div>
+        <div id="bk-preview"><b>Merging</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}Nothing changes: everything in the file is already here.{:else if opened.merge.fresh.length === 0}No records are added (everything in the file is already here); the file's {listWords(opened.settings)} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{:else}{@const what = addedWords(opened.merge)}{what[0].toUpperCase() + what.slice(1)} will be added{#if opened.merge.changed}, and {plural(opened.merge.changed, 'record')} here updated from the file{/if}{#if opened.newPhotos - (opened.merge.addedByKind.photo ?? 0) - (opened.merge.addedOnRemovedByKind.photo ?? 0) > 0}, with the pixels of {plural(opened.newPhotos - (opened.merge.addedByKind.photo ?? 0) - (opened.merge.addedOnRemovedByKind.photo ?? 0), 'photograph')} already listed here{/if}. Nothing here is removed.{#if opened.settings.length}{' '}The file's {listWords(opened.settings)} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{/if}{/if}{#if opened.missingPixels.length}{' '}{plural(opened.missingPixels.length, 'photo record')} in the file {opened.missingPixels.length === 1 ? 'has' : 'have'} no photograph in it or on this device.{/if}{#if opened.file.skipped.length}{' '}{plural(opened.file.skipped.length, 'change')} in the file cannot be read by this version and {opened.file.skipped.length === 1 ? 'is' : 'are'} kept as {opened.file.skipped.length === 1 ? 'it is' : 'they are'}, for a version that reads {opened.file.skipped.length === 1 ? 'it' : 'them'}.{/if}{#if opened.file.leftOut.length}{' '}{plural(opened.file.leftOut.length, 'change')} in the file cannot be read and {opened.file.leftOut.length === 1 ? 'is' : 'are'} left out ({opened.file.leftOut[0]}).{/if}</div>
       </div>
       {#if opened.merge.sharedNumbers.length}
         {@const lines = sharedLines(opened.merge.sharedNumbers)}

@@ -30,6 +30,7 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { paceLine } from './engine-pace.mjs';
+import { runScope, closingLine } from './predeploy-scope.mjs';
 
 const require = createRequire(import.meta.url);
 let cli;
@@ -123,7 +124,9 @@ if (run.error) {
 }
 // A run stopped by a signal has no status: that is not a pass either.
 const status = run.status ?? 1;
-console.log(status === 0 ? 'predeploy: every test passed first time; the deploy may go ahead' : `predeploy: the strict run failed (exit ${status}); do not deploy`);
+// The last line follows what was run (round eighty-four; outside review B12): only the whole suite in every engine ends
+// with the deploy going ahead; a spec, a filter, a repeat or a subset of projects says what it proved and names the gate.
+console.log(closingLine(status, runScope({ extra: [...extra, ...phoneToo], filtered, engines })));
 // A WebKit test that failed kept its trace, and smoke's two traced Saves their record (round seventy; triage-69 P1, IND-8):
 // the run is on the owner's PC only, so where to find them is said, for sending back.
 if (status !== 0 && engines.includes('webkit')) console.log("predeploy: each failed WebKit test kept its trace (trace.zip) in its folder under test-results/, and smoke's species-change and 400-plant Saves a save-trace.json beside it; npx playwright show-trace <that trace.zip> opens one");

@@ -115,13 +115,31 @@ export function photoCredit(p: { attribution: string; licence?: LicenceTag | nul
 }
 
 /** The parts of a credit: the source's licence, the author's line, whether that line names a licence, and whether it names another. */
-export function creditParts(p: { attribution: string; licence?: LicenceTag | null }): { lic: string; who: string; named: boolean; disagree: boolean } {
+/**
+ * The author's line with the licence words taken out, for a credit that names the licence beside it (round eighty-four;
+ * W2, A13: the hero's credit read "CC BY · (c) Oleksandr Shynder, some rights reserved (CC BY)", the licence twice). Only
+ * the words that say the licence go: "some rights reserved", "(CC BY)", ", CC BY-SA 4.0,"; the author, the "(c)" and
+ * "via GBIF" stay. A line that is nothing but a licence is left whole.
+ */
+export function withoutLicence(who: string): string {
+  const out = who
+    .replace(/,?\s*(?:some|no|all) rights reserved/gi, '')
+    .replace(/\s*\(\s*(?:cc[\s-]?0|cc[\s-]by(?:[\s-](?:sa|nc|nd))*(?:\s[\d.]+)?|public domain)\s*\)/gi, '')
+    .replace(/,\s*(?:cc[\s-]?0|cc[\s-]by(?:[\s-](?:sa|nc|nd))*(?:\s[\d.]+)?|public domain)(?=\s*(?:,|$))/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return out && out !== '(c)' ? out : who;
+}
+
+export function creditParts(p: { attribution: string; licence?: LicenceTag | null }): { lic: string; who: string; named: boolean; disagree: boolean; whoAlone: string } {
   const lic = p.licence ? licenceLabel(p.licence) : '';
   const who = shownAttribution(p); // "author not stated" where the line names no one (round eighty-two)
   // Spaces made hyphens before tagging: `licenceTag` reads "by-sa" and "by-nc", and "CC BY SA" with spaces was read as
   // CC BY, so an author's line agreeing with the source was said to disagree (round sixty-two; the words review's 4).
   const named = [...who.matchAll(NAMED_LICENCE)].map((x) => licenceTag(x[0].replace(/^cc[\s-]?0$/i, 'cc0').replace(/^(cc[\s-].*)$/i, (t) => t.replace(/[\s_]+/g, '-'))));
-  return { lic, who, named: named.length > 0, disagree: !!lic && named.some((t) => t !== p.licence) };
+  // The author's line without its licence words, where the licence is said beside it and agrees (round eighty-four).
+  const whoAlone = lic && named.length && !named.some((t) => t !== p.licence) ? withoutLicence(who) : who;
+  return { lic, who, named: named.length > 0, disagree: !!lic && named.some((t) => t !== p.licence), whoAlone };
 }
 
 /**

@@ -141,6 +141,8 @@ export interface RestoreReport {
   photosMissing: number;
   /** Device settings taken from the file because this device had none: 'site', 'units', 'label settings', 'preferences'. */
   settingsRestored: string[];
+  /** The restore left the device exactly the file and was noted as a backup made now (`countedAsBackup`): the page reads the last backup again (round eighty-four; W8). */
+  countedAsBackup: boolean;
 }
 
 
@@ -164,8 +166,7 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   if (PAGE_IN_DEMO) throw new Error(SAMPLE_REFUSAL); // the page's collection (round sixty-seven; triage-66 V3)
   if (mode === 'replace') {
     const r = await replaceFromBackup(o, onProgress);
-    await countedAsBackup();
-    return r;
+    return { ...r, countedAsBackup: await countedAsBackup() };
   }
   // A merge into a device that held nothing leaves it exactly the file: a backup of it exists, and is counted.
   const wasEmpty = (await changeKeys()).length === 0;
@@ -209,11 +210,11 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   // The fold with the file in it, as the snapshot, off the page's path (round sixty-seven; triage-66 R13). A replace
   // drops the snapshot with the log, and the load after its reload folds the whole log and writes one.
   if (changes.length) void collection.saveSnapshot().catch(() => false);
-  if (wasEmpty && changes.length) await countedAsBackup();
+  const counted = wasEmpty && changes.length ? await countedAsBackup() : false;
   // And the pixels already here of a photograph the file removed: bytes nothing names now, with sync or without (round
   // eighty-two; the independent review's 38). Off the page's path.
   if (changes.length) void collection.sweepPixels().catch(() => 0);
-  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings) };
+  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings), countedAsBackup: counted };
 }
 
 /**
@@ -223,8 +224,15 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
  * from). The page says it was a restore (`BACKUP_FROM`). A failure to note it changes nothing else.
  */
 export const BACKUP_FROM = 'lastBackupFrom';
-async function countedAsBackup(): Promise<void> {
-  await Promise.all([setMeta('lastBackup', new Date().toISOString()), setMeta(BACKUP_FROM, 'restore')]).catch(() => {});
+/** True once noted. A failure to note it is said in the console and changes nothing else: the page then says the last backup as before (round eighty-four; A16's silent catch). */
+async function countedAsBackup(): Promise<boolean> {
+  try {
+    await Promise.all([setMeta('lastBackup', new Date().toISOString()), setMeta(BACKUP_FROM, 'restore')]);
+    return true;
+  } catch (e) {
+    console.warn('the restore was not noted as a backup', e);
+    return false;
+  }
 }
 
 /** What a restore started in the sample collection is told. */
@@ -238,10 +246,15 @@ async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: n
   if (refused) throw new Error(refused);
   // A file of an older build is staged with no parks (`fileParks`): replace.ts stages the manifest's list as it is.
   const parks = fileParks(o.file.manifest);
-  const file = parks === o.file.manifest.parked ? o.file : { ...o.file, manifest: { ...o.file.manifest, parked: parks } };
+  const parked = parks === o.file.manifest.parked ? o.file : { ...o.file, manifest: { ...o.file.manifest, parked: parks } };
+  // The numbers this device has given that the file does not carry go into the replacement's log as one record
+  // (`keptNumbersFor`; round eighty-four, outside review B5): a number given after the file was taken stays given, and the
+  // ledger in `meta` is again a reading of the log that may be dropped.
+  const kept = await collection.keptNumbersFor(o.file.changes);
+  const file = kept.length ? { ...parked, changes: [...parked.changes, ...kept] } : parked;
   // The whole Replace, from the staging to the end of the switch, under the replace lock (vault.ts `underReplaceLock`;
   // round eighty-two, the independent review's 1): a second Replace in another tab waits for this one, and then finds
   // nothing pending, and a tab opened during the switch waits for its copy rather than run a second one beside it.
   const r = await underReplaceLock(() => replaceThroughStaging(file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } }));
-  return { ...r, settingsRestored: applyDeviceSettings(o.file.settings) };
+  return { ...r, settingsRestored: applyDeviceSettings(o.file.settings), countedAsBackup: false };
 }

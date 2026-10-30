@@ -43,7 +43,7 @@ import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, devi
 import { version as buildVersion } from '$app/environment';
 import { askToKeep } from '$lib/ui/keep-ask';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
-import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL } from './types';
+import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL, KEPT_NUMBERS, keptNumbers } from './types';
 import { fieldWords } from '$lib/ui/held-words';
 import { mySpeciesOf, type MySpecies } from './species-list';
 /** How long after a load the pixels nothing names are swept (`sweepPixels`): off the page's first moments. */
@@ -156,7 +156,7 @@ class Collection {
         : kind === 'event' ? named(`A log line (${EVENT_LABEL[f('t') as keyof typeof EVENT_LABEL] ?? (f('t') || 'an entry')})`, plantWords(f('acc')), f('d'))
         : kind === 'photo' ? named('A photograph', plantWords(f('acc') || f('sowing')), f('d') ? `taken ${f('d')}` : '')
         : kind === 'taxon' ? `Your notes on ${f('name') || 'a species'}`
-        : kind === 'setting' ? 'The numbering scheme' : 'A record';
+        : kind === 'setting' ? (id.startsWith(KEPT_NUMBERS) ? 'The numbers kept from a replacement' : 'The numbering scheme') : 'A record';
       out.push({ kind, id, label, fields: fieldWords(kind, live) });
     }
     return out;
@@ -285,6 +285,19 @@ class Collection {
    * rejected and Today and the example's offer stayed at "Opening…" for good. They show this instead.
    */
   failed = $state<string | null>(null);
+  /**
+   * A change another tab made that this tab could not read in, as a sentence, or null (round eighty-four; outside review
+   * A16): the rebuild and catch-up that follow another tab's notice failed without a word, and the tab went on showing
+   * the collection as it was. The layout says it, with a reload; a later reading that works puts it away.
+   */
+  readBehind = $state<string | null>(null);
+  /** Another tab's write followed here: said when it fails, put away when one works. */
+  private followOther(p: Promise<unknown>): void {
+    void p.then(() => { this.readBehind = null; }, (e: unknown) => {
+      console.warn('another tab\'s change could not be read here', e);
+      this.readBehind = `This tab could not read a change made in another tab (${e instanceof Error ? e.message || e.name : String(e)}). Reload the page to see it.`;
+    });
+  }
   load(): Promise<void> {
     if (!this.loading)
       this.loading = this.loadNow().catch(async (e) => {
@@ -314,8 +327,8 @@ class Collection {
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
           if (what === 'replaced') { if (typeof location !== 'undefined') location.reload(); return; }
-          if (what === 'refold') { void this.rebuild().catch(() => {}); return; }
-          if (what === 'written') void this.catchUp().catch(() => {});
+          if (what === 'refold') { this.followOther(this.rebuild()); return; }
+          if (what === 'written') this.followOther(this.catchUp());
         });
         const changes = await this.foldFromVault();
         await this.readLedger();
@@ -336,8 +349,8 @@ class Collection {
         // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
         // does not write to it (round fifty-six, 3), and the reading rule is the one every page already used.
         if (heard === 'replaced') { if (typeof location !== 'undefined') location.reload(); }
-        else if (heard === 'refold') void this.rebuild().catch(() => {});
-        else if (heard === 'written') void this.catchUp().catch(() => {});
+        else if (heard === 'refold') this.followOther(this.rebuild());
+        else if (heard === 'written') this.followOther(this.catchUp());
         // Asked, not waited for: Firefox puts the question to the person and answers only when they do, and every page that
         // waits for the load (the add form's species, a place's edit form, the example, sync, the frost watch) waited with
         // it, for good if the question was dismissed (round sixty-four; the Firefox run). Until the answer, `persisted` is
@@ -404,7 +417,41 @@ class Collection {
   private takenNumbers(kind: NumberKind, withLedger = true): Set<string> {
     const out = new Set(withLedger ? this.ledger[kind] : []);
     for (const r of this.state.values()) if (r.kind === kind) out.add(kind === 'accession' ? accNo(r as unknown as Accession) : sowNo(r as unknown as Sowing));
+    // The numbers a Replace kept (`KEPT_NUMBERS`), read from the log as the ledger's own: `meta['issued:…']` may then be
+    // dropped and nothing given here comes back into play (round eighty-four; outside review B5). With the ledger only:
+    // the repair reads the log's own numbers, the same on every device and every version (round eight, 5).
+    if (withLedger) for (const r of this.kinds.setting.values()) for (const n of keptNumbers(r, kind)) out.add(n);
     return out;
+  }
+  /**
+   * The record a Replace writes into the file's log before the switch (round eighty-four; outside review B5): every number
+   * this device has given (its ledger, its records and earlier kept numbers) that the file does not carry, so a number
+   * given after the file was taken stays given with the ledger in `meta` dropped. None when the file carries them all.
+   */
+  async keptNumbersFor(file: Change[]): Promise<Change[]> {
+    if (!this.ready) await this.untilOpen();
+    await this.readLedger(); // another tab may have given a number since this one read it
+    const inFile: Record<NumberKind, Set<string>> = { accession: new Set(), sowing: new Set() };
+    const kept: Record<NumberKind, Set<string>> = { accession: new Set(), sowing: new Set() };
+    for (const c of file) {
+      const k = numberField(c);
+      if (k && typeof c.value === 'string') inFile[k].add(c.value);
+      if (c.kind === 'setting' && c.id.startsWith(KEPT_NUMBERS) && (c.field === 'accession' || c.field === 'sowing') && Array.isArray(c.value)) for (const n of c.value) if (typeof n === 'string') kept[c.field].add(n);
+    }
+    const fields: Record<string, string[]> = {};
+    for (const k of ['accession', 'sowing'] as NumberKind[]) {
+      // Numbers given: the ledger, the numbers records carry in their field, and the numbers kept before. A record of the
+      // oldest shape has its number as its id and no field; the file carries such a record whole or not at all.
+      const field = k === 'accession' ? 'acc' : 'no';
+      const given = new Set(this.ledger[k]);
+      for (const r of this.kinds[k].values()) if (typeof r[field] === 'string') given.add(r[field] as string);
+      for (const r of this.kinds.setting.values()) for (const n of keptNumbers(r, k)) given.add(n);
+      const left = [...given].filter((n) => n && !inFile[k].has(n) && !kept[k].has(n)).sort();
+      if (left.length) fields[k] = left;
+    }
+    if (!Object.keys(fields).length) return [];
+    const id = `${KEPT_NUMBERS}-${this.eventId().slice(1)}`;
+    return diff('setting', id, fields, undefined, this.tick);
   }
   private async readLedger(): Promise<void> {
     for (const k of ['accession', 'sowing'] as NumberKind[]) {
@@ -1633,7 +1680,7 @@ class Collection {
    */
   private advanceOver(stored: { seq: number; first: number }): void {
     if (stored.first && stored.first === this.lastSeq + 1) this.lastSeq = stored.seq;
-    else if (stored.first > this.lastSeq + 1) queueMicrotask(() => void this.catchUp().catch(() => {}));
+    else if (stored.first > this.lastSeq + 1) queueMicrotask(() => this.followOther(this.catchUp()));
   }
 
   /** Called after every write the server has not seen (local edits and imports, not pulls); sync uses it to schedule a push. */

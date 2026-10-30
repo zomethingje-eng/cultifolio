@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { daysBetween } from '$core/dates';
+  import { daysSince } from '$core/dates';
   import { site, readerLat } from '$lib/ui/site.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { ruleRain } from '$core/units';
@@ -144,10 +144,13 @@
     // The example is backed up and synced nowhere, and is deleted on Leave: said so, in place of a backup's age it cannot
     // have (round sixty-seven; triage-66 V7; R45-3: "no backup yet, not synced" over plants that are not the visitor's).
     if (PAGE_IN_DEMO) return { text: 'The example collection is kept nowhere: it is deleted when you leave it.', tone: 'muted' };
-    const backup = lastBackup ? `backup ${daysBetween(lastBackup.slice(0, 10)) === 0 ? 'today' : `${daysBetween(lastBackup.slice(0, 10))} d ago`}` : 'no backup yet';
-    const synced = sync.configured ? (sync.lastSync ? `synced ${daysBetween(sync.lastSync.slice(0, 10)) === 0 ? 'today' : `${daysBetween(sync.lastSync.slice(0, 10))} d ago`}` : 'sync set up, not yet synced') : 'not synced';
+    // Each instant read on this device's calendar, against the shared day (`daysSince`; round eighty-four, A14: the UTC
+    // date of a backup taken after 8 pm in Pittsburgh was tomorrow, and the line said "backup -1 d ago").
+    const ago = (iso: string) => { const d = daysSince(iso, day.current); return d === 0 || d == null ? 'today' : `${d} d ago`; };
+    const backup = lastBackup ? `backup ${ago(lastBackup)}` : 'no backup yet';
+    const synced = sync.configured ? (sync.lastSync ? `synced ${ago(sync.lastSync)}` : 'sync set up, not yet synced') : 'not synced';
     const waiting = collection.incomplete ? `, ${collection.incomplete} record${collection.incomplete === 1 ? '' : 's'} waiting` : '';
-    const stale = !lastBackup || daysBetween(lastBackup.slice(0, 10)) > 30;
+    const stale = !lastBackup || (daysSince(lastBackup, day.current) ?? Infinity) > 30;
     return { text: `Kept on this device: ${backup}, ${synced}${waiting}.`, tone: stale && !sync.configured ? 'warn' : 'muted' };
   });
   const unseen = $derived(growing.filter((a) => collection.unseenWhy(a.id)));

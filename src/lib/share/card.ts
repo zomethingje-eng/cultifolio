@@ -11,6 +11,7 @@ import { climograph, type ClimoInput } from '$climate/climograph';
 import { temp, rain, ruleRain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
 import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
 import { yearRain } from '$climate/year-rain';
+import { lapseCause } from '$core/lapse';
 
 export interface CardInput {
   units?: Units;
@@ -24,8 +25,20 @@ export interface CardInput {
   south?: boolean;
   /** Why there is no floor, said as the glance row says it (round sixty-two; visitor-words 11, rule 2). */
   extremesStatus?: string | null;
+  /** The extremes set aside, when `extremesStatus` is 'lapse': the card names the cause that applied, as the page does (round eighty-four; A3). */
+  extremesLapse?: { minAbs: number; minP01?: number; lapseAppliedM?: number } | null;
   /** The dossier's per-cell yearly totals; with their median the card shows it (round sixty-three). */
   annualRain?: { p50?: number | null } | null;
+}
+
+/** The widest line of a card's small print, in characters of 12 px type in its 400 px (about 6.6 px each, generously). */
+export const CARD_SUB_CHARS = 60;
+/** A card's small print as one line, or two broken after a clause ("; ") or a word, never mid-word. */
+export function subLines(t: string, n = CARD_SUB_CHARS): string[] {
+  if (t.length <= n) return [t];
+  const at = t.lastIndexOf('; ', n);
+  const cut = at > 0 && t.length - at - 2 <= n ? at + 1 : t.lastIndexOf(' ', n);
+  return [t.slice(0, cut).trim(), t.slice(cut).trim()];
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -53,7 +66,7 @@ export function climateCardSvg(c: CardInput): string {
   const figs: Array<[string, string, string]> = [
     // "typical spot" and the figures' own names, as on the glance row; with no floor, the glance row's reason (round
     // sixty-two; outside review A3, visitor-words 3 and 11).
-    ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years at a typical spot · NASA POWER`] : ['Coldest month, mean nightly low', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor; ${extremesWhyTag(c.extremesStatus)} · CHELSA`],
+    ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years at a typical spot · NASA POWER`] : ['Coldest month, mean nightly low', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor; ${extremesWhyTag(c.extremesStatus, c.extremesStatus === 'lapse' && c.extremesLapse ? lapseCause({ months: m, extremes: c.extremesLapse }) : null, u)} · CHELSA`],
     ['Warmest month, mean daily high', temp(m[hot].tmax, u), `${hotAt} · CHELSA`],
     [yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more in the median year · CHELSA`],
     dlis.length ? ['Open-sky light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month · CHELSA'] : ['Cells', String(c.cells), `habitat grid cell${c.cells === 1 ? '' : 's'} read`]
@@ -83,10 +96,13 @@ export function climateCardSvg(c: CardInput): string {
     ${g.strip?.rh ? `<path d="${g.strip.rh.path}" fill="none" stroke="${ink3}" stroke-width="1.6" stroke-dasharray="3 3"/>` : ''}
     ${g.months.map((mo, i) => `<text x="${g.monthX[i]}" y="${g.height - 6}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10.5" fill="${ink2}">${mo}</text>`).join('')}
   </g>`;
+  // A line of small print longer than the card is two lines, broken between clauses: the set-aside extremes' cause ran
+  // past the card's edge into the chart (round eighty-four).
   const figsSvg = figs
     .map(([lab, val, sub], i) => {
       const y = 150 + i * 96;
-      return `<rect x="40" y="${y}" width="440" height="80" rx="12" fill="${card}"/><text x="58" y="${y + 24}" font-family="system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${esc(lab.toUpperCase())}</text><text x="58" y="${y + 52}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="26" fill="${ink}">${esc(val)}</text><text x="58" y="${y + 70}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">${esc(sub)}</text>`;
+      const lines = subLines(sub);
+      return `<rect x="40" y="${y}" width="440" height="${lines.length > 1 ? 88 : 80}" rx="12" fill="${card}"/><text x="58" y="${y + 24}" font-family="system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${esc(lab.toUpperCase())}</text><text x="58" y="${y + 52}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="26" fill="${ink}">${esc(val)}</text>${lines.map((t, j) => `<text x="58" y="${y + 70 + j * 14}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">${esc(t)}</text>`).join('')}`;
     })
     .join('');
   const origin = c.origin.slice(0, 3).join(', ') + (c.origin.length > 3 ? ` +${c.origin.length - 3}` : '');

@@ -38,7 +38,10 @@ export interface ImportResult {
 export function recordOf(row: ImportRow, check: NameCheck | undefined, placeId: string | null) {
   const p = parseName(row.name);
   const cultivar = row.cultivar ?? p.cultivar ?? null;
-  const nameKind = row.nameKind ?? (p.kind === 'hybrid' ? 'hybrid' : cultivar ? (p.epithet ? 'cultivar' : 'hybrid') : 'species');
+  // A cultivar under a genus alone is a cultivar, its species not stated, never a hybrid the sheet did not say (round
+  // eighty-four; review-w W5: "Philodendron 'Pink Princess'" was counted among the crosses). A cross, a nothogenus, or a
+  // kind the sheet states are kept.
+  const nameKind = row.nameKind ?? (p.kind === 'hybrid' ? 'hybrid' : cultivar ? 'cultivar' : 'species');
   const taxonKey = check?.s === 'found' && !p.qualifier ? check.key : null; // a key would say the plant is that species, which "cf." or "nr." says it may not be
   return {
     taxonName: p.scientific,
@@ -65,7 +68,7 @@ export function recordOf(row: ImportRow, check: NameCheck | undefined, placeId: 
 }
 
 /** A name as compared: its quotes one way, "cv." and its case and spacing set aside. */
-const nameText = (s: string) => tidyName(s).replace(/[‘’"]/g, "'").replace(/\bcv\.?\s+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const nameText = (s: string) => tidyName(s).replace(/[‘’"“”]/g, "'").replace(/\bcv\.?\s+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
 /** The sheet's text, when the plant is filed under another name; null when it is filed as the sheet wrote it. */
 function receivedAs(sheet: string, scientific: string, cultivar: string | null, aside: boolean): string | null {
   const t = sheet.trim();

@@ -45,7 +45,7 @@ import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, type OwnNames } from './own-names';
 import { canonicalOfKew } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, defaultWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
@@ -112,6 +112,18 @@ export interface KewBuildOptions {
 
 /** What a page without a GBIF key says of GBIF's records it read under the keys Kew's synonymy gives it. */
 export const KEW_KEYS_WORDS = "this species has no GBIF key of its own; its records are read under GBIF's keys for the names Kew's file holds as this plant, never by a name matched";
+/**
+ * The same, true of the keys read (round eighty-four, the merge; agent E's report): a page whose only keys are those of
+ * pages merged into it (Ferocactus hamatacanthus, under Bisnaga hamatacantha's key) reads no key for a name Kew's file
+ * holds as this plant, so says whose keys it reads.
+ */
+export function kewKeysWords(keys: ReadonlyArray<{ slug?: string }>): string {
+  // A merged page's key carries its old address (`slug`), and only such a key does.
+  const merged = keys.filter((k) => !!k.slug).length;
+  if (!merged || !keys.length) return KEW_KEYS_WORDS;
+  if (merged === keys.length) return `this species has no GBIF key of its own; its records are read under the GBIF ${merged === 1 ? 'key of a page' : 'keys of pages'} merged into this one, never by a name matched`;
+  return "this species has no GBIF key of its own; its records are read under GBIF's keys for the names Kew's file holds as this plant, and of the pages merged into this one, never by a name matched";
+}
 
 /**
  * What a page that reads no key records of why (round eighty): `occurrences.unread`, its words `noKeyWhy`'s, each page GBIF
@@ -226,7 +238,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       const rows = occ.status === 'ok' ? occ.data : [];
       const doi = rows.find((r) => r.downloadDoi)?.downloadDoi;
       const day = rows.find((r) => r.downloadDay)?.downloadDay;
-      upstream['gbif.occurrences'].detail = [KEW_KEYS_WORDS, ...(doi ? [`GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}`] : []), ...extra.keys.map(extraKeyWords)].join('; ');
+      upstream['gbif.occurrences'].detail = [kewKeysWords(extra.keys), ...(doi ? [`GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}`] : []), ...extra.keys.map(extraKeyWords)].join('; ');
       if (doi && day && extra.keys.every((x) => x.from === 'download')) upstream['gbif.occurrences'].asOf = day;
     }
     // By the regions' shapes where the build has them (round eighty, A).
@@ -245,6 +257,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       nOutsideRange: r.nOutside,
       nVague: r.nVague,
       rangeTested: boxes.length > 0,
+      ...(inside?.rule && boxes.length ? { rangeRule: inside.rule } : {}),
       restrictedShiftKm: r.restrictedShiftKm,
       thin: r.allPts.length < 12,
       datasets: [...r.datasets.entries()].map(([key, d]) => ({ key, ...(d.title ? { title: d.title } : {}), licence: d.licence, n: d.n })),
@@ -256,9 +269,9 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     else if (occ.status === 'skipped') climate = { status: 'pending', detail: 'the occurrence source was not asked when this page was built' };
     else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
     else if (r.forClimate.length) climate = await (o.climate ?? noClimate).envelope(r.forClimate);
-    else if (r.allPts.length) climate = { status: 'none', detail: `${r.allPts.length} in-range record${r.allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
+    else if (r.allPts.length) climate = { status: 'none', detail: noPlacedWords(r.nInRangeRecords, r.allPts.length) };
     else climate = { status: 'none', detail: 'no georeferenced record inside the range' };
-    // Extremes beyond a lapse correction's reach, or impossible, are set aside too, and the record says why (round eighty, A).
+    // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
     const lapseWhy = climate.status === 'ok' && !(climate.landFraction != null && climate.landFraction < 0.5) ? lapseSetAside(climate) : null;
     climate = setAsideExtremes(climate);
     if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };

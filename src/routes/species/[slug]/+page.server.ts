@@ -16,6 +16,7 @@ import { authorKey, plainlyAnother } from '$dossier/authors';
 import { regionSvg } from '$lib/map/still';
 import { unitName } from '$core/regions';
 import { drawOnce } from '$lib/server/drawn';
+import { describedBy } from '$lib/ui/ref/words';
 import type { PageServerLoad } from './$types';
 
 /** The genera's words for `englishNames`, once for each genera read (round seventy-seven: every page folded all 1,300). */
@@ -165,7 +166,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: signedName(e.key, e.name), family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
-  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera), older: [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])] });
+  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera), older: [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])], shared: d.name.shared }); // the names another species of the genus is given more often, as the index (round eighty-four, D9)
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
   const allSiblings = (await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus))).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
@@ -247,7 +248,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // data. A move inside the app asks for the data alone (`isDataRequest`), and gets it all, as before: the page draws the
   // map from it, and the offline page and a tab of the build before read what they always did. Anything else that is not
   // plainly the page's HTML (a caller that does not say) gets the whole data too.
-  const regionMark = isDataRequest === false ? drawOnce(locals, 'region-map', regionSvg(shown.distribution.boxes, points, shown.centroid, `Openly licensed records of ${shown.name.scientific}`, shown.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! })))) : null;
+  const regionMark = isDataRequest === false ? drawOnce(locals, 'region-map', describedBy(regionSvg(shown.distribution.boxes, points, shown.centroid, `Openly licensed records of ${shown.name.scientific}`, shown.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))), 'records-caption')) : null; // tied to its caption (round eighty-four; B8)
   const map: { regionMark?: string; points?: typeof points } = regionMark ? { regionMark } : { points };
   const sent = regionMark ? { ...shown, name: { ...shown.name, vernacular: shown.name.vernacular.filter((v) => v.source === 'Wikidata') } } : shown;
   return {

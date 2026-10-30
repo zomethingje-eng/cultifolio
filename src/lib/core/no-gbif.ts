@@ -46,10 +46,19 @@ export function recordsUnchecked(d: { ids?: { gbif?: number | null } | null; gbi
   return d.occurrences ? !d.occurrences.keys?.length : d.climate?.status === 'pending';
 }
 
-/** What a page without a GBIF key says of the records it read under the keys Kew's synonymy gives it, as a sentence. */
-export function kewKeysSentence(keys: ReadonlyArray<{ key: number; name: string; n: number }>): string {
-  const list = keys.map((k) => `${k.key} (${k.name}, ${k.n} record${k.n === 1 ? '' : 's'})`).join(', ');
-  return `This species has no GBIF key of its own. Its records are GBIF's under the key${keys.length === 1 ? '' : 's'} of the name${keys.length === 1 ? '' : 's'} Kew's World Checklist holds as this plant: ${list}. No name was matched to GBIF; the keys are read from Kew's synonymy.`;
+/**
+ * What a page without a GBIF key says of the records it read under the keys Kew's synonymy gives it, as a sentence. A key
+ * read because a page was merged into this one (it carries that page's old address, `slug`) is named apart: it is the
+ * reference's merge, not Kew's synonymy (round eighty-four; review S's 7: Echeveria desmetiana said Echeveria peacockii's
+ * key came from Kew's synonymy, while Kew files that name under Dudleya pulverulenta).
+ */
+export function kewKeysSentence(keys: ReadonlyArray<{ key: number; name: string; n: number; slug?: string }>): string {
+  const item = (k: (typeof keys)[number]) => `${k.key} (${k.name}, ${k.n} record${k.n === 1 ? '' : 's'})`;
+  const kew = keys.filter((k) => !k.slug), merged = keys.filter((k) => k.slug);
+  const kewPart = kew.length ? `under the key${kew.length === 1 ? '' : 's'} of the name${kew.length === 1 ? '' : 's'} Kew's World Checklist holds as this plant: ${kew.map(item).join(', ')}` : '';
+  const mergedPart = merged.length ? `under the key${merged.length === 1 ? '' : 's'} of ${merged.length === 1 ? 'a page' : 'pages'} merged into this one: ${merged.map(item).join(', ')}` : '';
+  const how = !merged.length ? "the keys are read from Kew's synonymy" : !kew.length ? `the key${merged.length === 1 ? ' is' : 's are'} the merged page${merged.length === 1 ? "'s" : "s'"}` : "the first are read from Kew's synonymy, the merged page's from the reference's own merge";
+  return `This species has no GBIF key of its own. Its records are GBIF's ${[kewPart, mergedPart].filter(Boolean).join('; and ')}. No name was matched to GBIF; ${how}.`;
 }
 
 /**

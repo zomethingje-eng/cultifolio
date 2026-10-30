@@ -14,10 +14,9 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { askToKeep } from '$lib/ui/keep-ask';
   import DemoBar from './DemoBar.svelte';
-  import { backupReminder, pageSaysKeeping } from '$lib/ui/backup-reminder.svelte';
+  import { backupReminder, pageSaysKeeping, nudgeHidden } from '$lib/ui/backup-reminder.svelte';
 
   const PERSIST = 'cultifolio.persistAfterFirst';
-  const NUDGE_HIDDEN = 'cultifolio.backupNudgeHidden';
   const n = $derived(collection.ready ? collection.accessions.length : 0);
   // The promise asked for once more when there is something to keep, on any browser: a browser weighs it by what the
   // site holds, and a grower who has just saved a plant is the one it is for. The answer is said once, and becomes the
@@ -47,41 +46,34 @@
     answer = null;
     // A refusal asks for a backup only where no line on the page does, and only while there is neither a backup nor sync
     // (round eighty-two; the independent review's 15: said on My plants straight after a restore, beside two more).
+    // A grower's words (round eighty-four, the merge; outside review A13: "has not promised to keep your data" meant
+    // nothing to a grower): what the refusal means for them.
     const ask = !ok && lastBackup === null && !sync.configured && !pageSaysKeeping(page.url.pathname);
-    toast.show(ok ? 'This browser has promised to keep your plants.' : ask ? 'This browser has not promised to keep your data: take a backup now and then.' : 'This browser has not promised to keep your data.', 10000, ask ? { label: 'Back up', run: () => { location.href = '/backup'; } } : null);
+    toast.show(ok ? 'This browser has promised to keep your plants.' : ask ? 'This browser may clear your plants to free space: take a backup now and then.' : 'This browser may clear your plants to free space.', 10000, ask ? { label: 'Back up', run: () => { location.href = '/backup'; } } : null);
     writeSetting(PERSIST, 'device', '1'); // asked again next time if the browser refuses the write: harmless
   });
   /**
    * The fifth plant with no backup taken and no sync: one line on My plants, put away for this tab on request. Not on
    * Today, whose own line already says "no backup yet" (round eighty-two; the independent review's 15). A restore that
    * left the device the file counts as a backup (backup/io.ts `countedAsBackup`).
+   *
+   * Decided here and drawn by My plants, in its notices' place under the search, with its list (round eighty-four; P2,
+   * A12): drawn here, above every page's title, it arrived after the title and pushed the page down. Only on the list:
+   * a plant's page and the add form, which it also reached, keep their first screen for the plant.
    */
   let lastBackup = $state<string | null | undefined>(undefined);
   let hidden = $state(false);
   $effect(() => {
     void page.url.pathname; // read again on each page: a backup taken a page ago puts the line away
     if (!collection.ready || n < 1 || PAGE_IN_DEMO) return; // from the first plant: the browser's answer reads it too
-    try { hidden = sessionStorage.getItem(NUDGE_HIDDEN) === '1'; } catch { /* shown */ }
+    hidden = nudgeHidden();
     void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null), () => (lastBackup = null));
   });
-  const where = $derived(/^\/plants(\/|$)/.test(page.url.pathname) && page.url.pathname !== '/plants/import');
-  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !PAGE_IN_DEMO && !backupReminder.page);
-  $effect(() => { backupReminder.nudge = nudge; });
-  function hide() {
-    hidden = true;
-    try { sessionStorage.setItem(NUDGE_HIDDEN, '1'); } catch { /* fine */ }
-  }
+  const where = $derived(page.url.pathname === '/plants');
+  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !backupReminder.hidden && !PAGE_IN_DEMO && !backupReminder.page);
+  // Settled once the last backup is read, or when no line can be due whatever it says.
+  const known = $derived(collection.ready && (lastBackup !== undefined || n < 5 || PAGE_IN_DEMO || sync.configured));
+  $effect(() => { backupReminder.nudge = nudge; backupReminder.known = known; });
 </script>
 
 <DemoBar />
-{#if nudge}
-  <p class="backupnudge" id="backup-nudge">{n} plants and no backup yet: a backup is one file you keep somewhere else. <a href="/backup">Back up now</a> <button class="linkish" type="button" onclick={hide}>Not now</button></p>
-{/if}
-
-<style>
-  .backupnudge { margin: 12px 0 0; padding: 8px 12px; border-left: 3px solid var(--warn, #b8692a); background: var(--card); border-radius: var(--r); font-size: var(--fs-md); }
-  .linkish { background: none; border: 0; padding: 0 0 0 6px; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; min-height: var(--tap); }
-  /* The link in the sentence keeps the sentence's line but takes a thumb's height (round sixty-one; the accessibility review, 18). */
-  .backupnudge a { display: inline-block; padding: 12px 2px; margin: -12px 0; }
-  @media print { .backupnudge { display: none !important; } } /* a printed page carries the page, not advice about backups (round sixty-one; the triage, decision 4) */
-</style>

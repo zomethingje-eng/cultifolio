@@ -22,9 +22,10 @@ import { LITERATURE_OFF } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
+import { gbifView, headWithKew } from './kew-heading';
 import { hybridLinks } from '$core/hybrids';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
-import type { RegionTester } from './tdwg-shapes';
+import { grownBox, SHAPE_BUFFER_DEG, type RegionTester } from './tdwg-shapes';
 import { ownNames, isOwnName, canonicalOf } from './own-names';
 import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
@@ -127,18 +128,30 @@ export interface BuildOptions {
   kewEntryOf?: (gbifKey: number) => string | undefined;
 }
 /** The record's words for the records left out at default points (round eighty, A). */
-export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year: scripts/default-points.txt; a record there its dataset states to within 10 km is kept)`;
+export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year, as the reference lists them; a record there its dataset states to within 10 km is kept)`;
 /**
  * The test of a record against a page's native range by the regions' shapes (round eighty, A; review-w 5), and the words
  * the record of the occurrences says of it: how many of the native regions were tested by their shapes and how many by
  * their boxes. Undefined without the shapes (a test, the Worker): the boxes, as before.
  */
-export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number) => boolean; words: string } | undefined {
+export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number) => boolean; words: string; rule?: string } | undefined {
   if (!regions) return undefined;
   const coded = native.filter((r) => r.code || r.box);
   const shaped = coded.filter((r) => r.code && regions.hasShape(r.code)).length;
-  const words = shaped === coded.length ? `records tested against the native regions' shapes (${regions.source})` : shaped ? `records tested against ${shaped} of the ${coded.length} native regions' shapes (${regions.source}) and the other ${coded.length - shaped} regions' bounding boxes` : "records tested against the native regions' bounding boxes (no region of this range has a shape here)";
-  return { test: (lat, lon) => coded.some((r) => (r.code ? regions.inRegion(lat, lon, r.code) : !!r.box && inBox(lat, lon, r.box))), words };
+  // Every record is tested, openly licensed or not (round eighty-four, A1 and B1: a restricted record is in no dossier, so
+  // the page says it was tested too); a box takes the shapes' buffer, so the words say "and a margin" of both.
+  const all = 'openly licensed and restricted alike';
+  const rule = regions.rule ? `; shapes rule ${regions.rule}` : '';
+  const words = shaped === coded.length ? `records tested against the native regions' shapes, ${all} (${regions.source}${rule})` : shaped ? `records tested against ${shaped} of the ${coded.length} native regions' shapes (${regions.source}${rule}) and the other ${coded.length - shaped} regions' bounding boxes, each with a margin of ${SHAPE_BUFFER_DEG}°, ${all}` : `records tested against the native regions' bounding boxes with a margin of ${SHAPE_BUFFER_DEG}°, ${all} (no region of this range has a shape here${rule})`;
+  return { test: (lat, lon) => coded.some((r) => (r.code ? regions.inRegion(lat, lon, r.code) : !!r.box && inBox(lat, lon, grownBox(r.box, SHAPE_BUFFER_DEG)))), words, ...(regions.rule ? { rule: regions.rule } : {}) };
+}
+/**
+ * The climate's reason when in-range records exist and none is placed well enough to read it (round eighty-four, A6f): the
+ * records counted as records (Dionysia iranica's four, at two places, read "2 in-range records"), and the placing said as
+ * the climate's rule reads it, not as a fact the datasets stated.
+ */
+export function noPlacedWords(records: number, places: number): string {
+  return `${records} in-range record${records === 1 ? '' : 's'}${places < records ? ` at ${places} place${places === 1 ? '' : 's'}` : ''}, none placed to within 10 km by the climate's rule (none states an accuracy of 10 km or better, and none is a person's observation given to three decimals)`;
 }
 /** How long the previous build's identifiers may be carried through Wikidata not answering, in days (triage-68 M5). */
 export const CARRY_DAYS = 90;
@@ -270,7 +283,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     key = m.data.usageKey;
   }
   // A carried taxon: the previous build's answer stands in for the backbone's, and every record says it was carried.
-  const carried = o.taxon && typeof nameOrKey === 'number' && o.taxon.key === nameOrKey ? o.taxon : null;
+  // Its name as GBIF gives it for the key (round eighty-four, decision 1): a page Kew's accepted name heads is derived under
+  // GBIF's name, as it was built, and headed again at the end (`headWithKew`), so the records' and sources' words do not move.
+  const carried = o.taxon && typeof nameOrKey === 'number' && o.taxon.key === nameOrKey ? { ...o.taxon, name: gbifView(o.taxon.name) } : null;
   const carriedFrom = carried ? `carried from build of ${carried.builtOn?.slice(0, 10) ?? '?'} (offline re-derivation; the backbone was not asked)` : '';
   let sp: Awaited<ReturnType<typeof gbif.species>>;
   if (carried) {
@@ -420,7 +435,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
   const inside = rangeTest(native, o.regions);
-  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.test, o.defaults);
+  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.test, o.defaults);
   if (occ.status === 'ok' && nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(nDefault)].filter(Boolean).join('; ');
   if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
   if (occ.status === 'ok') {
@@ -444,10 +459,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (dist.status === 'ok' && dist.data.held) climate = { status: 'none', detail: 'native range not verified: Kew holds this name with no native range, so records cannot be told from cultivation and no habitat climate is derived' };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
   else if (forClimate.length) climate = await (o.climate ?? noClimate).envelope(forClimate);
-  else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
+  else if (allPts.length) climate = { status: 'none', detail: noPlacedWords(nInRangeRecords, allPts.length) };
   // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
   // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
-  // Extremes beyond a lapse correction's reach, or impossible, are set aside too, and the record says why (round eighty, A).
+  // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
   const lapseWhy = climate.status === 'ok' && !(climate.landFraction != null && climate.landFraction < 0.5) ? lapseSetAside(climate) : null;
   climate = setAsideExtremes(climate);
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
@@ -704,6 +719,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       // A re-derivation keeps what Kew's names said: Kew's file has not changed under it (round seventy-two, A).
       ...(cited ? { cited } : carried?.name.cited ? { cited: carried.name.cited } : {}),
       ...(carried?.name.kew ? { kew: carried.name.kew } : {}),
+      // The names GBIF files under the species' varieties (round eighty-four, A8), as `--fill gbif-infra` read them: carried.
+      ...(carried?.name.infra?.length ? { infra: carried.name.infra } : {}),
       rank: u(s.rank),
       status,
       acceptedKey: u(s.acceptedKey),
@@ -725,6 +742,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       nOutsideRange: nOutside,
       nVague,
       rangeTested: boxes.length > 0,
+      // The shapes' rule the records were tested by (round eighty-four; `--check-ranges` lists a page derived before it).
+      ...(inside?.rule && boxes.length ? { rangeRule: inside.rule } : {}),
       restrictedShiftKm,
       thin: allPts.length < 12,
       datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n })),
@@ -739,6 +758,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   };
   // B2 after A1: Kew's entry by another author is said only while the page cites another name than the entry.
   settleRange(dossier);
+  // Kew's accepted name heads a `k` page (round eighty-four, the owner's decision 1; `kew-heading.ts`), its id being Kew's
+  // entry, which `--fill kew-names` stored; and no page's heading is malformed (an author cut short, a rank word left out).
+  headWithKew(dossier as Parameters<typeof headWithKew>[0], pageId);
   // Never publish something the schema will refuse to serve.
   return { ok: true, dossier: parseDossier(dossier, o.held) };
 }
@@ -776,11 +798,15 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
   let nInstitution = 0;
   /** Records at a default point (round eighty, A). */
   let nDefault = 0;
+  /** The in-range records, each counted (the coordinates above are one a place). */
+  let nInRangeRecords = 0;
   const institutionKinds = new Map<InstitutionKind, number>();
   {
     // Same coordinate to three decimals is one place; when an open and a restricted record share it, the
     // open one is the one kept, so a licence never hides a record the map could show.
     const byCoord = new Map<string, gbif.GbifOccurrence>();
+    // How many records each kept coordinate stands for (round eighty-four, A6f: the climate's reason counts records).
+    const nAt = new Map<string, number>();
     for (const r of data) {
       if (r.decimalLatitude == null || r.decimalLongitude == null) continue;
       if (r.basisOfRecord === 'LIVING_SPECIMEN') continue; // a plant somebody planted
@@ -802,6 +828,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // 201 km). A record with no figure there is left out, whatever its decimals: a checklist placed at one point
       // writes them as a phone does.
       if (defaults?.has(dk) && !(r.coordinateUncertaintyInMeters != null && r.coordinateUncertaintyInMeters <= 10_000)) { nDefault++; continue; }
+      nAt.set(dk, (nAt.get(dk) ?? 0) + 1);
       const held = byCoord.get(dk);
       // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
       // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
@@ -826,6 +853,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
         nOutside++;
         continue;
       }
+      nInRangeRecords += nAt.get(`${lat},${lon}`) ?? 1;
       if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
       else restrictedInRange.push([lat, lon]);
       // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
@@ -864,7 +892,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
-  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault };
+  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords };
 }
 
 /** The words a record of a species on a homonym key carries (`kewName`), by which a re-derivation keeps them. */

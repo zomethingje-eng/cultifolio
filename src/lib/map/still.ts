@@ -1,7 +1,12 @@
 /**
  * Still habitat pictures. No tile server is ever contacted: Natural Earth
  * coastlines (public domain) drawn as SVG, one world view with the native
- * range boxes and one regional crop with the open occurrence points.
+ * range and one regional crop with the open occurrence points. Round
+ * eighty-four (G; review W1): the native regions are drawn by their shapes,
+ * the range test's own (`regions-drawn.ts`, `scripts/dev/r84g-region-maps.py`),
+ * from two static files referenced with <use> as the coastline is, so the sea
+ * and the neighbouring countries are no longer painted as range; a region
+ * without a shape (three of 369) is still its box.
  * Coordinates in the static coastline files are already y = -lat, so no
  * transform is needed: Chromium stops painting a large path under a
  * negative-scale transform once the viewBox is zoomed in.
@@ -9,6 +14,7 @@
  * a static SVG referenced with <use>, fetched once and cached for every page.
  */
 import type { Box } from '$core/geo';
+import { REGION_AT, INSIDE, REGIONS_WORLD, REGIONS_CLOSE } from './regions-drawn';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); // the title lands in an attribute too (round twenty-nine, 10)
 
@@ -26,12 +32,31 @@ function boxRects(boxes: Box[], cls: string): string {
     .join('');
 }
 
+/** The region a box is (tdwg3.json's box, as every dossier and the catalogue give it), by its south-west corner. */
+export const regionOfBox = (b: Box): string | undefined => REGION_AT[`${b.s},${b.w}`];
+/** The native range: each region's shape from `file`, once a region; a box no shape is drawn for, as its rectangle. */
+function rangeShapes(boxes: Box[], file: string): string {
+  const seen = new Set<string>();
+  let out = '';
+  for (const b of boxes) {
+    const c = regionOfBox(b);
+    if (!c) out += boxRects([b], 'range');
+    else if (!seen.has(c)) { seen.add(c); out += `<use class="range" href="${file}#${c}"/>`; }
+  }
+  return out;
+}
+/** Whether a region's shape holds the whole of a frame (a rectangle wholly inside its shape holds it). */
+export function frameInside(b: Box, w: number, n: number, e: number, s: number): boolean {
+  const c = regionOfBox(b);
+  return !!c && (INSIDE[c] ?? []).some(([rs, rw, rn, re]) => rs <= s && rw <= w && rn >= n && re >= e);
+}
+
 export function worldSvg(boxes: Box[], centroid?: { lat: number; lon: number }, title = 'World map'): string {
   return (
     `<svg class="map map-world" viewBox="-180 -85 360 160" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc(title)}">` +
     `<rect class="sea" x="-180" y="-90" width="360" height="180"/>` +
     `<use class="land" href="/maps/land110.svg#land"/>` +
-    boxRects(boxes, 'range') +
+    rangeShapes(boxes, REGIONS_WORLD) +
     (centroid ? `<circle class="pin" cx="${centroid.lon}" cy="${-centroid.lat}" r="2.2"/>` : '') +
     `</svg>`
   );
@@ -71,6 +96,10 @@ function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArr
     lines += `<line class="scale" x1="${r3(x0)}" y1="${r3(-footLat)}" x2="${r3(x0 + deg)}" y2="${r3(-footLat)}"/>`;
     words += `<span class="mscale" style="left:${pct(fx(x0))};top:${pct(fy(footLat))}">${km.toLocaleString('en-US')} km</span>`;
   }
+  // A region whose shape holds the whole frame is said once, as the frame's place, not painted over it as a name in a
+  // field of colour (round eighty-four, W1: Echeveria desmetiana's close-up was one green field, "Mexico Central").
+  const within = labels.find((l) => frameInside(l.box, w, n, e, s));
+  if (within) return { lines, words: words + `<span class="mlab mlab-in" style="left:50%;top:10%">Inside ${esc(within.name)}</span>` };
   // The regions' names, each at its box's middle clamped into the frame, largest box first, none over another.
   const placed: Array<[number, number, number, number]> = [];
   const order = [...labels].sort((a, b) => (b.box.n - b.box.s) * (b.box.e - b.box.w) - (a.box.n - a.box.s) * (a.box.e - a.box.w));
@@ -170,7 +199,7 @@ export function regionSvg(boxes: Box[], points: Array<[number, number]>, centroi
     `<rect class="sea" x="-180" y="-90" width="360" height="180"/>` +
     `<use class="land" href="/maps/land50.svg#land"/>` +
     up.lines +
-    boxRects(boxes, 'range') +
+    rangeShapes(boxes, REGIONS_CLOSE) +
     pts +
     (centroid ? `<circle class="pin" cx="${centroid.lon}" cy="${-centroid.lat}" r="${r * 2.5}"/>` : '') +
     `</svg>` +

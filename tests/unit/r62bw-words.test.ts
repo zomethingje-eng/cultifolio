@@ -129,7 +129,7 @@ describe('the glance row (the words review\'s 1, the self-review\'s N10)', () =>
     expect(g).toMatch(/<span class="gt">Habitat figures(\{#if few\}.*?\{\/if\})?<\/span>/); // round eighty-two: the few-records mark beside it
   });
   it('states each gauge\'s scale, beside it and in its text alternative', () => {
-    expect(g).toContain('const RAIN_FULL = 1200;');
+    expect(g).toContain('const RAIN_FULL = $derived(rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);'); // round eighty-four (A13): never shorter than its figure
     expect(g).toContain('const DLI_FULL = 70;');
     expect(g).not.toMatch(/class="gauge" aria-hidden="true"/);
     expect(g.match(/class="gauge" role="img" aria-label="[^"]*on a bar from 0 to/g)).toHaveLength(2);
@@ -213,14 +213,15 @@ describe('/about/how (the words review\'s 16 to 20, 23, 25, 27; the outside tria
     expect(how).toContain('"Use my location" asks the browser for its position');
   });
   it('the glossary keeps "not asked" apart, and "held" has its threshold', () => {
-    expect(how).toContain('Not asked: a source the build skipped, or a call this site held back');
+    const gloss = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
+    expect(gloss).toContain('<dt>Not asked</dt><dd>A source the build skipped, or a call this site held back');
     expect(how).not.toContain('(it refused, failed or was not asked)');
-    expect(how).toContain('Held: a change dated more than five minutes ahead');
+    expect(gloss).toContain('<dt>Held</dt><dd>A change dated more than five minutes ahead');
   });
   it('the labels page\'s picked plants, the sample with no Web Locks, the brief, no rounds', () => {
     // Written when hidden too since round sixty-six, and read back on a return through history since round sixty-seven (triage-66 P4, P9; R45-13).
     expect(how).toContain('written when the page is hidden or left, forgotten when you move to another page of the app, and read back only when that page is reloaded or brought back through the browser\'s history');
-    expect(how).toContain('a browser without Web Locks cannot tell an open sample from a left one');
+    expect(how).toContain('A browser without Web Locks cannot tell an open example from a left one');
     expect(how).toContain('GBIF, Kew\'s WCVP, CHELSA, ETOPO, NASA POWER');
     expect(how).not.toContain('sent nowhere unless you turn on sync, and then encrypted with a key only you hold');
     expect(how).not.toMatch(/round sixty-two/);
@@ -232,17 +233,17 @@ describe('/about/how (the words review\'s 16 to 20, 23, 25, 27; the outside tria
 
 describe('/about/formats (the words review\'s 21 to 23, the self-review\'s N10)', () => {
   it('the import\'s two-digit-year example is one the import reads that way', () => {
-    expect(formats).toContain('(1/1/27 could be 1927 or 2027, so it is not read)');
+    expect(formats).toContain('So 1/1/27 is not read, since it could be 1927 or 2027');
     expect(readDate('1/1/27', '2026-10-09').why).toContain('could be 1927 or 2027');
     expect(readDate('15/06/27', '2026-10-09').why).toContain('year first or year last'); // why "15/06/27" was the wrong example
   });
   it('the pages that ask by hash group, the service worker, the verb', () => {
     expect(formats).toContain('A plant page, a batch page, Today, the labels, the plants list');
-    expect(formats).toContain('The service worker keeps those answers under the corpus id');
-    expect(formats).toContain('that the hash groups do not settle, go to /api/search?q=');
+    expect(formats).toContain("The service worker keeps those answers under the reference's id");
+    expect(formats).toContain('the groups do not settle, go to /api/search?q=');
   });
   it('"log batch" in the sync section, never a bare "batch" for one', () => {
-    const sync = formats.slice(formats.indexOf('One vault key per person'), formats.indexOf('The reference lookups your own pages make'));
+    const sync = formats.slice(formats.indexOf('One vault key per person'), formats.indexOf("Your own pages need the reference's figures"));
     // Not the listing's JSON key (`{ batches: [...] }`), which is the wire's own word.
     expect(sync.match(/(?<![\w-]|[Ll]og |\{ )[Bb]atch(es)?\b/g) ?? []).toEqual([]);
   });

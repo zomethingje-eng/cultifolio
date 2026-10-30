@@ -7,7 +7,7 @@
  *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview); LIVE_CHECK_ORIGIN in the
  *                                               environment does the same for `npm run deploy` on another deployment
  *
- * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast,thumbs,weight` skips the checks
+ * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast,thumbs,weight,index` skips the checks
  * that need an upstream (a local `wrangler dev` with no GBIF credentials) and `LIVE_CHECK_FIXTURE_OK=1` accepts the fixture
  * corpus; neither is ever set for the real site. Nothing here creates
  * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
@@ -55,6 +55,7 @@ function fail(what, r) {
 }
 // The held pair (round seventy-eight) is scripts/live-check-pair.mjs, tested without the network (round seventy-nine).
 import { heldPair as askHeld, centres } from './live-check-pair.mjs';
+import { indexCacheFault } from './live-check-cache.mjs';
 const heldPair = (path, init) => askHeld(get, path, init);
 function ok(what) {
   n++;
@@ -270,8 +271,17 @@ if (!skip.has('forecast')) {
 // The photographs behind the front page's tiles: one thumbnail served through GBIF's image cache, and one from
 // iNaturalist's bucket, must answer as images. GBIF's cache refused the bare address form from 2026-09 and 1,351 tiles
 // said "photograph did not load" for a fortnight before anyone looked (round thirty-two, 1). The fixture corpus has none.
+// The index's lifetime first, read from the GET a browser makes (round eighty-four; outside review B9: the route says five
+// minutes, the edge answered four hours). One GET serves both checks; `LIVE_CHECK_SKIP=index` leaves it out.
+const index = skip.has('index') ? null : await get('/api/index');
+if (index) {
+  if (index.status !== 200) fail('/api/index', index);
+  const fault = indexCacheFault(index.h('cache-control'));
+  if (fault) fail(`/api/index's cache lifetime: ${fault}`, index);
+  ok(`index: cached as the route says (${index.h('cache-control')}${index.h('cf-cache-status') ? `, ${index.h('cf-cache-status')}` : ''})`);
+}
 if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
-  const r = await get('/api/index');
+  const r = index ?? (await get('/api/index'));
   if (r.status !== 200) fail('/api/index', r);
   const idx = JSON.parse(r.text);
   for (const host of ['api.gbif.org', 'inaturalist-open-data.s3.amazonaws.com']) {

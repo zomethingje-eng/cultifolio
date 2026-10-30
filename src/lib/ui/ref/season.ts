@@ -4,7 +4,7 @@
  * beyond what the rules state: a spread year and a year with no season shade nothing (round sixty; visitor 3, the
  * self-review's experience item 3).
  */
-import { forReader, type Year } from '$core/sheet';
+import { forReader, runs, type Year } from '$core/sheet';
 
 export interface SeasonStrip {
   /** January first, in the reader's months. */
@@ -29,4 +29,21 @@ export function seasonStrip(year: Year | null, months: Array<{ precipMm: number 
     shadeIs: shaded.size ? shadeIs : null,
     calendar: !year.shiftable ? "the habitat's months, not shifted" : `your months, ${south ? 'southern' : 'northern'} hemisphere`
   };
+}
+
+/**
+ * The season in a few words, for the phone's line of habitat figures (round eighty-four; the owner's decision 3): what the
+ * rules read, in the reader's months where the shift rule applies, and which rule read it. Built from the same `Year` as
+ * the season card and the sheet, so the three cannot disagree.
+ */
+export function seasonWords(year: Year, readerLat: number | null | undefined): { head: string; months: string; rule: string } {
+  const months = runs(forReader(year, readerLat), 'short');
+  const whose = year.shiftable ? 'your months' : "the habitat's months";
+  if (year.none) return { head: 'No season to read', months: 'little rain, even warmth', rule: 'CHELSA' };
+  if (year.fog) return { head: 'Little rain', months: `cooler half ${months}, ${whose}`, rule: 'CHELSA' };
+  if (year.spread) return { head: 'Rain spread', months: 'over eight months or more', rule: 'CHELSA' };
+  if (year.flat) return { head: 'Rainy season', months: `${months}, ${whose}; even warmth`, rule: 'CHELSA' };
+  if (year.grow === 'even') return { head: 'Rainy season', months: `${months}, ${whose}`, rule: 'CHELSA' };
+  if (year.frozen) return { head: 'Wet, freezing winters', months: `${months}, ${whose}`, rule: 'CHELSA' };
+  return { head: year.grow === 'winter' ? 'Wet winters' : 'Wet summers', months: `${months}, ${whose}`, rule: 'CHELSA' };
 }

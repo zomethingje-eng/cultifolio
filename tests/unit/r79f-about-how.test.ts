@@ -52,6 +52,16 @@ describe('the page', () => {
       expect(page).toContain('Aloe (9 species, of the several hundred WCVP accepts)');
       return;
     }
+    // Round eighty-four (A's rewrite; the merge): the paragraph is now a summary and a list of rules, holding the
+    // figures the script's paragraph holds, from the same list.
+    if (!page.includes(FROM)) {
+      const f = paragraph(listText, indexOf(list)).figures;
+      expect(page).toContain(`${f.listed.toLocaleString('en-GB')} species.</li>`);
+      expect(page).toContain(`Aloe has ${f.aloe} of the 611 species Kew accepts, Euphorbia ${f.euphorbia} of 2,118.`);
+      expect(page).toContain(`${f.genera} collector genera`);
+      expect(page).toContain(`${f.alone} species are here for that reason alone`);
+      return;
+    }
     // Written by the script: the pending text but for the figures the build reached.
     const at = page.indexOf(FROM);
     const live = page.slice(at, page.indexOf('</p>', at) + 4)

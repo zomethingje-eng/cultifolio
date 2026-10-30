@@ -10,7 +10,7 @@ const ex = { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 4
 describe('the generated note', () => {
   it('condenses the sheet into one paragraph, shifted to the reader, every sentence traceable', () => {
     const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex, kew: { lifeform: 'succulent shrub', climate: 'desert or dry shrubland' } })!;
-    expect(n.text).toContain('Grouped as a cactus or succulent, listed under the genus Tylecodon in the archetype table, and Kew describes it as “succulent shrub”.'); // round sixty-two: what the table lists (A4); round eighty-one: and Kew's lifeform agreeing
+    expect(n.text).toContain('Grouped as a cactus or succulent, listed under the genus Tylecodon in the reference\'s list of growers\' groups, and Kew describes it as “succulent shrub”.'); // round sixty-two: what the table lists (A4); round eighty-one: and Kew's lifeform agreeing
     expect(n.text).toContain('Rain rule: a winter growing season, November to February in the northern hemisphere (May to August at the habitat, southern).');
     expect(n.text).toMatch(/Habitat rain 194 mm in the median year/);
     expect(n.text).toContain('Cold floor (1 night in 100) 4.1 °C, at a typical spot in the range (NASA POWER).'); // round sixty-two: named as the glance card names it
@@ -20,7 +20,7 @@ describe('the generated note', () => {
     expect(n.text.length).toBeLessThan(700);
     // line by line in a grower's words, one hemisphere per line, the rule apart (round fifty-eight)
     expect(n.items).toEqual([
-      { lead: 'A cactus or succulent, by its genus.', rule: 'archetype table' },
+      { lead: 'A cactus or succulent, by its genus.', rule: "growers' groups" },
       { lead: 'Wet winters: the rain comes November to February (May to August at the habitat), read as a winter growing season.', rule: 'rain rule, CHELSA' },
       { lead: '194 mm of rain in the median year, 4 months under 5 mm.', rule: 'CHELSA' },
       { lead: 'Open-sky light of 20 to 58 DLI across the year.', rule: 'CHELSA shortwave' },

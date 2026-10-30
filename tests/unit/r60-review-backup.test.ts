@@ -128,7 +128,11 @@ describe('a large collection through backup, merge and replace', () => {
     await a.collection.load();
     expect(fold(a.collection)).toBe(merged);
     expect(a.collection.accessions.some((x) => x.taxonName === 'Haworthia')).toBe(false);
-    expect((await a.vault.allChanges()).length).toBe(log.length);
+    // The file's log, and one record more since round eighty-four (outside review B5): the number the Haworthia had, which
+    // the file does not carry, kept from being given again in the log itself rather than only in `meta`.
+    const after = await a.vault.allChanges();
+    expect(after.length).toBe(log.length + 1);
+    expect(after.filter((c) => c.kind === 'setting' && c.id.startsWith('numbers-kept')).map((c) => c.field)).toEqual(['accession']);
   }, 120_000);
 
   it('the preview lists both plants that will share a number; the merge keeps both, renumbering neither', async () => {

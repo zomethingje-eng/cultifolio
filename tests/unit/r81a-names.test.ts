@@ -44,7 +44,7 @@ describe('r81a D5: one-word names of a whole genus or family', () => {
   it('/about/how lists the words', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
     expect(how).toContain('cycad, daisy, fern, flameflower, flower');
-    expect(how).toContain('which is never shown, neither as the heading nor among the names');
+    expect(how).toContain('is never shown, as the heading or among the names');
   });
 });
 
@@ -53,7 +53,7 @@ describe("r81a: Wikidata's spelling is kept, and said to be Wikidata's", () => {
     expect(englishNames([wd('Sierrra shootingstar')], { genus: 'Primula jeffreyi' })).toEqual({ common: 'Sierrra shootingstar' });
   });
   it('the page and /about/how say whose spelling it is', () => {
-    expect(readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8')).toContain('id="names-source">English names as Wikidata spells them, <a');
+    expect(readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8')).toContain('id="names-source"><b>English names</b> as Wikidata spells them, <a'); // round eighty-four: under Names & registers
     expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain('spelt as Wikidata spells them');
   });
 });

@@ -29,18 +29,21 @@ describe('D4: the Wikidata names line over a name the page does not show', () =>
   it('the species page gives the names it shows, and says the hidden ones as searched, not shown', () => {
     const svelte = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
     expect(svelte).toMatch(/namesSource\(d as never, common\)/);
-    expect(svelte).toMatch(/\{#if wdNames && 'item' in wdNames && wdNames\.hidden\}<p class="small muted" id="names-source">Wikidata's <a [^>]*>item \{wdNames\.item\}<\/a> gives \{wdNames\.hidden\.map/);
-    expect(svelte).toMatch(/which the search finds and this page does not show as the species' English name\./);
+    // Round eighty-four (W12): said under Names & registers, in a grower's words.
+    expect(svelte).toMatch(/\{#if wdNames && 'item' in wdNames && wdNames\.hidden\}<p class="small muted names" id="names-source"><b>Found by search as<\/b> \{wdNames\.hidden\.map/);
+    expect(svelte).toMatch(/a search for it finds this page\. It is not among the English names under the heading/);
   });
 });
 
-describe("D1: /about/how says round eighty's repair as what it is until it is live", () => {
+describe("D1: /about/how says the repairs as what they are, now they are live (round eighty-four; review S's 4)", () => {
   const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-  it("the regions' shapes and the default points", () => {
-    // Round eighty-three (C): the repair was uploaded on 29 October 2026; round eighty-three's corrections wait for a page's next derivation.
-    expect(how).toMatch(/The regions' shapes and the default points above are round eighty's rules, applied to the live pages by a repair uploaded on 29 October 2026; the corrections to both of round eighty-three \(the countries placed and the islets kept, and the records stated to within 10 km kept at a default point\) reach a page when it is next derived/);
+  it("the regions' shapes and the default points: in the present tense, a page's own day deciding its rules", () => {
+    // Round eighty-four: round eighty-three's repair is live (29 October 2026), so "until then" and "when it is next derived" are gone.
+    expect(how).not.toMatch(/reach a page when it is next derived|repair uploaded on 29 October 2026; the corrections/);
+    expect(how).toContain("A page's record of its sources gives the day it was built, and its records were tested by the rules of that day.");
   });
-  it("Kew's older names in the search", () => {
-    expect(how).toMatch(/Kew's older names reach the search with the index uploaded after the daily fill of cultivated photographs \(due at the end of October 2026\); until that upload, a search by one of Kew's names that GBIF's names do not hold finds nothing\./);
+  it("Kew's older names in the search: searched now, with no upload awaited", () => {
+    expect(how).not.toMatch(/due at the end of October 2026|until that upload/);
+    expect(how).toContain("Kew's older names for the plant are searched only as a name typed");
   });
 });

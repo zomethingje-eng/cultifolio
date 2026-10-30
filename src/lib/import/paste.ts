@@ -40,7 +40,8 @@ export function parsePaste(text: string): PastedLine[] {
     // A line with something on it but no name is not a plant; it is kept here, nameless, so the review can say it was
     // left out, as the sheet's rows with no name are counted (round sixty-one; the records review, 11).
     if (!name) { if (parts.some((x) => x)) out.push({ line: i + 1, name: '', cultivar: null, number: null, source: null, notes: null, problem: 'this line has no name, so it was left out' }); return; }
-    const cultivar = (parts[1] ?? '').trim().replace(/^['‘"]|['’"]$/g, '').trim() || null;
+    // In any quotes, a phone's ’…’ and “…” too (round eighty-four; review-s S3).
+    const cultivar = (parts[1] ?? '').trim().replace(/^['‘’"“”]|['‘’"“”]$/g, '').trim() || null;
     const extra = parts.slice(5).filter((x) => x.trim());
     out.push({
       line: i + 1,

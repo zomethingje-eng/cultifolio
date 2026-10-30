@@ -234,14 +234,31 @@ export function catalogueFrom(shown: Item[], by: By, total: number, withClimate:
 }
 
 /**
- * The species the front page's strip rotates through (round fifty-one, 6; written by the build as `featured.json` since
- * round seventy-six): one from each of the forty-eight genera with the most photographed species with a habitat climate,
- * the genus's most recorded. Eight or more photographs: a species photographed that often is photographed alive, not as a
- * pressed sheet.
+ * What the strip is chosen by (round eighty-four, the owner's decision 4): the popular genera, most grown first (the
+ * "Popular genera" chip's, `openingGenera` of `scripts/most-grown-genera.txt`: iNaturalist's observations marked captive or
+ * cultivated), and each species' own count of those observations (`scripts/species-list.txt`, by page id), where known.
  */
-export function featuredPoolOf(list: readonly Item[]): Item[] {
+export interface GrownRule { genera: readonly string[]; species?: ReadonlyMap<string, number> }
+/**
+ * The species the front page's strip rotates through (round fifty-one, 6; written by the build as `featured.json` since
+ * round seventy-six). Eight or more photographs and a habitat climate: a species photographed that often is photographed
+ * alive, not as a pressed sheet.
+ *
+ * Since round eighty-four (the owner's decision 4; outside review A: the strip featured wild Rosa mollis and Rubus
+ * arcticus), from the popular genera (`grown`), most grown first: of each, the species most observed in cultivation, then
+ * the most photographed, then the alphabet, one a genus, the first 48 genera that have one. So the strip is Rosa rugosa,
+ * Salvia rosmarinus, Prunus serrulata, Acer palmatum, Hibiscus syriacus, Euphorbia milii … rather than the species with the
+ * most wild records of the genera with the most photographed species. Without the rule's files (a corpus read without
+ * them), the genera with the most such species, as before, each by its most photographed species.
+ */
+export function featuredPoolOf(list: readonly Item[], grown?: GrownRule): Item[] {
   const byGenus = new Map<string, Item[]>();
   for (const c of list) if (c.thumb && c.climate === 'ok' && (c.photos ?? 0) >= 8) { const g = genusOf(c.name); const xs = byGenus.get(g); if (xs) xs.push(c); else byGenus.set(g, [c]); }
+  if (grown?.genera.length) {
+    const count = (c: Item) => grown.species?.get(c.key) ?? 0;
+    const best = (xs: Item[]) => [...xs].sort((a, b) => count(b) - count(a) || (b.photos ?? 0) - (a.photos ?? 0) || nameOrder(a.name, b.name))[0];
+    return grown.genera.filter((g) => byGenus.has(g)).slice(0, 48).map((g) => best(byGenus.get(g)!));
+  }
   const genera = [...byGenus.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   return genera.slice(0, 48).map(([, xs]) => [...xs].sort((a, b) => b.open - a.open)[0]);
 }

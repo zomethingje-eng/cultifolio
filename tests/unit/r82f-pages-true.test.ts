@@ -21,7 +21,7 @@ describe("Wikidata: when a page with a Kew id is matched by its label", () => {
     expect(how).not.toContain('is matched by those identifiers and never by its label');
     expect(how).toContain("is matched by those identifiers wherever Kew's file gives its name and author one");
     expect(how).toContain('Its label is read only where Kew gives its name and author no identifier');
-    expect(how).toContain('or on a page whose Wikidata record was made before this rule (round eighty) and is carried');
+    expect(how).toContain('or on a page whose Wikidata record was made before this rule and is carried');
     expect(how).toContain('"found by its label; its IPNI identifier 86934-2 is Kew\'s for Echeveria elegans Rose"');
   });
   // The code as the sentence says it (guards): with Kew's identifier the label is never read (tests/unit/r80a-wikidata-ids),
@@ -46,7 +46,7 @@ describe("Wikidata: when a page with a Kew id is matched by its label", () => {
 describe("the climate's elevation: the land's, the sea floor left out", () => {
   it('the sentence says what scripts/pack-climate.py does', () => {
     expect(how).not.toContain('a coastal cell averaged with sea floor');
-    expect(how).toContain("the grid cell's elevation is its land's alone (the sea floor ETOPO gives under water is left out of a coastal cell's mean, and a cell with no land has no elevation)");
+    expect(how).toContain("The grid cell's elevation is its land's alone (the sea floor ETOPO gives under water is left out of a coastal cell's mean, and a cell with no land has no elevation)");
     expect(readFileSync('scripts/pack-climate.py', 'utf8')).toContain('band[band < 0] = np.nan'); // guard: the mask
   });
 });

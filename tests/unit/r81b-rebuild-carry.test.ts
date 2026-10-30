@@ -12,7 +12,7 @@
  * that does not exist (exit 2).
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -24,6 +24,9 @@ const root = resolve('.');
 /** A project folder with these dossiers (fixtures, edited) and a network that answers nothing ("fetch failed"). */
 function folder(pages: Record<string, (d: Record<string, any>) => void>, files: Record<string, string> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'r81b-carry-'));
+  // Round eighty-four (G): a build reads the regions' shapes or does not start; the merge gives this folder the file.
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  copyFileSync(resolve('scripts/tdwg3-shapes.json'), join(dir, 'scripts/tdwg3-shapes.json'));
   const v3 = join(dir, 'static/s/v3');
   mkdirSync(v3, { recursive: true });
   for (const [k, edit] of Object.entries(pages)) {

@@ -118,7 +118,10 @@ export function olderNameOf(typed: string, hit: Searchable): string | null {
   const begins = (ws: string[]) => qs.every((q) => ws.some((w) => w.startsWith(q)));
   const own = [hit.name, hit.family ?? '', ...(hit.origin ?? [])].flatMap(nameWords);
   if (begins(own)) return null;
-  for (const c of [hit.common, ...(hit.commons ?? []), ...(hit.spellings ?? [])]) if (c && begins([...nameWords(c), ...own])) return null;
+  // A common name takes the words only by itself (round eighty-four, the merge; review-w W4): read with the hit's own
+  // words, Dracaena trifasciata's "Snake Sansevieria" and its own epithet took "Sansevieria trifasciata", which is its
+  // older name, so the row said nothing of it.
+  for (const c of [hit.common, ...(hit.commons ?? []), ...(hit.spellings ?? [])]) if (c && begins(nameWords(c))) return null;
   for (const n of [...(hit.syn ?? []), ...(hit.older ?? []), ...(hit.kew ?? [])]) {
     const ws = nameWords(n).filter((w) => !RANK_MARKERS.has(w));
     if (!ws.length || !begins(ws)) continue;

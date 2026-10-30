@@ -23,7 +23,7 @@
   import { parsePaste } from '$lib/import/paste';
   import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, dateQuestion, readDate, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
-  import { checkNames, checkKey, nameVerdict, type NameCheck, type Lookup } from '$lib/import/check';
+  import { checkNames, checkKey, nameVerdict, ownVerdict, type NameCheck, type Lookup } from '$lib/import/check';
   import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
   import { settlePlaces } from '$lib/ui/places-pending';
   import type { Accession } from '$lib/db/types';
@@ -254,10 +254,11 @@
   });
   const toMake = $derived(placesToMake([...new Set(live.map((r) => r.placePath).filter((p): p is string => !!p))], nodes));
   const plantsN = $derived(live.reduce((n, r) => n + r.qty, 0));
-  const statusOf = (r: ImportRow) => checks.get(checkKey(r.name));
+  // A cross, or a cultivar under a genus alone, says what it is from its own line (round eighty-four; review-w W5).
+  const statusOf = (r: ImportRow) => ownVerdict(r.name, r.nameKind) ?? checks.get(checkKey(r.name));
   /** The summary counts each line by the verdict its row shows (`nameVerdict`), so the two never disagree. */
   const counts = $derived.by(() => {
-    const c = { found: 0, keyless: 0, near: 0, older: 0, missing: 0, unchecked: 0, hybrid: 0, waiting: 0 };
+    const c = { found: 0, keyless: 0, near: 0, older: 0, missing: 0, unchecked: 0, hybrid: 0, genus: 0, waiting: 0 };
     for (const r of live) { const v = nameVerdict(statusOf(r), r.name); if (v === 'near' && statusOf(r)?.s === 'near' && (statusOf(r) as { why?: string }).why === 'older name') c.older++; else c[v]++; }
     return c;
   });
@@ -478,7 +479,7 @@
     <div class="secrule"><h2 id="imp-review-h" tabindex="-1">Review</h2><div class="line"></div><span class="n">{plantsN} plant{plantsN === 1 ? '' : 's'}</span></div>
     <p class="small" id="imp-summary">
       {live.length} line{live.length === 1 ? '' : 's'}{rows.length - live.length ? ` (${rows.length - live.length} dropped)` : ''}, {plantsN} plant{plantsN === 1 ? '' : 's'}.
-      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.older ? ` · an older name, the reference's name for it suggested: ${counts.older}` : ''}{counts.near ? ` · not under this name, a near spelling suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
+      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.older ? ` · an older name, the reference's name for it suggested: ${counts.older}` : ''}{counts.near ? ` · not under this name, a near spelling suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.genus ? ` · cultivars with no species named, filed under the genus: ${counts.genus}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
       {#if counts.unchecked && !checking}<button class="linkish" type="button" onclick={recheck}>Check again</button>{/if}
       <!-- One press for every line under an older name the reference holds under one species (round eighty-one; review-w 4: 24 lines of a 300-plant sheet, a press each). Each line keeps the sheet's name as received. -->
       {#if olderLines.length}<button class="linkish" type="button" id="imp-use-older" onclick={useOlderAll}>Use the reference's name on {olderLines.length === 1 ? 'the line' : `all ${olderLines.length} lines`} with an older name</button>{/if}
@@ -533,6 +534,7 @@
                 {:else if qual}<span class="muted">filed as written, with no reference key</span>
                 {:else if c.s === 'missing'}<span class="warn">not in the reference; added as typed</span>
                 {:else if c.s === 'hybrid'}<span class="muted">a cross, filed under its genus</span>
+                {:else if c.s === 'genus'}<span class="muted">a cultivar, species not stated: filed under its genus</span>
                 {:else}<span class="warn">not checked: the reference did not answer</span>{/if}
                 {#each r.problems as p}<span class="warn">{p}</span>{/each}
               {/if}

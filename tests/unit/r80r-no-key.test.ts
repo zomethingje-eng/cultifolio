@@ -163,7 +163,9 @@ describe('the page says it', () => {
     expect(sp).not.toMatch(/NO_GBIF_(WHY|SENTENCE)/);
     // Round eighty-two (the independent review's 10): the page's own reason said once, under the name card.
     expect(sp).toContain('const noSentence = $derived(uncheckedSentence(d));');
-    expect(sp).toContain('<p class="notice" id="records-unchecked"><b>GBIF\'s records not checked.</b> {noSentence}');
+    // Round eighty-four (P7): one line on the first screen, the page's own reason behind "Why".
+    expect(sp).toContain('<div class="notice" id="records-unchecked"><p><b>GBIF\'s records not checked.</b>');
+    expect(sp).toContain('<details class="why unchecked-why"><summary>Why</summary><div class="whybody">{noSentence}');
     expect(sp).toContain('<p class="small muted" id="kew-held-under">');
     const server = readFileSync('src/routes/species/[slug]/+page.server.ts', 'utf8');
     expect(server).toContain('const underIds = [...new Set((d.occurrences.unread?.under ?? []).map((u) => u.page)');

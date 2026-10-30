@@ -63,7 +63,10 @@ test('r75g grown 3: /about/how names the source, the day and the rule, and that 
   await page.goto('/about/how');
   const day = new Date(`${file.day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
   const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
-  expect(text).toContain("The front page's catalogue is the same on every device, every genus and every species, and its chip “Popular genera”, off until chosen, narrows it to the species of the popular genera");
-  expect(text).toContain(`together hold half of iNaturalist's observations of plants marked captive or cultivated across all the reference's genera that were counted, each genus counted with every taxon under it, on ${day} (scripts/most-grown-genera.txt in the source`);
+  // Round eighty-four: the rule in short sentences (the reviews' S5).
+  expect(text).toContain("The front page's catalogue is the same on every device: every genus and every species.");
+  expect(text).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist\'s observations of plants marked captive or cultivated, across the reference\'s genera that were counted.');
+  expect(text).toContain(`The count was made on ${day}, over the`);
+  expect(text).toContain('scripts/most-grown-genera.txt holds every count, the query and iNaturalist\'s terms.');
   expect(text).not.toMatch(/On a phone the front page's catalogue opens/);
 });

@@ -6,7 +6,7 @@
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
 import { materialise, apply, live, known, readChanges, changeError, isComplete, type Change, type Record_ } from '$core/log';
-import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
+import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, KEPT_NUMBERS, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { isPastStamp } from '$core/hlc';
 import { isRecordedTime } from '$core/when';
@@ -375,7 +375,8 @@ export function previewMerge(current: Change[], incoming: Change[]) {
         addedOnRemoved++;
         addedOnRemovedByKind[r.kind] = (addedOnRemovedByKind[r.kind] ?? 0) + 1;
       }
-      else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
+      // The numbers a Replace kept are counted apart from the numbering scheme, the other setting record (round eighty-four; B5).
+      else { const k = r.kind === 'setting' && r.id.startsWith(KEPT_NUMBERS) ? KEPT_NUMBERS : r.kind; addedByKind[k] = (addedByKind[k] ?? 0) + 1; }
     } else if (b !== r._t) changed++;
   }
   // Numbers the merge would leave shared: a plant here and a plant in the file under one number. Nothing renumbers on

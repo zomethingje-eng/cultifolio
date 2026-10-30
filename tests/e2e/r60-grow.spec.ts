@@ -488,7 +488,7 @@ test('r60 14: after the first plant the browser is asked once to keep the data, 
     };
   }, personAllows);
   const toasts = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as Array<{ t: string; path: string }>);
-  const promised = (all: Array<{ t: string; path: string }>) => all.filter((x) => /^This browser has (not )?promised to keep your (plants|data)/.test(x.t));
+  const promised = (all: Array<{ t: string; path: string }>) => all.filter((x) => /^This browser (has promised to keep your plants|may clear your plants to free space)/.test(x.t));
   /** Every persist() asked so far has been answered, and whatever its answer drew is on screen. */
   const answered = () => expect.poll(() => page.evaluate(() => (window as unknown as { __persisting: number }).__persisting), { timeout: 20_000 }).toBe(0);
   const no = await plant(page, 'Copiapoa cinerea');
@@ -501,7 +501,8 @@ test('r60 14: after the first plant the browser is asked once to keep the data, 
   await expect(page).toHaveURL(new RegExp(`/plants/${no}$`));
   const toast = page.locator('.toast');
   await expect(toast).toContainText(said.t);
-  if (said.t.includes('not promised')) await expect(toast.locator('.undo')).toHaveText('Back up');
+  if (said.t.includes('may clear')) // the refusal, in a grower's words since round eighty-four (the merge; A13)
+     await expect(toast.locator('.undo')).toHaveText('Back up');
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.persistAfterFirst'))).toBe('1');
   await page.reload();
   await ready(page);

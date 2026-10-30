@@ -94,8 +94,8 @@ describe('the cookies (H204; the cookie clause of the full detail)', () => {
     expect(source.filter((f) => /document\.cookie\s*=/.test(raw(f))).sort()).toEqual(['src/lib/ui/site.svelte.ts', 'src/lib/ui/units.svelte.ts']);
   });
   it('the hemisphere goes only with the pages the full detail names, and the units with every page', () => {
-    const detail = said('how', 'What the pages about your own plants do send');
-    const clause = part(detail, 'two small cookies', ';');
+    const detail = said('how', 'The hemisphere goes only with');
+    const clause = detail.text;
     const pages = claim({ ...detail, text: clause }, /goes only with ([a-z]+(?: and [a-z]+)*) pages/).split(' and ').map((w) => `/${w}`).sort();
     const paths = (name: string) => [...new Set(cookies.filter((c) => c.startsWith(`${name}=`)).map((c) => /path=([^;]+)/.exec(c)![1]))].sort();
     expect(paths('cultifolio.hemi'), detail.where).toEqual(pages);
@@ -112,9 +112,9 @@ describe("the framework's session keys (the session storage part of the key list
   const kit = raw('node_modules/@sveltejs/kit/src/runtime/client/constants.js');
   const client = raw('node_modules/@sveltejs/kit/src/runtime/client/client.js');
   it('the keys the list names are the ones the framework writes, and it writes no other', () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
-    const clause = part(list, 'and two the framework', '; in IndexedDB');
-    const n = numberWord(claim({ ...list, text: clause }, /and (\w+) the framework/));
+    const list = said('how', 'Two the framework writes in every tab');
+    const clause = list.text;
+    const n = numberWord(claim({ ...list, text: clause }, /^(\w+) the framework/));
     const named = [...clause.matchAll(/\b(sveltekit:[a-z]+)\b/g)].map((m) => m[1]).sort();
     const written = [...client.matchAll(/storage\.set\((\w+)/g)].map((m) => new RegExp(`export const ${m[1]} = '([^']+)'`).exec(kit)?.[1]).sort();
     expect(named.length, list.where).toBe(n);
@@ -123,8 +123,8 @@ describe("the framework's session keys (the session storage part of the key list
   // Round eighty (U): the front page keeps the reader's place in the catalogue for Back (the phone review's 1), and the
   // sentence says so; it is the one page that exports a snapshot, and what it keeps is the catalogue's, nothing of yours.
   it('"the front page keeps which catalogue row or species tile was at the top of the screen": the one page that exports a snapshot', () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
-    expect(list.text).toMatch(/the front page keeps which catalogue row or species tile was at the top of the screen and how far down, with the grouping and chip it was under, so Back returns to it; nothing of yours/);
+    const list = said('how', 'The front page keeps which catalogue row');
+    expect(list.text).toMatch(/The front page keeps which catalogue row or species tile was at the top of the screen and how far down, with the grouping and chip it was under, so Back returns to it; nothing of yours/);
     expect(source.filter((f) => /export const snapshot\b/.test(raw(f)))).toEqual(['src/routes/+page.svelte']);
     const page = raw('src/routes/+page.svelte');
     expect(page).toMatch(/type Place = \{ by: string; chip: string; count: number; open: string \| null; row: string; rowAt: number; tile: number \| null; top: number \};/);
@@ -142,21 +142,16 @@ describe("the browser's HTTP cache of this site's answers (the key list)", () =>
     [/^each sealed batch of your log and each sealed photograph/, ['src/routes/api/sync/log/[key]/+server.ts', 'src/routes/api/sync/photo/[id]/+server.ts']]
   ];
   it("every lifetime the clause gives is the route's own, and every route it names says no other to the browser", () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
-    const clause = part(list, "in the browser's own HTTP cache", '; and, while a page is open');
-    // "a, b, c and d for a day": the items before a lifetime share it.
-    const body = clause.replace(/^.*?for as long as each answer says: /, '').replace(/\(all of them are cleared[^)]*\)/, '');
+    // Round eighty-four: the HTTP cache's part of the key list is a list, one lifetime a line: "a, b, c and d: for a day".
+    const whole = aboutText('how');
+    const clause = whole.slice(whole.indexOf("in the browser's own HTTP cache"), whole.indexOf('and, while a page is open'));
+    const list = { text: clause, line: 0, where: "/about/how, the browser's own HTTP cache" };
     const pairs: Array<[string, number]> = [];
-    let pending: string[] = [];
-    for (const piece of body.split(/, (?![^()]*\))/).map((x) => x.replace(/^and /, '').trim())) {
-      // Joining words and the clauses that qualify a lifetime ("or five minutes when…", "since…") name no answer.
-      if (/^(?:and|with sync on|or .*|since .*|)$/.test(piece)) continue;
-      const m = /^(.*?)\s*\bfor (a minute|five minutes|an hour|half an hour|a day|a year)\b/.exec(piece);
-      if (!m) { pending.push(piece); continue; }
-      for (const p of [...pending, m[1]].filter(Boolean)) pairs.push([p.replace(/ \(encrypted, as the server holds them\)$/, ''), spanWords(m[2]) / 1000]);
-      pending = [];
+    for (const line of clause.split(/(?<=\.) (?=[A-Z])/).slice(1)) {
+      const m = /^(?:With sync on, )?(.*?): for (a minute|five minutes|an hour|half an hour|a day|a year)\b/.exec(line);
+      if (!m) continue; // the opening line, and the closing one: they name no answer
+      for (const piece of m[1].split(/, (?![^()]*\))/).map((x) => x.replace(/^and /, '').trim()).filter(Boolean)) pairs.push([piece.charAt(0).toLowerCase() + piece.slice(1).replace(/ \(encrypted, as the server holds them\)$/, ''), spanWords(m[2]) / 1000]);
     }
-    expect(pending, `${list.where}: answers named with no lifetime`).toEqual([]);
     const routed = pairs.filter(([item]) => ROUTES.some(([re]) => re.test(item)));
     expect(routed.length, list.where).toBe(ROUTES.length);
     for (const [item, secs] of routed) {
@@ -179,7 +174,7 @@ describe("the browser's HTTP cache of this site's answers (the key list)", () =>
 });
 
 describe('the reload under a new version (the full detail; H225)', () => {
-  const detail = said('how', 'What the pages about your own plants do send');
+  const detail = said('how', 'It is reloaded at once only in its first');
   const early = spanWords(claim(detail, /reloaded at once only in its first (\w+ seconds?)/));
   const base = { servedByOld: true, askedSkip: true, build: 'new', version: 'old', sinceStart: 0, typed: false, writing: 0 };
   it('at once only in the first seconds the sentence gives, with nothing typed and nothing being written', () => {
@@ -190,13 +185,13 @@ describe('the reload under a new version (the full detail; H225)', () => {
     expect(onTakeOver({ ...base, sinceStart: 1, writing: 1 })).toBe('next'); // "and nothing being written to your collection"
   });
   it('never for a first visit, a second copy of the same version, or a worker that does not say', () => {
-    expect(detail.text).toMatch(/so a first visit, a second copy of the same version and a worker that does not say are never reloaded under you/);
+    expect(said('how', 'The page asks the worker itself').text).toMatch(/so a first visit, a second copy of the same version and a worker that does not say are never reloaded under you/);
     expect(onTakeOver({ ...base, servedByOld: false })).toBe('none');
     expect(onTakeOver({ ...base, build: 'old' })).toBe('none');
     expect(onTakeOver({ ...base, build: null })).toBe('none');
   });
   it('otherwise once the next move has finished, the page it reaches reloading when nothing is typed on it and nothing is being written', () => {
-    expect(detail.text).toMatch(/the page it reaches reloading when nothing is typed on it and nothing is being written/);
+    expect(said('how', 'Otherwise it waits until your next move').text).toMatch(/the page it reaches reloading when nothing is typed on it and nothing is being written/);
     expect(onArrival({ pending: true, typed: false, writing: 0 })).toBe('reload');
     expect(onArrival({ pending: true, typed: true, writing: 0 })).toBe('none');
     expect(onArrival({ pending: true, typed: false, writing: 2 })).toBe('wait');
@@ -206,7 +201,7 @@ describe('the reload under a new version (the full detail; H225)', () => {
 
 describe('"keep data", asked at most once a month (the key list, cultifolio.persistAskedAt)', () => {
   it('every ask waits the span the sentence gives from the last, and a page asks once at most', async () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
+    const list = said('how', 'Every ask, the one after your first plant included');
     const span = spanWords(claim(list, /waits (a month|\w+ weeks?|\w+ days?) from the last/));
     const keep = await import('$lib/ui/keep-ask');
     expect(keep.ASK_EVERY_MS, list.where).toBe(span);
@@ -231,7 +226,7 @@ describe('"keep data", asked at most once a month (the key list, cultifolio.pers
     }
   });
   it('"only once there is something of yours to keep, never for a visitor or in the example collection"', () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
+    const list = said('how', 'An answer not yet said when your first plant comes');
     expect(list.text).toMatch(/only once there is something of yours to keep, never for a visitor or in the example collection/);
     // The two callers: a load with something in the collection, and the first plant; the example refuses inside the gate.
     expect(raw('src/lib/db/collection.svelte.ts')).toMatch(/if \(this\.state\.size > 0\) void askToKeep\('load'\)/);
@@ -255,8 +250,8 @@ describe('Natural Earth (H64)', () => {
 
 describe("the labels page's picks (the key list, cultifolio.labelsPicked)", () => {
   it('read back only on a reload or a return through history', () => {
-    const list = said('how', 'What the device keeps outside the collection, every key');
-    const clause = part(list, 'cultifolio.labelsPicked (', ')');
+    const list = said('how', 'cultifolio.labelsPicked:');
+    const clause = list.text;
     expect(clause).toMatch(/read back only when that page is reloaded or brought back through the browser's history/);
     const labels = raw('src/routes/labels/+page.svelte');
     const read = /const reloaded = \(([^)]*)\)/.exec(labels)![1];
@@ -264,32 +259,44 @@ describe("the labels page's picks (the key list, cultifolio.labelsPicked)", () =
   });
 });
 
-describe("the front page's photographs (H72)", () => {
-  it('the pool, the photographs a species needs and the day\'s share are the figures the sentence gives', () => {
-    const s = said('how', "The front page's photographs");
-    const genera = numberWord(claim(s, /of the (\d+) genera with the most species/));
-    const photos = numberWord(claim(s, /that have (\w+) photographs or more/));
-    const perDay = numberWord(claim(s, /(\w+) of those \d+ are shown a day/));
-    const page = raw('src/routes/+page.server.ts');
-    // The pool's rule, which the build writes as `featured.json` since round seventy-six (`featuredPoolOf`)
-    const rule = raw('src/lib/dossier/catalogue.ts').split('export function featuredPoolOf')[1];
-    expect(Number(/genera\.slice\(0, (\d+)\)/.exec(rule)![1]), s.where).toBe(genera);
-    expect(Number(/\(c\.photos \?\? 0\) >= (\d+)/.exec(rule)![1])).toBe(photos);
-    expect(Number(/Math\.min\((\d+), pool\.length\)/.exec(page)![1])).toBe(perDay);
-    expect(rule).toMatch(/c\.climate === 'ok'/); // "and a habitat climate"
-    expect(rule).toMatch(/sort\(\(a, b\) => b\.open - a\.open\)\[0\]/); // "the species of each with the most openly licensed records"
+describe("the front page's photographs (H72; round eighty-four, the owner's decision 4)", () => {
+  it("the genera, the photographs a species needs, the order and the day's share are what the strip's rule does", async () => {
+    const s = said('how', "The front page's photographs are chosen by rule");
+    expect(s.text).toMatch(/from the "Popular genera", most grown first/);
+    const of = said('how', 'Of each such genus, one species with');
+    const photos = numberWord(claim(of, /with (\w+) photographs or more and a habitat climate/));
+    const strip = said('how', 'The first 48 genera that have one make the strip');
+    const genera = numberWord(claim(strip, /The first (\d+) genera that have one make the strip/));
+    const perDay = numberWord(claim(strip, /and (\w+) of them are shown a day/));
+    expect(Number(/Math\.min\((\d+), pool\.length\)/.exec(raw('src/routes/+page.server.ts'))![1]), strip.where).toBe(perDay);
+    // The rule driven: the popular genera in their order, of each the species most observed in cultivation, then the most
+    // photographed, among those with the photographs and the climate the sentence names; one a genus, and so many genera.
+    const { featuredPoolOf } = await import('$dossier/catalogue');
+    const pool = featuredPoolOf as unknown as (list: unknown[], grown?: { genera: string[]; species?: Map<string, number> }) => Array<{ name: string }>;
+    const keyOf = (name: string) => `k${name.length}${name}`;
+    const item = (name: string, o: { photos: number; climate?: string; open?: number }) => ({ key: keyOf(name), slug: name.toLowerCase().replace(/ /g, '-'), name, family: 'F', thumb: 'https://upload.wikimedia.org/x.jpg', climate: o.climate ?? 'ok', photos: o.photos, open: o.open ?? 1, origin: [] });
+    const list = [
+      item('Alpha one', { photos, open: 1 }), item('Alpha two', { photos: photos + 5, open: 900 }), item('Alpha three', { photos: photos - 1 }),
+      item('Beta one', { photos, climate: 'none' }), item('Beta two', { photos: photos + 1 }),
+      ...Array.from({ length: genera + 3 }, (_, i) => item(`Gen${i} sp`, { photos }))
+    ];
+    const grown = { genera: ['Beta', 'Alpha', ...Array.from({ length: genera + 3 }, (_, i) => `Gen${i}`)], species: new Map([[keyOf('Alpha one'), 50], [keyOf('Alpha three'), 99]]) };
+    const got = pool(list, grown).map((x) => x.name);
+    // Beta first, as the popular genera are (Beta one has no climate); of Alpha, the most observed with enough photographs
+    // (Alpha three, observed most, has too few; Alpha two, with the most records, is not the most observed).
+    expect(got.slice(0, 2), of.where).toEqual(['Beta two', 'Alpha one']);
+    expect(got.length).toBe(genera);
   });
 });
 
 describe('the collector genera (H67)', () => {
   it('the count the sentence gives is the list file\'s', () => {
     // Round seventy-nine's paragraph (docs/PENDING-ABOUT-HOW-R79.md) says it in its second sentence.
-    const first = said('how', 'The species list was derived, not chosen by hand');
-    const s = /collector genera/.test(first.text) ? first : said('how', 'It is the file scripts/species-list.txt');
+    const s = said('how', 'It holds every species Kew accepts of');
     const n = Number(claim(s, /of (\d+) collector genera/));
     const file = new Set(raw('scripts/specialist-genera.txt').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))).size;
     expect(file, s.where).toBe(n);
-    expect(claim(s, /the list is (scripts\/specialist-genera\.txt) in the source/)).toBe('scripts/specialist-genera.txt');
+    expect(claim(said('how', 'The list is scripts/specialist'), /The list is (scripts\/specialist-genera\.txt)/)).toBe('scripts/specialist-genera.txt');
   });
 });
 
@@ -302,12 +309,15 @@ describe('the page text the tests read', () => {
 });
 
 describe('hover preloading on the pages about your own plants (the full detail)', () => {
-  const detail = said('how', 'What the pages about your own plants do send');
-  const clause = part(detail, 'links on these pages are not preloaded on hover', ')');
+  const detail = said('how', 'Links on these pages are not preloaded on hover');
+  const clause = detail.text;
   const layout = raw('src/routes/+layout.svelte');
-  it('off on the whole page, the body included, which holds the top bar and the footer, and on the compare tray', () => {
+  it('off on the whole page, the body included, which holds the top bar and the footer; the compare tray is not on these pages', () => {
     const places = claim({ ...detail, text: clause }, /anywhere on the page, (.*) included/).split(/, | and /).map((w) => w.replace(/^the /, '')).sort();
-    expect(places, detail.where).toEqual(['compare tray', 'footer', 'top bar']);
+    expect(places, detail.where).toEqual(['footer', 'top bar']);
+    // Round eighty-four (U, P4; the merge): the tray is drawn on species pages only, so on none of these.
+    expect(layout).toMatch(/const comparePage = \$derived\(page\.url\.pathname\.startsWith\('\/species\/'\)\);/);
+    expect(layout).toMatch(/\{#if comparePage\}<CompareBar /);
     // The body's attribute is the router's last word for every link outside <main>: the top bar and the footer.
     expect(layout).toMatch(/document\.body\.setAttribute\('data-sveltekit-preload-data', privateRoute \? 'off' : 'hover'\)/);
     expect(layout.indexOf('<header id="topbar"')).toBeLessThan(layout.indexOf('<main class="wrap"'));
@@ -344,7 +354,7 @@ describe('Related: the distance in rain (H173)', () => {
   // The base said "the difference in rain on a log scale weighted so that a factor of 2.7 in a month's rain counts as
   // three degrees". The log is of the month's rain plus 1 mm (`Math.log1p`), so a factor of 2.7 counts three degrees only
   // in a wet month: 1 mm against 2.7 mm counted 1.85.
-  const s = said('how', 'The distance is one number');
+  const s = said('how', "The rain is taken as each month's rain plus");
   const flat = (rain: number) => Array.from({ length: 12 }, () => ({ tmax: 25, tmin: 10, precipMm: rain }));
   it('the log is of the rain plus the millimetre the sentence names, at the weight it gives', () => {
     const plus = numberWord(claim(s, /each month's rain plus (\w+) mm/));

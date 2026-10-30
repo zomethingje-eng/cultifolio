@@ -12,13 +12,16 @@
 export type Disclosure = { file: string; cls: string; at: string; sel: string; unreached?: string };
 
 export const DISCLOSURES: Disclosure[] = [
-  { file: 'src/routes/about/how/+page.svelte', cls: 'full', at: 'how', sel: 'details.full' },
+  // /about/how's lists of rules in full (round eighty-four): four of the sources' rules, six of the privacy section's.
+  ...[0, 1, 2, 3].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'more', at: 'how', sel: `details.more >> nth=${n}` })),
+  ...[0, 1, 2, 3, 4, 5].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full', at: 'how', sel: `details.full >> nth=${n}` })),
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=0' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why howmade', at: 'species', sel: 'details.why.howmade' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'figures', at: 'species', sel: 'details.figures' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why', at: 'species', sel: 'details.why:not(.howmade) >> nth=0' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why', at: 'species', sel: 'details.why:not(.howmade) >> nth=1' },
   { file: 'src/lib/ui/Provenance.svelte', cls: 'prov', at: 'species', sel: 'details.prov' },
+  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why unchecked-why', at: 'species-unchecked', sel: '#records-unchecked details.unchecked-why' },
   { file: 'src/routes/plants/new/+page.svelte', cls: 'namehelp', at: 'add', sel: 'details.namehelp' },
   { file: 'src/routes/plants/new/+page.svelte', cls: 'moredetails', at: 'add', sel: 'details.moredetails' },
   { file: 'src/routes/plants/new/+page.svelte', cls: 'own', at: 'add', sel: 'details.own' },

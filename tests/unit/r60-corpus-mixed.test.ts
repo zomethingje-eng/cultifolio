@@ -18,8 +18,8 @@ it('decided: a species page held under corpus A renders the dossier the bucket h
   const platform = { env: { STORE: store } } as unknown as App.Platform;
   const c = await corpusNow(platform, noStatic);
   // the refresh's first copy lands: the dossier object (a mutable path) before the new manifest
-  m.set('s/v3/k2735933.json', JSON.stringify({ ...fx, summary: { ...fx.summary, text: 'CORPUS B TEXT' } }));
+  m.set('s/v3/k2735933.json', JSON.stringify({ ...fx, summary: { ...fx.summary, text: 'CORPUS B TEXT.' } }));
   const ev = { params: { slug: 'copiapoa-cinerea' }, platform, fetch: noStatic, setHeaders: () => {}, cookies: { get: () => undefined }, request: new Request('https://x/species/copiapoa-cinerea'), url: new URL('https://x/species/copiapoa-cinerea'), getClientAddress: () => '1.2.3.4', locals: { corpus: c } };
   const data = (await load(ev as never)) as { d: { summary?: { text: string } } };
-  expect(data.d.summary?.text).toBe('CORPUS B TEXT');
+  expect(data.d.summary?.text).toBe('CORPUS B TEXT.');
 });

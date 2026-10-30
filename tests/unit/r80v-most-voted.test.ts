@@ -294,6 +294,6 @@ describe('/about/how', () => {
   it('says which 24 a taxon of more than 24 shows, and when', () => {
     const page = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
     expect(page).not.toContain('of a taxon with more than 24 such observations, the 24 whose photographs iNaturalist received last, since the export holds no votes;');
-    expect(page).toContain('of a taxon with more than 24 such observations, the 24 iNaturalist puts first by votes, asked of iNaturalist directly');
+    expect(page).toContain('Of a taxon with more than 24 such observations, the 24 iNaturalist puts first by votes, asked of iNaturalist directly');
   });
 });

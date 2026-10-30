@@ -148,7 +148,7 @@ describe('the pages say it', () => {
     const sp = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
     expect(sp).toContain('const unchecked = $derived(recordsUnchecked(d));');
     // Round eighty-two (the independent review's 10): the page's own reason once, under the name; the map refers to it.
-    expect(sp).toContain('<div class="mapcap">{unchecked ? "Records not checked: GBIF\'s records were not asked, as said under the name."');
+    expect(sp).toContain('<div class="mapcap" id="records-caption">{unchecked ? \'No records drawn: see under the name.\''); // round eighty-four (A10): "not checked" said once, under the name
     expect(sp).toContain('<p class="small muted" id="kew-keys-records">{kewKeysSentence(d.occurrences.keys)}');
     expect(sp).not.toMatch(/\{#if gbifless\}<NotChecked what="Climate"/);
     expect(readFileSync('src/routes/plants/[acc]/+page.svelte', 'utf8')).toContain('{#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}');

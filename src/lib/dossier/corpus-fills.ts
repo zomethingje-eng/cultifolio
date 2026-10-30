@@ -9,6 +9,7 @@
  *   - `--fill summaries` (M3): Wikipedia summaries a redirect brought from another title;
  *   - `--list-rebuild` (M2, M4; round seventy, B4 with `--bulk`): the species to rebuild with `--keys`.
  */
+import { gbifView } from './kew-heading';
 import type { PageId } from '../core/page-id';
 import type { JsonFetcher, SourceResult } from './fetch';
 import type { Dossier } from './schema';
@@ -592,10 +593,12 @@ export function olderNameOf(s: string): { name: string; authorship?: string } {
 }
 
 /** Kew's answer for a stored page, as a build with `--bulk` would read it: its own name, else its stored older names. */
-function kewAnswer(d: RangeDossier, wcvp: Pick<WcvpIndex, 'distributions'> & Partial<Pick<WcvpIndex, 'viaOlderNames' | 'holds'>>): ReturnType<WcvpIndex['distributions']> {
+function kewAnswer(stored: RangeDossier, wcvp: Pick<WcvpIndex, 'distributions'> & Partial<Pick<WcvpIndex, 'viaOlderNames' | 'holds'>>): ReturnType<WcvpIndex['distributions']> {
+  // By GBIF's name for the key, as the build reads it, where Kew's accepted name heads the page (round eighty-four, decision 1).
+  const d = { ...stored, name: gbifView(stored.name as Parameters<typeof gbifView>[0]) as RangeDossier['name'] };
   const got = wcvp.distributions(d.name.scientific, d.name.authorship, d.name.family);
   if (got || !wcvp.viaOlderNames || !wcvp.holds || wcvp.holds(d.name.scientific, d.name.authorship, d.name.family)) return got;
-  const via = wcvp.viaOlderNames((d.name.synonyms ?? []).map(olderNameOf));
+  const via = wcvp.viaOlderNames((d.name.synonyms ?? []).map(olderNameOf), { name: d.name.scientific, authorship: d.name.authorship });
   return via && !('ambiguous' in via) ? via : via ? 'ambiguous' : null;
 }
 
@@ -724,7 +727,7 @@ export * from './summary-fill';
 /** The first day GBIF's synonyms were read page by page (round sixty-nine): a list of fifty since then is GBIF's own. */
 const SYNONYMS_PAGED = '2026-10-12';
 
-export function rebuildList(store: DossierStore): string[] {
+export function rebuildList(store: Pick<DossierStore, 'files' | 'read'>): string[] {
   const out: string[] = [];
   for (const file of store.files()) {
     let d: Pick<Dossier, 'key' | 'distribution'> & Partial<Pick<Dossier, 'ids'>> & { name: { scientific: string; synonyms?: string[] }; upstream?: Record<string, { status?: string; detail?: string }> };

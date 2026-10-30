@@ -29,7 +29,7 @@ describe('the owner\'s merges of the duplicate pages', () => {
     expect(peacockii).toMatchObject({ page: 0, pageId: 'k2781125', how: 'merged', merged: 'echeveria-peacockii', except: [5690759] });
     expect(lines.find((k) => k.key === 9592399)).toMatchObject({ page: 0, pageId: 'k505095', merged: 'ceropegia-nubica', except: [3577721] });
     expect(lines.some((k) => k.key === 9574874)).toBe(false);
-    expect(extraWhy(peacockii)).toBe("the key of a page merged here by the owner's decision (scripts/merged-pages.txt)");
+    expect(extraWhy(peacockii)).toBe('the key of a page merged into this one'); // round eighty-four: no repository path on a page (A6e)
   });
   it('--prune-followed finds a kept page without a GBIF key by its id', () => {
     const pages = [

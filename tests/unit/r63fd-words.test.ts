@@ -61,7 +61,8 @@ describe('R2 2: the cells\' median is interpolated, and nothing says it is a tot
   // whole, on /about/how, where the median is said.
   it('/about/how says the median as the code takes it, halfway between the two middle totals, and never as a total cells have', () => {
     const how = code('src/routes/about/how/+page.svelte').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
-    expect(how).toContain("the rain a year, the median of the range's grid cells' own yearly totals (each cell's twelve months added first, then the middle of those totals taken, or the halfway point between the two middle totals when the cells are even in number;");
+    expect(how).toContain("The rain a year: the median of the range's grid cells' own yearly totals");
+    expect(how).toContain("Each cell's twelve months are added first, then the middle of those totals is taken, or the halfway point between the two middle totals when the cells are even in number.");
     expect(how).not.toMatch(/cells actually have/);
   });
 });

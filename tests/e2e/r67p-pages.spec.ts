@@ -63,9 +63,10 @@ test('r67p P3: hovering the compare tray on a private page sends nothing (S-F6, 
   for (const w of [1280, 390]) {
     await page.setViewportSize({ width: w, height: 800 });
     await page.goto('/plants'); await ready(page);
-    const link = page.locator(w > 700 ? '.tray a[href^="/compare?"]' : '.cmppill a.go').first();
-    await expect(link).toBeVisible();
-    await link.hover();
+    // Since round eighty-four (P4) the tray and its pill are on the species pages only: a private page has none to hover,
+    // and the top bar and the footer, hovered, send nothing either.
+    await expect(page.locator('.tray, .cmppill')).toHaveCount(0);
+    await page.locator('footer.credits a[href="/compare"]').hover();
     await page.waitForTimeout(1200);
   }
   expect(asked).toEqual([]);

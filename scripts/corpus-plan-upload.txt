@@ -1,0 +1,6 @@
+# The upload alone, then the live check (round eighty-four, G; review A21): node scripts/corpus-step.mjs --plan scripts/corpus-plan-upload.txt
+# The upload step asks the builder first whether the index on disk is the one the dossiers and the code on disk would
+# write, and uploads nothing when it is not (run npm run dossier -- --index, then the same command). Then the dossiers, a
+# check that the bucket holds each as it is on disk, the manifest last, and the live check.
+upload
+live-check

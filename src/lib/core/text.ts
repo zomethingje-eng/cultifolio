@@ -41,6 +41,20 @@ function sentenceEnds(t: string, n = Infinity): number[] {
 }
 
 /**
+ * A quoted text as a page shows it: whole, where it ends a sentence (its last mark a full stop, a question or exclamation
+ * mark, or an ellipsis, past any closing quote or bracket); otherwise cut, with an ellipsis put at its end and `cut` set,
+ * which the page reads as more following and links the source (round eighty-four; outside review A4: Euphorbia × martini's
+ * quoted summary stopped at "…E. characias subsp. characias", the article going on past a line break Wikipedia's extract
+ * ends at, with nothing to say so). The same rule at the derivation (`summary`) and when a page is served (`safeUrls`),
+ * so a summary stored before is marked too. A text that ends a sentence is returned as it is.
+ */
+export function sentenceCut(text: string): { text: string; cut: boolean } {
+  const t = text.trim();
+  if (!t || /[.!?…]["'\u201D\u2019)\]]*$/u.test(t)) return { text, cut: false };
+  return { text: `${t.replace(/[\s,;:(–—-]+$/u, '')}…`, cut: true };
+}
+
+/**
  * A quoted text kept to at most `max` characters, cut at the end of its last whole sentence within them (round eighty-two,
  * F; review 1's 36: Wikipedia's extract was sliced at 1,500 characters before the page's four-sentence cut, so a long first
  * paragraph could end mid-word with no sign of the cut). With no sentence end inside, it is cut at a word with an ellipsis

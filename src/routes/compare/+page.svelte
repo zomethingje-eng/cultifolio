@@ -12,6 +12,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { cultivationSheet, CARD_ORDER, tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
+  import { lapseCause } from '$core/lapse';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { compare } from '$lib/ui/compare.svelte';
@@ -42,7 +43,7 @@
     // Every month that ties as printed, named (round sixty-one; visitor 5: Copiapoa humilis, 23 °C in January and February, read "Jan").
     const at = (f: (x: Month) => number, hi: boolean, fmt: (v: number) => string) => (m ? monthNames(tiedMonths(m.map(f), hi, fmt), 'short') : '');
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: recordsUnchecked(d) ? 'unchecked' : cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: recordsUnchecked(d) ? 'unchecked' : cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, extremesLapse: cl.status === 'ok' ? (cl.extremesLapse ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const shown = d.photos.filter(showable); // a Commons photograph with no thumbnail is not shown (round sixty-two; outside review A35)
     const hero = heroOf(shown); // the species page's lead, by its one rule (round eighty-two; the independent review's 13)
     return {
@@ -219,7 +220,7 @@
     <div class="row" class:differs={differs.cold} role="row">
       <!-- The figure's own name, as on the species page's glance row (round sixty-one; visitor 1). -->
       <div class="rowlab" role="rowheader">{coldKinds.has('mean') ? (coldKinds.has('night') ? 'Cold floor (1 night in 100), or coldest month, mean nightly low' : 'Coldest month, mean nightly low') : 'Cold floor (1 night in 100)'}{#if differs.cold}<span class="dif">differs</span>{:else if coldKinds.size > 1}<span class="kinds">figures of different kinds, not compared</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>cold floor, 1 night in 100 colder at a typical spot in the range; record low {temp(c.ex.minAbs, u, 1)} in {c.ex.years} years, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>coldest month's mean nightly low, {c.cold.mo}, at the habitat (CHELSA), not a floor; {extremesWhyTag(c.d.climate.status === 'ok' ? c.d.climate.extremesStatus : null)}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>cold floor, 1 night in 100 colder at a typical spot in the range; record low {temp(c.ex.minAbs, u, 1)} in {c.ex.years} years, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>coldest month's mean nightly low, {c.cold.mo}, at the habitat (CHELSA), not a floor; {extremesWhyTag(c.d.climate.status === 'ok' ? c.d.climate.extremesStatus : null, c.d.climate.status === 'ok' && c.d.climate.extremesLapse ? lapseCause({ months: c.d.climate.months, extremes: c.d.climate.extremesLapse }) : null, u)}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.hot} role="row">
       <div class="rowlab" role="rowheader">Warmest month, mean daily high{#if differs.hot}<span class="dif">differs</span>{/if}</div>

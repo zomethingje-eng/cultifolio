@@ -79,6 +79,14 @@ function keysByStore() {
       (m[1] === 'localStorage' ? local : session).add(k);
       if (m[1] === 'localStorage' && m[2] !== 'getItem') direct.set(k, [...(direct.get(k) ?? []), f]);
     }
+    // A store passed in, defaulting to one of the browser's (round eighty-four; outside review A's 15: offline-kept.ts keeps
+    // cultifolio.offline-tried through `store`, sessionStorage by default, and no walk read it).
+    for (const d of s.matchAll(/(\w+)\??\s*:\s*Pick<Storage[^=]*=\s*typeof (sessionStorage|localStorage) === 'undefined'/g)) {
+      for (const m of s.matchAll(new RegExp(`\\b${d[1]}\\.(getItem|setItem|removeItem)\\(\\s*([^,)]+)`, 'g'))) {
+        const k = key(m[2]);
+        if (k) (d[2] === 'localStorage' ? local : session).add(k);
+      }
+    }
     // stored.ts keeps a 'tab' setting in sessionStorage and any other scope in localStorage (outside the sample), so the
     // scope argument says the store (round sixty-two: `cultifolio.labelsPicked` is 'tab', and was counted as local).
     const scoped = [...s.matchAll(/(?:readSetting|writeSetting)\(\s*([^,)]+),\s*['"`](\w+)['"`]/g)];
@@ -117,7 +125,8 @@ describe('storage keys, by the store each is kept in, both ways', () => {
     expect([...viaHelper].filter((k) => direct.has(k)).map((k) => `${k}: ${direct.get(k)!.join(', ')}`)).toEqual([]);
   });
   it('every key /about/how names exists in the code, under the store it is named under', () => {
-    const named = (part: string) => [...new Set([...part.matchAll(/\b(cultifolio\.[A-Za-z][\w.]*[A-Za-z]|storage-notice-hidden)\b/g)].map((m) => m[1]))];
+    // A key with a hyphen is one key (round eighty-four; outside review A's 15: cultifolio.offline-tried was read as cultifolio.offline).
+    const named = (part: string) => [...new Set([...part.matchAll(/\b(cultifolio\.[A-Za-z][\w.-]*[A-Za-z]|storage-notice-hidden)\b/g)].map((m) => m[1]))];
     // "cultifolio.demo." and a setting's name: the template, read as its own line below.
     const localNamed = named(localPart), sessionNamed = named(sessionPart).filter((k) => !k.startsWith('cultifolio.demo.'));
     expect(localNamed.length).toBeGreaterThan(10);
@@ -127,7 +136,7 @@ describe('storage keys, by the store each is kept in, both ways', () => {
   it("the sample's template-built keys: formats names a copy for every setting stored.ts keeps, and no other", () => {
     expect(raw('src/lib/ui/stored.ts')).toMatch(/SAMPLE_PREFIX = 'cultifolio\.demo\.'/);
     expect(raw('src/lib/ui/stored.ts')).toMatch(/SAMPLE_PREFIX \+ key\.replace\(\/\^cultifolio\\\.\/, ''\)/);
-    const sample = formats.slice(formats.indexOf('The example collection (the sample, in the code) is a database of its own'));
+    const sample = formats.slice(formats.indexOf('The example collection (the sample, in the code) is'));
     const copies = new Set([...sample.matchAll(/cultifolio\.demo\.([a-zA-Z][\w.]*[a-zA-Z])/g)].map((m) => `cultifolio.${m[1]}`));
     // The units are read through the helper only inside a sample tab, so they have a copy too.
     const helper = new Set([...viaHelper, 'cultifolio.units']);
@@ -178,8 +187,8 @@ describe('IndexedDB, cache, lock and channel names, both ways', () => {
   const parts = (): Record<Kind, string> => ({
     idb: part('in IndexedDB, the collection itself', 'in the cache storage'),
     cache: part('in the cache storage', "in the browser's own HTTP cache"),
-    lock: part('names the browser holds for coordination', 'And one path does reach the server'),
-    channel: part('names the browser holds for coordination', 'And one path does reach the server')
+    lock: part('names the browser holds for coordination', 'Words the app uses'),
+    channel: part('names the browser holds for coordination', 'Words the app uses')
   });
   it('every call names its store by a name the walk could read', () => {
     const names = inCode();
@@ -199,6 +208,8 @@ describe('IndexedDB, cache, lock and channel names, both ways', () => {
     const named = new Set([...how.matchAll(/\b(cultifolio-[a-z0-9-]*:?)/g), ...formats.matchAll(/\b(cultifolio-[a-z0-9-]*:?)/g)].map((m) => m[1]));
     named.delete('cultifolio-backup'); // the backup file's format name, not a browser store
     named.delete('cultifolio-vault-v1'); // the key derivation's salt
+    named.delete('cultifolio-plants-'); // a downloaded file's name (round eighty-four: /about/formats names the exports' files)
+    named.delete('cultifolio-watering-');
     expect([...named].filter((n) => !names.has(n)).sort()).toEqual([]);
   });
 });
@@ -282,8 +293,9 @@ describe('the figures the pages state are the constants', () => {
     const minutes: Record<number, string> = { 5: 'five minutes', 30: 'half an hour' };
     expect(mins('FORECAST_TTL_MS')).toBe(30);
     // The device sentence and the key list: both name each lifetime the client keeps, and no other.
-    const device = how.slice(how.indexOf('an answer is kept half an hour on the device'), how.indexOf('the same site is not asked again'));
-    const key = how.slice(how.indexOf('cultifolio.forecast ('), how.indexOf(')', how.indexOf('cultifolio.forecast (') + 40) + 1);
+    const device = how.slice(how.indexOf('An answer is kept half an hour on the device'), how.indexOf('The same site is not asked again'));
+    const ka = how.indexOf('cultifolio.forecast:');
+    const key = how.slice(ka, how.indexOf('. ', ka) + 1);
     const kept = [mins('FORECAST_TTL_MS'), mins('REFUSED_TTL_MS')].filter((x): x is number => x != null).map((x) => minutes[x]);
     for (const part of [device, key]) {
       expect(part.length, part).toBeGreaterThan(20);
@@ -297,15 +309,16 @@ describe('the figures the pages state are the constants', () => {
     const s = said('how', 'The server also caps how often it asks the weather services and GBIF');
     expect(RATE.upstream.windowMs).toBe(60_000);
     expect(numberWord(claim(s, /has a share of ([\d,]+) calls a minute/)), s.where).toBe(RATE.upstream.limit);
-    expect(tenths[UPSTREAM_ADDRESS_PART]).toBe(claim(s, /may take (a tenth|\w+ tenths) of a share in a minute/));
-    expect(tenths[Math.round(UPSTREAM_ADDRESS_PART * NET_FACTOR * 10) / 10]).toBe(claim(s, /an IPv6 \/48 (a tenth|\w+ tenths)/));
+    const part = said('how', 'One address (an IPv4 address or an IPv6 /64) may take');
+    expect(tenths[UPSTREAM_ADDRESS_PART]).toBe(claim(part, /may take (a tenth|\w+ tenths) of a share in a minute/));
+    expect(tenths[Math.round(UPSTREAM_ADDRESS_PART * NET_FACTOR * 10) / 10]).toBe(claim(part, /an IPv6 \/48 (a tenth|\w+ tenths)/));
   });
   it('90 days without an upload gives a place back', () => {
     const s = said('formats', 'A vault with no upload for');
     expect(Number(claim(s, /no upload for (\d+) days/)), s.where).toBe(RECLAIM_DAYS);
   });
   it('a crossed recount waits 30 s', () => {
-    const s = said('formats', 'It is kept only if no upload landed and no removal was made while it was being taken');
+    const s = said('formats', 'After two tries that end that way');
     expect(Number(claim(s, /Retry-After: (\d+)/)), s.where).toBe(RECOUNT_RETRY_S);
   });
   it('an hour: the recount on open, the refusal cap and the 409', () => {
@@ -321,8 +334,8 @@ describe('the figures the pages state are the constants', () => {
   it('two days: parking, and a correction that needs two readings', () => {
     const park = said('formats', 'A change stamped more than two days past the arrival of the log batch');
     expect(spanWords(claim(park, /stamped more than (\w+ days) past the arrival of the log batch/)), park.where).toBe(PARK_MS);
-    const two = said('formats', "That clock is the device's corrected by the server's");
-    expect(spanWords(claim(two, /a correction of (\w+ days) or more is taken only when two readings/)), two.where).toBe(TRUST_SERVER_TWICE_PAST_MS);
+    const two = said('formats', 'A correction of two days or more is taken only');
+    expect(spanWords(claim(two, /A correction of (\w+ days) or more is taken only when two readings/)), two.where).toBe(TRUST_SERVER_TWICE_PAST_MS);
   });
   it('five minutes ahead, and half a minute of disagreement', () => {
     const ahead = said('formats', 'A change stamped more than five minutes ahead');

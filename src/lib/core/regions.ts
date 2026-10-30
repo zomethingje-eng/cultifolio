@@ -96,11 +96,13 @@ const regionWords = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').to
  *   of five letters or more, the regions that have it, or a word one typing error from it, as a whole word ("provinces",
  *   "provinses": Cape Provinces, Northern Provinces).
  */
-export function regionsTyped(q: string, names: readonly string[]): string[] {
+export function regionsTyped(q: string, names: readonly string[], typos = true): string[] {
   const qs = regionWords(q);
   if (!qs.length || qs[qs.length - 1].length < 2) return [];
   const all = names.map((n) => ({ n, ws: regionWords(n) }));
-  const near = (w: string, r: string) => (w.length >= 4 ? oneEdit(w, r) : w === r);
+  // `typos` false (round eighty-four; review-s S12): the query named species as typed, so it is no misspelt region ("aster",
+  // the genus, offered "Easter Is." one letter away).
+  const near = (w: string, r: string) => (w.length >= 4 && typos ? oneEdit(w, r) : w === r);
   const first = (xs: typeof all) => xs.slice(0, 3).map((r) => r.n);
   const of = all.filter((r) => r.ws.length === qs.length);
   if (qs.length > 1) {

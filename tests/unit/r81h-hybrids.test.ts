@@ -142,7 +142,13 @@ describe('the live pages’ records (copies the reviewers read on 2026-10-23, re
         expect(w.links.powo).toBe(`https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${hybridOf(d.key)!.powo}`);
         expect(w.links.ipni).toBe(`https://www.ipni.org/n/${hybridOf(d.key)!.ipni}`);
         expect(Object.keys(w.links).slice(0, 3)).toEqual(['gbif', 'powo', 'ipni'].filter((k) => k !== 'gbif' || !!d.links.gbif));
-      } else expect(w).toEqual({ ids: d.ids, links: d.links, kew: false });
+      } else if (d.ids.ipni && d.ids.powo) expect(w).toEqual({ ids: d.ids, links: d.links, kew: false });
+      else {
+        // One of the two linked (round eighty-four, review-d D5): the other is Kew's entry's, the stored one kept.
+        expect(w.kew).toBe(true);
+        expect(w.ids.ipni ?? null).toBe(d.ids.ipni ?? hybridOf(d.key)!.ipni ?? null);
+        expect(w.ids.powo).toBe(d.ids.powo ?? `urn:lsid:ipni.org:names:${hybridOf(d.key)!.powo}`);
+      }
     }
   });
 });

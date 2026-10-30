@@ -1,6 +1,6 @@
 import type { JsonFetcher, SourceResult } from '../fetch';
 import { titleProof, redirected, notChecked, notOurs, titled, proofByName, titleKey, type Who, type Facts, type Proof } from '../summary-proof';
-import { upToSentence } from '../../core/text';
+import { upToSentence, sentenceCut } from '../../core/text';
 /** The longest summary kept, in characters, cut at a sentence's end (`upToSentence`; the page quotes four sentences of it). */
 export const SUMMARY_MAX = 1500;
 
@@ -48,7 +48,9 @@ export async function summary(f: JsonFetcher, title: string, accept?: readonly s
       proof = v.proof;
     } else if (!accept.some((a) => titleKey(a) === titleKey(got))) return { status: 'none', detail: redirected(title, got) };
   }
-  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: upToSentence(r.data.extract, SUMMARY_MAX), ...(r.data.extract.trim().length > SUMMARY_MAX ? { cut: true as const } : {}), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}) } };
+  // A lead that does not end a sentence is cut where Wikipedia's extract stopped, and marked so (`sentenceCut`; round eighty-four, A4).
+  const kept = sentenceCut(upToSentence(r.data.extract, SUMMARY_MAX));
+  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: kept.text, ...(r.data.extract.trim().length > SUMMARY_MAX || kept.cut ? { cut: true as const } : {}), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}) } };
 }
 
 /**

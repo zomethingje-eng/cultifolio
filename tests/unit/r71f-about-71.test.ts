@@ -40,7 +40,7 @@ function upTo(page: 'how' | 'formats', opening: string, end: string) {
 
 /* ---------------- B: Kew, the backbone, Wikidata, iNaturalist ---------------- */
 describe('B: Kew\'s rows by the entry each is filed under', () => {
-  const s = said('how', 'Where Kew cites the author otherwise');
+  const s = said('how', 'A row Kew files under a subspecies or variety of the name itself');
   it('Fragaria virginiana Duchesne, filed under the type subspecies, takes the range of Miller\'s species (Kew\'s rows, June 2026)', () => {
     const [name, author] = [claim(s, /\((Fragaria virginiana) Duchesne, filed under/), claim(s, /\(Fragaria virginiana (Duchesne), filed under/)];
     const w = new WcvpIndex();
@@ -70,10 +70,10 @@ describe('B: Kew\'s rows by the entry each is filed under', () => {
 });
 
 describe('B: Wikidata\'s POWO proof, and the genitive', () => {
-  const s = said('how', 'When Wikidata finds no item that does');
+  const s = said('how', "It carries the species' GBIF key, or that of an older name with the same type");
   it('"or its POWO identifier is Kew\'s for this name by the backbone\'s author": Peperomia monticola Miq. (Wikidata, 2026-10-15)', async () => {
-    expect(s.text, s.where).toMatch(/or its POWO identifier is Kew's for this name by the backbone's author;/);
-    expect(s.text).toMatch(/as does a GBIF key of another author's name, unless its POWO identifier proves it/);
+    expect(said('how', "Or its POWO identifier is Kew's").text, s.where).toMatch(/Or its POWO identifier is Kew's for this name by the backbone's author\./);
+    expect(said('how', "A GBIF key of another author's name refuses it too").text).toMatch(/refuses it too, unless its POWO identifier proves it/);
     const KEW = 'https://api.gbif.org/v1/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2';
     const c = (v: unknown) => ({ mainsnak: { datavalue: { value: v } } });
     const ok = (data: unknown) => ({ status: 'ok', data });
@@ -90,14 +90,16 @@ describe('B: Wikidata\'s POWO proof, and the genitive', () => {
     expect(await crossIds(f, 'Peperomia monticola', 7555524, [], { authorship: 'Miq.', family: 'X' })).toMatchObject({ status: 'ok', data: { wikidata: 'Q15605262', ipni: '679159-1' } });
   });
   it('"a genitive ending only, never the adjective": Parodia ritteriana is not Parodia ritteri; burbidgeae is burbidgei', () => {
-    const [adj, gen] = [claim(s, /an item labelled "Parodia (ritteriana)" is not Parodia ritteri/), claim(s, /is not Parodia (ritteri)\)/)];
+    const g = said('how', 'An item whose label spells the epithet another way counts too');
+    const g2 = said('how', 'That is a genitive ending only');
+    const [adj, gen] = [claim(g2, /an item labelled "Parodia (ritteriana)" is not Parodia ritteri/), claim(g2, /is not Parodia (ritteri)\./)];
     expect(genitivesAgree(adj, gen), s.where).toBe(false);
-    expect(genitivesAgree(claim(s, /as "Nepenthes (burbidgeae)" for Nepenthes burbidgei/), 'burbidgei')).toBe(true);
+    expect(genitivesAgree(claim(g, /"Nepenthes (burbidgeae)" for Nepenthes burbidgei/), 'burbidgei')).toBe(true);
   });
 });
 
 describe('B with C: the iNaturalist follow\'s slip and transfer, by the merged rule', () => {
-  const s = said('how', 'An id iNaturalist has made inactive is followed');
+  const s = said('how', 'Nor is one GBIF holds otherwise than as this species');
   it('a name Kew accepts, or holds under another, is no slip; GBIF\'s record by this species\' own author is one name', () => {
     expect(slipStanding('Salvia aurea', { scientific: 'Salvia azurea' }, [{ canonicalName: 'Salvia aurea', scientificName: 'Salvia aurea L.', taxonomicStatus: 'ACCEPTED', rank: 'SPECIES' }], null).own, s.where).toBe(false);
     const [gbifName, author] = [claim(s, /\(GBIF's (Othonna cakilifolia) DC\., which Kew spells cakilefolia/), claim(s, /\(GBIF's Othonna cakilifolia (DC\.), which Kew spells/)];
@@ -106,7 +108,7 @@ describe('B with C: the iNaturalist follow\'s slip and transfer, by the merged r
     expect(slipStanding(gbifName, { scientific: 'Othonna cakilefolia', authorship: author, key: 2 }, [], g('Harv.')).own).toBe(false);
   });
   it('"a name in another genus is never taken when Kew accepts both (Lupinus longifolius is not Acacia longifolia)"', () => {
-    expect(s.text, s.where).toMatch(/a name in another genus is never taken when Kew accepts both \(Lupinus longifolius is not Acacia longifolia\)/);
+    expect(said('how', 'A name in another genus is never taken').text, s.where).toMatch(/A name in another genus is never taken when Kew accepts both \(Lupinus longifolius is not Acacia longifolia\)/);
     expect(transferTaken({ kew: 'accepted', kewOurs: 'accepted' })).toBe(false);
     expect(transferTaken({ kew: 'accepted', kewOurs: 'none' })).toBe(true);
   });
@@ -114,15 +116,15 @@ describe('B with C: the iNaturalist follow\'s slip and transfer, by the merged r
 
 describe('B: identifiers kept through a lag, and GBIF\'s media', () => {
   it('"they are kept for at most 90 days from the build that first kept them": dated from that build', () => {
-    const s = said('how', 'When Wikidata does not answer');
+    const s = said('how', "Where that build's day is not known");
     expect(claim(s, /kept for at most (\d+) days from the build that first kept them/), s.where).toBe('90');
     const row = { status: 'error', at: '2026-10-14T10:00:00Z', detail: 'wikidata maxlag; the identifiers of an earlier build, of a day not known, are kept' };
     const d = { key: gbifPage(3706589), name: { scientific: 'Pleiospilos simulans', synonyms: [] }, distribution: { source: 'WCVP' }, ids: { wikidata: 'Q1' }, upstream: { wikidata: row }, built: '2026-10-14T10:00:00Z' };
     expect(prevIdsFor(d as never)).toMatchObject({ prevIdsOn: '2026-10-14', prevIdsDayUnknown: true }); // driven in full by B's r71b-lag-kept
   });
   it('"asked of GBIF instead, human observations only": a record of another basis is a specimen', async () => {
-    const s = said('how', "Photographs come first from the media that GBIF's occurrence download carries");
-    expect(s.text, s.where).toMatch(/asked of GBIF instead, human observations only, as the download is read;/);
+    const s = said('how', "Where the records came as GBIF's SQL download");
+    expect(s.text, s.where).toMatch(/GBIF is asked instead, human observations only, as the download is read\./);
     const asked: string[] = [];
     const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { results: [{ key: gbifPage(7), basisOfRecord: 'PRESERVED_SPECIMEN', media: [{ type: 'StillImage', identifier: 'https://x/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A' }] }], endOfRecords: true } }; }) as unknown as JsonFetcher;
     const r = await media(f, 3092);
@@ -130,18 +132,18 @@ describe('B: identifiers kept through a lag, and GBIF\'s media', () => {
     expect(r.status === 'ok' && r.data.map((m) => !!m.specimen)).toEqual([true]);
   });
   it('the lead sentence: GBIF\'s media of a record that is not an observation of the living plant is not shown (C)', () => {
-    const s = said('how', "The lead photograph is iNaturalist's wild one first");
+    const s = said('how', "GBIF's media of a record that is not an observation of the living plant");
     expect(s.text, s.where).toMatch(/GBIF's media of a record that is not an observation of the living plant, or on a herbarium's own host, is not shown/);
     const photo = (id: string, specimen?: boolean) => ({ src: 'gbif', id, url: `https://x/${id}.jpg`, thumb: `https://x/${id}.jpg`, licence: 'by', attribution: 'A, CC BY, via GBIF', ...(specimen ? { specimen } : {}) });
     expect(shownPhotos([photo('a', true), photo('b')]).map((p) => p.id)).toEqual(['b']);
-    const f = said('formats', 'Each species page is rendered from one JSON document');
-    expect(f.text, f.where).toMatch(/a GBIF photograph whose record is not an observation of the living plant carries specimen, and is not shown/);
+    const f = said('formats', 'A GBIF photograph whose record is not an observation');
+    expect(f.text, f.where).toMatch(/A GBIF photograph whose record is not an observation of the living plant carries specimen, and is not shown/);
   });
 });
 
 /* ---------------- A: the summaries ---------------- */
 describe('A: a summary under another title', () => {
-  const s = said('how', "A summary under any title but the species' name");
+  const s = said('how', 'Its epithet may differ only as the photographs');
   const who = (name: string, item: string) => ({ name, synonyms: [], item });
   it('the spellings it reads: "a gender ending within one declension" ("Euphorbia peplis" is not Euphorbia peplus), "a genitive in -ae is never read as a gender"', () => {
     expect(s.text, s.where).toMatch(/a genitive in -ae is never read as a gender/);
@@ -152,7 +154,8 @@ describe('A: a summary under another title', () => {
     expect(spellingKey('stolonifer')).toBe(spellingKey('stolonifera')); // guard
   });
   it('"the title\'s item carries … one whose record at IPNI is the species\' name by its author ("Rosa lucieae" for Rosa luciae)"', async () => {
-    const [title, of] = [claim(s, /\("(Rosa lucieae)" for Rosa luciae\)/), claim(s, /\("Rosa lucieae" for (Rosa luciae)\)/)];
+    const ro = said('how', "Or when the title's item carries the species' IPNI identifier");
+    const [title, of] = [claim(ro, /\("(Rosa lucieae)" for Rosa luciae\)/), claim(ro, /\("Rosa lucieae" for (Rosa luciae)\)/)];
     const w: World = {
       items: { Q65947499: { P171: ['Q34687'], P105: [SPECIES], P225: [of] }, Q17246292: { sitelink: title, P105: [SPECIES], P225: [title], P961: ['60464116-2'] } },
       gbif: { [title]: { species: title, status: 'ACCEPTED' } },
@@ -163,8 +166,8 @@ describe('A: a summary under another title', () => {
     expect(r.status, s.where).toBe('ok');
   });
   it('"one whose proof could not be read … is recorded as not checked, and is not shown until it is read" (Drosera montana)', async () => {
-    const r = said('how', 'A summary quoted from under another title');
-    expect(r.text, r.where).toMatch(/because Wikidata, GBIF, Kew or IPNI did not answer is recorded as not checked, and is not shown until it is read/);
+    const r = said('how', 'One whose proof could not be read');
+    expect(r.text, r.where).toMatch(/because Wikidata, GBIF, Kew or IPNI did not answer, is recorded as not checked, and is not shown until it is read/);
     const NOW = () => '2026-10-15T00:00:00.000Z';
     const docs: Record<string, any> = { d: { key: gbifPage(1), name: { scientific: 'Drosera montana', synonyms: [] }, ids: { wikidata: 'Q5308558', wikipedia: 'Drosera tomentosa' }, links: {}, summary: { text: 'x', source: 'wikipedia', url: 'u', licence: 'CC BY-SA 4.0', title: 'Drosera tomentosa' }, upstream: { wikipedia: { status: 'ok', detail: 'carried from build of 2026-09-29; this build: skipped' } } } };
     const store = { files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { docs[k] = d; } };
@@ -180,22 +183,22 @@ describe('C: the kinds a Commons file is shown as none of', () => {
   const HELD = heldNamesOf([{ key: gbifPage(1), name: 'Aloe vera' }, { key: gbifPage(2), name: 'Aloe ferox' }]);
   const n = { scientific: 'Aloe vera', key: gbifPage(1), held: HELD };
   it('"a map (in any language …)": each word the sentence gives hides a file', () => {
-    const words = claim(s, /a map \(in any language: ([^)]*)\)/).split(/, /).map((w) => w.replace(/^"|"$/g, ''));
+    const words = claim(said('how', 'Not a map'), /a map \(in any language: ([^)]*)\)/).split(/, /).map((w) => w.replace(/^"|"$/g, ''));
     expect(words.length, s.where).toBe(4);
     for (const w of words) expect(commonsKind(`File:Aloe vera ${w}.jpg`, n), w).not.toBeNull();
   });
   it('"an animal named in the file\'s name ("nymphs", "bees")"; a flower with an insect filed under it is the plant (guard)', () => {
-    for (const w of claim(s, /an animal named in the file's name \(([^)]*)\)/).split(/, /).map((x) => x.replace(/"/g, ''))) expect(commonsKind(`File:Leaf-footed bug ${w} on Aloe vera.jpg`, n), w).not.toBeNull();
+    for (const w of claim(said('how', 'Not an animal named'), /an animal named in the file's name \(([^)]*)\)/).split(/, /).map((x) => x.replace(/"/g, ''))) expect(commonsKind(`File:Leaf-footed bug ${w} on Aloe vera.jpg`, n), w).not.toBeNull();
     expect(commonsKind('File:Aloe vera with a bee visitor 2.jpg', n, ['Aloe vera', 'Apis mellifera'])).toBeNull();
   });
   it('"unless its name names this species as a name and none of the others ("Vertical garden" names no Aloe vera)"', () => {
-    const t = claim(s, /\("(Vertical garden)" names no Aloe vera\)/);
+    const t = claim(said('how', 'Not a photograph Commons files under two or more species'), /\("(Vertical garden)" names no Aloe vera\)/);
     expect(commonsKind(`File:${t}.jpg`, n, ['Aloe vera', 'Aloe ferox']), s.where).not.toBeNull();
     expect(commonsKind('File:Aloe vera 1.jpg', n, ['Aloe vera', 'Aloe ferox'])).toBeNull(); // guard
   });
   it('"a pressed, mounted or museum specimen (…) or one whose source is a herbarium\'s or museum\'s specimen record, or whose description calls it one"', () => {
     // Round seventy-two (C8): the description's words are named, and a plant on show in a museum is shown.
-    expect(s.text).toMatch(/or one whose source is a herbarium's or museum's specimen record, or whose description calls it a herbarium, pressed, mounted, dried or preserved specimen, or a specimen of a natural-history museum \(a plant on show in another museum is shown\)/);
+    expect(said('how', 'Not a pressed, mounted or museum specimen').text).toMatch(/or one whose source is a herbarium's or museum's specimen record, or whose description calls it a herbarium, pressed, mounted, dried or preserved specimen, or a specimen of a natural-history museum \(a plant on show in another museum is shown\)/);
     expect(commonsKind('File:Aloe vera 1.jpg', n, { kind: 'a pressed or mounted specimen' })).not.toBeNull(); // the kind the fill reads from the source (C's r71c-photographs)
   });
   it('"known by the photograph Commons names as its source or by the number at the end of its name"', () => {
@@ -207,12 +210,12 @@ describe('C: the kinds a Commons file is shown as none of', () => {
   });
   it('the author: "a derivative work names both, the original\'s author and its maker, and never the file\'s name"', () => {
     const a = said('how', "A Commons file's author is its Artist field");
-    expect(a.text, a.where).toMatch(/a derivative work names both, the original's author and its maker, and never the file's name;/);
+    expect(a.text, a.where).toMatch(/a derivative work names both, the original's author and its maker, and never the file's name\./);
     expect(commonsAuthor('N._andamana2.jpg: Marcello Catalano\nderivative work: Mgiganteus (talk)')).toBe('Marcello Catalano; derivative work: Mgiganteus');
   });
   it('/formats: a Commons photograph may carry slips, inat, kind and sourceRead, which the read uses', () => {
     const f = said('formats', 'Each species page is rendered from one JSON document');
-    for (const k of ['slips', 'inat', 'kind', 'sourceRead']) expect(f.text, `${f.where}: ${k}`).toMatch(new RegExp(`\\b${k} \\(`));
+    for (const k of ['slips', 'inat', 'kind', 'sourceRead']) expect(aboutText('formats'), `${f.where}: ${k}`).toMatch(new RegExp(`\\b${k} \\(`));
     expect(readFileSync('src/lib/dossier/schema.ts', 'utf8')).toMatch(/sourceRead/);
   });
 });
@@ -227,12 +230,12 @@ describe('D: the import\'s short dates and keys', () => {
   });
   it('the keys, the backup and the clock sentences are said; their rules are driven by D\'s r71d-import-bare, r71d-import-dates, r71d-backup-unsent and r71d-clock', () => {
     const t = aboutText('formats');
-    expect(t).toMatch(/or the plants filed under the line without the column are as many as the lines sharing it that still lack a plant;/);
-    expect(t).toMatch(/numbered after the plants of lines that had none, so a sheet that has lost those columns finds it; while the plant's own line, those columns and all, is still in the sheet, that key finds it for no other line/);
-    expect(t).toMatch(/sync does not send it, since a device that cannot read it would set aside the bundle it came in, until a version that reads it opens here, which sends it;/);
+    expect(t).toMatch(/or the plants filed under the line without the column are as many as the lines sharing it that still lack a plant\./);
+    expect(t).toMatch(/numbered after the plants of lines that had none, so a sheet that has lost those columns finds it\. While the plant's own line, those columns and all, is still in the sheet, that key finds it for no other line/);
+    expect(t).toMatch(/Sync does not send such a change, since a device that cannot read it would set aside the bundle it came in, until a version that reads it opens here and sends it\./);
     expect(t).toMatch(/A page loaded that long after the reading waits even while another tab of this browser holds the correction in force/);
-    expect(t).toMatch(/the question names the day each answer reads, with its year/);
-    expect(t).toMatch(/or, read year first, by the day it reads;/);
+    expect(t).toMatch(/The question names the day each answer reads, with its year/);
+    expect(t).toMatch(/; read year first, by the day it reads\./);
   });
 });
 
@@ -251,9 +254,9 @@ describe('E: what the server keeps, the listing, the kept 429 and the keep-data 
   });
   it('the listing, the kept 429 and the keep-data keys are said; their rules are driven by E\'s r71e-server, r71e-sync and r71e-keep-ask', () => {
     const f = aboutText('formats');
-    expect(f).toMatch(/the server finishes a listing, and settles it, even when the device has gone;/);
+    expect(f).toMatch(/The server finishes a listing, and settles it, even when the device has gone\./);
     // Round seventy-two (E5): the shorter refusal is kept beside the day's.
-    expect(f).toMatch(/a shorter refusal met by such a log batch \(a 503, or a request window's 429\) leaves the day's wait standing and is kept beside it/);
+    expect(f).toMatch(/A shorter refusal met by such a log batch \(a 503, or a request window's 429\) leaves the day's wait standing and is kept beside it/);
     const h = aboutText('how');
     expect(h).toMatch(/once there was a plant to keep, whichever page asked\)/);
     expect(h).toMatch(/is read from the browser's own record, which asks nothing,/);
@@ -262,23 +265,23 @@ describe('E: what the server keeps, the listing, the kept 429 and the keep-data 
 
 /* ---------------- F: the pages and search ---------------- */
 describe('F: the species address, the records, the search order', () => {
-  const s = said('how', 'A species address under an older name goes to the one species that holds it');
+  const s = said('how', 'Where GBIF files one name by one author under two of them');
   it('"where GBIF files one name by one author under two of them it says so ("one name, not two")"', () => {
     const words = claim(s, /it says so \("([^"]+)"\)/);
     expect(sharedNameMessage('Vernonia praealta', [{ name: 'Vernonia gigantea', authors: ['(L.) Michx.'] }, { name: 'Vernonia noveboracensis', authors: ['(L.) Michx.'] }]), s.where).toMatch(new RegExp(`${words}$`));
   });
   it('the records paragraph: "where every record lies outside the range it says the range and the records disagree"', () => {
     // Round seventy-two (B10): one stray record is no disagreement.
-    expect(aboutText('how')).toMatch(/the page counts those it discards, and where every record lies outside the range it says so, and, where two or more do, that the range and the records disagree/);
+    expect(aboutText('how')).toMatch(/The page counts the records it discards\. Where every record lies outside the range it says so, and where two or more do, that the range and the records disagree/);
     expect(noneInRange(49).text).toMatch(/the range and the records disagree/);
   });
   it('/formats: an older name typed whole before a genus the query only begins ("Tecoma speciosa")', () => {
-    const f = said('formats', 'Search puts a name typed as a name first');
-    const [typed, holder, other] = [claim(f, /: "(Tecoma speciosa)" is/), claim(f, /is (Campsis radicans) before/), claim(f, /before (Tecomanthe speciosa)\)/)];
+    const f = said('formats', 'An older name typed whole that a species holds exactly');
+    const [typed, holder, other] = [claim(f, /: "(Tecoma speciosa)" is/), claim(f, /and (Campsis radicans) before/), claim(f, /before (Tecomanthe speciosa)\./)];
     const P = prepare([{ key: gbifPage(1), name: other, family: 'X' }, { key: gbifPage(2), name: holder, family: 'X', syn: [typed] }]);
     expect(search(P, typed).map((x) => x.name), f.where).toEqual([holder, other]);
   });
   it('iNaturalist under older names: "asked under these older names" (the follow\'s wider rule is its own sentence)', () => {
-    expect(part(said('how', 'From iNaturalist, asked under these older names'), 'From')).toMatch(/^From iNaturalist, asked under these older names, a taxon is taken only when its own name is one of the species' own names/);
+    expect(part(said('how', 'From iNaturalist, asked under older names'), 'From')).toMatch(/^From iNaturalist, asked under older names, a taxon is taken only when its own name is one of the species' own names/);
   });
 });

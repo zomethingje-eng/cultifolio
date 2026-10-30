@@ -12,7 +12,7 @@
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto, beforeNavigate } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import Opening from '$lib/db/Opening.svelte';
@@ -22,14 +22,16 @@
   import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance, PlantEvent } from '$lib/db/types';
-  import { slugify, speciesOf, speciesSlug, parseName, isNamedHybrid } from '$core/names';
+  import { slugify, speciesOf, speciesSlug, parseName, isNamedHybrid, speciesNotStated } from '$core/names';
+  import { readSearch } from '$lib/import/check';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { entriesFor, sheetForNameOr, isUnreached, type Unreached } from '$lib/ui/index.svelte';
+  import { entriesFor, sheetForNameOr, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
   import { unreachedClause } from '$lib/ui/reach-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
-  import { cultivationSheet, runs, forReader, tiedMonths, monthNames } from '$core/sheet';
+  import { cultivationSheet, runs, forReader, tiedMonths, monthNames, extremesWhyShort } from '$core/sheet';
+  import { lapseCause } from '$core/lapse';
   import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
   import { parents } from '$core/names';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
@@ -118,7 +120,58 @@
   const refused = $derived(refWhy && refWhy.kind !== 'unreachable' ? (() => { const c = unreachedClause(refWhy, 'the species reference'); return c.charAt(0).toUpperCase() + c.slice(1); })() : null);
   const kind = $derived(a ? kindOf(a) : 'species');
   /** A named nothospecies is asked of the reference as a species is: the reference holds some (Mentha × piperita), and its page is the plant's species page (round eighty-one, H). A cross written out, or a cultivar of a genus, is not. */
-  const asSpecies = $derived(kind !== 'hybrid' || (!!a && isNamedHybrid(a.taxonName)));
+  /** A cultivar filed under its genus, its species not stated ("Echeveria 'Lola'"): it has no species page (round eighty-four; review-w W5). */
+  const notStated = $derived(!!a && kind === 'cultivar' && speciesNotStated({ ...parseName(a.taxonName), kind: 'cultivar' }));
+  const asSpecies = $derived((kind !== 'hybrid' && !notStated) || (!!a && isNamedHybrid(a.taxonName)));
+  /**
+   * A record an earlier version filed as a hybrid from a cultivar under a genus alone, with no parentage: the log is read as
+   * written (the grower may have chosen "hybrid" on this form, which the record cannot tell apart), and the page offers to
+   * file it as a cultivar, species not stated, in one tap that the log records (round eighty-four; review-w W5, outside
+   * review A9).
+   */
+  const hybridOfCultivar = $derived(!!a && kind === 'hybrid' && !!a.cultivar && !a.parentage && !parseName(a.taxonName).epithet && !a.taxonName.trim().startsWith('×'));
+  let refiling = $state(false);
+  async function fileAsCultivar() {
+    if (!a || refiling) return;
+    refiling = true;
+    try {
+      await collection.putWith('accession', a.id, { nameKind: 'cultivar', parentage: null }, [{ acc: a.id, d: localDate(), t: 'note', note: 'Now recorded as a cultivar, species not stated', auto: true }]);
+      toast.show('Now a cultivar, species not stated; the log says so.');
+    } catch { /* refused: the notice above says why */ } finally { refiling = false; }
+  }
+  /**
+   * A name with no species page may be an older name of one (round eighty-four; review-w W6: "Aloe aristata", whose address
+   * goes to Aristaloe aristata, said only "No species page under this name"). Looked up when the grower asks: the plant's
+   * own page asks the reference by hash group, never by name, so the name goes to the catalogue's search only on that
+   * press, as the search box sends it. `older` is the page found, with a way to file the plant under it.
+   */
+  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null } | null>(null);
+  async function lookOlder() {
+    if (!a) return;
+    const name = speciesOf(a.taxonName);
+    olderLook = { for: a.taxonName, state: 'asking' };
+    const got = await searchCatalogue(name, 6);
+    if (olderLook?.for !== a?.taxonName) return;
+    if (got === null || !Array.isArray(got)) { olderLook = { for: a.taxonName, state: 'unreached' }; return; }
+    const r = readSearch(name, true, got);
+    olderLook = r.s === 'near' && r.why === 'older name' ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key } : { for: a.taxonName, state: 'none' };
+  }
+  $effect(() => { void a?.taxonName; untrack(() => { if (olderLook && olderLook.for !== a?.taxonName) olderLook = null; }); });
+  /** Files the plant under the page its name is an older name of, as Edit would, the old name kept as received and in the log. */
+  async function fileUnderOlder() {
+    if (!a || olderLook?.state !== 'older' || refiling) return;
+    const to = olderLook.name, key = olderLook.key;
+    const sub = a.taxonName.slice(speciesOf(a.taxonName).length).trim(); // a rank and epithet after the species stay with it
+    const taxonName = sub ? `${to} ${sub}` : to;
+    const oldFull = `${a.taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
+    const newFull = `${taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
+    refiling = true;
+    try {
+      await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (the reference's name; the old one is an older name of it)`, auto: true }]);
+      olderLook = null;
+      toast.show(`Now filed under ${taxonName}; the old name is kept as received.`);
+    } catch { /* refused: the notice above says why */ } finally { refiling = false; }
+  }
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
   $effect(() => {
@@ -168,12 +221,13 @@
     const ex = c.extremes ?? null;
     const exStatus = c.extremesStatus ?? null;
     const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
-    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, extremesStatus: exStatus, lat: dossier.habitatLat ?? c.at.lat, units: u });
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, extremesStatus: exStatus, extremesLapse: c.extremesLapse ?? null, lat: dossier.habitatLat ?? c.at.lat, units: u });
     return {
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
       night: { v: m[coldI].tmin, mo: coldI + 1, at: monthNames(tiedMonths(m.map((x) => x.tmin), false, (v) => temp(v, u, 1))), lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin }, // a tie names every month (round sixty-one; visitor 5)
       ex,
       exStatus,
+      setAside: c.extremesLapse ? lapseCause({ months: m, extremes: c.extremesLapse }) : null,
       year: sheet.year,
       cells: c.cells
     };
@@ -198,7 +252,7 @@
     const n = habitat.night;
     const night = `coldest month's mean nightly low at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : habitat.exStatus === 'lapse' ? "; the daily extremes were read at a weather cell whose ground is too far above or below the typical spot to correct for, and are not used, so no floor is read (the species page says why)" : '';
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : habitat.exStatus === 'lapse' ? `; ${extremesWhyShort('lapse', habitat.setAside, u)}, so no floor is read` : ''; // the cause that applied (round eighty-four; D1)
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this space` };
     return { here: cond.floorC, text: `this space is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
@@ -327,8 +381,12 @@
   /** Archive asks once: it is one tap on the bar, and it takes the plant off every list (round forty-nine, 3). */
   let confirmArchive = $state(false);
   function quick(t: EventType) {
-    et = t;
-    ed = localDate(); // today as of opening the form, not as of loading the page (round twenty-four, 2)
+    // A draft kept by Back reopens as it was left, its kind and date too, from "Record…" (round eighty-four; review-p P6);
+    // a verb's own button opens its own kind, with the words typed.
+    const k = kept;
+    kept = null;
+    et = k && t === 'note' ? k.et : t;
+    ed = k && t === 'note' ? k.ed : localDate(); // today as of opening the form, not as of loading the page (round twenty-four, 2)
     logOpen = true;
     // The first thing to fill: a measurement's first figure, a treatment's product, else the note.
     setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : t === 'repot' ? '#ev-pot' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
@@ -336,14 +394,33 @@
   /** After a record or a cancel, focus returns to the verb bar and the log line is announced, so a keyboard user is not dropped on the page body. */
   /** The Undo a recorded death offers (round sixty). */
   let deathUndo: { label: string; run: () => void } | null = null;
-  function closeLog(recorded?: string) {
+  /**
+   * How the Record form closed (round eighty-four; review-p P6): `cancel`, its Cancel button, drops what was typed; `back`,
+   * the browser's Back or Escape (on Android the gesture that puts a keyboard or a sheet away), keeps it for the next
+   * "Record…" and says so, with a way back into it. A line recorded has cleared it already.
+   */
+  function closeLog(recorded?: string, how: 'cancel' | 'back' = 'cancel') {
     logOpen = false;
     if (recorded) toast.show(recorded, 2400, deathUndo);
+    else if (how === 'cancel') clearDraft();
+    else if (draftTyped()) {
+      kept = { et, ed };
+      toast.show('Record closed. What you typed is kept: “Record…” opens it again.', 8000, { label: 'Open it', run: () => quick('note') });
+    }
     deathUndo = null;
     setTimeout(() => document.querySelector<HTMLElement>('.quickbar button')?.focus(), 0);
   }
-  // Back closes the Record form, as Cancel does, and stays on the plant (round eighty-one; the phone review's 8).
-  backLayer('record', () => logOpen, () => closeLog());
+  // Back closes the Record form and stays on the plant (round eighty-one; the phone review's 8), keeping what was typed (round eighty-four; P6).
+  backLayer('record', () => logOpen, () => closeLog(undefined, 'back'));
+  /** The kind and date of a draft Back kept, for the next "Record…". */
+  let kept: { et: EventType; ed: string } | null = null;
+  const draftTyped = () => !!(enote.trim() || eused.trim() || ecause.trim() || emedium.trim() || numberOrNull(epot) != null || Object.values(measures).some((v) => numberOrNull(v) != null));
+  function clearDraft() {
+    enote = ''; eused = ''; ecause = ''; measures = {}; epot = ''; emedium = ''; evmsg = '';
+    kept = null;
+  }
+  // A draft is this plant's: the page is kept when another plant's page opens, and must not carry it there.
+  $effect(() => { void id; untrack(clearDraft); });
   const propagations = $derived(collection.propagationsOf(id));
 
   let et = $state<EventType>('water');
@@ -664,17 +741,18 @@
     <div class="who">
       <h1 class="sci"><span class="accno big lead">{accNo(a)}</span>{' '}<SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
       <p class="vern">
-        {#if kind === 'hybrid'}<span class="kind">hybrid</span> · {:else if kind === 'cultivar'}<span class="kind">cultivar</span> · {/if}
+        {#if kind === 'hybrid'}<span class="kind">hybrid</span> · {:else if kind === 'cultivar'}<span class="kind">cultivar</span>{#if notStated}<span id="species-not-stated">, species not stated</span>{/if} · {/if}
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
-        {#if !a.taxonKey && asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
+        {#if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">An older name of {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
+        {:else if asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{#if parseName(a.taxonName).epithet && !parseName(a.taxonName).qualifier}{#if olderLook?.state === 'asking'}{' '}<span class="muted" role="status">looking among older names…</span>{:else if olderLook?.state === 'none'}<span id="older-name-none" role="status">, nor is it an older name of one</span>{:else if olderLook?.state === 'unreached'}<span id="older-name-unreached" role="status">; the reference's search did not answer, so older names were not checked. <button class="linkish tap" type="button" onclick={lookOlder}>Try again</button></span>{:else}{' '}<button class="linkish tap" type="button" id="look-older" onclick={lookOlder} title="Sends this name to the reference's search, as the search box does">Is it an older name?</button>{/if}{/if}{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}
-        <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
+        <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{#if hybridOfCultivar}{' '}Not a cross? <button class="linkish" type="button" id="file-as-cultivar" onclick={fileAsCultivar} aria-disabled={refiling}>File it as a cultivar, species not stated</button>.{/if}{/if}</p>
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
       <!-- While the sheet is asked the offer's line is held, so its arrival does not move the verb bar below (round seventy-eight). A species without a photograph gives the room back: the rarer move. -->
@@ -707,7 +785,7 @@
       <label class="wide"><span>Species</span><SpeciesPicker reserve addLabel="Save" bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
       <!-- "this version of the app", not "this build", here and under Provenance (round fifty-eight; the accessibility review). -->
-      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
+      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar (of the species, or of the genus when no species is named)</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
@@ -754,7 +832,7 @@
 
   {#if logOpen}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(recordedText(label)); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
+    <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(recordedText(label)); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(undefined, 'back'); } }}>
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
         <!-- Each field with a visible name: the placeholders were the only ones, and went as soon as a word was typed (round fifty-eight; the accessibility review). -->
@@ -871,7 +949,7 @@
   <details class="hab" id="habitat">
     <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this space{:else}Habitat vs this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
-      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier && recordsUnchecked(dossier)}<NotChecked what="Climate" why={NO_GBIF_SENTENCE} />{:else if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier && recordsUnchecked(dossier)}No season is read: the species page has no habitat climate, for that reason.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier && recordsUnchecked(dossier)}<NotChecked what="Climate" why={NO_GBIF_SENTENCE} />{:else if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : notStated ? 'No species named' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier && recordsUnchecked(dossier)}No season is read: the species page has no habitat climate, for that reason.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : notStated ? 'A cultivar filed under its genus; name its species to compare its habitat.' : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
     {#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}
       <!-- A species page without a GBIF key (round seventy-nine): nothing to compare this space with, and why. -->
@@ -925,7 +1003,8 @@
   <div class="factgrid">
     <div><b>Source</b>{#if a.sourceFrom}<a href="/plants?q={encodeURIComponent(a.sourceFrom)}" title="Every plant from this source">{a.sourceFrom}</a>{/if}{#if a.sourceForm}{a.sourceFrom ? ' · ' : ''}as {a.sourceForm === 'plant' ? 'a plant' : a.sourceForm === 'seed' ? 'seed' : a.sourceForm === 'seedling' ? 'a seedling' : a.sourceForm === 'cutting' ? 'a cutting' : a.sourceForm}{/if}{#if a.acquired}{a.sourceFrom || a.sourceForm ? ', ' : ''}{a.acquired}{/if}{#if !a.sourceFrom && !a.sourceForm && !a.acquired}not stated{/if}{#if a.price}{' · '}{a.price}{/if}</div>
     {#if a.sourceRef}<div><b>Lot or reference</b>{a.sourceRef}</div>{/if}
-    <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
+    <!-- A field left blank is not stated, never "none", as the batch page says (round eighty-four; review-w W9). -->
+    <div><b>Field number</b>{a.fieldNumber || 'not stated'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
     {#if a.sowingId}<div><b>Raised from</b><a href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}

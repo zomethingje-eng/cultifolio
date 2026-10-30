@@ -102,7 +102,7 @@ describe('3. the kept page, reached by the old address, says so under its name',
     expect(page).toContain(', by another author (${o.authors.map((a) => `${data.was} ${a}`).join(\' and \')})');
   });
   it('/about/how says a merged page\'s old address goes to its kept page, shared name or not', () => {
-    expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain('but the old address of a page merged into one of them goes to that one (since round eighty-three: /species/echeveria-peacockii is Echeveria desmetiana');
+    expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain('But the old address of a page merged into one of them goes to that one (/species/echeveria-peacockii is Echeveria desmetiana');
   });
   it('guard: Dudleya pulverulenta under the same name is as before (a shared name, no merge, no authors read)', async () => {
     const data = (await load(event('dudleya-pulverulenta', 'Echeveria peacockii'))) as unknown as Data;

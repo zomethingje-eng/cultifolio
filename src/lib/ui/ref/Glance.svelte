@@ -14,6 +14,7 @@
   import { MON3 } from '$core/months';
   import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
   import { yearRain } from '$climate/year-rain';
+  import { lapseCause } from '$core/lapse';
   type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
   type Ex = { minP01: number; minAbs: number; years: number } | null;
   let {
@@ -29,7 +30,10 @@
     chartHref = null,
     season = true,
     annualRain = null,
-    few = null
+    few = null,
+    extremesLapse = null,
+    whyHref = null,
+    fewHref = null
   }: {
     months: M[];
     extremes?: Ex;
@@ -51,6 +55,12 @@
     annualRain?: { p50?: number | null } | null;
     /** A climate read from few records (round eighty-two; `$core/few-records`): marked beside the row's head, the counts in its title. */
     few?: { records: number; cells: number } | null;
+    /** The extremes set aside, when `extremesStatus` is 'lapse': the card names the cause that applied (round eighty-four; D1, S1, A3). */
+    extremesLapse?: { minAbs: number; minP01?: number; lapseAppliedM?: number } | null;
+    /** Where the page says in full why the extremes were not used: the card's few words link there. */
+    whyHref?: string | null;
+    /** Where the page says what few records means for this climate. */
+    fewHref?: string | null;
   } = $props();
   const u = $derived(units.current);
   const idx = (f: (x: M) => number, hi: boolean) => months.reduce((b, x, i) => ((hi ? f(x) > f(months[b]) : f(x) < f(months[b])) ? i : b), 0);
@@ -66,21 +76,26 @@
   // above is not when the dossier has the cells' median (round sixty-seven; triage-66 N11, R45-10).
   const wetMonths = $derived(months.filter((x) => x.precipMm >= 25).length);
   const dlis = $derived(months.map((x) => x.dli).filter((x): x is number => x != null));
-  const exWhy = $derived(extremesWhyTag(extremesStatus));
+  const exWhy = $derived(extremesWhyTag(extremesStatus, extremesStatus === 'lapse' && extremesLapse ? lapseCause({ months, extremes: extremesLapse }) : null, u));
   // Each gauge's full width, said beside it and in its text alternative: the bars were drawn on scales no reader was
   // told (round sixty-two; the self-review's N10, visitor-words 17). A year's rain over 1,200 mm and a month over 70 DLI
   // fill the bar.
-  const RAIN_FULL = 1200;
+  // A year over 1,200 mm takes a bar to the next thousand, so the bar is never shorter than its figure: "bar 0 to 1,200 mm"
+  // stood under 1,235 mm (round eighty-four; A13).
+  const RAIN_FULL = $derived(rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);
   const DLI_FULL = 70;
 
   /* ---- the season, in the reader's months: built only from the rules' outputs (the year the sheet read) ---- */
   const strip = $derived(seasonStrip(year, months, readerLat));
+  // "rain rule, CHELSA": the source, and the rule that read it.
+  const seasonSrc = $derived(seasonRule.split(', ').pop() ?? '');
+  const seasonHow = $derived(seasonRule.includes(', ') ? `How the ${seasonRule.slice(0, seasonRule.lastIndexOf(', '))} ${/rules$/.test(seasonRule.slice(0, seasonRule.lastIndexOf(', '))) ? 'read' : 'reads'} it` : '');
 </script>
 
 <div class="ghead">
   <!-- "Habitat figures", not "In the wild": the floor is one reanalysis cell at a typical spot and the rest are medians
        across cells, which "in the wild" said more than (round sixty-two; the words review's 1, outside review A3). -->
-  <span class="gt">Habitat figures{#if few}<span class="few" id="few-records-mark" title="{few.records} record{few.records === 1 ? '' : 's'} in {few.cells} grid cell{few.cells === 1 ? '' : 's'}">from few records</span>{/if}</span>
+  <span class="gt">Habitat figures{#if few}<!-- The counts in the mark's own words, not a hover title a finger never sees; a link to the line that says more where the page has one (round eighty-four; P9). -->{#if fewHref}<a class="few" id="few-records-mark" href={fewHref}>from few records: {few.records} in {few.cells} cell{few.cells === 1 ? '' : 's'}</a>{:else}<span class="few" id="few-records-mark">from few records: {few.records} in {few.cells} cell{few.cells === 1 ? '' : 's'}</span>{/if}{/if}</span>
   {#if toggle}
     <!-- Both units shown, the current one marked: a lone "°F" beside a figure in °C read as a contradiction (round sixty; visitor 13). -->
     <div class="useg" role="group" aria-label="Units">
@@ -98,13 +113,17 @@
     {:else}
       <div class="lab" role="heading" aria-level="3">Coldest month, mean nightly low</div>
       <div class="val">{tempN(months[cold].tmin, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
-      <div class="sub">{coldAt} at the habitat, not a floor; {exWhy} <span class="src">CHELSA</span></div>
+      <div class="sub">{coldAt} at the habitat, not a floor; {#if whyHref && (extremesStatus === 'lapse' || extremesStatus === 'sea')}<a href={whyHref}>{exWhy}</a>{:else}{exWhy}{/if} <span class="src">CHELSA</span></div>
     {/if}
   </div>
   <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean daily high</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
   <div class="card"><div class="lab" role="heading" aria-level="3">{yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} in the median year <span class="src">CHELSA</span></div></div>
   {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
-  {#if season && year && strip}
+</div>
+<!-- The season card under the four, outside their grid: spanning the grid's every track, it kept six 153 px tracks at a
+     desktop's width, two of them empty, and the four cards filled two thirds of the row (round eighty-four; W3). -->
+{#if season && year && strip}
+  <div class="cards gseason">
     <div class="card season">
       <div class="lab" role="heading" aria-level="3">The year in {strip.calendar}</div>
       <!-- Twelve cells, January first, in the reader's months: the rule's months shaded, the months under 5 mm marked.
@@ -116,17 +135,24 @@
         {#each strip.cells as c (c.m)}<li class:on={c.on} class:dry={c.dry}><span class="mo">{MON3[c.m - 1][0]}<span class="rest">{MON3[c.m - 1].slice(1)}</span></span><span class="visually-hidden">{c.on && strip.shadeIs ? ', shaded' : ''}{c.dry ? `, under ${ruleRain(5, u)} of rain` : ''}</span></li>{/each}
       </ol>
       <div class="sub key" aria-hidden="true">{#if strip.shadeIs}<span><i class="sw on"></i>{strip.shadeIs}</span>{/if}{#if strip.cells.some((c) => c.dry)}<span><i class="sw dry"></i>under {ruleRain(5, u)} of rain</span>{/if}</div>
-      {#if seasonLead}<div class="sub lead">{seasonLead} <span class="src">{seasonRule}</span></div>{/if}
-      <div class="sub hemi">{#if !year.shiftable}Not shifted: the shift rule does not apply to this habitat.{:else if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your spaces.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{#if chartHref}{' '}<a href={chartHref}>The chart</a> is in the habitat's months.{/if}</div>
+      <!-- The source as the pill, as on every card; the rule by its name as the way to how it reads, not as a source (round
+           eighty-four; A7: "rain rule, CHELSA" stood in the source's pill). -->
+      {#if seasonLead}<div class="sub lead">{seasonLead} <span class="src">{seasonSrc}</span>{#if seasonHow}{' '}<a class="how" href="/about/how#year">{seasonHow}</a>{/if}</div>{/if}
+      <div class="sub hemi">{#if !year.shiftable}The habitat's own months: it lies too near the equator, or its warmth changes too little, for them to be moved to your hemisphere.{:else if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your spaces.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{#if chartHref}{' '}<a href={chartHref}>The chart</a> below keeps the habitat's own months.{/if}</div>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <style>
   .ghead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; flex-wrap: wrap; }
   .gt { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   /* The mark of a climate read from few records (round eighty-two): the warm dashed edge the page's other cautions wear. */
+  a.few { text-decoration: none; }
+  a.few:hover { text-decoration: underline; }
   .few { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.04em; text-transform: none; font-weight: 700; }
+  /* The switch works by script: with scripts off it stood pressed and did nothing (round eighty-four; A13). Hidden, not
+     removed, until the app is drawn, so nothing moves when it appears. */
+  :global(html:not([data-ready])) .useg { visibility: hidden; }
   .useg { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; background: var(--card); color: var(--ink3); }
   .useg button { min-width: var(--tap); min-height: var(--tap); padding: 0 10px; border: 0; background: none; color: var(--ink2); font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
   .useg button.on { background: var(--accent); color: var(--on-accent, #fff); }
@@ -136,7 +162,7 @@
   .gcards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); margin: 0 0 12px; }
   .gcards .card { min-width: 0; overflow-wrap: anywhere; }
   .src { display: inline-block; font-size: var(--fs-xs); letter-spacing: 0.04em; color: var(--ink3); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 0 5px; margin-left: 2px; max-width: 100%; overflow-wrap: anywhere; }
-  .season { grid-column: 1 / -1; }
+  .gseason { grid-template-columns: minmax(0, 1fr); margin: 0 0 12px; }
   .strip { list-style: none; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 10px 0 6px; padding: 0; }
   .strip li { position: relative; text-align: center; padding: 8px 0 10px; border-radius: var(--r-sm); background: var(--sunk); font-size: var(--fs-xs); color: var(--ink2); min-width: 0; }
   .strip li.on { background: color-mix(in srgb, var(--cool) 30%, var(--card)); color: var(--ink); font-weight: 700; }
@@ -149,6 +175,9 @@
   .sw.dry { width: 6px; height: 6px; border-radius: 50%; background: var(--warm); }
   .gscale { margin: -6px 0 6px; font-size: var(--fs-xs); color: var(--ink3); }
   .lead { margin-top: 6px; color: var(--ink); }
+  /* Kept on one line where it fits; wrapped where it does not (a phone at 200% text: the merge, r62ba N10 and r67h engines 3). */
+  .lead .how { font-size: var(--fs-sm); white-space: nowrap; }
+  @media (max-width: 640px) { .lead .how { white-space: normal; } }
   .hemi { margin-top: 4px; font-size: var(--fs-sm); color: var(--ink3); }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 640px) { .gcards .card .sub { font-size: var(--fs-sm); line-height: 1.35; } }

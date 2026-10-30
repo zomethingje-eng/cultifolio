@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,6 +49,9 @@ describe('round eighty, X: a species a reference page holds through its range is
   it('the build leaves such a line out of a list made before, and says so', () => {
     const ROOT = resolve('.');
     const dir = mkdtempSync(join(tmpdir(), 'r80x-held-'));
+    // Round eighty-four (G): a build reads the regions' shapes or does not start; the merge gives this folder the file.
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    copyFileSync(resolve('scripts/tdwg3-shapes.json'), join(dir, 'scripts/tdwg3-shapes.json'));
     mkdirSync(join(dir, 'bulk')); mkdirSync(join(dir, 'static/s/v3'), { recursive: true });
     const H = 'plant_name_id|ipni_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|infraspecific_rank|infraspecies|parenthetical_author|primary_author|publication_author|place_of_publication|volume_and_page|first_published|nomenclatural_remarks|geographic_area|lifeform_description|climate_description|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id|hybrid_formula|reviewed';
     const row = (o: Record<string, string>) => H.split('|').map((h) => o[h] ?? '').join('|');

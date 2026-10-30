@@ -17,7 +17,7 @@ smokeSetup();
 test('r81a D2: the group is said with Kew\'s words that agree, and no group gives a temperature', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   await expect(page.locator('#group-chip')).toHaveText('listed by its genus as a cactus or succulent');
-  await expect(page.locator('p.archline')).toHaveText('Grouped as a cactus or succulent, listed under the genus Copiapoa in the archetype table, and Kew describes it as “succulent subshrub”.');
+  await expect(page.locator('p.archline')).toHaveText('Grouped as a cactus or succulent, listed under the genus Copiapoa in the reference\'s list of growers\' groups, and Kew describes it as “succulent subshrub”.');
   const text = await page.locator('main').innerText();
   expect(text).not.toMatch(/convention for|grown indoors is|group min/);
   await page.goto('/about/how'); await ready(page);

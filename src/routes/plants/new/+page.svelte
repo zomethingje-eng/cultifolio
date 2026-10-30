@@ -18,6 +18,7 @@
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Accession, Provenance } from '$lib/db/types';
   import { plantLabel } from '$lib/ui/plant-label';
+  import { addedWords } from '$lib/ui/added-words';
   import { plantHref } from '$lib/db/links';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
@@ -135,7 +136,7 @@
 
   let nameUnresolved = $state(false);
   let nameArmed = $state(false);
-  let picker = $state<{ check: () => Promise<boolean> } | null>(null);
+  let picker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean> } | null>(null);
   let dateMsg = $state('');
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
@@ -200,6 +201,9 @@
       // A name with "cf.", "aff." or "sp." is filed as written, with no key: it names no species of the reference, and the
       // species part it compares with is what its page and its care line read (round sixty-one; the grower review, 5).
       if (!taxonKey && kind !== 'hybrid' && !nameArmed && !parseName(name).qualifier && !(await picker?.check())) { nameArmed = true; return; }
+      // A name the field resolved that is an older name of a reference page is asked about once, with the page named
+      // (round eighty-four; review-w W6).
+      if (!nameArmed && !parseName(name).qualifier && (await picker?.olderFirst())) { nameArmed = true; return; }
     } finally {
       checking = false;
     }
@@ -236,7 +240,10 @@
         notes: notes.trim() || null
       });
       // The last watering, one line per plant, as Water writes it; a second commit, after the plants exist.
-      if (lastWatered) { try { await collection.addEventsIds(recs.map((r) => ({ acc: r.id, d: lastWatered, t: 'water' as const, note: 'as given when the plant was added' }))); } catch { /* the plants stand; lastWriteError says why the line did not */ } }
+      // The plants stand if it fails; the toast says the line did not, and why (round eighty-four; outside review A16: it was
+      // caught silently and the toast said only "added").
+      let waterFailed: string | null = null;
+      if (lastWatered) { try { await collection.addEventsIds(recs.map((r) => ({ acc: r.id, d: lastWatered, t: 'water' as const, note: 'as given when the plant was added' }))); } catch (e) { waterFailed = collection.lastWriteError ?? (e instanceof Error ? e.message : ''); } }
       const firstId = accNo(recs[0]);
       // Several new pots want labels next: the toast opens the labels page with these plants picked, by identity as the plant page's Label does (round fifty-eight; the grower review).
       const labelsFor = { label: 'Labels', run: () => { void goto('/labels?acc=' + recs.map((r) => r.id).join(',')); } };
@@ -245,14 +252,14 @@
         addAnother = false;
         // Mid-batch the toast offers Undo, not Open: a tap on "Open" left the form and its typed plant behind (round sixty; the grower review, 3).
         const undo = { label: 'Undo', run: () => { void Promise.all(recs.map((r) => collection.remove('accession', r.id))).then(() => toast.show(wanted > 1 ? `Undone: the ${wanted} plants removed; their numbers stay reserved.` : `Undone: ${firstId} removed; its number stays reserved.`)); } };
-        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, undo);
+        toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, undo);
         name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
         setTimeout(() => document.querySelector<HTMLElement>('.picker input')?.focus(), 0);
         return;
       }
       saved = true;
-      if (wanted > 1) toast.show(`${wanted} plants added`, 8000, labelsFor);
-      else toast.show(`${firstId} added`);
+      if (wanted > 1) toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, labelsFor);
+      else toast.show(addedWords({ count: 1, firstId, waterFailed }), waterFailed ? 12000 : undefined);
       goto(wanted > 1 ? '/plants' : plantHref(recs[0])); // by identity while another plant shares the number (round sixty)
     } catch {
       /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
@@ -281,7 +288,7 @@
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
   <label class="field"><span id="f-species-lab">Species</span><SpeciesPicker reserve labelledby="f-species-lab" {linked} addLabel={`Add${countN > 1 ? ` ${countN}` : ''} as typed`} bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
-  <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Monstera deliciosa</i> 'Thai Constellation'); a hybrid as the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
+  <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Monstera deliciosa</i> 'Thai Constellation'), or after its genus when the species is not known (<i>Echeveria</i> 'Blue Curls'). A hybrid as the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and × when the parents are not known (<i>Echeveria</i> × 'Blue Curls').</p><!-- a cultivar under a genus is a cultivar, never a hybrid (round eighty-four; review-w W5) --></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
   {/if}

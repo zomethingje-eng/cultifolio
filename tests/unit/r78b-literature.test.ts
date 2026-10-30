@@ -61,7 +61,7 @@ describe('a page built now: not checked, with why, in one sentence', () => {
   });
   it('the about page says the same, and no longer that literature is carried', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toContain("papers are not yet asked for this reference, and a later fill takes them from OpenAlex's free snapshot"); // base: "Recent literature comes from OpenAlex."
+    expect(how).toContain('so a page built since has no Papers section, and its record of sources says OpenAlex was not asked, and why.'); // base: "Recent literature comes from OpenAlex."
     expect(how).not.toContain('What is carried is exact: literature,');
   });
 });

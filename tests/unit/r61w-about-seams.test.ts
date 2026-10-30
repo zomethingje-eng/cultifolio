@@ -67,10 +67,10 @@ describe('about pages against the code', () => {
   });
 
   it('the glossary and the sync page use one word for a sync unit', () => {
-    const g = said('how', 'Sync bundle:');
-    const word = claim(g, /^(Sync bundle):/).toLowerCase();
+    const g = said('how', 'A sealed bundle of changes one device sends');
+    const word = (/<dt>(Sync bundle)<\/dt><dd>A sealed bundle of changes one device sends/.exec(readFileSync('src/routes/about/how/+page.svelte', 'utf8'))?.[1] ?? 'no term').toLowerCase();
     expect(readFileSync('src/lib/ui/sync-words.ts', 'utf8'), g.where).toMatch(new RegExp(word));
-    expect(claim(g, /as the sync page names it \(the formats page, describing the wire, calls it a (log batch)\)/)).toBe('log batch');
+    expect(claim(g, /as the sync page names it; the formats page calls it a (log batch)/)).toBe('log batch');
     expect(said('formats', 'A log batch here is what the sync page calls a sync bundle').text).toMatch(/one device's sealed bundle of changes/);
   });
 
@@ -78,9 +78,10 @@ describe('about pages against the code', () => {
     const s = said('formats', 'A reading is trusted only while it is under a week old');
     const slack = spanWords(claim(s, /not dated more than (\w+ minutes) after the device's own clock/));
     expect(readFileSync('src/lib/core/hlc.ts', 'utf8'), s.where).toMatch(new RegExp(`age > -${slack / 60_000} \\* 60_000`));
-    const k = said('formats', 'The snapshot is only ever a cache of the log');
+    const k = said('formats', 'Nor when it was built by another device');
     expect(part(k, 'by another device')).toMatch(/under another stored clock correction, or with that correction confirmed by a reading where it is now not, or the reverse/);
-    expect(spanWords(claim(k, /a page load holds a correction of more than (a day|\w+ days) out of force until a reading/)), k.where).toBe(WAIT_PAST_MS);
+    const k2 = said('formats', 'A page load holds a correction of more than a day out of force');
+    expect(spanWords(claim(k2, /A page load holds a correction of more than (a day|\w+ days) out of force until a reading/)), k2.where).toBe(WAIT_PAST_MS);
     const col = readFileSync('src/lib/db/collection.svelte.ts', 'utf8');
     expect(col).toMatch(/f\.checked/);
     expect(col).toMatch(/const clock = clockStored\(\);/);
@@ -89,7 +90,9 @@ describe('about pages against the code', () => {
   it("formats' rank markers are the search's, both ways", () => {
     const s = said('formats', 'A query is read as a botanical name where');
     const ranks = claim(s, /where ((?:[a-z]+\.?, )+[a-z]+\.? and [a-z]+) are skipped/).split(/, | and /).map((w) => w.replace(/\.$/, ''));
-    const quals = claim(s, /what follows cv\. is a cultivar and is not searched, ("[a-z]+\.", "[a-z]+\.", "[a-z]+\." and "[a-z]+\.") are skipped/).match(/[a-z]+(?=\.")/g)!;
+    const q = said('formats', '"cf.", "cfr.", "aff." and "nr." are skipped');
+    const quals = claim(q, /^("[a-z]+\.", "[a-z]+\.", "[a-z]+\." and "[a-z]+\.") are skipped/).match(/[a-z]+(?=\.")/g)!;
+    expect(s.text).toMatch(/what follows cv\. is a cultivar and is not searched/);
     expect([...ranks, 'cv', ...quals, 'x'].sort(), s.where).toEqual([...RANK_MARKERS].sort());
   });
 

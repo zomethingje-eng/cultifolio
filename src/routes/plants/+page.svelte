@@ -33,7 +33,9 @@
   import { CLOSED_WORDS, PAGE_IN_DEMO } from '$lib/db/demo';
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
-  import { backupReminder } from '$lib/ui/backup-reminder.svelte';
+  import { backupReminder, hideNudge } from '$lib/ui/backup-reminder.svelte';
+  import { frame } from '$lib/ui/frame.svelte';
+  import { onDestroy } from 'svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
   import { today as day } from '$lib/ui/day.svelte';
   onMount(() => { site.load(); collection.load(); }); // the site, for the empty list's third step (round fifty-eight; the grower review)
@@ -127,13 +129,22 @@
   // list, it moved the list 26 px down (CLS 0.011 to 0.020). The list waits for that answer, a few milliseconds in Chromium,
   // and at most a quarter of a second where the browser asks the grower first (round sixty-two; the self-review's N10, the
   // accessibility review of round sixty-one, 9).
+  // And for the other answers its notices read (round eighty-four; P2, A12, B4): whether the backup line is due (the last
+  // backup read) and whether sync is set up (sync's key read, `example.settled`). Drawn with the list, not after it, so
+  // nothing arrives over a list already on screen; at most 400 ms, then the list is drawn whatever is still unread.
   let persistWaited = $state(false);
+  const settled = $derived(collection.persisted !== null && backupReminder.known && example.settled);
   $effect(() => {
-    if (!collection.ready || collection.persisted !== null) return;
-    const t = setTimeout(() => (persistWaited = true), 250);
+    if (!collection.ready || settled) return;
+    const t = setTimeout(() => (persistWaited = true), 400);
     return () => clearTimeout(t);
   });
-  const opened = $derived(collection.ready && (collection.persisted !== null || persistWaited));
+  const opened = $derived(collection.ready && (settled || persistWaited));
+  // The footer waits for the list too (round eighty-four; P2, A12, B4: drawn in view under "Opening your collection…",
+  // it was pushed off by 200 rows, a shift of 0.29 to 0.39 on a cold load of 400 plants).
+  const releaseFooter = frame.hold();
+  onDestroy(releaseFooter);
+  $effect(() => { if (opened) releaseFooter(); });
   /** The storage notice, which asks for a backup itself: the layer's backup line gives way to it (round eighty-two; the independent review's 15). */
   const storageNotice = $derived(opened && storageLow && !storageNoticeHidden && !PAGE_IN_DEMO);
   $effect(() => { backupReminder.page = storageNotice; return () => { backupReminder.page = false; }; });
@@ -231,13 +242,15 @@
 <!-- "N growing" alone: "31 growing · 41 plant numbers" left the grower wondering why the two differ (round sixty; the grower review, 16). -->
 <!-- And no count while the collection is still opening: "0 growing" stood over "Opening your collection…" for as long as the
      open took (round sixty-six; the all-engines run, smoke 2527, a minute in Safari's engine on the PC; rule 2). -->
-<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={!collection.ready || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
+<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={!opened || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
   <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
   <a class="btn pri wideonly" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>
   <PlantsMenu />
 </PageHead>
 
-{#if collection.ready && collection.accessions.length}
+<!-- With the list, not before it: drawn as the collection opened, the search and the chips pushed "Opening your
+     collection…" down under the reader for the moment the page waits for its notices (round eighty-four; P2). -->
+{#if opened && collection.accessions.length}
 <div class="toolrow plantstools">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search plants…" aria-label="Search your plants" bind:value={q} />
   {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By space</option></select>{/if}
@@ -265,7 +278,10 @@
 {:else if opened && PAGE_IN_DEMO}
   <!-- The example is backed up nowhere and has no backup to offer: it is deleted on Leave (round sixty-seven; triage-66 V7; R45-3). -->
   <p class="small muted keepline" id="storage-notice">The example collection is kept nowhere: it is deleted when you leave it.</p>
-{:else if opened && collection.persisted === false && !sync.configured && collection.accessions.length && !backupReminder.nudge}<!-- one backup reminder at a time, and none over an empty list (round eighty-two; the independent review's 15) -->
+{:else if opened && backupReminder.nudge}
+  <!-- The layer's line, drawn here with the list, under the search, never above the title (round eighty-four; P2, A12). -->
+  <p class="backupnudge" id="backup-nudge">{collection.accessions.length} plants and no backup yet: a backup is one file you keep somewhere else. <a href="/backup">Back up now</a> <button class="linkish nudgehide" type="button" onclick={hideNudge}>Not now</button></p>
+{:else if opened && collection.persisted === false && !sync.configured && collection.accessions.length}<!-- one backup reminder at a time, and none over an empty list (round eighty-two; the independent review's 15) -->
   <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
 <!-- What "set aside" meant, and "version of the app", not "build" (round fifty-eight; the accessibility review). -->
@@ -337,9 +353,15 @@
 
 <style>
   .keepline { margin: -6px 0 10px; }
+  .backupnudge { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid var(--warn, #b8692a); background: var(--card); border-radius: var(--r); font-size: var(--fs-md); }
+  .backupnudge .nudgehide { padding: 0 0 0 6px; color: var(--ink3); }
+  /* The link in the sentence keeps the sentence's line but takes a thumb's height (round sixty-one; the accessibility review, 18). */
+  .backupnudge a { display: inline-block; padding: 12px 2px; margin: -12px 0; }
+  @media print { .backupnudge { display: none !important; } } /* a printed page carries the page, not advice about backups (round sixty-one; the triage, decision 4) */
   .more { display: flex; justify-content: center; padding: 10px 0; }
   .placesel { max-width: 100%; text-overflow: ellipsis; }
-  .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; min-height: var(--tap); }
+  /* In running text, each of them: the finger's height is the theme's invisible margin, not a taller line (round eighty-four; P8). */
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
   .sortsel { border: 1px solid var(--field-edge); background: var(--card); border-radius: var(--r); padding: 8px 10px; min-height: var(--tap); font: inherit; font-size: var(--fs-md); color: var(--ink); } /* an edge at 3:1: --rule was 1.17:1 (round fifty-nine) */
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }

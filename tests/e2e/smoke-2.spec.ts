@@ -38,13 +38,14 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(tok.locator('.why')).toContainText('GBIF media refused when this page was built. Not asked, or not answered, is not "none"');
   await expect(page.locator('.idcard .pill', { hasText: 'Climate known' })).toHaveCount(0); // what is known is shown, not announced
   // climate refused: its own line, with the detail as a sentence
-  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. The occurrence source refused the request when this page was built. This is not a statement that no climate exists.');
+  // "not checked" once, by the mark under the name; here what that means (round eighty-four; A10)
+  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Climate not read. The occurrence source refused the request when this page was built. This is not a statement that no climate exists.');
   // the cultivation section does not say "no habitat climate"
-  await expect(page.locator('.note-slot')).toContainText('Not checked. The occurrence source refused the request when this page was built. No sheet is derived from an answer that was not given');
+  await expect(page.locator('.note-slot')).toContainText('No sheet: the habitat climate was not read (see Climate).');
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
   // the map caption does not promise a marker there is none of
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
-  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked: the occurrence source refused the request'); // a refusal, not an absence, on the map too
+  await expect(page.locator('.mapcap').nth(1)).toContainText('No records drawn: the occurrence source refused the request'); // a refusal, not an absence, on the map too (its "not checked" said once, by the record; round eighty-four)
   // front page
   await page.goto('/?by=genus&open=refusia');
   const tile = page.locator('.tile', { hasText: 'Refusia' });
@@ -94,7 +95,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.locator('#s-climate ~ details.why').first().locator('summary').click(); // the provenance is one tap from the chart
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
   await expect(page.getByText(/Extremes and elevation were read at a typical spot in the range, cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
-  await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest and decides nothing: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker');
+  await expect(page.locator('.mapcap').first()).toContainText('The marker is where the records are densest; the climate comes from all the well-placed records, not from this spot'); // round eighty-four: in a grower's words (A7)
   const marker = page.locator('#s-habitat ~ details.why', { hasText: 'How this section is made' }).first();
   await expect(marker).toBeVisible();
   await expect(marker).toContainText('The map marker: the centre of the tenth-degree cell'); // said once (round sixty)

@@ -28,6 +28,7 @@ import { unitName } from '$core/regions';
 import { resetRateLimits } from '$lib/server/sync';
 import { gbifPage } from '$core/page-id';
 import { regionSvg, dots, short } from '$lib/map/still';
+import { describedBy } from '$lib/ui/ref/words';
 import { drawOnce, placeDrawn, markOf, type Drawn } from '$lib/server/drawn';
 import { offlineBuild, STYLE_ROUTE } from '../../scripts/offline-files.mjs';
 import { load as speciesLoad } from '../../src/routes/species/[slug]/+page.server';
@@ -119,7 +120,7 @@ describe('r83w 2: the species page\'s data, for its HTML and for a move inside t
     const drawn = locals.drawn?.get(data.regionMark);
     const pts = template.occurrences.open.map((p: number[]) => [p[0], p[1]]);
     // The very map the browser draws from a move's data: the same function of the same page.
-    expect(drawn).toBe(regionSvg(data.d.distribution.boxes, pts, data.d.centroid, 'Openly licensed records of Copiapoa cinerea', data.d.distribution.native.filter((r: { box?: unknown }) => r.box).map((r: { name: string; box: never }) => ({ name: unitName(r.name), box: r.box }))));
+    expect(drawn).toBe(describedBy(regionSvg(data.d.distribution.boxes, pts, data.d.centroid, 'Openly licensed records of Copiapoa cinerea', data.d.distribution.native.filter((r: { box?: unknown }) => r.box).map((r: { name: string; box: never }) => ({ name: unitName(r.name), box: r.box }))), 'records-caption')); // round eighty-four (B8): tied to its caption
     expect((drawn!.match(/<path d="M/g) ?? []).length).toBe(52);
     expect(data.d.name.vernacular).toEqual([VERNACULAR[1]]); // base: all three
   });
@@ -137,7 +138,7 @@ describe('r83w 2: the species page\'s data, for its HTML and for a move inside t
   });
   it('the page draws from the points when it has them, else holds the mark the server\'s map stands in', () => {
     const page = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
-    expect(page).toContain("const regionMap = $derived(data.points ? regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))) : (data.regionMark ?? ''));");
+    expect(page).toContain("const regionMap = $derived(data.points ? describedBy(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))), 'records-caption') : (data.regionMark ?? ''));");
     expect(page).toContain('<div class="mapbox">{@html regionMap}');
   });
 });
@@ -164,7 +165,7 @@ describe('r83w 3: the stylesheets stay in the HTML; the species page\'s are kept
     expect(list).not.toContain('_app/immutable/chunks/photo.E.js');
     expect(STYLE_ROUTE.test('src/routes/species/[slug]/+page.svelte')).toBe(true);
     // And /about/how says so.
-    expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain("(the scripts, styles and typefaces of the collection's pages, the front page and the offline page, the species page's styles, the tab's icon and the web manifest)");
+    expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain("the scripts, styles and typefaces of the collection's pages, the front page and the offline page, the species page's styles, the tab's icon and the web manifest.");
   });
   it('the live check says the page\'s weight, and only notes a Worker of an earlier round (the plan runs it after each upload)', () => {
     const live = readFileSync('scripts/live-check.mjs', 'utf8');

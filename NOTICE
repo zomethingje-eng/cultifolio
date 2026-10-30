@@ -8,18 +8,49 @@ The data tooling (everything under scripts/) is licensed under the MIT
 License; see scripts/LICENSE. It is separately licensed so that the corpus
 build can be reused without AGPL obligations.
 
-The species reference the app serves is derived from public data whose
-licences are carried through to every page and every record:
+The species reference the app serves is derived from public data. Every page
+names the source of each figure and photograph, with its licence:
 
-  GBIF Backbone Taxonomy and occurrence data     CC BY 4.0 / CC0 per record
+  GBIF Backbone Taxonomy                          CC BY 4.0
+  GBIF occurrence records                         CC0 or CC BY per record, as published;
+                                                  CC BY-NC records are read for derived
+                                                  figures (the map marker, the habitat
+                                                  climate) and never published
   World Checklist of Vascular Plants, RBG Kew     CC BY 4.0
   CHELSA V2.1 climatologies                       CC0 1.0
-  NASA POWER                                      public domain (US Government)
+  ETOPO 2022, NOAA NCEI (elevation, land)         public domain (US Government)
+  NASA POWER (daily temperatures)                 public domain (US Government)
+  Natural Earth coastlines, and its states and    public domain
+    provinces, from which the regions' shapes
+    are made
+  Wikidata (identifiers, article titles, English  CC0 1.0
+    names for pages without a GBIF key, the
+    list of botanic gardens, arboreta,
+    herbaria and zoos)
   iNaturalist and GBIF photographs                CC0, public domain, CC BY, CC BY-SA per photo
   Wikimedia Commons photographs                   CC0, public domain, CC BY, CC BY-SA per file
   Wikipedia summaries                             CC BY-SA 4.0
-  OpenAlex                                        CC0 1.0
-  Natural Earth coastlines                        public domain
+  OpenAlex (papers listed on pages built          CC0 1.0
+    before October 2026)
 
-No other data is used. Nothing on a species page is written by a person or
-a language model; see /about/how in the running app.
+Read, and published only as codes, names or links: the level-3 region codes
+and names of TDWG's World Geographical Scheme for Recording Plant
+Distributions, 2nd edition, and its tables that place states and provinces in
+regions (github.com/tdwg/wgsrpd; TDWG's own boundary polygons are not used);
+IPNI and POWO identifiers (RBG Kew); iNaturalist taxon identifiers; and the
+titles and descriptions of GBIF's datasets, read to tell living collections
+from genebanks when the species list was made.
+
+The frost watch, which is no part of the reference, shows forecasts asked for
+your site: from MET Norway (api.met.no; CC BY 4.0) and, in the
+US and its territories, from the National Weather Service (public domain).
+
+The licences' texts:
+  CC BY 4.0      https://creativecommons.org/licenses/by/4.0/
+  CC BY-SA 4.0   https://creativecommons.org/licenses/by-sa/4.0/
+  CC0 1.0        https://creativecommons.org/publicdomain/zero/1.0/
+
+No other data is used. Nothing about a species is written for its page by a
+person or a language model, apart from credited quotations; the templates its
+sentences are filled into were written once, the same for every species. See
+/about/how in the running app ("Who writes the words").

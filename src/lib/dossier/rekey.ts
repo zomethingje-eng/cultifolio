@@ -6,13 +6,16 @@
  *
  * `--rekey` (this round's corpus step) reads a version 2 corpus (`s/v2/<GBIF key>.json`, `key` GBIF's) and writes it as
  * version 3 (`s/v3/<id>.json`) by the same rule, its references to other pages (GBIF keys before) read as those pages'
- * GBIF keys. Nothing else in a dossier changes: what the page shows is the same, and so is the day its substance last
- * changed (`changed.on`); its fingerprint is taken again, since the id is part of it.
+ * GBIF keys. Nothing else in a dossier changes but its heading (round eighty-four, the owner's decision 1: Kew's accepted
+ * name heads a page whose id is its Kew entry, GBIF's any other; `kew-heading.ts`): otherwise what the page shows is the
+ * same, and so is the day its substance last changed (`changed.on`); its fingerprint is taken again, since the id is part
+ * of it.
  */
 import { byId, gbifPage, isPageId, type PageId } from '../core/page-id';
 import { pageIds, idWords, sharedKewEntries, type IdAnswer } from './page-ids';
 import { substanceHash } from './changed';
 import { DOSSIER_V } from './schema';
+import { headWithKew, type Headed } from './kew-heading';
 
 /** The dossiers of one directory, as the rekey reads and writes them. `files` are names like `k123.json`, `g456.json` (or `456.json` in a version 2 corpus). */
 export interface RekeyStore {
@@ -27,11 +30,12 @@ export const DOSSIER_FILE = /^[kg][1-9][0-9]{0,9}\.json$/;
 /** A dossier file of a version 2 corpus: GBIF's key and `.json`. */
 export const V2_FILE = /^[1-9][0-9]{0,9}\.json$/;
 
-type Slim = { file: string; gbif?: number; entry?: string; heldBy?: string; name: string; refs: boolean; key: unknown };
+type Slim = { file: string; gbif?: number; entry?: string; heldBy?: string; name: string; refs: boolean; key: unknown; heads: { kew: boolean; other: boolean } };
 type Doc = {
   v?: number;
   key?: unknown;
   ids?: { gbif?: number };
+  slug?: string;
   name?: { scientific?: string; kew?: { entry?: string; heldBy?: string } };
   distribution?: { via?: { page?: string } };
   photos?: Array<{ shared?: unknown[] }>;
@@ -75,7 +79,10 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
     if (!d || typeof d !== 'object') { unreadable.push(file); continue; }
     const gbif = typeof d.ids?.gbif === 'number' ? d.ids.gbif : migrating && typeof d.key === 'number' ? d.key : undefined;
     const refs = !!d.distribution?.via?.page || !!d.photos?.some((p) => Array.isArray(p.shared) && p.shared.length);
-    slim.push({ file, gbif, entry: d.name?.kew ? (d.name.kew.entry ?? '') : undefined, ...(d.name?.kew?.heldBy ? { heldBy: d.name.kew.heldBy } : {}), name: d.name?.scientific ?? '', refs, key: d.key });
+    // Whether the heading changes under a `k` id of its entry and under any other (round eighty-four, decision 1;
+    // `kew-heading.ts`): read now, so a page whose id does not change is read again only when its heading does.
+    const heads = { kew: headsAs(d, `k${d.name?.kew?.entry ?? ''}`), other: headsAs(d, '') };
+    slim.push({ file, gbif, entry: d.name?.kew ? (d.name.kew.entry ?? '') : undefined, ...(d.name?.kew?.heldBy ? { heldBy: d.name.kew.heldBy } : {}), name: d.name?.scientific ?? '', refs, key: d.key, heads });
   }
   // Two files of one GBIF key (a run stopped between writing a page and removing its old file) are one page twice: said,
   // and nothing is changed until one goes, since both would take one id.
@@ -116,10 +123,14 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
     if (a.why === 'kew') report.kew++;
     else report.gbif.push({ id: a.id, name: p.name, why: idWords(a, p.entry) });
     const file = `${a.id}.json`;
-    if (!migrating && file === p.file && p.key === a.id && !p.refs) return;
+    const reheads = a.id === `k${p.entry ?? ''}` ? p.heads.kew : p.heads.other;
+    if (!migrating && file === p.file && p.key === a.id && !p.refs && !reheads) return;
     const d = src.read(p.file) as Doc;
     const was = JSON.stringify(d);
-    // The stamp stays current where it was: a new id is not a change of what the page shows.
+    // Kew's accepted name heads a page whose id is its Kew entry, GBIF's any other (round eighty-four, decision 1).
+    if (d.name && typeof d.name.scientific === 'string') headWithKew(d as unknown as Headed, a.id);
+    // The stamp stays current where it was: a new id is not a change of what the page shows. A new heading is, and is read
+    // after it: its stamp no longer matches, and `--index` writes the day it changed.
     const current = !!d.changed && d.changed.h === substanceHash(d, o.hash);
     if (migrating) d.v = DOSSIER_V;
     d.key = a.id;
@@ -141,6 +152,12 @@ export function rekey(o: { to: RekeyStore; from?: RekeyStore; merges?: ReadonlyA
   }
   for (const x of out) if (x.file !== x.old && !taken.has(x.old)) o.to.remove(x.old);
   return report;
+}
+
+/** Whether `headWithKew` would change a dossier under an id, read on a copy of its name. */
+function headsAs(d: Doc, id: string): boolean {
+  if (!d.name || typeof d.name.scientific !== 'string') return false;
+  return headWithKew({ slug: d.slug, name: JSON.parse(JSON.stringify(d.name)) } as Headed, id);
 }
 
 /** `ids-gbif.txt`: every page keyed by GBIF's key, with why, one a line (`<id>\t<name>\t<why>`). */

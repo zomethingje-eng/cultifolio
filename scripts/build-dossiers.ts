@@ -105,6 +105,19 @@
  *   npx tsx scripts/build-dossiers.ts --list-r83-repair <copy or none> <shapes before>
  *                                                                # rebuild-r83c.txt (round eighty-three): every page whose records the October 2026
  *                                                                # repair took out that the regions' shapes or the default points now keep; offline
+ *   npx tsx scripts/build-dossiers.ts --walk --offline --grid climate --bulk bulk
+ *                                                                # the walk (round eighty-four): --list-walk, then those pages derived as --keys derives
+ *                                                                # them; the same command resumes a walk that stopped
+ *   npx tsx scripts/build-dossiers.ts --list-walk                # rebuild-walk.txt (round eighty-four): every page, for one offline re-derivation of the
+ *                                                                # whole corpus (--keys rebuild-walk.txt --offline --grid climate --bulk bulk); written
+ *                                                                # again after a stop, it lists only the pages not derived since the walk began
+ *                                                                # (walk.json); --again begins a new walk
+ *   npx tsx scripts/build-dossiers.ts --check-ranges             # check-ranges.txt (round eighty-four): after the walk, before the upload, every page whose
+ *                                                                # typical cell lies outside its native regions or whose records were not tested by
+ *                                                                # this round's shapes rule, and the review's five cases said one by one; exit 2 if any
+ *   npx tsx scripts/build-dossiers.ts --index-ready              # exit 0 when the index on disk is the one the dossiers and code on disk would write
+ *                                                                # (round eighty-four): the upload asks it first
+ * Every listing stops, writing nothing, at a dossier it cannot read, and names it (round eighty-four, B11).
  *   npx tsx scripts/build-dossiers.ts --list-wikidata-retry      # rebuild-wd-retry.txt (round eighty): every page Wikidata did not answer at its build, and
  *                                                                # every page with a Kew id whose item a label refused, for --keys; offline
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
@@ -117,7 +130,9 @@
  * This script is the only builder: no Worker route builds a dossier (round sixty-nine; triage-68 M10), and it exists
  * so you see every dossier before anyone else does.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync, createReadStream } from 'node:fs';
+import { createGunzip } from 'node:zlib';
+import { createInterface } from 'node:readline';
 import { loadKewNames, kewFileDay } from './kew-names-load';
 import { signEntries } from '../src/lib/core/hybrids';
 import { fillWikidataNames } from '../src/lib/dossier/wikidata-names';
@@ -127,19 +142,26 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_SPECIES, MIN_UNDATED } from '../src/lib/dossier/default-points';
 import { repairList, changedRegions, type RepairPage } from '../src/lib/dossier/repair-r83';
-import { regionTester, outsideShapes, SHAPES_FILE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
+import { regionTester, outsideShapes, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
+import { listingStore, readEach, unreadSentence, type ListingStore } from '../src/lib/dossier/listing-store';
+import { walkList, checkPage, caseLine, NAMED_CASES, CELL_SLACK_DEG, type CheckPage } from '../src/lib/dossier/range-check';
+import { carriesCore } from '../src/lib/dossier/carry-core';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify } from '../src/lib/core/names';
+import { parseMostGrown, openingGenera } from '../src/lib/ui/ref/most-grown-rule';
+import { InfraNames, backboneRow, type BackboneRow } from '../src/lib/dossier/infra-names';
+import { gbifView } from '../src/lib/dossier/kew-heading';
+import type { GrownRule } from '../src/lib/dossier/catalogue';
 import { makeFetcher, fixtureFetcher, isThrottle } from '../src/lib/dossier/fetch';
 import { dayCached, type DayStore } from '../src/lib/dossier/day-cache';
 import { dayBudget, INAT_DAY_BUDGET } from '../src/lib/dossier/day-budget';
@@ -279,6 +301,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 const unfinished = () => { if (!process.exitCode) process.exitCode = 3; };
 
 const args = process.argv.slice(2);
+/** The walk's list and its start (round eighty-four; `--list-walk`, `--walk`). */
+const WALK_LIST = 'rebuild-walk.txt';
+const WALK_FILE = 'walk.json';
 const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
@@ -290,7 +315,7 @@ const fill = (() => { const i = args.indexOf('--fill'); return i >= 0 ? args[i +
  * or "9476326 Aeonium tabulaeforme"); every listed one is rebuilt whatever is on disk, and the rest are kept (round
  * sixty-seven; triage-66 N4: the 164 species an offline re-derivation left without photographs or with a refusal).
  */
-const keysFile = (() => { const i = args.indexOf('--keys'); return i >= 0 ? args[i + 1] : undefined; })();
+const keysFile = (() => { const i = args.indexOf('--keys'); return i >= 0 ? args[i + 1] : args.includes('--walk') ? WALK_LIST : undefined; })();
 const force = args.includes('--force') || rederive || !!keysFile;
 const skip: SkippableSource[] = rederive ? [...NETWORK_EXTRAS] : (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is SkippableSource => (NETWORK_EXTRAS as string[]).includes(x)) : []; })();
 const gridDir = (() => { const i = args.indexOf('--grid'); return i >= 0 ? args[i + 1] : undefined; })();
@@ -385,6 +410,8 @@ type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { 
 const vernOf = new Map<PageId, VernacularName[]>();
 /** Each species' own older names, GBIF's and Kew's, kept with its vernacular names: one written as a common name is not one (round eighty, A). */
 const olderOf = new Map<PageId, string[]>();
+/** Each species' names GBIF files under its varieties (`name.infra`; round eighty-four, A8): what `nameEntries` keeps off another page's accepted name. */
+const infraOf = new Map<PageId, ReadonlySet<string>>();
 /** Each species' own author and GBIF's older names as its record writes them, with their authors: what `homonymEntries` reads (round eighty-two; review 1's 3). */
 const recordOf = new Map<PageId, { authorship?: string | null; synonyms: string[] }>();
 /**
@@ -400,18 +427,61 @@ function homonymIndex<E extends IndexEntry>(index: E[]): E[] {
 /** The common names of every entry of the finished index, by the rule with the index's own genera. */
 function nameEntries(index: IndexEntry[]): void {
   const genera = generaOf(index.map((e) => e.name));
+  // The one-word names a species does not head with, another of its genus being given them more often (round eighty-four,
+  // review-d D9; `sharedHeadlines`), written into each dossier whose answer changed, so its page reads the same.
+  const shared = sharedHeadlines(index.map((e) => ({ key: e.key, genus: genusOf(e.name), names: oneWordNames(vernOf.get(e.key) ?? []) })));
+  markSharedNames(index, shared);
+  // A name GBIF files under a species' variety that is another page's accepted name is that page's (round eighty-four, A8):
+  // not searched as this one's.
+  const accepted = new Set(index.map((e) => e.name.replace(/×\s*/g, '').toLowerCase()));
+  for (const e of index) {
+    const infra = infraOf.get(e.key);
+    if (!infra || !e.kew) continue;
+    const kept = e.kew.filter((n) => !infra.has(n) || !accepted.has(n.replace(/×\s*/g, '').toLowerCase()));
+    if (kept.length !== e.kew.length) { if (kept.length) e.kew = kept; else delete e.kew; }
+  }
   index.forEach((e, i) => {
-    const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera, older: olderOf.get(e.key) ?? [] });
+    const lost = shared.get(e.key);
+    const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera, older: olderOf.get(e.key) ?? [], shared: lost });
+    // A name not shown for D9 is searched as a spelling: the spellings read again against the names shown, only where one was lost.
+    const spellings = lost ? pooledSpellings(vernOf.get(e.key) ?? [], [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x)) : e.spellings;
     // In the entry's own place, after `family`, so a rebuilt index differs from the last only where a name does.
     const o: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(e)) {
-      if (k === 'common' || k === 'commons') continue;
+      if (k === 'common' || k === 'commons' || (lost && k === 'spellings')) continue;
       o[k] = v;
-      if (k === 'family') Object.assign(o, names);
+      if (k === 'family') Object.assign(o, names, spellings?.length ? { spellings } : {});
     }
     index[i] = o as unknown as IndexEntry;
   });
 }
+/**
+ * `name.shared` written into each dossier whose one-word names lost changed (round eighty-four, D9), with its stamp, so the
+ * species page shows the names the index does; said once. A corpus of fixtures is not written.
+ */
+function markSharedNames(index: IndexEntry[], shared: ReadonlyMap<string, string[]>): void {
+  if (fixtures) return;
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  let changed = 0, pages = 0;
+  for (const e of index) {
+    const want = shared.get(e.key) ?? [];
+    if (want.length) pages++;
+    const f = `${dir}/${e.key}.json`;
+    if (!existsSync(f)) continue;
+    const text = readFileSync(f, 'utf8');
+    // Read only a file whose mark may differ: one that has a mark, or should.
+    if (!want.length && !text.includes('"shared":[')) continue;
+    const d = JSON.parse(text) as Dossierish & { name: { shared?: string[] } };
+    if (JSON.stringify(d.name.shared ?? []) === JSON.stringify(want)) continue;
+    if (want.length) d.name.shared = want; else delete d.name.shared;
+    const st = restamp(d, today(), sha1);
+    if (st) d.changed = st;
+    writeAtomic(f, JSON.stringify(d));
+    changed++;
+  }
+  if (pages) console.log(`  ${pages} page${pages === 1 ? '' : 's'} not headed by a one-word name another species of the genus is given more often, or as often (name.shared)${changed ? `; ${changed} dossier${changed === 1 ? '' : 's'} written` : ''}`);
+}
+
 /**
  * The photographs a page shows, by the Worker's rule: a Commons file that is not a photograph of the species, or whose
  * licence or author is not read, neither leads a tile nor is counted (round sixty-nine; triage-68 K1-K3, K5). Read with
@@ -443,7 +513,10 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
   const genus = d.name.scientific.split(' ')[0];
   const { syn, older } = olderNamesOf(d.name.scientific, names);
   // Kew's older names the two do not hold, for the search alone (`kewOlderOf`; round eighty, review-d 5).
-  const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) ? d.name.kew.synonyms : undefined);
+  // And the names GBIF files under the species' own varieties and subspecies (`name.infra`; round eighty-four, A8: San Pedro), read the same way.
+  const infra = Array.isArray((d.name as { infra?: unknown }).infra) ? ((d.name as { infra?: string[] }).infra ?? []) : [];
+  const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) || infra.length ? [...(d.name.kew?.synonyms ?? []), ...infra] : undefined);
+  if (infra.length) infraOf.set(d.key, new Set(infra));
   // The names of the pages merged here, marked (`mergedNamesOf`; round eighty-three): the search puts this page first for
   // one typed, and its row says why. A page whose merge is not yet built into it (no key with an old address) has none.
   const merged = mergedNamesOf(d.name.scientific, d.occurrences.keys);
@@ -625,8 +698,9 @@ const INSTITUTIONS = (() => { const i = args.indexOf('--institutions'); return i
 const places: PlaceIndex | undefined = existsSync(INSTITUTIONS) ? new PlaceIndex(parsePlaces(readFileSync(INSTITUTIONS, 'utf8'))) : undefined;
 /**
  * The regions' shapes for the range test (round eighty, A; `tdwg-shapes.ts`): scripts/tdwg3-shapes.json, made by
- * scripts/dev/r80a-tdwg-shapes.py from Natural Earth (public domain). Every build reads it; without the file each region is
- * its bounding box, as before, and each page's record says which.
+ * scripts/dev/r80a-tdwg-shapes.py from Natural Earth (public domain). Every build reads it; since round eighty-four a build
+ * (but `--fixtures`) refuses to start without it (the boxes alone let Aloe vera's climate in from Fujairah), and every
+ * page's record says which test each record had, and by which rule (`occurrences.rangeRule`).
  */
 /**
  * The default points (round eighty, A; `default-points.ts`): scripts/default-points.txt, written by --list-default-points
@@ -1143,7 +1217,11 @@ async function listExtraKeysStep(): Promise<void> {
   // A page by its GBIF key here: the list's pages and keys are GBIF's (round seventy-eight).
   const slim = (d: P & { ids?: { gbif?: number } }): P => ({ key: d.ids?.gbif ?? (d.key as unknown as number), name: { scientific: d.name.scientific, ...(d.name.kew ? { kew: { entry: d.name.kew.entry } } : {}) }, occurrences: { keys: d.occurrences?.keys?.map((k) => ({ key: k.key })) } });
   // A page without a GBIF key (round seventy-nine) is not one of the list's pages: its GBIF records are not asked at all.
-  const onDisk: P[] = existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)).flatMap((f) => { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as P & { ids?: { gbif?: number } }; return d.ids?.gbif == null ? [] : [slim(d)]; } catch { return []; } }) : [];
+  // A dossier that cannot be read stops the listing (round eighty-four, B11).
+  const store = listingStore(dirStore(dir));
+  const onDisk: P[] = [];
+  for (const d of readEach<P & { ids?: { gbif?: number } }>(store)) if (d.ids?.gbif != null) onDisk.push(slim(d));
+  refuseUnread(store, 'rebuild-extra.txt');
   // The species list's pages not on disk yet, and the whole list as the reference (round eighty, X).
   const pages: P[] = [...onDisk];
   let reference: Set<number> | undefined;
@@ -1300,6 +1378,37 @@ async function fillCommonsKindStep(): Promise<void> {
   writeIndexFromDisk();
 }
 
+/**
+ * Round eighty-four (G; the owner's decision 2): the whole-corpus walk's list, every page not derived since the walk began
+ * (`walk.json` keeps when; `--again` begins a new walk), written to rebuild-walk.txt. Returns how many are left.
+ */
+function listWalk(): number {
+  let since: string | undefined;
+  try { since = args.includes('--again') ? undefined : (JSON.parse(readFileSync(WALK_FILE, 'utf8')) as { since?: string }).since; } catch { since = undefined; }
+  const began = !since;
+  since ??= new Date().toISOString();
+  const store = listingStore(diskStore());
+  const { lines, done } = walkList(readEach<CheckPage>(store), since);
+  refuseUnread(store, WALK_LIST);
+  if (began) writeFileSync(WALK_FILE, JSON.stringify({ since, rule: RANGE_RULE }) + '\n');
+  writeFileSync(WALK_LIST, lines.join('\n') + (lines.length ? '\n' : ''));
+  console.log(`  the walk ${began ? 'begins' : 'began'} ${since.replace('T', ' ').slice(0, 16)} UTC (${WALK_FILE}): ${done} page${done === 1 ? '' : 's'} derived since, ${lines.length} to derive → ${WALK_LIST}${lines.length ? (args.includes('--walk') ? '' : `; run --keys ${WALK_LIST} --offline --grid climate --bulk bulk (if it stops, run these two lines again: the list is then what is left)`) : '; the walk is done: run --index, then --check-ranges'}`);
+  return lines.length;
+}
+/** A folder's dossiers to read (a listing's: the corpus, or a backup's copy). */
+function dirStore(dir: string): Pick<DossierStore, 'files' | 'read'> {
+  return {
+    files: () => (existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)) : []),
+    read: <T,>(file: string) => JSON.parse(readFileSync(`${dir}/${file}`, 'utf8')) as T
+  };
+}
+/** A listing that met a dossier it could not read stops here, before it writes, and says which (round eighty-four, B11). */
+function refuseUnread(store: ListingStore, what: string): void {
+  const said = unreadSentence(store, what);
+  if (!said) return;
+  console.error(said);
+  process.exit(2);
+}
 /** The dossiers on disk as the fills read and write them (`corpus-run.ts`), so a test drives the same loops with dossiers in memory. */
 function diskStore(): DossierStore {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
@@ -1370,7 +1479,10 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
   if (!bulkDir) { console.error('--fill kew-names needs --bulk <dir> with wcvp_names.csv'); process.exit(2); }
   const all = diskStore();
   const store: DossierStore = keys ? { ...all, files: () => all.files().filter((f) => keys.has(f.replace(/\.json$/, '') as PageId)) } : all;
-  const pages = store.files().flatMap((file) => { try { return [store.read<Dossier>(file)]; } catch { return []; } });
+  // Only what `loadKewNames` reads of each page, not the page (the merge, round eighty-four): the walk's fill reads all
+  // 48,357, and whole dossiers held at once took 1.4 GB at 8,940 of round seventy-seven's smaller pages.
+  const slim = (d: Dossier) => ({ key: d.key, name: { scientific: d.name.scientific, synonyms: d.name.synonyms, vernacular: d.name.vernacular?.map((v) => ({ name: v.name })), kew: d.name.kew?.entry ? { entry: d.name.kew.entry } : undefined, gbif: (d.name as { gbif?: { scientific: string } | null }).gbif?.scientific ? { scientific: (d.name as { gbif: { scientific: string } }).gbif.scientific } : undefined }, ids: { powo: d.ids.powo, ipni: d.ids.ipni } });
+  const pages = store.files().flatMap((file) => { try { return [slim(store.read<Dossier>(file))]; } catch { return []; } });
   console.log(`Reading Kew's names for ${pages.length} dossiers from ${bulkDir}/wcvp_names.csv…`);
   const idx = await loadKewNames(bulkDir, pages);
   if (!idx) { console.error(`  no ${bulkDir}/wcvp_names.csv: nothing done`); process.exit(2); }
@@ -1381,6 +1493,50 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
   const heldBy = (entry: string, page: string) => (ids.has(`k${entry}`) && page !== `k${entry}` ? `k${entry}` : undefined);
   const c = fillKewNames(store, idx, kewFileDay(bulkDir), reference, { heldBy });
   console.log(`  ${c.read} dossiers read, ${c.changed} changed: ${c.cited} cite Kew's author, ${c.elsewhere} list older names Kew accepts as species of their own, ${c.vernacularDropped} common names dropped as scientific names${c.held ? `, ${c.held} not given a Kew entry another page holds` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  if (index) writeIndexFromDisk();
+}
+
+/** GBIF's backbone export: `--backbone <file>`, else `<bulk>/backbone/simple.txt.gz` when it is there. */
+const backboneFile = (): string | undefined => {
+  const i = args.indexOf('--backbone');
+  if (i >= 0) return args[i + 1];
+  const f = bulkDir ? `${bulkDir}/backbone/simple.txt.gz` : undefined;
+  return f && existsSync(f) ? f : undefined;
+};
+/**
+ * `--fill gbif-infra [--backbone <simple.txt.gz>]` (round eighty-four; outside review A8: San Pedro): each page's
+ * `name.infra`, the names of species rank GBIF files under the species' own varieties and subspecies (`InfraNames`), from
+ * GBIF's backbone export, read twice and never held. Offline; a second run changes nothing. With `keys`, only those
+ * dossiers (a `--keys` build given `--bulk` whose folder holds the export runs it after). Then the index, unless `index`
+ * is false.
+ */
+async function fillGbifInfraStep(keys?: Set<PageId>, index = true): Promise<void> {
+  const file = backboneFile();
+  if (!file || !existsSync(file)) { console.error(`--fill gbif-infra needs GBIF's backbone export: --backbone <simple.txt.gz>, or --bulk <dir> with backbone/simple.txt.gz${file ? ` (no ${file})` : ''}`); if (index) process.exit(2); return; }
+  const store = diskStore();
+  const files = store.files().filter((f) => !keys || keys.has(f.replace(/\.json$/, '') as PageId));
+  const byGbif = new Map<number, string>();
+  for (const f of files) { try { const d = store.read<Dossier>(f); if (d.ids.gbif != null) byGbif.set(d.ids.gbif, f); } catch { /* an unreadable file is said by the index */ } }
+  const infra = new InfraNames(new Set(byGbif.keys()));
+  const pass = async (each: (r: BackboneRow) => void) => {
+    const rl = createInterface({ input: createReadStream(file).pipe(createGunzip()), crlfDelay: Infinity });
+    for await (const line of rl) { const r = backboneRow(line); if (r) each(r); }
+  };
+  console.log(`Reading the names GBIF files under the varieties and subspecies of ${byGbif.size} pages' species from ${file} (two passes)…`);
+  await pass((r) => infra.first(r));
+  await pass((r) => infra.second(r));
+  let changed = 0, pages = 0, names = 0;
+  for (const [key, f] of byGbif) {
+    const d = store.read<Dossier & { name: { infra?: string[] } }>(f);
+    const own = gbifView(d.name);
+    const want = infra.of(key, { scientific: own.scientific, synonyms: own.synonyms });
+    if (want.length) { pages++; names += want.length; }
+    if (JSON.stringify(d.name.infra ?? []) === JSON.stringify(want)) continue;
+    if (want.length) d.name.infra = want; else delete d.name.infra;
+    store.write(f, d);
+    changed++;
+  }
+  console.log(`  ${infra.usages} varieties and subspecies of the pages' species; ${names} names of species rank filed under them on ${pages} pages, searched as a name typed (name.infra); ${changed} dossiers written`);
   if (index) writeIndexFromDisk();
 }
 
@@ -1544,7 +1700,10 @@ async function fillSummaries(): Promise<void> {
  * (round seventy; triage-69 B4).
  */
 async function listRebuild(): Promise<void> {
-  const lines = rebuildList(diskStore());
+  // A dossier that cannot be read stops the listing (round eighty-four, B11).
+  const first = listingStore(diskStore());
+  const lines = rebuildList(first);
+  refuseUnread(first, 'rebuild-keys.txt');
   if (bulkDir) {
     const store = diskStore();
     const ownNames: string[] = [];
@@ -1642,6 +1801,26 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number, aliase
  * previous corpus's files until the next refresh (DEPLOY.md says how the bucket is pruned), and a device or an edge
  * that read the previous manifest a minute ago still finds them.
  */
+/**
+ * The front page strip's rule (round eighty-four, the owner's decision 4; `featuredPoolOf`): the popular genera, most grown
+ * first, as the "Popular genera" chip reads `scripts/most-grown-genera.txt` (`openingGenera`), and each species' own count
+ * of iNaturalist's observations marked captive or cultivated from `scripts/species-list.txt` ("inat N", by Kew's
+ * plant_name_id, the page id without its k). Null without the genera's file: the strip is then chosen as before, and said.
+ */
+function grownRule(index: IndexEntry[]): GrownRule | null {
+  const generaFile = 'scripts/most-grown-genera.txt', listFile = 'scripts/species-list.txt';
+  if (!existsSync(generaFile)) { console.log(`  the front page's strip: no ${generaFile}, so chosen by the rule before the popular genera`); return null; }
+  const genera = openingGenera(parseMostGrown(readFileSync(generaFile, 'utf8')), index.map((e) => genusOf(e.name))).genera;
+  const species = new Map<string, number>();
+  if (existsSync(listFile)) for (const line of readFileSync(listFile, 'utf8').split(/\r?\n/)) {
+    if (!line || line.startsWith('#')) continue;
+    const f = line.split('\t');
+    const n = /\binat (\d+)/.exec(f[4] ?? '');
+    if (/^[1-9]\d*$/.test(f[0] ?? '') && n) species.set(`k${f[0]}`, Number(n[1]));
+  }
+  console.log(`  the front page's strip: from the ${genera.length} popular genera, each by its species most observed in cultivation (${species.size} species counted in ${listFile})`);
+  return { genera, species };
+}
 function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, aliases: readonly Alias[] = [], synonymsOf?: (key: PageId) => readonly string[] | undefined): Manifest {
   let prev: Manifest | null = null;
   try { prev = JSON.parse(readFileSync(`${idxDir}/manifest.json`, 'utf8')) as Manifest; } catch { /* the first build with a manifest */ }
@@ -1657,7 +1836,8 @@ function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, s
   };
   // The search's key files are written as they are made (round seventy-seven): at fifty thousand species they are
   // gigabytes, and holding them all before writing would not fit.
-  const { manifest, files, storedHashes } = buildProducts(index, indexText, sheetsOf, undefined, aliases, synonymsOf, (hash, body) => { keyBytes += body.length; write(hash, body); });
+  const grown = grownRule(index);
+  const { manifest, files, storedHashes } = buildProducts(index, indexText, sheetsOf, undefined, aliases, synonymsOf, (hash, body) => { keyBytes += body.length; write(hash, body); }, grown ? { grown } : {});
   for (const [name, body] of files) write(manifest.files[name], body);
   const changed = prev?.id !== manifest.id || prev.buckets !== manifest.buckets || prev.postings !== manifest.postings;
   if (changed) {
@@ -2009,15 +2189,19 @@ async function main() {
   if (fill === 'kew-links') return fillKewLinksStep();
   if (fill === 'kew-names') return fillKewNamesStep();
   if (fill === 'kew-why') return fillKewWhyStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why or genus`);
+  if (fill === 'gbif-infra') return fillGbifInfraStep();
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
   // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.
   if (args.includes('--list-default-points')) {
-    const dir = `${outDir}/s/v${DOSSIER_V}`;
-    const files = readdirSync(dir).filter((x) => DOSSIER_FILE.test(x));
-    const read = function* () { for (const f of files) { try { const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as { key: string; name: { scientific: string }; occurrences?: { open?: Array<[number, number, number | null]> } }; yield d; } catch { /* half-written */ } } };
+    const store = listingStore(diskStore());
+    const files = store.files();
+    type P = { key: string; name: { scientific: string }; occurrences?: { open?: Array<[number, number, number | null]> } };
+    const read = () => readEach<P>(store);
     const found = defaultPoints([...read()].map((d) => ({ open: d.occurrences?.open ?? [] })));
+    // A dossier that cannot be read stops the listing before anything is written (round eighty-four, B11).
+    refuseUnread(store, `${DEFAULT_POINTS} and rebuild-default-points.txt`);
     // A point once listed stays listed: pages rebuilt under the rule no longer hold its records, and would not find it again.
     const before = defaults ?? new Set<string>();
     const kept = [...before].filter((k) => !found.some((p) => p.key === k)).map((key) => ({ key, species: 0, records: 0, undated: 0 }));
@@ -2033,18 +2217,17 @@ async function main() {
   // Round eighty (A): the pages whose open in-range records include one outside every native region's shape, for --keys.
   if (args.includes('--list-range-shapes')) {
     if (!regions) { console.error(`no ${SHAPES_FILE}: nothing to test against`); process.exit(2); }
-    const dir = `${outDir}/s/v${DOSSIER_V}`;
+    const store = listingStore(diskStore());
     const lines: string[] = [];
     let read = 0, recs = 0;
-    for (const f of readdirSync(dir).filter((x) => DOSSIER_FILE.test(x))) {
-      let d: Parameters<typeof outsideShapes>[0] & { key: string; name: { scientific: string } };
-      try { d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')); } catch { continue; }
+    for (const d of readEach<Parameters<typeof outsideShapes>[0] & { key: string; name: { scientific: string } }>(store)) {
       read++;
       const n = outsideShapes(d, regions);
       // And a page holding a record at a default point (`--list-default-points`, run first): one re-derivation for both rules.
       const atDefault = defaults ? ((d as { occurrences?: { open?: Array<[number, number]> } }).occurrences?.open ?? []).filter((r) => defaults.has(pointKey(r[0], r[1]))).length : 0;
       if (n || atDefault) { lines.push(`${d.key} ${d.name.scientific}\t${[n ? `${n} open record${n === 1 ? '' : 's'} inside the native regions' boxes and outside their shapes` : '', atDefault ? `${atDefault} at a default point` : ''].filter(Boolean).join('; ')}`); recs += n; }
     }
+    refuseUnread(store, 'rebuild-shapes.txt');
     if (lines.length) writeFileSync('rebuild-shapes.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-shapes.txt')) unlinkSync('rebuild-shapes.txt');
     console.log(`  ${read} dossiers read; ${lines.length} pages with an open record outside every native region's shape (${recs} records) or at a default point${lines.length ? ' → rebuild-shapes.txt; run --keys rebuild-shapes.txt --offline --grid climate --bulk bulk' : ''}`);
@@ -2062,8 +2245,10 @@ async function main() {
     const before = regionTester(beforeFileJson);
     const changed = changedRegions(beforeFileJson, JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile);
     const dir = `${outDir}/s/v${DOSSIER_V}`;
-    const readDir = function* (d: string) { for (const f of readdirSync(d).filter((x) => DOSSIER_FILE.test(x))) { try { yield JSON.parse(readFileSync(`${d}/${f}`, 'utf8')) as RepairPage & { upstream?: Record<string, { detail?: string }> }; } catch { /* half-written */ } } };
-    const { lines, regained, defaults } = repairList(readDir(dir), noCopy ? null : readDir(copyDir), before, regions, changed);
+    const cur = listingStore(dirStore(dir)), cop = listingStore(dirStore(copyDir));
+    const { lines, regained, defaults } = repairList(readEach<RepairPage & { upstream?: Record<string, { detail?: string }> }>(cur), noCopy ? null : readEach<RepairPage>(cop), before, regions, changed);
+    refuseUnread(cur, 'rebuild-r83c.txt');
+    refuseUnread(cop, `rebuild-r83c.txt (in the copy ${copyDir})`);
     if (lines.length) writeFileSync('rebuild-r83c.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-r83c.txt')) unlinkSync('rebuild-r83c.txt');
     console.log(`  ${lines.length} pages to derive again: ${regained} ${noCopy ? `with a record outside the range and a native region among the ${changed.size} whose shape changed` : "with a record inside a native region's shape now and outside them before"}, ${defaults} with records left out at a default point${lines.length ? ' → rebuild-r83c.txt; run --keys rebuild-r83c.txt --offline --grid climate --bulk bulk' : ''}`);
@@ -2071,7 +2256,9 @@ async function main() {
   }
   // Round eighty (A): the pages to build again for Wikidata (not answered, or refused by a label), for --keys.
   if (args.includes('--list-wikidata-retry')) {
-    const lines = wikidataRetryList(diskStore());
+    const store = listingStore(diskStore());
+    const lines = wikidataRetryList(store);
+    refuseUnread(store, 'rebuild-wd-retry.txt');
     if (lines.length) writeFileSync('rebuild-wd-retry.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-wd-retry.txt')) unlinkSync('rebuild-wd-retry.txt');
     console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} to build again for Wikidata → rebuild-wd-retry.txt${lines.length ? '; run --keys rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat' : ''}`);
@@ -2080,16 +2267,67 @@ async function main() {
   // Round eighty-two (F; review 1's 7): the pages with a row not ok and no reason, the build's "none" written before it
   // gave one (`no-reason.ts`), for --keys.
   if (args.includes('--list-no-reason')) {
-    const store = diskStore();
+    const store = listingStore(diskStore());
     // A page that leaves by a merge (scripts/merged-pages.txt) is not rebuilt: --prune-followed takes it (round eighty-two,
     // M: Bisnaga hamatacantha, whose range row was the review's case, joins Ferocactus hamatacanthus).
     const away = new Set(merges().map((m) => m.from));
-    const read = function* () { for (const f of store.files()) { try { const d = store.read<NoReasonPage & { ids?: { gbif?: number } }>(f); if (d.ids?.gbif != null && away.has(d.ids.gbif)) continue; yield d; } catch { /* half-written */ } } };
+    const read = function* () { for (const d of readEach<NoReasonPage & { ids?: { gbif?: number } }>(store)) { if (d.ids?.gbif != null && away.has(d.ids.gbif)) continue; yield d; } };
     const { lines, by } = noReasonLines(read());
+    refuseUnread(store, 'rebuild-no-reason.txt');
     if (lines.length) writeFileSync('rebuild-no-reason.txt', lines.join('\n') + '\n');
     else if (existsSync('rebuild-no-reason.txt')) unlinkSync('rebuild-no-reason.txt');
     console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} with a row not ok and no reason${lines.length ? ` (${[...by].map(([k, n]) => `${k} ${n}`).join(', ')}) → rebuild-no-reason.txt; run --keys rebuild-no-reason.txt --grid climate --bulk bulk --skip inat` : ''}`);
     return;
+  }
+  // Round eighty-four (G; the owner's decision 2): the whole-corpus walk, every page derived again offline by this round's
+  // code. `--list-walk` writes rebuild-walk.txt, every page not derived since the walk began (`walk.json` keeps when it
+  // began, so the same two lines resume a walk that stopped); `--list-walk --again` begins a new walk.
+  if (args.includes('--list-walk')) { listWalk(); return; }
+  // `--walk`: the list written again (the pages not derived since the walk began), then those pages derived, as
+  // `--keys rebuild-walk.txt` would; the same command resumes a walk that stopped, and says when there is nothing left.
+  if (args.includes('--walk') && !listWalk()) return;
+  // Round eighty-four (G): the check after the walk, before the upload. Every page whose typical cell lies outside its
+  // native regions, whose records were not tested by this round's rule, or with an open record outside its native regions
+  // is listed in check-ranges.txt (as --keys reads it), and the review's five cases are said one by one; exit 2 when
+  // anything is listed or a dossier cannot be read, so the upload waits.
+  if (args.includes('--check-ranges')) {
+    if (!regions) { console.error(`no ${SHAPES_FILE}: nothing to test against`); process.exit(2); }
+    const file = JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile;
+    const cell = regionTester(file, SHAPE_BUFFER_DEG + CELL_SLACK_DEG);
+    const store = listingStore(diskStore());
+    const lines: string[] = [];
+    const named = new Map(NAMED_CASES.map((c) => [c.key, c]));
+    const seen = new Map<string, { d: CheckPage; f: ReturnType<typeof checkPage> }>();
+    let read = 0, cells = 0, old = 0, open = 0;
+    for (const d of readEach<CheckPage>(store)) {
+      read++;
+      const f = checkPage(d, cell, regions, RANGE_RULE);
+      if (named.has(d.key)) seen.set(d.key, { d, f });
+      const why = [f.cellOutside ? `typical cell ${d.climate?.at?.lat} N, ${d.climate?.at?.lon} E outside every native region` : '', f.oldRule ? `records not tested by shapes rule ${RANGE_RULE}${d.upstream?.['gbif.occurrences']?.detail?.startsWith('carried from build of') ? ' (carried from a build before)' : ''}` : '', f.openOutside ? `${f.openOutside} open record${f.openOutside === 1 ? '' : 's'} outside every native region` : ''].filter(Boolean);
+      if (f.cellOutside) cells++;
+      if (f.oldRule) old++;
+      if (f.openOutside) open++;
+      if (why.length) lines.push(`${d.key} ${d.name.scientific}\t${why.join('; ')}`);
+    }
+    refuseUnread(store, 'check-ranges.txt');
+    const cases = NAMED_CASES.map((c) => caseLine(c, seen.get(c.key)?.d, seen.get(c.key)?.f, RANGE_RULE));
+    if (lines.length) writeFileSync('check-ranges.txt', lines.sort().join('\n') + '\n');
+    else if (existsSync('check-ranges.txt')) unlinkSync('check-ranges.txt');
+    console.log(`  ${read} dossiers read (shapes rule ${regions.rule ?? 'none'}, ${file.meta.regions ?? '?'} regions with a shape): ${cells} with a typical cell outside every native region, ${old} whose records were not tested by rule ${RANGE_RULE}, ${open} with an open record outside every native region${lines.length ? ` → check-ranges.txt (${lines.length} pages); derive them again with --keys check-ranges.txt --grid climate --bulk bulk --skip inat (not offline: a page whose range was carried was one an offline build could not read again, its range coming through GBIF's older names), then --index and this check` : ''}`);
+    for (const c of cases) console.log(`    ${c.line}`);
+    if (lines.length || cases.some((c) => !c.ok)) { console.log('  Not ready to upload.'); process.exit(2); }
+    console.log('  Every page is inside its native range by this rule: ready to upload.');
+    return;
+  }
+  // Round eighty-four (G; review A21): whether the index on disk is the one the dossiers and the code on disk would write
+  // (`index-stamp.ts`). The upload asks this first (`corpus-step.mjs --upload`, and the plan's upload step) and refuses
+  // an index older than the dossiers it would publish.
+  if (args.includes('--index-ready')) {
+    const corpusDir = `${outDir}/s/v${DOSSIER_V}`;
+    const same = upToDate('.', corpusDir, CODE_ROOT);
+    if (same) { console.log(`  the index on disk (${same.species} species, written ${same.at.replace('T', ' ').slice(0, 16)} UTC) is the one the dossiers and the code on disk would write: ready to upload`); return; }
+    console.error(`  the index on disk is not the one the dossiers${existsSync(INDEX_STAMP) ? ' and the code' : ''} on disk would write (a dossier, or the builder's code, changed after it, or ${INDEX_STAMP} is missing): run npm run dossier -- --index first, then the upload again`);
+    process.exit(2);
   }
   if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
@@ -2117,6 +2355,9 @@ async function main() {
     jobs.push({ name: 'Copiapoa cinerea', fetcher: fixtureFetcher(copiapoa()) });
     jobs.push({ name: 'Refusia testii', fetcher: fixtureFetcher(refused()) });
   } else {
+    // Round eighty-four (G; A1, B1): no page is derived without the regions' shapes, so no record, open or restricted,
+    // is tested by a box alone where a shape is drawn.
+    if (!regions) { console.error(`${SHAPES_FILE} is not there: every record is tested against the native regions' shapes, so nothing is built without it (git checkout -- ${SHAPES_FILE})`); process.exit(2); }
     let file = keysFile ?? args.find((a) => !a.startsWith('--'));
     // Several files of lines at once (round eighty-one, review B8): `--keys a.txt,b.txt` builds the pages of both in one
     // run, so the download is read once, not once a file (an hour each for a Darwin Core Archive). A file of the list
@@ -2472,9 +2713,9 @@ async function main() {
       // range and climate were lost on 44 species, whose pages then said the source had refused (round sixty-seven;
       // triage-66 N4).
       const coreRefused = ['gbif.occurrences', 'wcvp.distribution'].filter((k) => ['refused', 'error'].includes(d.upstream[k]?.status ?? '') || d.upstream[k]?.status === 'skipped');
-      const coreNotAsked = coreRefused.length > 0 && coreRefused.every((k) => d.upstream[k]?.status === 'skipped');
-      const prevCoreOk = ['gbif.occurrences', 'wcvp.distribution'].every((k) => ['ok', 'none'].includes(prev.upstream?.[k]?.status ?? ''));
-      if (coreRefused.length && prevCoreOk && prev.v === d.v && (!rederive || coreNotAsked)) {
+      // Never the records of another key, nor records for a page with no key to read them under (round eighty-four, D4:
+      // Xanthoceras sorbifolium carried the records of GBIF's 9479204, a grass, after it lost that key): `carry-core.ts`.
+      if (carriesCore(prev, d, rederive)) {
         d.distribution = prev.distribution;
         d.occurrences = prev.occurrences;
         d.centroid = prev.centroid;
@@ -2531,7 +2772,13 @@ async function main() {
   }
   // A build given Kew's files reads Kew's names for what it built, as `--fill kew-names` does (round seventy-two, A); the
   // index then reads those dossiers from disk.
-  if (bulkDir && !fixtures && thisRun.size) { await fillKewNamesStep(new Set(thisRun.keys()), false); thisRun.clear(); }
+  if (bulkDir && !fixtures && thisRun.size) {
+    const built = new Set(thisRun.keys());
+    await fillKewNamesStep(built, false);
+    // And the names GBIF files under the species' varieties and subspecies, where the folder holds GBIF's backbone export (round eighty-four, A8).
+    if (backboneFile()) await fillGbifInfraStep(built, false);
+    thisRun.clear();
+  }
   // Each page under the id the rule gives (round seventy-eight): a new page, or one whose Kew entry this build changed.
   if (!fixtures && built && rekeyDisk()) thisRun.clear();
   if (fixtures && built) fixtureIds(thisRun);

@@ -36,7 +36,7 @@ function tidyHead(t: string): string {
     .replace(/\b(var|v|variety)\.?\s/gi, 'var. ')
     .replace(/\b(f|fa|fo|forma)\.?\s/gi, 'f. ')
     // "cv. Blue Curls" → 'Blue Curls': the rest of the line is the cultivar name, closed as well as opened.
-    .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (/^['‘"]/.test(c) ? c : `'${c.trim()}'`))
+    .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (/^['‘’"“”]/.test(c) ? c : `'${c.trim()}'`))
     // "xGraptoveria" / "XGraptoveria": a nothogenus written without its space.
     .replace(/^[xX](?=[A-Z][a-z])/, '× ')
     .replace(/^([a-z])/, (m) => m.toUpperCase());
@@ -72,15 +72,29 @@ export interface ParsedName {
 const QUALIFIER = /^(cf|cfr|aff|nr|near|sp|spp)\.?$/i;
 /** Each written one way, so a second parse changes nothing: "cfr." is "cf.", "near" is "nr.". */
 const QUALIFIER_AS: Record<string, string> = { cf: 'cf.', cfr: 'cf.', aff: 'aff.', nr: 'nr.', near: 'nr.', sp: 'sp.', spp: 'spp.' };
+/** Every quote a keyboard writes: straight, and curly single and double, either way round (a phone writes ’ to open). */
+export const QUOTES = `'"‘’“”`;
+/** The whole text in one pair of quotes, nothing quoted inside. */
+const QUOTE_WHOLE = new RegExp(`^[${QUOTES}]([^${QUOTES}]+)[${QUOTES}]$`);
+/** A cultivar: an opening quote at the start, after a space or a bracket, to the last quote. */
+const QUOTED_CULTIVAR = new RegExp(`(^|[\\s(])[${QUOTES}](.+)[${QUOTES}]`);
 
 export function parseName(raw: string): ParsedName {
   let s = tidyName(raw);
   let cultivar: string | undefined;
   let aside: string | undefined;
-  // The cultivar is everything between the first quote and the last: "Haworthia 'Bev's Wonder'" keeps its apostrophe.
-  s = s.replace(/[‘'"](.+)[’'"]/, (_, c) => {
+  // Quotes around the whole text are punctuation, as the catalogue's search reads them (round eighty-four; review-s S9):
+  // `"Haworthia cooperi"` was a cultivar of no genus, filed as a hybrid with no row offered.
+  const whole = QUOTE_WHOLE.exec(s);
+  if (whole) s = whole[1].trim();
+  // The cultivar is everything between the first opening quote and the last quote: "Haworthia 'Bev's Wonder'" keeps its
+  // apostrophe. Any quote opens it, straight or curly, single or double (round eighty-four; review-s S3: a phone writes
+  // "Crassula ovata ’Gollum’" with U+2019 on both sides, which was read as part of the species' name and filed with no key
+  // and no cultivar); an opening quote starts the text or follows a space or a bracket, so the apostrophe inside a word
+  // ("St. John’s wort 'Hidcote'") opens nothing.
+  s = s.replace(QUOTED_CULTIVAR, (_, lead: string, c: string) => {
     cultivar = c.trim();
-    return '';
+    return lead;
   });
   s = s.replace(/\(([^)]+)\)/g, (_, a) => {
     aside = a.trim();
@@ -139,7 +153,9 @@ export function parseName(raw: string): ParsedName {
     if (provisional) cultivar = undefined;
     const tail = [...parts.slice(compared ? 3 : 2).map((w) => (/^nov\.?$/i.test(w) ? 'nov.' : w)), provisional].filter(Boolean).join(' ');
     const sci = [sign + genus, word, compared, tail].filter(Boolean).join(' ');
-    return { scientific: sci, cultivar, aside, genus, epithet: compared, kind: nothogenus ? 'hybrid' : cultivar ? (compared ? 'cultivar' : 'hybrid') : 'species', qualifier: word };
+    // A cultivar is a cultivar whether or not a species is named; a hybrid is a cross, a formula or a nothogenus (round
+    // eighty-four; review-w W5, outside review A9).
+    return { scientific: sci, cultivar, aside, genus, epithet: compared, kind: nothogenus ? 'hybrid' : cultivar ? 'cultivar' : 'species', qualifier: word };
   }
   // A field number after the genus is no epithet and is kept as written: "Gymnocalycium LB 123" was filed as
   // "Gymnocalycium lb 123", and "Lithops C 036" as "Lithops c 036". A collector's code of one to three capitals, or a
@@ -150,8 +166,17 @@ export function parseName(raw: string): ParsedName {
   // before it ("Mammillaria ssp. bombycina") is still left out, and the import keeps the text as the name as received.
   const rest = parts.slice(epithet || /^(?:subsp|var|f)\.$/.test(parts[1] ?? '') ? 2 : 1).join(' ');
   const scientific = [sign + genus, epithet, rest].filter(Boolean).join(' ');
-  const kind: NameKind = nothogenus ? 'hybrid' : epithet ? (cultivar ? 'cultivar' : 'species') : cultivar ? 'hybrid' : 'species';
+  // A cultivar written under a genus alone ("Echeveria 'Lola'", "Philodendron 'Pink Princess'") is a cultivar whose species
+  // is not stated, filed under its genus: it was filed and shown as "hybrid, parentage not stated", which the grower never
+  // said (round eighty-four; review-w W5, outside review A9). A hybrid is a cross written out, a named nothospecies, or a
+  // nothogenus (× Graptoveria 'Fred Ives'), or what the grower chooses on the plant's form.
+  const kind: NameKind = nothogenus ? 'hybrid' : cultivar ? 'cultivar' : 'species';
   return { scientific, cultivar, aside, genus, epithet, kind };
+}
+
+/** A cultivar filed under its genus, its species not stated: "Echeveria 'Lola'" (round eighty-four; review-w W5). */
+export function speciesNotStated(p: Pick<ParsedName, 'kind' | 'epithet' | 'genus'> & { cultivar?: string | null; qualifier?: string }): boolean {
+  return p.kind === 'cultivar' && !p.epithet && !!p.genus && !p.qualifier;
 }
 
 /** "Ariocarpus retusus × Ariocarpus trigonus" → the two parent names, for linking. */

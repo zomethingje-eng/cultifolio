@@ -1,0 +1,17 @@
+# Round eighty-four (G; the owner's decision 2): every page derived again offline by this round's code, the index, the
+# check that no page's typical cell lies outside its native regions, a review, the upload and the live check.
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-r84-walk.txt
+# A step that stops is run again by the same command: the walk's step resumes where it stopped (the builder lists only
+# the pages not derived since the walk began, walk.json). About an hour to read the download, then six to seven hours.
+backup
+dossier --walk --offline --grid climate --bulk bulk
+# Kew's names (which head each `k` page) and the names GBIF files under a species' varieties are read at the end of each
+# run of the walk for the pages that run derived: a walk stopped and resumed leaves the first run's pages without them.
+# Read for every page here (offline; a second run changes nothing; minutes each). The second needs bulk\backbone\simple.txt.gz.
+dossier --fill kew-names --bulk bulk
+dossier --fill gbif-infra --bulk bulk
+dossier --index
+dossier --check-ranges
+review Read the five lines the check above printed ("fixed: Aloe vera …", and so on), and the compare with the backup: up to every dossier differs (each says it was derived again). If anything reads "NOT FIXED", stop and paste the end of corpus-step.log back.
+upload
+live-check

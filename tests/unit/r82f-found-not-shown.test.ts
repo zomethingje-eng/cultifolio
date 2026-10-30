@@ -21,7 +21,7 @@ describe('an answer the page shows none of says what was found', () => {
   });
   it('the daily extremes set aside: at a cell mostly sea, and by the lapse rule in its own words', () => {
     expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'sea', landFraction: 0.31 } })).toBe("read, and set aside: NASA POWER's cell is mostly sea (31% land), so no cold floor is shown");
-    expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'lapse', months: [{ tmin: 4 }, { tmin: 2 }], extremesLapse: { minAbs: -3, lapseAppliedM: -1181 } } })).toBe("read, and set aside: the correction for elevation, -1181 m, is beyond the 1,000 m either way that a lapse rate is applied over, so the weather cell's ground is other terrain than the typical spot's, so no cold floor is shown");
+    expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'lapse', months: [{ tmin: 4 }, { tmin: 2 }], extremesLapse: { minAbs: -3, lapseAppliedM: -1181 } } })).toBe("read, and set aside: the correction for elevation, -1181 m, is beyond the 1,000 m either way that a lapse rate is applied over: the weather cell's ground is 1,181 m higher than the typical spot's, so the cell stands for other terrain, so no cold floor is shown");
     expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'ok' } })).toBeNull();
   });
   it("Kew's range with no native region, unless the row says so already", () => {

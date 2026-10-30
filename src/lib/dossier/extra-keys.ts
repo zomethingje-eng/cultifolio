@@ -367,7 +367,9 @@ export function parseNoKeys(text: string): Map<string, NoKeyLine> {
 /** The words the build and the page say of an extra key's Kew reading. */
 export function extraWhy(x: Pick<ExtraKey, 'kewLabel' | 'how'>): string {
   // A key read because the owner merged its page here (round eighty, A), not because Kew's file reads it so.
-  if (x.how === 'merged') return "the key of a page merged here by the owner's decision (scripts/merged-pages.txt)";
+  // Said to a reader of the page, with no file of the repository in it (round eighty-four; A6e, S7): the list is named in
+  // the build's own log and in /about/how, not on a species page.
+  if (x.how === 'merged') return 'the key of a page merged into this one';
   const how = x.how === 'abbreviation' ? ', its author read as an abbreviation of Kew\'s' : x.how === 'autonym' ? ', an autonym of that name' : '';
   return `Kew's file holds it as ${x.kewLabel}${how}`;
 }
@@ -473,7 +475,7 @@ export function mergeKeys(merges: readonly Merge[], have: readonly ExtraKey[], s
     if (read.has(`${mergeTarget(m)}:${m.from}`)) continue;
     const u = usage?.(m.from);
     const ex = [...new Set([...(except?.(m) ?? []), ...(m.except ?? [])])].sort((a, b) => a - b);
-    out.push({ page: m.intoPage ? 0 : m.into, ...(m.intoPage ? { pageId: m.intoPage } : {}), key: m.from, label: u?.label ?? m.name, status: u?.status ?? 'ACCEPTED', kew: '-', kewLabel: "the page merged here by the owner's decision (scripts/merged-pages.txt)", how: 'merged', merged: slugOf(m.name), ...(ex.length ? { except: ex } : {}) });
+    out.push({ page: m.intoPage ? 0 : m.into, ...(m.intoPage ? { pageId: m.intoPage } : {}), key: m.from, label: u?.label ?? m.name, status: u?.status ?? 'ACCEPTED', kew: '-', kewLabel: 'the page merged into this one', how: 'merged', merged: slugOf(m.name), ...(ex.length ? { except: ex } : {}) });
   }
   return out;
 }

@@ -37,7 +37,9 @@ const BARE: Record<string, number> = {
   'src/routes/places/+page.svelte': 2, // takeDraft('place') and ExampleAddLine what="place"
   'src/routes/plants/+page.svelte': 6, // the sort order `place` and the address's `place=` parameter
   'src/routes/plants/[acc]/+page.svelte': 3, // the first steps' row key and the idcard's class
-  'src/lib/server/sync.ts': 5 // the sync fault kind `place`, counted per day (FAULTS)
+  'src/lib/server/sync.ts': 5, // the sync fault kind `place`, counted per day (FAULTS)
+  'src/lib/dossier/build.ts': 1, // round eighty-four (G, A6f): the climate's reason, "4 in-range records at 2 places", geographic
+  'src/routes/about/formats/+page.svelte': 1 // round eighty-four (A): the vault ceilings' section anchor, id="places"
 };
 
 /**
@@ -51,11 +53,13 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['geographic', /the coordinates are not a place on Earth/],
   ['geographic', /No weather alerts are read for this place/],
   ['geographic', /so a place it does not cover/],
-  ['geographic', /a figure about a place/],
+  ['geographic', /a (figure|fact) about a place/],
+  // round eighty-four's /about/how (A, rewritten for a grower): where a record or a weather cell is
+  ['geographic', /records it has no place for|names a place but states no accuracy|a restricted record's place|Each place is counted once|at how many places|at one place in the range|the same place well enough|a plant with a place|Family and places are matched/],
   ['geographic', /facts about places/],
   ['geographic', /a word of a place|the places it grows/],
   ['geographic', /among a place's maps|Commons files as a place/],
-  ['geographic', /cannot place a climate cell/],
+  // round eighty-four removed the species page's "cannot place a climate cell" (A7: a grower's words)
   // Kew's word for a name it does not place under an accepted species, and a verb
   ['Kew', /\bunplaced\b/i],
   ['Kew', /Kew's file places under|where neither places it|Kew's checklist does not place/],
@@ -65,6 +69,7 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['order', /ha(s|ve) no place in it|has a place, which came first|the plant's place among the plants|the matching name's place among|a marked stamp's place|places its own repair/],
   // the idioms, and the place a photograph is shown in
   ['idiom', /\bin (its )?place\b/],
+  ['idiom', /as long as it was, at the same place/],
   ['idiom', /the place (needs|can use)/]
 ];
 

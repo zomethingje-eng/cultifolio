@@ -53,7 +53,7 @@ describe('r81a D2: a group only where Kew agrees', () => {
   });
   it('the page says where the table lists it and what Kew says', () => {
     const { arch } = cultivationSheet({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', kew: { lifeform: 'succulent subshrub', climate: 'desert or dry shrubland' } });
-    expect(arch!.why).toBe('listed under the genus Copiapoa in the archetype table, and Kew describes it as “succulent subshrub”');
+    expect(arch!.why).toBe('listed under the genus Copiapoa in the reference\'s list of growers\' groups, and Kew describes it as “succulent subshrub”');
     expect(cultivationSheet({ scientific: 'Senecio vulgaris', family: 'Asteraceae', kew: { lifeform: 'annual', climate: 'temperate' } }).arch).toBeNull();
   });
   it('the species page passes the dossier\'s Kew words to the sheet', () => {

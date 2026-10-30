@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Dossier } from '$dossier/schema';
   import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail, foundNotShown } from '$lib/ui/ref/upstream';
+  import { readerWords } from '$lib/ui/ref/words';
   // What it reads of the record, and the count of the datasets its open records came from: the species page carries the count, not the list (round seventy-seven).
   let { dossier, datasets }: { dossier: Pick<Dossier, 'upstream' | 'built'> & Partial<Pick<Dossier, 'photos' | 'climate' | 'distribution'>>; datasets: number } = $props();
   const rows = $derived(Object.entries(dossier.upstream));
@@ -8,13 +9,14 @@
   // plain words with its id beside it, and the climate's reason read as its source did (round sixty-two; the grower
   // review's 2, the words review's 12).
   // An answer the page shows none of says what was found (round eighty-two, F; review 1's 29).
-  const detail = (src: string, d: string | undefined) => [src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, dossier.upstream[src], dossier)].filter(Boolean).join('; ');
+  // In a reader's words: no file of the repository, and a merged page's key said as that (round eighty-four; A6e).
+  const detail = (src: string, d: string | undefined) => readerWords([src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, dossier.upstream[src], dossier)].filter(Boolean).join('; '));
   // Two answers where one is taken is a settled answer, not a failure: no warning tone (round sixty-nine; triage-68 M8).
   const tone = (s: string) => (s === 'ok' ? 'ok' : s === 'none' || s === 'skipped' || s === 'ambiguous' ? '' : 'warn');
 </script>
 
 <details class="prov">
-  <summary><span class="k">Where this page came from</span> <span class="faint small">built {dossier.built.slice(0, 10)}</span></summary>
+  <summary><span class="k">Where this page came from</span> <span class="faint small">built {dossier.built.slice(0, 10)}</span><span class="op" aria-hidden="true">open</span></summary>
   <div class="rows">
     {#each rows as [src, u]}
       <div class="row"><span>{UPSTREAM_NAME[src] ?? src}{#if UPSTREAM_NAME[src]}{' '}<code class="faint">{src}</code>{/if}</span> <span class="pill {tone(u.status)}">{label[u.status] ?? u.status}</span>{#if u.asOf}<span class="faint small">as of {u.asOf}</span>{:else if u.at && u.status !== 'skipped' && !/carried from build of/.test(u.detail ?? '')}<span class="faint small">asked {u.at.slice(0, 10)}</span>{/if}<!-- a source read from a file (Kew's files, a GBIF download) is as of the file's day, not asked on the build's (round seventy-two, B1) --><!-- a source not asked has no day it was asked (round sixty-two; outside review A35) -->{#if detail(src, u.detail)}<span class="faint small">{detail(src, u.detail)}</span>{/if}</div>
@@ -26,7 +28,16 @@
 
 <style>
   .prov { margin-top: 2.5rem; padding: 0.8rem 1rem; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); }
-  summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; flex-wrap: wrap; }
+  /* A flex summary loses the browser's own triangle: it draws the page's "›" as every other disclosure does, turned when open,
+     and says "open" on the right, so the card reads as one that opens (round eighty-four; W7). */
+  summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; flex-wrap: wrap; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '›'; content: '›' / ''; display: inline-block; transition: transform 0.15s; color: var(--accent); font-weight: 700; font-size: var(--fs-lg); line-height: 1; }
+  .prov[open] > summary::before { transform: rotate(90deg); }
+  summary .op { margin-left: auto; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .prov[open] > summary .op { display: none; }
+  summary:hover .k { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
   .rows { display: grid; gap: 0.3rem; margin-block: 0.8rem; }
   .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: var(--fs-md); }
   .small { font-size: var(--fs-md); }

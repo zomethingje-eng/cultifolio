@@ -9,8 +9,14 @@ import type { PageId } from '$core/page-id';
  */
 type Ok = Extract<Dossier['climate'], { status: 'ok' }>;
 export type SheetMonth = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number };
+/**
+ * The three figures of a set-aside extremes series that say why it was set aside (round eighty-four; D1): a plant's page
+ * names the cause as the species page does (`$core/lapse`'s `lapseCause`). A sheet built before has none, and says only
+ * that the series was set aside.
+ */
+export type SetAside = { minAbs: number; minP01?: number; lapseAppliedM?: number };
 export type SheetClimate =
-  | { status: 'ok'; cells: number; records: number; at: { lat: number }; months: SheetMonth[]; p10: Pick<SheetMonth, 'tmin' | 'dli'>[]; p90: Pick<SheetMonth, 'tmin' | 'dli'>[]; extremes?: Ok['extremes']; extremesStatus?: Ok['extremesStatus'] }
+  | { status: 'ok'; cells: number; records: number; at: { lat: number }; months: SheetMonth[]; p10: Pick<SheetMonth, 'tmin' | 'dli'>[]; p90: Pick<SheetMonth, 'tmin' | 'dli'>[]; extremes?: Ok['extremes']; extremesStatus?: Ok['extremesStatus']; extremesLapse?: SetAside }
   | { status: 'pending' | 'none' | 'refused'; detail?: string };
 export type Sheet = {
   /** The page's id (round seventy-eight). */
@@ -53,7 +59,7 @@ export function sheetOf(d: Dossier, thumb?: string, credit?: string): Sheet {
     centroid: d.centroid ? { lat: d.centroid.lat } : null,
     habitatLat: d.centroid?.lat ?? (c.status === 'ok' ? c.at.lat : null),
     climate: c.status === 'ok'
-      ? { status: 'ok', cells: c.cells, records: c.records, at: { lat: c.at.lat }, months: slimYear(c.months), p10: slimSpan(c.p10), p90: slimSpan(c.p90), ...(c.extremes ? { extremes: c.extremes } : {}), ...(c.extremesStatus && c.extremesStatus !== 'ok' ? { extremesStatus: c.extremesStatus } : {}) }
+      ? { status: 'ok', cells: c.cells, records: c.records, at: { lat: c.at.lat }, months: slimYear(c.months), p10: slimSpan(c.p10), p90: slimSpan(c.p90), ...(c.extremes ? { extremes: c.extremes } : {}), ...(c.extremesStatus && c.extremesStatus !== 'ok' ? { extremesStatus: c.extremesStatus } : {}), ...(c.extremesStatus === 'lapse' && c.extremesLapse ? { extremesLapse: { minAbs: c.extremesLapse.minAbs, minP01: c.extremesLapse.minP01, ...(c.extremesLapse.lapseAppliedM != null ? { lapseAppliedM: c.extremesLapse.lapseAppliedM } : {}) } } : {}) }
       : { status: c.status, ...(c.detail ? { detail: c.detail } : {}) }
   };
 }

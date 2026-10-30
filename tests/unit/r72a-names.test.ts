@@ -80,8 +80,9 @@ describe('--fill kew-names (A1, A2, A5, A8)', () => {
     expect(docs.ixora.upstream['gbif.species'].detail).toBe("GBIF's key 8793122 is Ixora coccinea Comm. ex Lam.; the page links Kew's Ixora coccinea L., and the name is cited as Kew cites it");
   });
   it('name.kew: the entry, Kew\'s other names for it (its varieties\' too, misapplied names never), and the older names Kew accepts apart', () => {
-    expect(docs.ixora.name.kew).toEqual({ entry: '103356', synonyms: [], acceptedElsewhere: [], file: '2026-06-04' });
-    expect(docs.leek.name.kew).toEqual({ entry: '2856', synonyms: ['Allium babingtonii', 'Allium holmense'], acceptedElsewhere: ['Allium porrum L.'], file: '2026-06-04' });
+    // With Kew's row for the entry since round eighty-four (`accepted`, which heads a `k` page: decision 1).
+    expect(docs.ixora.name.kew).toEqual({ entry: '103356', synonyms: [], acceptedElsewhere: [], file: '2026-06-04', accepted: { name: 'Ixora coccinea', authors: 'L.', rank: 'Species' } });
+    expect(docs.leek.name.kew).toMatchObject({ entry: '2856', synonyms: ['Allium babingtonii', 'Allium holmense'], acceptedElsewhere: ['Allium porrum L.'], file: '2026-06-04' });
     expect(docs.bisnaga.name.kew).toMatchObject({ entry: '2808156', synonyms: ['Echinocactus glaucescens', 'Ferocactus glaucescens'] });
     expect(docs.unread.name.kew).toEqual({ entry: '', synonyms: [], acceptedElsewhere: [], file: '2026-06-04' });
   });

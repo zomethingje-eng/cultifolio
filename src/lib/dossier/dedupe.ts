@@ -68,5 +68,34 @@ export function heroOf<T extends { url: string; captive?: boolean; src?: string;
   const rank = (p: T) => (p.captive === true && p.src === 'inat' ? -1 : leadRank(p));
   const ordered = pool.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map((x) => x.p);
   const upright = (p: T) => !!p.width && !!p.height && p.height > p.width;
-  return ordered.find((p) => !upright(p)) ?? ordered[0];
+  // Nor a photograph its source states smaller than the box it fills (round eighty-four; outside review A's 6h and 13):
+  // Lithops lesliei led with a 374 by 318 px close-up, blown up to the 400 px hero and twice that on a phone's screen.
+  // One that is both full size and not upright first; then full size; then, where every photograph is small, as before.
+  const small = (p: T) => !!p.width && !!p.height && Math.max(p.width, p.height) < HERO_MIN_PX;
+  return ordered.find((p) => !upright(p) && !small(p)) ?? ordered.find((p) => !small(p)) ?? ordered.find((p) => !upright(p)) ?? ordered[0];
+}
+
+/** The smallest long side, in pixels as the source states it, a lead photograph may have: the hero is 400 CSS px wide on a desktop, 800 device pixels at twice the density, and a phone's band is as wide as the screen. */
+export const HERO_MIN_PX = 640;
+
+/**
+ * The photographs in the order a row shows them, the first `n` from as many observers as there are (round eighty-four;
+ * the desktop review's W2): Echeveria elegans's first row was three near-duplicates of one clump by one observer, and
+ * three by another. The first row takes, in the photographs' own order, one from each observer not yet in it, then fills
+ * any places left in order; the rest follow in their own order. An observer is the credit's author (the line before its
+ * first comma, "(c)" aside), else the photograph's page.
+ */
+export function spreadByObserver<T extends { attribution?: string; page?: string; url: string }>(photos: readonly T[], n = 6): T[] {
+  const who = (p: T) => (p.attribution ?? '').replace(/^\s*\(c\)\s*/i, '').split(',')[0].trim().toLowerCase() || p.page || p.url;
+  const first: T[] = [];
+  const seen = new Set<string>();
+  for (const p of photos) {
+    if (first.length >= n) break;
+    if (!seen.has(who(p))) { seen.add(who(p)); first.push(p); }
+  }
+  for (const p of photos) {
+    if (first.length >= n) break;
+    if (!first.includes(p)) first.push(p);
+  }
+  return [...first, ...photos.filter((p) => !first.includes(p))];
 }

@@ -6,7 +6,7 @@ import { searchAnswer, corpusNow, searchRegions, warmSearch } from '$lib/server/
 import { regionsTyped, broadRegion } from '$core/regions';
 import { slugify } from '$core/names';
 import { limited } from '$lib/server/sync';
-import { droppedLabel, nearAnswer, genusReading, genusOfReading, leftOut } from '$core/search';
+import { droppedLabel, nearAnswer, genusReading, genusOfReading, leftOut, shorterReadings } from '$core/search';
 import { genusOf } from '$core/names';
 
 /**
@@ -112,6 +112,17 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // by its first two words, is a cultivar of the genus ("Echeveria Lola", "Haworthia Big Band"): answered by the genus,
   // and only when the first word is a genus of the reference, by the answer's own names, so a common name in title case
   // never shrinks to its first word (round sixty-two; the verification review's search 1 and 2; A7, B2).
+  // Still nothing: the last word read from fewer of its letters (`shorterReadings`; round eighty-four, review-s S10:
+  // "lithops lesleyi" and "sansiveria", two letters off, found nothing), the first reading that answers kept and named, as
+  // a retry is ("Showing results for “lithops lesl”"). At most four more searches, only for a query nothing answered; a
+  // reading too common to list is passed over.
+  if (!a.hits.length && !a.narrow && !at && !a.total && !genusReading(q)) {
+    for (const shorter of shorterReadings(q)) {
+      const s = await searchAnswer(platform, fetch, shorter, n, miss, c, at);
+      if ('stop' in s) return s.stop;
+      if (!s.narrow && s.hits.length && !s.relaxed) { a = { ...s, relaxed: { query: shorter } }; break; }
+    }
+  }
   const genus = !a.hits.length && !a.narrow ? genusReading(q) : null;
   if (genus) {
     const g = await searchAnswer(platform, fetch, genus, n, miss, c, at);
@@ -130,7 +141,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const relaxed: Relaxed | undefined = a.relaxed ?? (dropped ? { query: dropped, ...(left ? { left } : {}) } : undefined);
   const near = nearAnswer(a.relaxed?.query ?? q, hits);
   const names = await regionNames;
-  const regions = names ? regionsTyped(q, names).map((name) => { const label = broadRegion(name); return { name, row: { id: slugify(label), label } }; }) : [];
+  // A region by a typing error only where no species answered the query as typed (round eighty-four; review-s S12).
+  const regions = names ? regionsTyped(q, names, !hits.length || near).map((name) => { const label = broadRegion(name); return { name, row: { id: slugify(label), label } }; }) : [];
   const k: Counted = { ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}), ...(regions.length ? { regions } : {}) };
   // Kept only under the corpus the answer is from (the key names the corpus loaded above, which is the one searched).
   if (edge && corpus === c.corpus) {
