@@ -16,10 +16,20 @@
  *
  * Pure: the script reads the files and says the lines.
  */
-import type { RegionTester } from './tdwg-shapes';
+import { regionTester, SHAPE_BUFFER_DEG, COAST_DEG, type RegionTester, type ShapesFile } from './tdwg-shapes';
 
 /** Half the diagonal of the climate grid's cell (0.05°), in degrees: a cell's middle may lie this far from its record. */
 export const CELL_SLACK_DEG = 0.036;
+
+/**
+ * The tester for a typical cell's middle: the range test's buffer and its coast reach, each widened by half the cell's
+ * diagonal. A cell holding a record the coast rule took (an islet off Korea's west coast, 36.30 N 126.31 E) has its middle
+ * up to that much further out to sea; testing the middle against the coast reach alone listed Semiaquilegia adoxoides,
+ * whose records are in range (the owner's walk, 31 October 2026).
+ */
+export function cellTester(file: ShapesFile): RegionTester {
+  return regionTester(file, SHAPE_BUFFER_DEG + CELL_SLACK_DEG, COAST_DEG + CELL_SLACK_DEG);
+}
 
 export interface CheckPage {
   key: string;

@@ -144,7 +144,7 @@ import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_S
 import { repairList, changedRegions, type RepairPage } from '../src/lib/dossier/repair-r83';
 import { regionTester, outsideShapes, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
 import { listingStore, readEach, unreadSentence, type ListingStore } from '../src/lib/dossier/listing-store';
-import { walkList, checkPage, caseLine, NAMED_CASES, CELL_SLACK_DEG, type CheckPage } from '../src/lib/dossier/range-check';
+import { walkList, checkPage, caseLine, NAMED_CASES, cellTester, type CheckPage } from '../src/lib/dossier/range-check';
 import { carriesCore } from '../src/lib/dossier/carry-core';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
@@ -2293,7 +2293,7 @@ async function main() {
   if (args.includes('--check-ranges')) {
     if (!regions) { console.error(`no ${SHAPES_FILE}: nothing to test against`); process.exit(2); }
     const file = JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile;
-    const cell = regionTester(file, SHAPE_BUFFER_DEG + CELL_SLACK_DEG);
+    const cell = cellTester(file);
     const store = listingStore(diskStore());
     const lines: string[] = [];
     const named = new Map(NAMED_CASES.map((c) => [c.key, c]));
