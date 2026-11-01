@@ -1,0 +1,2548 @@
+{
+"k2465732": {
+"heading": "Weingartia fidana",
+"authorship": "(Backeb.) Werderm.",
+"gbif": {
+"scientific": "Weingartia fidaiana",
+"authorship": "(Backeb.) Werderm."
+},
+"synonyms": [
+"Rebutia fidana (Backeb.) D.R.Hunt",
+"Echinocactus fidanus Backeb.",
+"Weingartia fidaiana (Backeb.) Werderm."
+],
+"kewSynonyms": [
+"Echinocactus fidanus",
+"Gymnocalycium cintiense",
+"Gymnocalycium fidanum",
+"Rebutia fidana",
+"Spegazzinia fidana",
+"Sulcorebutia cintiensis",
+"Sulcorebutia fidana",
+"Weingartia cintiensis",
+"Weingartia fidana"
+],
+"via": {
+"kind": "spelling",
+"entry": "Weingartia fidana (Backeb.) Werderm.",
+"name": "Weingartia fidana",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2588872": {
+"heading": "Sarcocaulon inerme",
+"authorship": "S.E.A.Rehm",
+"gbif": {
+"scientific": "Monsonia inermis",
+"authorship": "(S.E.A.Rehm) F.Albers"
+},
+"synonyms": [
+"Sarcocaulon inerme Rehm",
+"Monsonia inermis (S.E.A.Rehm) F.Albers"
+],
+"kewSynonyms": [
+"Sarcocaulon inerme"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Sarcocaulon inerme S.E.A.Rehm",
+"name": "Sarcocaulon inerme",
+"row": "Monsonia inermis (S.E.A.Rehm) F.Albers",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2593568": {
+"heading": "Scabiosa atropurpurea",
+"authorship": "L.",
+"gbif": {
+"scientific": "Sixalix atropurpurea",
+"authorship": "(L.) Greuter & Burdet"
+},
+"synonyms": [
+"Scabiosa arvensis Ucria",
+"Scabiosa arvensis Ucria ex DC.",
+"Scabiosa columbaria Willk. ex Willk. & Lange",
+"Sixalix atropurpurea (L.) Greuter & Burdet"
+],
+"kewSynonyms": [
+"Asterocephalus acutiflorus",
+"Asterocephalus ambiguus",
+"Asterocephalus atropurpureus",
+"Asterocephalus diffusus",
+"Asterocephalus grandiflorus",
+"Asterocephalus maritimus",
+"Asterocephalus setifer",
+"Columbaria atropurpurea",
+"Cyrtostemma atropurpureum",
+"Cyrtostemma maritimum",
+"Scabiosa acutiflora",
+"Scabiosa ambigua",
+"Scabiosa angulata",
+"Scabiosa ateridoi",
+"Scabiosa atropurpurea",
+"Scabiosa bailletii",
+"Scabiosa calyptocarpa",
+"Scabiosa cornucopia",
+"Scabiosa cupanii",
+"Scabiosa diffusa",
+"Scabiosa fruticulosa",
+"Scabiosa grandiflora",
+"Scabiosa integrata",
+"Scabiosa luteola",
+"Scabiosa major",
+"Scabiosa maritima",
+"Scabiosa odora",
+"Scabiosa paui",
+"Scabiosa rosea",
+"Scabiosa saviana",
+"Scabiosa setifera",
+"Scabiosa transsilvanica",
+"Scabiosa vivipara",
+"Scabiosa wulfeniana",
+"Sclerostemma atropurpureum",
+"Sixalix maritima",
+"Spongostemma acutiflorum",
+"Spongostemma atropurpureum",
+"Spongostemma maritimum",
+"Spongostemma savianum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Scabiosa atropurpurea L.",
+"name": "Scabiosa atropurpurea",
+"row": "Sixalix atropurpurea (L.) Greuter & Burdet",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 22
+},
+"k2725649": {
+"heading": "Clematis armandi",
+"authorship": "Franch.",
+"gbif": {
+"scientific": "Clematis armandii",
+"authorship": "Franch."
+},
+"synonyms": [
+"Clematis armandii var. biondiana (Pavol.) Rehder",
+"Clematis biondiana Pavol.",
+"Clematis ornithopus Ulbr.",
+"Clematis armandii Franch."
+],
+"kewSynonyms": [
+"Clematis armandi",
+"Clematis biondiana",
+"Clematis chengguensis",
+"Clematis hefengensis",
+"Clematis napoensis",
+"Clematis ornithopus",
+"Clematis retusifolia"
+],
+"via": {
+"kind": "spelling",
+"entry": "Clematis armandi Franch.",
+"name": "Clematis armandi",
+"file": "2026-06-04"
+},
+"native": 6
+},
+"k2734813": {
+"heading": "Conophytum calculus subsp. vanzylii",
+"authorship": "(Lavis) S.A.Hammer",
+"gbif": {
+"scientific": "Conophytum calculus vanzylii",
+"authorship": "(Lavis) S.A.Hammer"
+},
+"synonyms": [
+"Conophytum breve var. vanzylii (Lavis) Rawé",
+"Conophytum namiesicum L.Bolus",
+"Conophytum vanzylii Lavis"
+],
+"kewSynonyms": [
+"Conophytum calculus",
+"Conophytum komkansicum",
+"Conophytum namiesicum",
+"Conophytum vanzylii",
+"Mesembryanthemum calculus"
+],
+"via": {
+"kind": "kew-entry",
+"entry": "Conophytum calculus subsp. vanzylii (Lavis) S.A.Hammer",
+"name": "Conophytum calculus subsp. vanzylii",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2752658": {
+"heading": "Cyphostemma anatomicum",
+"authorship": "(C.A.Sm.) Wild & R.B.Drumm.",
+"gbif": {
+"scientific": "Cyphostemma anatomica",
+"authorship": "(C.A.Sm.) Wild & R.B.Drumm."
+},
+"synonyms": [
+"Cissus anatomicus C.A.Sm.",
+"Cyphostemma anatomica (C.A.Sm.) Wild & R.B.Drumm."
+],
+"kewSynonyms": [
+"Cissus anatomicus",
+"Cyphostemma anatomicum"
+],
+"via": {
+"kind": "spelling",
+"entry": "Cyphostemma anatomicum (C.A.Sm.) Wild & R.B.Drumm.",
+"name": "Cyphostemma anatomicum",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2752686": {
+"heading": "Cyphostemma congoense",
+"authorship": "(Anon.) Desc.",
+"gbif": {
+"scientific": "Cyphostemma congoensis",
+"authorship": "(Hort.) Desc."
+},
+"synonyms": [
+"Cyphostemma congoense (Hort.) Desc.",
+"Vitis congoensis Anon.",
+"Vitis congoensis Hort.",
+"Cyphostemma congoensis (Hort.) Desc."
+],
+"kewSynonyms": [
+"Cyphostemma congoense",
+"Vitis congoensis"
+],
+"via": {
+"kind": "spelling",
+"entry": "Cyphostemma congoense (Anon.) Desc.",
+"name": "Cyphostemma congoense",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2752770": {
+"heading": "Cyphostemma kapiriense",
+"authorship": "(Dewit) Desc.",
+"gbif": {
+"scientific": "Cyphostemma kapiriensis",
+"authorship": "(Dewit) Desc."
+},
+"synonyms": [
+"Cissus kapiriensis Dewit",
+"Cyphostemma kapiriense (Dewit) Desc.",
+"Cyphostemma kapiriensis (Dewit) Desc."
+],
+"kewSynonyms": [
+"Cissus kapiriensis",
+"Cyphostemma kapiriense"
+],
+"via": {
+"kind": "spelling",
+"entry": "Cyphostemma kapiriense (Dewit) Desc.",
+"name": "Cyphostemma kapiriense",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2783497": {
+"heading": "Echinopsis macrogona",
+"authorship": "(Salm-Dyck) H.Friedrich & G.D.Rowley",
+"gbif": {
+"scientific": "Trichocereus macrogonus",
+"authorship": "(Salm-Dyck) Riccob."
+},
+"synonyms": [
+"Cereus macrogonus Salm-Dyck",
+"Cereus rosei Werderm.",
+"Echinopsis macrogona (Salm-Dyck) H.Friedrich & G.D.Rowley",
+"Echinopsis peruviana (Britton & Rose) H.Friedrich & G.D.Rowley",
+"Echinopsis peruviana subsp. peruviana",
+"Echinopsis peruviana subsp. puquiensis (Rauh & Backeb.) H.Friedrich & G.D.Rowley",
+"Echinopsis peruviana subsp. puquiensis (Rauh & Backeb.) Ostolaza",
+"Echinopsis puquiensis (Rauh & Backeb.) H.Friedrich & G.D.Rowley",
+"Echinopsis trichosa (Cárdenas) H.Friedrich & G.D.Rowley",
+"Trichocereus macrogonus subsp. sanpedro M.H.J.van der Meer",
+"Trichocereus macrogonus var. peruvianus (Britton & Rose) Lodé",
+"Trichocereus pachanoi f. peruvianus (Britton & Rose) F.Ritter",
+"Trichocereus peruvianus Britton & Rose",
+"Trichocereus peruvianus subsp. puquiensis (Rauh & Backeb.) Ostolaza",
+"Trichocereus puquiensis Rauh & Backeb.",
+"Trichocereus tacnaensis F.Ritter",
+"Trichocereus trichosus Cárdenas",
+"Trichocereus macrogonus (Salm-Dyck) Riccob."
+],
+"kewSynonyms": [
+"Cereus macrogonus",
+"Cereus rosei",
+"Echinopsis macrogona",
+"Echinopsis peruviana",
+"Echinopsis puquiensis",
+"Echinopsis trichosa",
+"Trichocereus peruvianus",
+"Trichocereus puquiensis",
+"Trichocereus tacnaensis",
+"Trichocereus trichosus"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Echinopsis macrogona (Salm-Dyck) H.Friedrich & G.D.Rowley",
+"name": "Echinopsis macrogona",
+"row": "Trichocereus macrogonus (Salm-Dyck) Riccob.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k2808144": {
+"heading": "Ferocactus echidne",
+"authorship": "(DC.) Britton & Rose",
+"gbif": {
+"scientific": "Parrycactus echidne",
+"authorship": "(DC.) Doweld"
+},
+"synonyms": [
+"Echinocactus dolichacanthus Lem.",
+"Echinocactus dolichacanthus var. minor Lem.",
+"Echinocactus echidne DC.",
+"Echinocactus echidne f. gilvus (A.Dietr.) K.Schum.",
+"Echinocactus echidne var. gilvus (A.Dietr.) Salm-Dyck",
+"Echinocactus gilvus A.Dietr.",
+"Echinocactus rafaelensis J.A.Purpus",
+"Echinocactus vanderaeyi Lem.",
+"Echinocactus victoriensis Rose",
+"Echinofossulocactus echidne (DC.) Lawr.",
+"Echinofossulocactus vanderaeyi (Lem.) Lawr.",
+"Echinofossulocactus vanderaeyi var. ignotus-longispinus Lawr.",
+"Ferocactus echidne (DC.) Britton & Rose",
+"Ferocactus echidne subsp. victoriensis (Rose) Lodé",
+"Ferocactus echidne var. rhodanthus G.Unger",
+"Ferocactus echidne var. victoriensis (Rose) G.E.Linds.",
+"Ferocactus rafaelensis (J.A.Purpus) Borg",
+"Ferocactus rhodanthus Fritz Schwarz",
+"Ferocactus victoriensis (Rose) Backeb.",
+"Parrycactus echidne (DC.) Doweld"
+],
+"kewSynonyms": [
+"Echinocactus dolichacanthus",
+"Echinocactus echidne",
+"Echinocactus gilvus",
+"Echinocactus rafaelensis",
+"Echinocactus vanderaeyi",
+"Echinocactus victoriensis",
+"Echinofossulocactus echidne",
+"Echinofossulocactus vanderaeyi",
+"Ferocactus echidne",
+"Ferocactus rafaelensis",
+"Ferocactus victoriensis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Ferocactus echidne (DC.) Britton & Rose",
+"name": "Ferocactus echidne",
+"row": "Parrycactus echidne (DC.) Doweld",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k2808151": {
+"heading": "Ferocactus flavovirens",
+"authorship": "(Scheidw.) Britton & Rose",
+"gbif": {
+"scientific": "Parrycactus flavovirens",
+"authorship": "(Scheidw.) Doweld"
+},
+"synonyms": [
+"Bisnaga flavovirens (Scheidw.) Orcutt",
+"Echinocactus flavovirens Scheidw.",
+"Ferocactus flavovirens (Scheidw.) Britton & Rose",
+"Parrycactus flavovirens (Scheidw.) Doweld"
+],
+"kewSynonyms": [
+"Bisnaga flavovirens",
+"Echinocactus flavovirens",
+"Ferocactus flavovirens"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Ferocactus flavovirens (Scheidw.) Britton & Rose",
+"name": "Ferocactus flavovirens",
+"row": "Parrycactus flavovirens (Scheidw.) Doweld",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k2808171": {
+"heading": "Ferocactus histrix",
+"authorship": "(DC.) G.E.Linds.",
+"gbif": {
+"scientific": "Bisnaga histrix",
+"authorship": "(DC.) Doweld"
+},
+"synonyms": [
+"Bisnaga electracantha (Lem.) Orcutt",
+"Cactus multangularis Moc. & Sessé",
+"Cactus multangularis Moc. & Sessé ex DC.",
+"Cactus multiangularis Sessé & Moc.",
+"Cactus multiangularis Sessé & Moc. ex DC.",
+"Echinocactus coulteri G.Don",
+"Echinocactus electracanthus Lem.",
+"Echinocactus electracanthus var. rufispinus Müll.Arg.",
+"Echinocactus histrix DC.",
+"Echinocactus hystrichacanthus Lem.",
+"Echinocactus lancifer Rchb. ex Walp.",
+"Echinocactus melocactiformis DC.",
+"Echinocactus oxypterus Zucc.",
+"Echinocactus oxypterus Zucc. ex Pfeiff.",
+"Echinocactus pfersdorffii Schelle",
+"Echinocactus pycnoxyphus Lem.",
+"Echinofossulocactus oxypterus (Zucc. ex Pfeiff.) Lawr.",
+"Ferocactus histrix (DC.) G.E.Linds.",
+"Ferocactus melocactiformis (DC.) Britton & Rose",
+"Bisnaga histrix (DC.) Doweld"
+],
+"kewSynonyms": [
+"Bisnaga electracantha",
+"Cactus multangularis",
+"Echinocactus coulteri",
+"Echinocactus electracanthus",
+"Echinocactus histrix",
+"Echinocactus hystrichacanthus",
+"Echinocactus lancifer",
+"Echinocactus melocactiformis",
+"Echinocactus oxypterus",
+"Echinocactus pfersdorffii",
+"Echinocactus pycnoxyphus",
+"Echinofossulocactus oxypterus",
+"Ferocactus histrix",
+"Ferocactus melocactiformis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Ferocactus histrix (DC.) G.E.Linds.",
+"name": "Ferocactus histrix",
+"row": "Bisnaga histrix (DC.) Doweld",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k281065": {
+"heading": "Manfreda chamelensis",
+"authorship": "E.J.Lott & Verh.-Will.",
+"gbif": {
+"scientific": "Agave chamelensis",
+"authorship": "(E.J.Lott & Verh.-Will.) Thiede & Eggli"
+},
+"synonyms": [
+"Manfreda chamelensis E.J.Lott & Verh.-Will.",
+"Agave chamelensis (E.J.Lott & Verh.-Will.) Thiede & Eggli"
+],
+"kewSynonyms": [
+"Manfreda chamelensis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda chamelensis E.J.Lott & Verh.-Will.",
+"name": "Manfreda chamelensis",
+"row": "Agave chamelensis (E.J.Lott & Verh.-Will.) Thiede & Eggli",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k281312": {
+"heading": "Manfreda involuta",
+"authorship": "McVaugh",
+"gbif": {
+"scientific": "Agave involuta",
+"authorship": "(McVaugh) Thiede & Eggli"
+},
+"synonyms": [
+"Manfreda involuta McVaugh",
+"Agave involuta (McVaugh) Thiede & Eggli"
+],
+"kewSynonyms": [
+"Manfreda involuta"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda involuta McVaugh",
+"name": "Manfreda involuta",
+"row": "Agave involuta (McVaugh) Thiede & Eggli",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k281386": {
+"heading": "Manfreda revoluta",
+"authorship": "(Klotzsch) Rose",
+"gbif": {
+"scientific": "Agave revoluta",
+"authorship": "Klotzsch"
+},
+"synonyms": [
+"Manfreda revoluta (Klotzsch) Rose",
+"Polianthes revoluta (Klotzsch) Shinners",
+"Agave revoluta Klotzsch"
+],
+"kewSynonyms": [
+"Manfreda revoluta",
+"Polianthes revoluta"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda revoluta (Klotzsch) Rose",
+"name": "Manfreda revoluta",
+"row": "Agave revoluta Klotzsch",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k281388": {
+"heading": "Manfreda potosina",
+"authorship": "(B.L.Rob. & Greenm.) Rose",
+"gbif": {
+"scientific": "Agave potosina",
+"authorship": "B.L.Rob. & Greenm."
+},
+"synonyms": [
+"Delpinoa gracillima H.Ross",
+"Manfreda potosina (B.L.Rob. & Greenm.) Rose",
+"Polianthes potosina (B.L.Rob. & Greenm.) Shinners",
+"Agave potosina B.L.Rob. & Greenm."
+],
+"kewSynonyms": [
+"Delpinoa gracillima",
+"Manfreda potosina",
+"Polianthes potosina"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda potosina (B.L.Rob. & Greenm.) Rose",
+"name": "Manfreda potosina",
+"row": "Agave potosina B.L.Rob. & Greenm.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k281412": {
+"heading": "Manfreda variegata",
+"authorship": "(Jacobi) Rose",
+"gbif": {
+"scientific": "Agave variegata",
+"authorship": "Jacobi"
+},
+"synonyms": [
+"Manfreda tamazunchalensis Matuda",
+"Manfreda variegata (Jacobi) Rose",
+"Manfreda xilitlensis Matuda",
+"Polianthes variegata (Jacobi) Shinners",
+"Agave variegata Jacobi"
+],
+"kewSynonyms": [
+"Manfreda tamazunchalensis",
+"Manfreda variegata",
+"Manfreda xilitlensis",
+"Polianthes variegata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda variegata (Jacobi) Rose",
+"name": "Manfreda variegata",
+"row": "Agave variegata Jacobi",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k2901791": {
+"heading": "Eriobotrya japonica",
+"authorship": "(Thunb.) Lindl.",
+"gbif": {
+"scientific": "Rhaphiolepis bibas",
+"authorship": "(Lour.) Galasso & Banfi"
+},
+"synonyms": [
+"Crataegus bibas Lour.",
+"Eriobotrya japonica (Thunb.) Lindl.",
+"Eriobotrya japonica f. variegata Anon.",
+"Mespilus japonica Thunb.",
+"Photinia japonica (Thunb.) Benth. & Hook.fil.",
+"Photinia japonica (Thunb.) Benth. & Hook.fil. ex Asch. & Schweinf.",
+"Photinia japonica (Thunb.) Franch. & Sav.",
+"Photinia japonica (Thunb.) Hemsl.",
+"Pyrus bibas (Lour.) M.F.Fay & Christenh.",
+"Rhaphiolepis loquata B.B.Liu & J.Wen",
+"Rhaphiolepis bibas (Lour.) Galasso & Banfi"
+],
+"kewSynonyms": [
+"Crataegus bibas",
+"Eriobotrya japonica",
+"Mespilus japonica",
+"Mespilus pomifera",
+"Photinia japonica",
+"Pyrus bibas",
+"Rhaphiolepis loquata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Eriobotrya japonica (Thunb.) Lindl.",
+"name": "Eriobotrya japonica",
+"row": "Rhaphiolepis bibas (Lour.) Galasso & Banfi",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2994185": {
+"heading": "Waldsteinia ternata",
+"authorship": "(Stephan) Fritsch",
+"gbif": {
+"scientific": "Geum ternatum",
+"authorship": "(Stephan) Smedmark"
+},
+"synonyms": [
+"Waldsteinia maximovicziana Teppner",
+"Waldsteinia maximovicziana Teppner ex Prob.",
+"Waldsteinia trifolia Rochel",
+"Geum ternatum (Stephan) Smedmark"
+],
+"kewSynonyms": [
+"Comaropsis sibirica",
+"Dalibarda ternata",
+"Waldsteinia sibirica",
+"Waldsteinia teppneri",
+"Waldsteinia ternata",
+"Waldsteinia trifolia",
+"Waldsteinia trifoliata",
+"Waldsteinia triloba"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Waldsteinia ternata (Stephan) Fritsch",
+"name": "Waldsteinia ternata",
+"row": "Geum ternatum (Stephan) Smedmark",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 8
+},
+"k3159443": {
+"heading": "Sphaeropteris lepifera",
+"authorship": "(J.Sm. ex Hook.) R.M.Tryon",
+"gbif": {
+"scientific": "Alsophila lepifera",
+"authorship": "J.Sm. ex Hook."
+},
+"synonyms": [
+"Alsophila calocoma Christ",
+"Alsophila lepifera J.Sm.",
+"Alsophila pustulosa Christ",
+"Cyathea calocoma (Christ) Copel.",
+"Cyathea lepifera (J.Sm. ex Hook.) Copel.",
+"Cyathea pteridioides Copel.",
+"Cyathea pteridoides Copel.",
+"Cyathea pterioides Copel.",
+"Cyathea pustulosa Copel.",
+"Cyathea umbrosa Copel.",
+"Sphaeropteris lepifera (J.Sm. ex Hook.) R.M.Tryon"
+],
+"kewSynonyms": [
+"Alsophila calocoma",
+"Alsophila pustulosa",
+"Cyathea calocoma",
+"Cyathea lepifera",
+"Cyathea pteridioides",
+"Cyathea pustulosa",
+"Cyathea umbrosa",
+"Sphaeropteris lepifera"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Sphaeropteris lepifera (J.Sm. ex Hook.) R.M.Tryon",
+"name": "Sphaeropteris lepifera",
+"row": "Alsophila lepifera J.Sm. ex Hook.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 7
+},
+"k3173122": {
+"heading": "Athyrium niponicum",
+"authorship": "(Mett.) Hance",
+"gbif": {
+"scientific": "Anisocampium niponicum",
+"authorship": "(Mett.) Yea C.Liu, W.L.Chiou & M.Kato"
+},
+"synonyms": [
+"Asplenium brevisorum (Wall. ex Hook.) T.Moore",
+"Asplenium brevisorum Wall.",
+"Asplenium brevisorum Wall. ex Hook.",
+"Asplenium niponicum Mett.",
+"Asplenium niponicum subsp. longipes Franch. & Sav.",
+"Asplenium niponicum subsp. minus Franch. & Sav.",
+"Asplenium niponicum var. uropteron (Miq.) Franch. & Sav.",
+"Asplenium nipponicum var. longipes Franch. & Sav.",
+"Asplenium nipponicum var. minus Franch. & Sav.",
+"Asplenium uropteron Miq.",
+"Athyrium anhweiense Ching & P.C.Chiu",
+"Athyrium apiciflorum Ching",
+"Athyrium biondii Christ",
+"Athyrium brevisorum (Wall. ex Hook.) T.Moore",
+"Athyrium brevisorum Bedd.",
+"Athyrium chekiangense Ching",
+"Athyrium concinnum Nakai",
+"Athyrium fissum Christ",
+"Athyrium goeringianum var. pictum Maxwell",
+"Athyrium matsumurae Christ ex Matsum.",
+"Athyrium niponicum (Mett) Hance",
+"Athyrium niponicum f. cristato-flabellatum (Makino) Nameg. & Sa.Kurata",
+"Athyrium niponicum f. majus C.Chr.",
+"Athyrium niponicum var. cristato-flabellatum Makino",
+"Athyrium niponicum var. pachyphlebium (C.Chr.) Kitag.",
+"Athyrium niponicum var. pictum (Maxwell) Fraser-Jenk.",
+"Athyrium nipponicum f. major C.Chr.",
+"Athyrium pachyphlebium C.Chr.",
+"Athyrium silvestrii Christ",
+"Athyrium uropteron (Miq.) C.Chr.",
+"Athyrium yunnanense Christ",
+"Microchlaena yunnanensis (Christ) Ching",
+"Anisocampium niponicum (Mett.) Yea C.Liu, W.L.Chiou & M.Kato"
+],
+"kewSynonyms": [
+"Asplenium brevisorum",
+"Asplenium niponicum",
+"Asplenium uropteron",
+"Athyrium biondii",
+"Athyrium brevisorum",
+"Athyrium concinnum",
+"Athyrium fissum",
+"Athyrium matsumurae",
+"Athyrium niponicum",
+"Athyrium pachyphlebium",
+"Athyrium silvestrii",
+"Athyrium uropteron",
+"Athyrium yunnanense",
+"Dryopteris yunnanensis",
+"Microchlaena yunnanensis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Athyrium niponicum (Mett.) Hance",
+"name": "Athyrium niponicum",
+"row": "Anisocampium niponicum (Mett.) Yea C.Liu, W.L.Chiou & M.Kato",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 13
+},
+"k3225638": {
+"heading": "Talinum ankaranense",
+"authorship": "(Appleq.) Christenh. & Byng",
+"gbif": {
+"scientific": "Talinella ankaranensis",
+"authorship": "Appleq."
+},
+"synonyms": [
+"Talinum ankaranense (Appleq.) Christenh. & Byng",
+"Talinella ankaranensis Appleq."
+],
+"kewSynonyms": [
+"Talinum ankaranense"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Talinum ankaranense (Appleq.) Christenh. & Byng",
+"name": "Talinum ankaranense",
+"row": "Talinella ankaranensis Appleq.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3225675": {
+"heading": "Talinum boivinianum",
+"authorship": "(Baill.) Christenh. & Byng",
+"gbif": {
+"scientific": "Talinella boiviniana",
+"authorship": "Baill."
+},
+"synonyms": [
+"Talinum boivinianum (Baill.) Christenh. & Byng",
+"Talinella boiviniana Baill."
+],
+"kewSynonyms": [
+"Talinum boivinianum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Talinum boivinianum (Baill.) Christenh. & Byng",
+"name": "Talinum boivinianum",
+"row": "Talinella boiviniana Baill.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3225681": {
+"heading": "Talinum grevei",
+"authorship": "(Danguy) Christenh. & Byng",
+"gbif": {
+"scientific": "Talinella grevei",
+"authorship": "Danguy"
+},
+"synonyms": [
+"Talinella grevei Danguy"
+],
+"kewSynonyms": [
+"Sabouraea sarmentosa",
+"Talinum grevei"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Talinum grevei (Danguy) Christenh. & Byng",
+"name": "Talinum grevei",
+"row": "Talinella grevei Danguy",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3225688": {
+"heading": "Talinum xerophilum",
+"authorship": "(Appleq.) Christenh. & Byng",
+"gbif": {
+"scientific": "Talinella xerophila",
+"authorship": "Appleq."
+},
+"synonyms": [
+"Talinum xerophilum (Appleq.) Christenh. & Byng",
+"Talinella xerophila Appleq."
+],
+"kewSynonyms": [
+"Talinum xerophilum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Talinum xerophilum (Appleq.) Christenh. & Byng",
+"name": "Talinum xerophilum",
+"row": "Talinella xerophila Appleq.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3225691": {
+"heading": "Talinum humbertii",
+"authorship": "(Appleq.) Christenh. & Byng",
+"gbif": {
+"scientific": "Talinella humbertii",
+"authorship": "Appleq."
+},
+"synonyms": [
+"Talinum humbertii (Appleq.) Christenh. & Byng",
+"Talinella humbertii Appleq."
+],
+"kewSynonyms": [
+"Talinum humbertii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Talinum humbertii (Appleq.) Christenh. & Byng",
+"name": "Talinum humbertii",
+"row": "Talinella humbertii Appleq.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3225768": {
+"heading": "Valeriana congesta",
+"authorship": "(Lindl.) Byng & Christenh.",
+"gbif": {
+"scientific": "Plectritis congesta",
+"authorship": "(Lindl.) DC."
+},
+"synonyms": [
+"Plectrites brachystemon Fisch. & C.A.Mey.",
+"Plectrites capitata Nutt.",
+"Plectrites capitata Nutt. ex Torr. & A.Gray",
+"Plectrites major Höck",
+"Plectritis congesta var. alba Suksd.",
+"Plectritis microptera Suksd.",
+"Plectritis racemulosa Gand.",
+"Plectritis suksdorfii Gand.",
+"Plectritis suksdorfii var. alba Gand.",
+"Valeriana congesta (Lindl.) Byng & Christenh.",
+"Valerianella congesta Lindl.",
+"Valerianella congesta var. trigona Suksd.",
+"Valerianella parviflora Douglas",
+"Valerianella parviflora Douglas ex Torr. & A.Gray",
+"Plectritis congesta (Lindl.) DC."
+],
+"kewSynonyms": [
+"Plectritis microptera",
+"Plectritis racemulosa",
+"Plectritis suksdorfii",
+"Valeriana congesta",
+"Valerianella congesta",
+"Valerianella parviflora"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Valeriana congesta (Lindl.) Byng & Christenh.",
+"name": "Valeriana congesta",
+"row": "Plectritis congesta (Lindl.) DC.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k3277316": {
+"heading": "Weingartia cintia",
+"authorship": "(Hjertson) Hentzschel & K.Augustin",
+"gbif": {
+"scientific": "Rebutia cintia",
+"authorship": "Hjertson"
+},
+"synonyms": [
+"Cintia knizei Ríha",
+"Copiapoa knizei (Ríha) Halda",
+"Rebutia borealis Diers & Krahn",
+"Weingartia cintia (Hjertson) Hentzschel & K.Augustin",
+"Rebutia cintia Hjertson"
+],
+"kewSynonyms": [
+"Cintia knizei",
+"Copiapoa knizei",
+"Weingartia cintia"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Weingartia cintia (Hjertson) Hentzschel & K.Augustin",
+"name": "Weingartia cintia",
+"row": "Rebutia cintia Hjertson",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3294112": {
+"heading": "Oreomecon nudicaulis",
+"authorship": "(L.) Banfi, Bartolucci, J.-M.Tison & Galasso",
+"gbif": {
+"scientific": "Papaver nudicaule",
+"authorship": "L."
+},
+"synonyms": [
+"Papaver alpinum var. nudicaule (L.) Fisch. & C.A.Mey.",
+"Papaver coloradense Fedde",
+"Papaver nudicaule f. nudicaule",
+"Papaver nudicaule f. typicum Serg.",
+"Papaver nudicaule var. nudicaule",
+"Papaver parkmannii Voss",
+"Papaver rubro-aurantiacum Fisch. ex DC.",
+"Papaver nudicaule L."
+],
+"kewSynonyms": [
+"Oreomecon insularis",
+"Oreomecon microcarpa",
+"Oreomecon nudicaulis",
+"Oreomecon ochotensis",
+"Papaver insulare",
+"Papaver microcarpum",
+"Papaver miniatum",
+"Papaver ochotense",
+"Papaver pseudocorydalifolium"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Oreomecon nudicaulis (L.) Banfi, Bartolucci, J.-M.Tison & Galasso",
+"name": "Oreomecon nudicaulis",
+"row": "Papaver nudicaule L.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 12
+},
+"k3316521": {
+"heading": "Matucana borchersii",
+"authorship": "(Boed.) G.J.Charles",
+"gbif": {
+"scientific": "Oroya borchersii",
+"authorship": "(Boed.) Backeb."
+},
+"synonyms": [
+"Echinocactus borchersii Boed.",
+"Oroya borchersii f. fuscata (Rauh & Backeb.) Krainz",
+"Oroya borchersii var. fuscata Rauh & Backeb.",
+"Oroya borchersii (Boed.) Backeb."
+],
+"kewSynonyms": [
+"Echinocactus borchersii",
+"Matucana borchersii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Matucana borchersii (Boed.) G.J.Charles",
+"name": "Matucana borchersii",
+"row": "Oroya borchersii (Boed.) Backeb.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k3330762": {
+"heading": "Shawia insignis",
+"authorship": "(Hook.f.) Saldivia & Nicol",
+"gbif": {
+"scientific": "Pachystegia insignis",
+"authorship": "(Hook.f.) Cheeseman"
+},
+"synonyms": [
+"Aster insignis (Hook.fil.) F.Muell.",
+"Aster insignis (Hook.fil.) Kuntze",
+"Aster neozelandicus Kuntze",
+"Olearia insignis Hook.fil.",
+"Olearia insignis var. insignis",
+"Olearia marginata Colenso",
+"Pachystegia insignis var. insignis",
+"Pachystegia insignis (Hook.f.) Cheeseman"
+],
+"kewSynonyms": [
+"Aster insignis",
+"Aster neozelandicus",
+"Olearia insignis",
+"Olearia marginata",
+"Shawia insignis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Shawia insignis (Hook.f.) Saldivia & Nicol",
+"name": "Shawia insignis",
+"row": "Pachystegia insignis (Hook.f.) Cheeseman",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k372619": {
+"heading": "Drimia pulchromarginata",
+"authorship": "J.C.Manning & Goldblatt",
+"gbif": {
+"scientific": "Austronea pulchromarginata",
+"authorship": "(J.C.Manning & Goldblatt) Mart.-Azorín, M.B.Crespo, M.Pinter & Wetschnig"
+},
+"synonyms": [
+"Drimia pulchromarginata J.C.Manning & Goldblatt",
+"Austronea pulchromarginata (J.C.Manning & Goldblatt) Mart.-Azorín, M.B.Crespo, M.Pinter & Wetschnig"
+],
+"kewSynonyms": [
+"Drimia pulchromarginata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Drimia pulchromarginata J.C.Manning & Goldblatt",
+"name": "Drimia pulchromarginata",
+"row": "Austronea pulchromarginata (J.C.Manning & Goldblatt) Mart.-Azorín, M.B.Crespo, M.Pinter & Wetschnig",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k39866": {
+"heading": "Chrysalidocarpus lutescens",
+"authorship": "H.Wendl.",
+"gbif": {
+"scientific": "Dypsis lutescens",
+"authorship": "(H.Wendl.) Beentje & J.Dransf."
+},
+"synonyms": [
+"Areca flavescens Voss",
+"Chrysalidocarpus baronii subsp. littoralis Jum. & H.Perrier",
+"Chrysalidocarpus baronii var. littoralis Jum. & H.Perrier",
+"Chrysalidocarpus glaucescens Waby",
+"Chrysalidocarpus lutescens H.Wendl.",
+"Dypsis lutescens (H.Wendl.) Beentje & J.Dransf."
+],
+"kewSynonyms": [
+"Areca flavescens",
+"Chrysalidocarpus glaucescens",
+"Chrysalidocarpus lutescens"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Chrysalidocarpus lutescens H.Wendl.",
+"name": "Chrysalidocarpus lutescens",
+"row": "Dypsis lutescens (H.Wendl.) Beentje & J.Dransf.",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k473973": {
+"heading": "Manfreda umbrophila",
+"authorship": "García-Mend.",
+"gbif": {
+"scientific": "Agave umbrophila",
+"authorship": "(García-Mend.) Thiede"
+},
+"synonyms": [
+"Manfreda umbrophila García-Mend.",
+"Agave umbrophila (García-Mend.) Thiede"
+],
+"kewSynonyms": [
+"Manfreda umbrophila"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Manfreda umbrophila García-Mend.",
+"name": "Manfreda umbrophila",
+"row": "Agave umbrophila (García-Mend.) Thiede",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k500284": {
+"heading": "Anacampseros coahuilensis",
+"authorship": "(S.Watson) Eggli & Nyffeler",
+"gbif": {
+"scientific": "Grahamia coahuilensis",
+"authorship": "(S.Watson) G.D.Rowley"
+},
+"synonyms": [
+"Anacampseros coahuilensis (S.Watson) Eggli & Nyffeler",
+"Grahamia palmeri (Brandegee) Nyananyo & Heywood",
+"Talinaria coahuilensis (S.Watson) P.Wilson",
+"Talinaria palmeri Brandegee",
+"Talinum coahuilense S.Watson",
+"Talinum uniflorum Rose",
+"Grahamia coahuilensis (S.Watson) G.D.Rowley"
+],
+"kewSynonyms": [
+"Anacampseros coahuilensis",
+"Grahamia palmeri",
+"Talinaria coahuilensis",
+"Talinaria palmeri",
+"Talinum coahuilense"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Anacampseros coahuilensis (S.Watson) Eggli & Nyffeler",
+"name": "Anacampseros coahuilensis",
+"row": "Grahamia coahuilensis (S.Watson) G.D.Rowley",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k500311": {
+"heading": "Anacampseros harveyi",
+"authorship": "(J.van Thiel & Lavranos) Dreher",
+"gbif": {
+"scientific": "Avonia harveyi",
+"authorship": "J.van Thiel & Lavranos"
+},
+"synonyms": [
+"Anacampseros harveyi (J.van Thiel & Lavranos) Dreher",
+"Avonia harveyi J.van Thiel & Lavranos"
+],
+"kewSynonyms": [
+"Anacampseros harveyi"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Anacampseros harveyi (J.van Thiel & Lavranos) Dreher",
+"name": "Anacampseros harveyi",
+"row": "Avonia harveyi J.van Thiel & Lavranos",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k502147": {
+"heading": "Caralluma arachnoidea",
+"authorship": "(P.R.O.Bally) M.G.Gilbert",
+"gbif": {
+"scientific": "Ceropegia arachnoidea",
+"authorship": "(P.R.O.Bally) Bruyns"
+},
+"synonyms": [
+"Caralluma arachnoidea (P.R.O.Bally) M.G.Gilbert",
+"Caralluma flavovirens L.E.Newton",
+"Caralluma gracilipes subsp. arachnoidea P.R.O.Bally",
+"Spathulopetalum arachnoideum (P.R.O.Bally) Plowes",
+"Ceropegia arachnoidea (P.R.O.Bally) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma arachnoidea",
+"Spathulopetalum arachnoideum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Caralluma arachnoidea (P.R.O.Bally) M.G.Gilbert",
+"name": "Caralluma arachnoidea",
+"row": "Ceropegia arachnoidea (P.R.O.Bally) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k502401": {
+"heading": "Caralluma stalagmifera",
+"authorship": "C.E.C.Fisch.",
+"gbif": {
+"scientific": "Ceropegia stalagmifera",
+"authorship": "(C.E.C.Fisch.) Bruyns"
+},
+"synonyms": [
+"Caralluma moorei Aditya",
+"Caralluma stalagmifera C.E.C.Fisch.",
+"Caralluma stalagmifera var. intermedia Karupp. & Pull.",
+"Caralluma stalagmifera var. longipetala Karupp. & Pull.",
+"Ceropegia moorei (Aditya) Kottaim.",
+"Ceropegia stalagmifera (C.E.C.Fisch.) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma stalagmifera"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Caralluma stalagmifera C.E.C.Fisch.",
+"name": "Caralluma stalagmifera",
+"row": "Ceropegia stalagmifera (C.E.C.Fisch.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k502451": {
+"heading": "Caudanthera edulis",
+"authorship": "(Edgew.) Meve & Liede",
+"gbif": {
+"scientific": "Ceropegia edulis",
+"authorship": "(Edgew.) Bruyns"
+},
+"synonyms": [
+"Asclepias subulata Forssk.",
+"Boucerosia aucheriana Decne.",
+"Boucerosia dentata (Forssk.) Deflers",
+"Boucerosia edulis Edgew.",
+"Boucerosia stocksiana Boiss.",
+"Brachystelma subaphyllum (Schltr.) K.Schum.",
+"Caralluma ango (A.Rich.) N.E.Br.",
+"Caralluma aucheriana (Decne.) A.P.Jagtap & N.P.Singh",
+"Caralluma aucheriana (Decne.) N.E.Br.",
+"Caralluma dentata (Forssk.) Blatt.",
+"Caralluma edulis (Edgew.) A.Chev. ex Hutch. & Dalziel",
+"Caralluma edulis (Edgew.) Benth.",
+"Caralluma edulis (Edgew.) Benth. ex Hook.fil.",
+"Caralluma edulis (Edgew.) Gravely & Mayur.",
+"Caralluma longidens N.E.Br.",
+"Caralluma mouretii A.Chev.",
+"Caralluma vittata N.E.Br.",
+"Caudanthera edulis (Edgew.) Meve & Liede",
+"Crenulluma aucheriana (Decne.) Plowes",
+"Cryptolluma edulis (Edgew.) Plowes",
+"Desmidorchis aucheriana (Decne.) Kuntze",
+"Desmidorchis stocksiana (Boiss.) Kuntze",
+"Lasiostelma subaphyllum Schltr.",
+"Spiralluma longidens (N.E.Br.) Plowes",
+"Spiralluma mouretii (A.Chev.) Plowes",
+"Stapelia ango A.Rich.",
+"Stapelia dentata Forssk.",
+"Tenaris subaphylla (Schltr.) N.E.Br.",
+"Ceropegia edulis (Edgew.) Bruyns"
+],
+"kewSynonyms": [
+"Boucerosia edulis",
+"Boucerosia stocksiana",
+"Brachystelma subaphyllum",
+"Caralluma ango",
+"Caralluma edulis",
+"Caralluma longidens",
+"Caralluma vittata",
+"Caudanthera edulis",
+"Cryptolluma edulis",
+"Desmidorchis stocksiana",
+"Lasiostelma subaphyllum",
+"Spiralluma longidens",
+"Stapelia ango",
+"Tenaris subaphylla"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Caudanthera edulis (Edgew.) Meve & Liede",
+"name": "Caudanthera edulis",
+"row": "Ceropegia edulis (Edgew.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 12
+},
+"k505021": {
+"heading": "Duvalia caespitosa",
+"authorship": "(Masson) Haw.",
+"gbif": {
+"scientific": "Ceropegia caespitosa",
+"authorship": "(Masson) Bruyns"
+},
+"synonyms": [
+"Duvalia marlothiae N.E.Br.",
+"Stapelia jacquinii Loudon",
+"Stissera caespitosa (Masson) Kuntze",
+"Stissera tuberculata (Haw.) Kuntze",
+"Ceropegia caespitosa (Masson) Bruyns"
+],
+"kewSynonyms": [
+"Duvalia caespitosa",
+"Duvalia compacta",
+"Duvalia concolor",
+"Duvalia emiliana",
+"Duvalia glomerata",
+"Duvalia hirtella",
+"Duvalia laevigata",
+"Duvalia mastodes",
+"Duvalia propinqua",
+"Duvalia radiata",
+"Duvalia reclinata",
+"Duvalia replicata",
+"Duvalia tuberculata",
+"Piaranthus fasciculatus",
+"Stapelia caespitosa",
+"Stapelia compacta",
+"Stapelia concolor",
+"Stapelia cymosa",
+"Stapelia fasciculata",
+"Stapelia glomerata",
+"Stapelia hirtella",
+"Stapelia laevigata",
+"Stapelia mastodes",
+"Stapelia mastodis",
+"Stapelia radiata",
+"Stapelia reclinata",
+"Stapelia replicata",
+"Stapelia tuberculata",
+"Stisseria caespitosa",
+"Stisseria compacta",
+"Stisseria concolor",
+"Stisseria glomerata",
+"Stisseria hirtella",
+"Stisseria laevigata",
+"Stisseria mastodes",
+"Stisseria radiata",
+"Stisseria reclinata",
+"Stisseria replicata",
+"Stisseria tuberculata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Duvalia caespitosa (Masson) Haw.",
+"name": "Duvalia caespitosa",
+"row": "Ceropegia caespitosa (Masson) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 3
+},
+"k505037": {
+"heading": "Duvalia galgallensis",
+"authorship": "Lavranos",
+"gbif": {
+"scientific": "Ceropegia galgallensis",
+"authorship": "(Lavranos) Bruyns"
+},
+"synonyms": [
+"Duvalia galgallensis Lavranos",
+"Ceropegia galgallensis (Lavranos) Bruyns"
+],
+"kewSynonyms": [
+"Duvalia galgallensis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Duvalia galgallensis Lavranos",
+"name": "Duvalia galgallensis",
+"row": "Ceropegia galgallensis (Lavranos) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k505070": {
+"heading": "Duvalia sulcata",
+"authorship": "N.E.Br.",
+"gbif": {
+"scientific": "Ceropegia sulcata",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Duvalia sulcata N.E.Br.",
+"Ceropegia sulcata (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Ceropegia seminuda",
+"Duvalia sulcata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Duvalia sulcata N.E.Br.",
+"name": "Duvalia sulcata",
+"row": "Ceropegia sulcata (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k505111": {
+"heading": "Echidnopsis globosa",
+"authorship": "Thulin & Hjertson",
+"gbif": {
+"scientific": "Ceropegia globosa",
+"authorship": "(Thulin & Hjertson) Thulin"
+},
+"synonyms": [
+"Echidnopsis fartaqensis T.A.Mc Coy & Orlando",
+"Echidnopsis globosa Thulin & Hjertson",
+"Ceropegia globosa (Thulin & Hjertson) Thulin"
+],
+"kewSynonyms": [
+"Echidnopsis fartaqensis",
+"Echidnopsis globosa"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Echidnopsis globosa Thulin & Hjertson",
+"name": "Echidnopsis globosa",
+"row": "Ceropegia globosa (Thulin & Hjertson) Thulin",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k505144": {
+"heading": "Echidnopsis sharpei",
+"authorship": "A.C.White & B.Sloane",
+"gbif": {
+"scientific": "Ceropegia sharpei",
+"authorship": "(A.C.White & B.Sloane) Bruyns"
+},
+"synonyms": [
+"Ceropegia sharpei (A.C.White & B.Sloane) Bruyns"
+],
+"kewSynonyms": [
+"Echidnopsis sharpei"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Echidnopsis sharpei A.C.White & B.Sloane",
+"name": "Echidnopsis sharpei",
+"row": "Ceropegia sharpei (A.C.White & B.Sloane) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k505158": {
+"heading": "Echidnopsis virchowii",
+"authorship": "K.Schum.",
+"gbif": {
+"scientific": "Ceropegia virchowii",
+"authorship": "(K.Schum.) Bruyns"
+},
+"synonyms": [
+"Echidnopsis stellata Lavranos",
+"Echidnopsis thulinii M.G.Gilbert",
+"Echidnopsis virchowii K.Schum.",
+"Echidnopsis virchowii var. stellata (Lavranos) Plowes",
+"Virchowia africana Vatke",
+"Virchowia africana Vatke ex K.Schum.",
+"Ceropegia virchowii (K.Schum.) Bruyns"
+],
+"kewSynonyms": [
+"Echidnopsis stellata",
+"Echidnopsis virchowii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Echidnopsis virchowii K.Schum.",
+"name": "Echidnopsis virchowii",
+"row": "Ceropegia virchowii (K.Schum.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k506502": {
+"heading": "Hoodia alstonii",
+"authorship": "(N.E.Br.) Plowes",
+"gbif": {
+"scientific": "Ceropegia alstonii",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Hoodia alstonii (N.E.Br.) Plowes",
+"Trichocaulon alstonii N.E.Br.",
+"Trichocaulon halenbergense Dinter",
+"Ceropegia alstonii (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Hoodia alstonii",
+"Trichocaulon alstonii",
+"Trichocaulon halenbergense"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Hoodia alstonii (N.E.Br.) Plowes",
+"name": "Hoodia alstonii",
+"row": "Ceropegia alstonii (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k506518": {
+"heading": "Hoodia flava",
+"authorship": "(N.E.Br.) Plowes",
+"gbif": {
+"scientific": "Ceropegia flavanthera",
+"authorship": "Bruyns"
+},
+"synonyms": [
+"Hoodia flava (N.E.Br.) Plowes",
+"Trichocaulon flavum N.E.Br.",
+"Trichocaulon karasmontanum Dinter",
+"Ceropegia flavanthera Bruyns"
+],
+"kewSynonyms": [
+"Hoodia flava",
+"Trichocaulon flavum",
+"Trichocaulon karasmontanum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Hoodia flava (N.E.Br.) Plowes",
+"name": "Hoodia flava",
+"row": "Ceropegia flavanthera Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k507287": {
+"heading": "Huernia aspera",
+"authorship": "N.E.Br.",
+"gbif": {
+"scientific": "Ceropegia aspera",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Huernia aspera N.E.Br.",
+"Ceropegia aspera (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Huernia aspera"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Huernia aspera N.E.Br.",
+"name": "Huernia aspera",
+"row": "Ceropegia aspera (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 3
+},
+"k507290": {
+"heading": "Huernia barbata subsp. barbata",
+"authorship": null,
+"gbif": {
+"scientific": "Ceropegia clavigera",
+"authorship": "(Jacq.) Bruyns"
+},
+"synonyms": [
+"Huernia barbata subsp. ingeii (Lavranos) Bruyns",
+"Ceropegia clavigera (Jacq.) Bruyns"
+],
+"kewSynonyms": [
+"Huernia barbata",
+"Huernia campanulata",
+"Huernia clavigera",
+"Huernia crispa",
+"Huernia decemdentata",
+"Huernia duodecimfida",
+"Huernia tubata",
+"Stapelia barbata",
+"Stapelia campanulata",
+"Stapelia clavigera",
+"Stapelia crispa",
+"Stapelia duodecimfida",
+"Stapelia tubata",
+"Stapelia tubulosa"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Huernia barbata subsp. barbata",
+"name": "Huernia barbata subsp. barbata",
+"row": "Ceropegia clavigera (Jacq.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 3
+},
+"k507298": {
+"heading": "Huernia blyderiverensis",
+"authorship": "(L.C.Leach) Bruyns",
+"gbif": {
+"scientific": "Ceropegia blyderiverensis",
+"authorship": "(L.C.Leach) Bruyns"
+},
+"synonyms": [
+"Huernia blyderiverensis (L.C.Leach) Bruyns",
+"Huernia quinta var. blyderiverensis L.C.Leach",
+"Ceropegia blyderiverensis (L.C.Leach) Bruyns"
+],
+"kewSynonyms": [
+"Huernia blyderiverensis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Huernia blyderiverensis (L.C.Leach) Bruyns",
+"name": "Huernia blyderiverensis",
+"row": "Ceropegia blyderiverensis (L.C.Leach) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k507311": {
+"heading": "Huernia calosticta",
+"authorship": "Bruyns",
+"gbif": {
+"scientific": "Ceropegia calosticta",
+"authorship": "(Bruyns) Bruyns"
+},
+"synonyms": [
+"Huernia calosticta Bruyns",
+"Ceropegia calosticta (Bruyns) Bruyns"
+],
+"kewSynonyms": [
+"Huernia calosticta"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Huernia calosticta Bruyns",
+"name": "Huernia calosticta",
+"row": "Ceropegia calosticta (Bruyns) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k507327": {
+"heading": "Huernia erectiloba",
+"authorship": "L.C.Leach & Lavranos",
+"gbif": {
+"scientific": "Ceropegia erectiloba",
+"authorship": "(L.C.Leach & Lavranos) Bruyns"
+},
+"synonyms": [
+"Huernia erectiloba L.C.Leach & Lavranos",
+"Ceropegia erectiloba (L.C.Leach & Lavranos) Bruyns"
+],
+"kewSynonyms": [
+"Huernia erectiloba"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Huernia erectiloba L.C.Leach & Lavranos",
+"name": "Huernia erectiloba",
+"row": "Ceropegia erectiloba (L.C.Leach & Lavranos) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k507687": {
+"heading": "Larryleachia picta",
+"authorship": "(N.E.Br.) Plowes",
+"gbif": {
+"scientific": "Ceropegia picta",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Ceropegia meloformis (Marloth) Bruyns",
+"Hoodia meloformis (Marloth) Halda",
+"Hoodia picta (N.E.Br.) Halda",
+"Larryleachia meloformis (Marloth) Plowes",
+"Larryleachia picta (N.E.Br.) Plowes",
+"Lavrania picta (N.E.Br.) Bruyns",
+"Lavrania picta subsp. parvipunctata Bruyns",
+"Leachia meloformis (Marloth) Plowes",
+"Leachia pictum (N.E.Br.) Plowes",
+"Leachiella meloformis (Marloth) Plowes",
+"Leachiella picta (N.E.Br.) Plowes",
+"Trichocaulon engleri Dinter",
+"Trichocaulon meloforme Marloth",
+"Trichocaulon pictum N.E.Br.",
+"Ceropegia picta (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Ceropegia meloformis",
+"Hoodia meloformis",
+"Hoodia picta",
+"Larryleachia meloformis",
+"Larryleachia picta",
+"Lavrania picta",
+"Leachia meloformis",
+"Leachia pictum",
+"Leachiella meloformis",
+"Leachiella picta",
+"Trichocaulon engleri",
+"Trichocaulon meloforme",
+"Trichocaulon pictum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Larryleachia picta (N.E.Br.) Plowes",
+"name": "Larryleachia picta",
+"row": "Ceropegia picta (N.E.Br.) Bruyns",
+"status": "illegitimate",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k509312": {
+"heading": "Orbea cooperi",
+"authorship": "(N.E.Br.) L.C.Leach",
+"gbif": {
+"scientific": "Ceropegia cooperi",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Orbea cooperi (N.E.Br.) L.C.Leach",
+"Stapelia cooperi N.E.Br.",
+"Stapeliopsis cooperi (N.E.Br.) E.Phillips",
+"Stultitia cooperi (N.E.Br.) E.Phillips",
+"Ceropegia cooperi (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Orbea cooperi",
+"Stapelia cooperi",
+"Stapeliopsis cooperi",
+"Stultitia cooperi"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Orbea cooperi (N.E.Br.) L.C.Leach",
+"name": "Orbea cooperi",
+"row": "Ceropegia cooperi (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 3
+},
+"k509318": {
+"heading": "Orbea deflersiana",
+"authorship": "(Lavranos) Bruyns",
+"gbif": {
+"scientific": "Ceropegia deflersiana",
+"authorship": "(Lavranos) Bruyns"
+},
+"synonyms": [
+"Angolluma deflersiana (Lavranos) Plowes",
+"Caralluma deflersiana Lavranos",
+"Orbea deflersiana (Lavranos) Bruyns",
+"Pachycymbium deflersianum (Lavranos) M.G.Gilbert",
+"Ceropegia deflersiana (Lavranos) Bruyns"
+],
+"kewSynonyms": [
+"Angolluma deflersiana",
+"Caralluma deflersiana",
+"Orbea deflersiana",
+"Pachycymbium deflersianum"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Orbea deflersiana (Lavranos) Bruyns",
+"name": "Orbea deflersiana",
+"row": "Ceropegia deflersiana (Lavranos) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k509347": {
+"heading": "Orbea lugardii",
+"authorship": "(N.E.Br.) Bruyns",
+"gbif": {
+"scientific": "Ceropegia lugardiana",
+"authorship": "Bruyns"
+},
+"synonyms": [
+"Angolluma lugardii (N.E.Br.) Plowes",
+"Caralluma longicuspis N.E.Br.",
+"Caralluma lugardii N.E.Br.",
+"Orbea lugardii (N.E.Br.) Bruyns",
+"Pachycymbium lugardii (N.E.Br.) M.G.Gilbert",
+"Ceropegia lugardiana Bruyns"
+],
+"kewSynonyms": [
+"Angolluma lugardii",
+"Caralluma longicuspis",
+"Caralluma lugardii",
+"Orbea lugardii",
+"Pachycymbium lugardii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Orbea lugardii (N.E.Br.) Bruyns",
+"name": "Orbea lugardii",
+"row": "Ceropegia lugardiana Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 4
+},
+"k509356": {
+"heading": "Orbea maculata subsp. rangeana",
+"authorship": "(Dinter & A.Berger) Bruyns",
+"gbif": {
+"scientific": "Ceropegia rangeana",
+"authorship": "(Dinter & A.Berger) Bruyns"
+},
+"synonyms": [
+"Ceropegia rangeana (Dinter & A.Berger) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma maculata",
+"Caralluma rangeana",
+"Orbea maculata",
+"Orbea rangeana",
+"Piaranthus streyianus",
+"Stapelia rangeana"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Orbea maculata subsp. rangeana (Dinter & A.Berger) Bruyns",
+"name": "Orbea maculata subsp. rangeana",
+"row": "Ceropegia rangeana (Dinter & A.Berger) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k509399": {
+"heading": "Orbea valida",
+"authorship": "(N.E.Br.) Bruyns",
+"gbif": {
+"scientific": "Ceropegia valida",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Ceropegia valida (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma valida",
+"Orbea valida",
+"Orbeopsis occidentalis",
+"Orbeopsis valida"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Orbea valida (N.E.Br.) Bruyns",
+"name": "Orbea valida",
+"row": "Ceropegia valida (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 5
+},
+"k510527": {
+"heading": "Piaranthus atrosanguineus",
+"authorship": "(N.E.Br.) Bruyns",
+"gbif": {
+"scientific": "Ceropegia atrosanguinea",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Caralluma atrosanguinea (N.E.Br.) N.E.Br.",
+"Huerniopsis atrosanguinea (N.E.Br.) A.C.White & B.Sloane",
+"Huerniopsis gibbosa Nel",
+"Huerniopsis papillata Nel",
+"Piaranthus atrosanguineus (N.E.Br.) Bruyns",
+"Stapelia atrosanguinea N.E.Br.",
+"Ceropegia atrosanguinea (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma atrosanguinea",
+"Huerniopsis atrosanguinea",
+"Huerniopsis gibbosa",
+"Huerniopsis papillata",
+"Piaranthus atrosanguineus",
+"Stapelia atrosanguinea"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Piaranthus atrosanguineus (N.E.Br.) Bruyns",
+"name": "Piaranthus atrosanguineus",
+"row": "Ceropegia atrosanguinea (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k510686": {
+"heading": "Pseudolithos mccoyi",
+"authorship": "Lavranos & Mies",
+"gbif": {
+"scientific": "Ceropegia mccoyi",
+"authorship": "(Lavranos & Mies) Bruyns"
+},
+"synonyms": [
+"Anomalluma mccoyi (Lavranos & Mies) Meve & Liede",
+"Pseudolithos mccoyi Lavranos & Mies",
+"Ceropegia mccoyi (Lavranos & Mies) Bruyns"
+],
+"kewSynonyms": [
+"Anomalluma mccoyi",
+"Pseudolithos mccoyi"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Pseudolithos mccoyi Lavranos & Mies",
+"name": "Pseudolithos mccoyi",
+"row": "Ceropegia mccoyi (Lavranos & Mies) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k510742": {
+"heading": "Quaqua armata",
+"authorship": "(N.E.Br.) Bruyns",
+"gbif": {
+"scientific": "Ceropegia armata",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Ceropegia armata (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma armata",
+"Quaqua armata",
+"Quaqua maritima"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Quaqua armata (N.E.Br.) Bruyns",
+"name": "Quaqua armata",
+"row": "Ceropegia armata (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k510748": {
+"heading": "Quaqua bayeriana",
+"authorship": "(Bruyns) Plowes",
+"gbif": {
+"scientific": "Ceropegia bayeriana",
+"authorship": "(Bruyns) Bruyns"
+},
+"synonyms": [
+"Quaqua bayeriana (Bruyns) Plowes",
+"Quaqua parviflora subsp. bayeriana Bruyns",
+"Ceropegia bayeriana (Bruyns) Bruyns"
+],
+"kewSynonyms": [
+"Quaqua bayeriana"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Quaqua bayeriana (Bruyns) Plowes",
+"name": "Quaqua bayeriana",
+"row": "Ceropegia bayeriana (Bruyns) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k510752": {
+"heading": "Quaqua framesii",
+"authorship": "(Pillans) Bruyns",
+"gbif": {
+"scientific": "Ceropegia framesii",
+"authorship": "(Pillans) Bruyns"
+},
+"synonyms": [
+"Caralluma framesii Pillans",
+"Quaqua framesii (Pillans) Bruyns",
+"Ceropegia framesii (Pillans) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma framesii",
+"Quaqua framesii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Quaqua framesii (Pillans) Bruyns",
+"name": "Quaqua framesii",
+"row": "Ceropegia framesii (Pillans) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k510768": {
+"heading": "Quaqua pallens",
+"authorship": "Bruyns",
+"gbif": {
+"scientific": "Ceropegia pallens",
+"authorship": "(Bruyns) Bruyns"
+},
+"synonyms": [
+"Quaqua pallens Bruyns",
+"Ceropegia pallens (Bruyns) Bruyns"
+],
+"kewSynonyms": [
+"Quaqua pallens"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Quaqua pallens Bruyns",
+"name": "Quaqua pallens",
+"row": "Ceropegia pallens (Bruyns) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512041": {
+"heading": "Stapelia hirsuta var. hirsuta",
+"authorship": null,
+"gbif": {
+"scientific": "Ceropegia pulvinata",
+"authorship": "(Masson) Bruyns"
+},
+"synonyms": [
+"Ceropegia hamata (Jacq.)",
+"Gonostemon asterias (Masson) P.V.Heath",
+"Gonostemon asterias var. gibbus (N.E.Br.) P.V.Heath",
+"Gonostemon asterias var. lucidus (DC.) P.V.Heath",
+"Gonostemon grandiflorus var. asterias (Masson) P.V.Heath",
+"Gonostemon grandiflorus var. sororius (Masson) P.V.Heath",
+"Gonostemon hirsutus (L.) P.V.Heath",
+"Gonostemon hirsutus var. affinis (N.E.Br.) P.V.Heath",
+"Gonostemon hirsutus var. comatus (Jacq.) P.V.Heath",
+"Gonostemon hirsutus var. depressus (Jacq.) P.V.Heath",
+"Gonostemon hirsutus var. gratus (N.E.Br.) P.V.Heath",
+"Gonostemon hirsutus var. longirostris (N.E.Br.) P.V.Heath",
+"Gonostemon hirsutus var. luteus (N.E.Br.) P.V.Heath",
+"Gonostemon pulvinatus (Masson) P.V.Heath",
+"Gonostemon pulvinatus f. margarita (Sloane) Rowley",
+"Stapelia affinis N.E.Br.",
+"Stapelia asterias Masson",
+"Stapelia asterias var. gibba N.E.Br.",
+"Stapelia asterias var. lucida (DC.) N.E.Br.",
+"Stapelia comata Jacq.",
+"Stapelia courcellii N.E.Br.",
+"Stapelia depressa Jacq.",
+"Stapelia elongata Sweet",
+"Stapelia hamata Jacq.",
+"Stapelia hirsuta L.",
+"Stapelia hirsuta var. affinis (N.E.Br.) N.E.Br.",
+"Stapelia hirsuta var. atra Lindl.",
+"Stapelia hirsuta var. comata (Jacq.) N.E.Br.",
+"Stapelia hirsuta var. depressa (Jacq.) N.E.Br.",
+"Stapelia hirsuta var. grata N.E.Br.",
+"Stapelia hirsuta var. longirostris (N.E.Br.) N.E.Br.",
+"Stapelia hirsuta var. lutea N.E.Br.",
+"Stapelia hirsuta var. patula (Willd.) N.E.Br.",
+"Stapelia hirsuta var. unguipetala (N.E.Br.) N.E.Br.",
+"Stapelia lanifera Haw.",
+"Stapelia lucida DC.",
+"Stapelia margarita B.Sloane",
+"Stapelia patentirostris N.E.Br.",
+"Stapelia patula Willd.",
+"Stapelia patula var. depressa (Jacq.) N.E.Br.",
+"Stapelia patula var. longirostris N.E.Br.",
+"Stapelia pulvinata Donn",
+"Stapelia pulvinata Masson",
+"Stapelia pulvinata f. margarita (B.Sloane) G.D.Rowley",
+"Stapelia sororia Jacq.",
+"Stapelia sororia Masson",
+"Stapelia stellaris Haw.",
+"Stapelia stellata St.-Lag.",
+"Stapelia unguipetala N.E.Br.",
+"Stapelia villosa N.E.Br.",
+"Stissera asterias (Masson) Kuntze",
+"Stissera comata (Jacq.) Kuntze",
+"Stissera comosa Kuntze",
+"Stissera depressa (Jacq.) Kuntze",
+"Stissera hamata (Jacq.) Kuntze",
+"Stissera hirsuta (L.) Kuntze",
+"Stissera lanifera (Haw.) Kuntze",
+"Stissera lucida (DC.) Kuntze",
+"Stissera patula (Willd.) Kuntze",
+"Stissera pulvinata (Donn) Kuntze",
+"Stisseria asterias (Masson) Kuntze",
+"Stisseria comata (Jacq.) Kuntze",
+"Stisseria depressa (Jacq.) Kuntze",
+"Stisseria hamata (Jacq.) Kuntze",
+"Stisseria hirsuta (L.) Kuntze",
+"Stisseria lanifera (Haw.) Kuntze",
+"Stisseria lucida (DC.) Kuntze",
+"Stisseria patula (Willd.) Kuntze",
+"Stisseria pulvinata (Masson) Kuntze",
+"Stisseria sororia (Masson) Kuntze",
+"Stisseria stellaris (Haw.) Kuntze",
+"Tridentea depressa (Jacq.) Haw.",
+"Tridentea depressa (Jacq.) Haw. ex Schult.",
+"Ceropegia pulvinata (Masson) Bruyns"
+],
+"kewSynonyms": [
+"Gonostemon baylisii",
+"Gonostemon gariepensis",
+"Gonostemon glabricaulis",
+"Gonostemon hirsutus",
+"Gonostemon peglerae",
+"Gonostemon praetermissus",
+"Gonostemon pulvinatus",
+"Gonostemon tsomoensis",
+"Gonostemon vetulus",
+"Stapelia affinis",
+"Stapelia baylissii",
+"Stapelia comata",
+"Stapelia courcellii",
+"Stapelia depressa",
+"Stapelia elongata",
+"Stapelia forcipis",
+"Stapelia gariepensis",
+"Stapelia glabricaulis",
+"Stapelia hamata",
+"Stapelia hirsuta",
+"Stapelia johni-lavrani",
+"Stapelia juvencula",
+"Stapelia lanifera",
+"Stapelia lucida",
+"Stapelia margarita",
+"Stapelia nudiflora",
+"Stapelia patentirostris",
+"Stapelia patula",
+"Stapelia peglerae",
+"Stapelia praetermissa",
+"Stapelia pulvinata",
+"Stapelia simsii",
+"Stapelia sororia",
+"Stapelia stellaris",
+"Stapelia stellata",
+"Stapelia tsomoensis",
+"Stapelia unguipetala",
+"Stapelia vetula",
+"Stapelia villosa",
+"Stisseria comata",
+"Stisseria depressa",
+"Stisseria hamata",
+"Stisseria hirsuta",
+"Stisseria juvencula",
+"Stisseria lanifera",
+"Stisseria lucida",
+"Stisseria patula",
+"Stisseria pulvinata",
+"Stisseria simsii",
+"Stisseria sorroria",
+"Stisseria stellaris",
+"Stisseria vetula",
+"Tridentea depressa",
+"Tridentea juvencula",
+"Tridentea simsii",
+"Tridentea vetula"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelia hirsuta var. hirsuta",
+"name": "Stapelia hirsuta var. hirsuta",
+"row": "Ceropegia pulvinata (Masson) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512073": {
+"heading": "Stapelia kwebensis",
+"authorship": "N.E.Br.",
+"gbif": {
+"scientific": "Ceropegia longipedicellata",
+"authorship": "(A.Berger) Bruyns"
+},
+"synonyms": [
+"Gonostemon kwebensis (N.E.Br.) P.V.Heath",
+"Gonostemon longipedicellatus (A.Berger) P.V.Heath",
+"Stapelia kwebensis N.E.Br.",
+"Stapelia kwebensis var. longipedicellata A.Berger",
+"Stapelia longipedicellata (A.Berger) L.C.Leach",
+"Stapelia longipedicellata (A.Berger) N.E.Br.",
+"Ceropegia longipedicellata (A.Berger) Bruyns"
+],
+"kewSynonyms": [
+"Gonostemon kwebensis",
+"Gonostemon longipedicellatus",
+"Stapelia kwebensis",
+"Stapelia longipedicellata"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelia kwebensis N.E.Br.",
+"name": "Stapelia kwebensis",
+"row": "Ceropegia longipedicellata (A.Berger) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 5
+},
+"k512173": {
+"heading": "Stapelia pearsonii",
+"authorship": "N.E.Br.",
+"gbif": {
+"scientific": "Ceropegia pearsonii",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Gonostemon pearsonii (N.E.Br.) P.V.Heath",
+"Stapelia pearsonii N.E.Br.",
+"Ceropegia pearsonii (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Gonostemon pearsonii",
+"Stapelia pearsonii"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelia pearsonii N.E.Br.",
+"name": "Stapelia pearsonii",
+"row": "Ceropegia pearsonii (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512263": {
+"heading": "Stapelia surrecta",
+"authorship": "N.E.Br.",
+"gbif": {
+"scientific": "Ceropegia surrecta",
+"authorship": "(N.E.Br.) Bruyns"
+},
+"synonyms": [
+"Gonostemon surrectus (N.E.Br.) P.V.Heath",
+"Gonostemon surrectus var. primosii (C.A.Lückh.) P.V.Heath",
+"Stapelia surrecta N.E.Br.",
+"Stapelia surrecta var. primosii C.A.Lückh.",
+"Ceropegia surrecta (N.E.Br.) Bruyns"
+],
+"kewSynonyms": [
+"Gonostemon surrectus",
+"Stapelia surrecta"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelia surrecta N.E.Br.",
+"name": "Stapelia surrecta",
+"row": "Ceropegia surrecta (N.E.Br.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512328": {
+"heading": "Stapelia villetiae",
+"authorship": "C.A.Lückh.",
+"gbif": {
+"scientific": "Ceropegia villetiae",
+"authorship": "(C.A.Lückh.) Bruyns"
+},
+"synonyms": [
+"Gonostemon villetiae (C.A.Lückh.) P.V.Heath",
+"Stapelia villetiae C.A.Lückh.",
+"Ceropegia villetiae (C.A.Lückh.) Bruyns"
+],
+"kewSynonyms": [
+"Gonostemon villetiae",
+"Stapelia villetiae"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelia villetiae C.A.Lückh.",
+"name": "Stapelia villetiae",
+"row": "Ceropegia villetiae (C.A.Lückh.) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512344": {
+"heading": "Stapelianthus insignis",
+"authorship": "Desc.",
+"gbif": {
+"scientific": "Ceropegia insignanthera",
+"authorship": "Bruyns"
+},
+"synonyms": [
+"Stapelianthus insignis Desc.",
+"Stapelianthus insignis subsp. tongoboryensis Rauh",
+"Ceropegia insignanthera Bruyns"
+],
+"kewSynonyms": [
+"Stapelianthus insignis"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Stapelianthus insignis Desc.",
+"name": "Stapelianthus insignis",
+"row": "Ceropegia insignanthera Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k512998": {
+"heading": "Tromotriche aperta",
+"authorship": "(Masson) Bruyns",
+"gbif": {
+"scientific": "Ceropegia aperta",
+"authorship": "(Masson) Bruyns"
+},
+"synonyms": [
+"Caralluma aperta (Masson) N.E.Br.",
+"Caruncularia aperta (Masson) Sweet",
+"Stapelia aperta Masson",
+"Stissera aperta (Masson) Kuntze",
+"Stisseria aperta (Masson) Kuntze",
+"Tridentea aperta (Masson) L.C.Leach",
+"Tromotriche aperta (Masson) Bruyns",
+"Ceropegia aperta (Masson) Bruyns"
+],
+"kewSynonyms": [
+"Caralluma aperta",
+"Caruncularia aperta",
+"Stapelia aperta",
+"Stisseria aperta",
+"Tridentea aperta",
+"Tromotriche aperta"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Tromotriche aperta (Masson) Bruyns",
+"name": "Tromotriche aperta",
+"row": "Ceropegia aperta (Masson) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k513005": {
+"heading": "Tromotriche herrei",
+"authorship": "(Nel) Bruyns",
+"gbif": {
+"scientific": "Ceropegia tigrina",
+"authorship": "(Nel) Bruyns"
+},
+"synonyms": [
+"Stapelia herrei Nel",
+"Stapelia neliana A.C.White & B.Sloane",
+"Stapelia tigrina Nel",
+"Tridentea herrei (Nel) L.C.Leach",
+"Tridentea herrei var. neliana (A.C.White & B.Sloane) P.V.Heath",
+"Tromotriche herrei (Nel) Bruyns",
+"Ceropegia tigrina (Nel) Bruyns"
+],
+"kewSynonyms": [
+"Stapelia herrei",
+"Stapelia neliana",
+"Stapelia tigrina",
+"Tridentea herrei",
+"Tromotriche herrei"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Tromotriche herrei (Nel) Bruyns",
+"name": "Tromotriche herrei",
+"row": "Ceropegia tigrina (Nel) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k513016": {
+"heading": "Tromotriche ruschiana",
+"authorship": "(Dinter) Bruyns",
+"gbif": {
+"scientific": "Ceropegia ruschiana",
+"authorship": "(Dinter) Bruyns"
+},
+"synonyms": [
+"Stapelia ruschiana Dinter",
+"Tridentea ruschiana (Dinter) L.C.Leach",
+"Tromotriche ruschiana (Dinter) Bruyns",
+"Ceropegia ruschiana (Dinter) Bruyns"
+],
+"kewSynonyms": [
+"Stapelia ruschiana",
+"Tridentea ruschiana",
+"Tromotriche ruschiana"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Tromotriche ruschiana (Dinter) Bruyns",
+"name": "Tromotriche ruschiana",
+"row": "Ceropegia ruschiana (Dinter) Bruyns",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k525273": {
+"heading": "Drimia trichophylla",
+"authorship": "Mart.-Azorín, A.P.Dold & M.B.Crespo",
+"gbif": {
+"scientific": "Austronea trichophylla",
+"authorship": "(Mart.-Azorín, A.P.Dold & M.B.Crespo) Mart.-Azorín, M.B.Crespo & A.P.Dold"
+},
+"synonyms": [
+"Drimia trichophylla Mart.-Azorín, A.P.Dold & M.B.Crespo",
+"Austronea trichophylla (Mart.-Azorín, A.P.Dold & M.B.Crespo) Mart.-Azorín, M.B.Crespo & A.P.Dold"
+],
+"kewSynonyms": [
+"Drimia trichophylla"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Drimia trichophylla Mart.-Azorín, A.P.Dold & M.B.Crespo",
+"name": "Drimia trichophylla",
+"row": "Austronea trichophylla (Mart.-Azorín, A.P.Dold & M.B.Crespo) Mart.-Azorín, M.B.Crespo & A.P.Dold",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k2623641": {
+"heading": "Aeonium tabuliforme",
+"authorship": "(Haw.) Webb & Berthel.",
+"gbif": {
+"scientific": "Aeonium tabulaeforme",
+"authorship": "(Haw.) Webb & Berthel."
+},
+"synonyms": [
+"Aeonium berthelotianum Bolle",
+"Aeonium complanatum (A.DC.) Lem.",
+"Aeonium macrolepum Webb ex Christ",
+"Aeonium tabuliforme (Haw.) Webb & Berthel.",
+"Aeonium umbelliforme Knoche",
+"Sempervivum berthelotianum (Bolle) Christ",
+"Sempervivum complanatum A.DC.",
+"Sempervivum disciforme DC.",
+"Sempervivum disciforme DC. ex Praeger",
+"Sempervivum macrolepum (Webb ex Christ) Christ",
+"Sempervivum tabulaeforme Haw.",
+"Sempervivum tabuliforme Haw.",
+"Sempervivum umbelliforme Linding.",
+"Aeonium tabulaeforme (Haw.) Webb & Berthel."
+],
+"kewSynonyms": [
+"Aeonium berthelotianum",
+"Aeonium complanatum",
+"Aeonium macrolepum",
+"Aeonium tabuliforme",
+"Aeonium umbelliforme",
+"Sempervivum berthelotianum",
+"Sempervivum complanatum",
+"Sempervivum disciforme",
+"Sempervivum macrolepum",
+"Sempervivum tabuliforme",
+"Sempervivum umbelliforme"
+],
+"via": {
+"kind": "spelling",
+"entry": "Aeonium tabuliforme (Haw.) Webb & Berthel.",
+"name": "Aeonium tabuliforme",
+"file": "2026-06-04"
+},
+"native": 1
+},
+"k285734": {
+"heading": "Polianthes tuberosa",
+"authorship": "L.",
+"gbif": {
+"scientific": "Agave amica",
+"authorship": "(Medik.) Thiede & Govaerts"
+},
+"synonyms": [
+"Agave polianthes Thiede & Eggli",
+"Agave tuberosa (L.) Thiede & Eggli",
+"Crinum angustifolium Houtt.",
+"Polianthes gracilis Link",
+"Polianthes tuberosa L.",
+"Polianthes tuberosa f. plena Moldenke",
+"Polianthes tuberosa subsp. gracilis (Link) Baker",
+"Polianthes tuberosa subsp. plena Moldenke",
+"Polianthes tuberosa var. gracilis (Link) Beurl.",
+"Tuberosa amica Medik.",
+"Agave amica (Medik.) Thiede & Govaerts"
+],
+"kewSynonyms": [
+"Agave polianthes",
+"Agave tuberosa",
+"Crinum angustifolium",
+"Polianthes gracilis",
+"Polianthes tuberosa",
+"Tuberosa amica"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Polianthes tuberosa L.",
+"name": "Polianthes tuberosa",
+"row": "Agave amica (Medik.) Thiede & Govaerts",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+},
+"k500370": {
+"heading": "Anacampseros quinaria",
+"authorship": "E.Mey. ex Fenzl",
+"gbif": {
+"scientific": "Avonia quinaria",
+"authorship": "(E.Mey. ex Fenzl) G.D.Rowley"
+},
+"synonyms": [
+"Anacampseros quinaria E.Mey. ex Fenzl",
+"Anacampseros quinaria subsp. quinaria",
+"Avonia quinaria (E.Mey. ex Fenzl) G.D.Rowley"
+],
+"kewSynonyms": [
+"Anacampseros alstonii",
+"Anacampseros quinaria",
+"Anacampseros trigona"
+],
+"via": {
+"kind": "synonym-of",
+"entry": "Anacampseros quinaria E.Mey. ex Fenzl",
+"name": "Anacampseros quinaria",
+"row": "Avonia quinaria (E.Mey. ex Fenzl) G.D.Rowley",
+"status": "synonym",
+"file": "2026-06-04"
+},
+"native": 2
+}
+}

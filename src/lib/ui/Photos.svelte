@@ -2,7 +2,10 @@
   import type { Photo } from '$dossier/schema';
   import { heroOf, spreadByObserver } from '$dossier/dedupe';
   import { photoCredit, shownAttribution } from '$lib/ui/ref/head';
-  let { photos, name, strip = false }: { photos: Photo[]; name: string; strip?: boolean } = $props();
+  import { creditDays, type CreditUp } from '$lib/ui/ref/credit-days';
+  // `upstream`: the page's record of sources, for the day each source's credits were read (round eighty-five, the owner's
+  // decision 7); `lead`: the lead photograph's credit is said first, as it is shown above the gallery, not in it.
+  let { photos, name, strip = false, upstream = {}, lead = false }: { photos: Photo[]; name: string; strip?: boolean; upstream?: CreditUp; lead?: boolean } = $props();
   // "Wild" is what a source says, not what it leaves unsaid: iNaturalist marks each photograph; Commons and GBIF media
   // carry no flag, so those go unsaid rather than captioned as wild (round thirty, R2-12).
   const wild = $derived(photos.filter((p) => !p.captive));
@@ -22,6 +25,10 @@
     for (const p of shown) m.set(credit(p), (m.get(credit(p)) ?? 0) + 1);
     return [...m.entries()].map(([k, n]) => (n > 1 ? `${k} (${n})` : k)).join('; ');
   });
+  /** The lead's own credit, with whether it was cultivated and its day, which the band on a phone leaves out (round eighty-five). */
+  const leadCredit = $derived(hero && lead ? `${credit(hero)}${hero.captive === true ? ', in cultivation' : hero.captive === false ? ', observed growing wild' : ''}${hero.observedOn ? `, ${hero.observedOn}` : ''}` : '');
+  /** The day each source's credits were read, for the photographs credited here (decision 7; `credit-days.ts`). */
+  const days = $derived(creditDays(lead && hero ? [hero, ...shown] : shown, upstream));
 </script>
 
 {#if hero && !strip}
@@ -37,7 +44,7 @@
         <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={p.thumb} alt="{name}, photograph {i + 1}" loading="lazy" onerror={(e) => { const a = (e.currentTarget as HTMLImageElement).closest('a'); a?.classList.add('failed'); }} />{#if p.captive}<span class="tag">cultivated</span>{/if}<span class="nope">did not load</span></a>
       {/each}
     </div>
-    <p class="credits faint">Photographs: {credits}.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
+    <p class="credits faint">{#if leadCredit}The photograph at the top: {leadCredit}.{' '}{/if}Photographs: {credits}.{#if days}{' '}<span id="credit-days">{days}.</span>{/if} <a class="help" href="https://creativecommons.org/about/cclicenses/" rel="noopener">What each licence allows</a>.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
   {/if}
 {:else}
   <div class="empty card">

@@ -56,9 +56,8 @@ describe('r81a D2: a group only where Kew agrees', () => {
     expect(arch!.why).toBe('listed under the genus Copiapoa in the reference\'s list of growers\' groups, and Kew describes it as “succulent subshrub”');
     expect(cultivationSheet({ scientific: 'Senecio vulgaris', family: 'Asteraceae', kew: { lifeform: 'annual', climate: 'temperate' } }).arch).toBeNull();
   });
-  it('the species page passes the dossier\'s Kew words to the sheet', () => {
-    expect(readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8')).toMatch(/const sheetIn = \$derived\(\{[^\n]*kew: d\.distribution\.kew \?\? null \}\);/);
-  });
+  // The species page passes the dossier's Kew words to the sheet: tests/unit/r85q-species-page.test.ts mounts the page
+  // and reads the group line that quotes them (round eighty-five; this read the page's source, outside review A23).
 });
 
 describe('r81a: the four group temperatures are removed', () => {
@@ -90,7 +89,7 @@ describe('r81a W6: the label line as whole clauses', () => {
     const parts = careParts(input);
     expect(parts.length).toBe(3);
     expect(parts.join(' · ')).toBe(careLine(input));
-    expect(parts[1]).toBe('floor 4.1 °C (1 in 100, NASA POWER)');
+    expect(parts[1]).toBe('floor 4.1 °C (1\u00a0in\u00a0100, NASA POWER)');
     for (const p of parts) expect(p).not.toContain(' · ');
   });
   it('the labels page shows them as clauses fitted whole, not a line clamped to an ellipsis', () => {

@@ -62,11 +62,13 @@ test('r75g grown 2: without JavaScript the chip is a link and its address draws 
 test('r75g grown 3: /about/how names the source, the day and the rule, and that every device shows every genus', async ({ page }) => {
   await page.goto('/about/how');
   const day = new Date(`${file.day}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  // Round eighty-five (A, S11): the rules are folded under "The rules in full"; read with every list opened, as print opens them.
+  await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
   const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
   // Round eighty-four: the rule in short sentences (the reviews' S5).
   expect(text).toContain("The front page's catalogue is the same on every device: every genus and every species.");
   expect(text).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist\'s observations of plants marked captive or cultivated, across the reference\'s genera that were counted.');
   expect(text).toContain(`The count was made on ${day}, over the`);
-  expect(text).toContain('scripts/most-grown-genera.txt holds every count, the query and iNaturalist\'s terms.');
+  expect(text).toContain('The list of counts holds every count, the query and iNaturalist\'s terms.'); // round eighty-five (A22): a link, not a path
   expect(text).not.toMatch(/On a phone the front page's catalogue opens/);
 });

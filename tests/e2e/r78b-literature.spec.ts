@@ -25,7 +25,8 @@ test('r78b: a page built now has no Papers section, and its record says the pape
   await page.locator('details.prov summary').click();
   const row = page.locator('details.prov .row', { hasText: 'OpenAlex papers' });
   await expect(row).toContainText('not asked');
-  await expect(row).toContainText("not yet asked for this reference; a later fill takes the papers from OpenAlex's snapshot");
+  // Round eighty-five (E; outside review A9f): no promise of a later fill, in a page built before (these words) or after.
+  await expect(row).toContainText('the reference does not ask OpenAlex for papers');
   await expect(row).not.toContainText('nothing to report');
 });
 
@@ -38,7 +39,8 @@ test('r78b: a page built before keeps its papers, and its summary is quoted and 
   await expect(page.locator('#s-summary')).toHaveText('Summary');
   const credit = page.locator('#s-summary ~ p.small.muted').first();
   await expect(credit).toContainText('Quoted from');
-  await expect(credit.locator('a')).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Welwitschia');
+  // The quoted article's link among the credit's (round eighty-five, E: the licence and the route are linked too).
+  await expect(credit.getByRole('link', { name: /^Wikipedia, / })).toHaveAttribute('href', 'https://en.wikipedia.org/wiki/Welwitschia');
   await expect(credit).toContainText('CC BY-SA 4.0');
 });
 

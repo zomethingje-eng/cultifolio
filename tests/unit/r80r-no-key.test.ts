@@ -83,22 +83,24 @@ describe('the words, and the file', () => {
   // homonym, agent A's Xanthoceras line), beside the build's own scripts/extra-keys-kew.txt, which is kept as the build read
   // it. 921 pages read no key in the build; 909 have their reason here, and the other 12 are the pages whose lines became
   // keyless after that file was made, which the rule now gives keys the build's download did not ask (named in the header).
-  it('scripts/extra-keys-kew-none.txt: 909 of the 921 that read no key, each once, none of them a page that reads keys', () => {
+  // Round eighty-five (the merge): the 18 pages of decision 6 run by the same rule, 14 of them lumped (here) and 4 reading
+  // a key: 923 of the 935 that read no key, the same 12 apart.
+  it('scripts/extra-keys-kew-none.txt: 923 of the 935 that read no key, each once, none of them a page that reads keys', () => {
     const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     const keyed = new Set(parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8')).map((k) => k.pageId));
     const text = readFileSync('scripts/extra-keys-kew-none.txt', 'utf8');
     const none = parseNoKeys(text);
-    expect(none.size).toBe(909);
+    expect(none.size).toBe(923);
     expect([...none.keys()].every((id) => keyless.has(id) && !keyed.has(id))).toBe(true);
-    expect(keyless.size - keyed.size).toBe(921);
+    expect(keyless.size - keyed.size).toBe(935);
     const later = [...keyless].filter((id) => !keyed.has(id) && !none.has(id));
     expect(later).toHaveLength(12);
     const header = text.split('\n').find((l) => l.startsWith('# Twelve'))!;
     expect(later.every((id) => header.includes(id))).toBe(true);
     const kinds = new Map<string, number>();
     for (const l of none.values()) kinds.set(l.kind, (kinds.get(l.kind) ?? 0) + 1);
-    expect(Object.fromEntries(kinds)).toEqual({ lumped: 643, none: 210, 'other-type': 46, 'other-author': 9, other: 1 });
+    expect(Object.fromEntries(kinds)).toEqual({ lumped: 657, none: 210, 'other-type': 46, 'other-author': 9, other: 1 });
     // every page GBIF files a lumped page's names under is a page of the list, named as the list names it
     const listKeys = new Set(list.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : [])));
     const lumps = [...none.values()].filter((l) => l.kind === 'lumped');
@@ -164,12 +166,12 @@ describe('the page says it', () => {
     // Round eighty-two (the independent review's 10): the page's own reason said once, under the name card.
     expect(sp).toContain('const noSentence = $derived(uncheckedSentence(d));');
     // Round eighty-four (P7): one line on the first screen, the page's own reason behind "Why".
-    expect(sp).toContain('<div class="notice" id="records-unchecked"><p><b>GBIF\'s records not checked.</b>');
+    expect(sp).toContain('<div class="notice" id="records-unchecked"><p><b>GBIF\'s records not asked.</b>');
     expect(sp).toContain('<details class="why unchecked-why"><summary>Why</summary><div class="whybody">{noSentence}');
     expect(sp).toContain('<p class="small muted" id="kew-held-under">');
     const server = readFileSync('src/routes/species/[slug]/+page.server.ts', 'utf8');
     expect(server).toContain('const underIds = [...new Set((d.occurrences.unread?.under ?? []).map((u) => u.page)');
-    expect(readFileSync('src/routes/compare/+page.svelte', 'utf8')).toContain('`Climate not checked. ${uncheckedSentence(d)}`');
+    expect(readFileSync('src/routes/compare/+page.svelte', 'utf8')).toContain('`Climate not asked. ${uncheckedSentence(d)}`'); // round eighty-five (S9)
     const build = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(build).toContain("noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined");
     expect(build).toContain("if (fill === 'kew-why') return fillKewWhyStep();");
@@ -177,7 +179,7 @@ describe('the page says it', () => {
   });
   it('/about/how and /about/formats say it', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toContain("The why is the page's own, read by the same rule from what GBIF's backbone holds of Kew's names for it (<code>scripts/extra-keys-kew-none.txt</code>)");
+    expect(how).toContain(`The why is the page's own, read by the same rule from what GBIF's backbone holds of Kew's names for it (<a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/extra-keys-kew-none.txt">the list of pages with no key</a>)`); // round eighty-five: a link, not a path
     expect(how).toContain('the page says GBIF lumps what Kew splits');
     expect(readFileSync('src/routes/about/formats/+page.svelte', 'utf8')).toContain('<code>occurrences.unread</code>');
   });

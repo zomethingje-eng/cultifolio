@@ -13,7 +13,8 @@
    * size, so what you see is what the printer gets. A QR code on each label
    * opens the plant's page on this site.
    */
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { frame } from '$lib/ui/frame.svelte';
   import { accNo, PROP_METHODS } from '$lib/db/types';
   import { page } from '$app/state';
   import QRCode from 'qrcode';
@@ -241,7 +242,7 @@
           const line = careLine({ scientific: a.taxonName, climateStatus: d && recordsUnchecked(d) ? 'unchecked' : d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat: lat });
           // A cf. or aff. plant is not that species: its care line says whose care it borrows (round sixty-two; A21).
           const p = parseName(a.taxonName);
-          const asFor = line && line !== 'climate not checked' && line !== 'climate pending' && p.qualifier && p.epithet ? `care as for ${p.genus.charAt(0)}. ${p.epithet}: ` : '';
+          const asFor = line && line !== 'climate not checked' && line !== 'climate not asked' && line !== 'climate pending' && p.qualifier && p.epithet ? `care as for ${p.genus.charAt(0)}. ${p.epithet}: ` : '';
           care[a.id] = asFor + line; // one key, not a copy of the map per answer (round fifty-one, 5)
           if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff.add(a.id); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care[a.id] = null; });
@@ -268,6 +269,12 @@
     return [a.when ? `${m.veg ? 'started' : 'sown'} ${a.when}` : null, a.count != null ? `${a.count} ${unit}` : null].filter(Boolean).join(' · ');
   };
   const tiny = $derived(sheet.h < 16);
+
+  // The footer waits for the preview, which is drawn once the collection is open (the merge, round eighty-five; W12), as
+  // My plants' waits for its list.
+  const releaseFooter = frame.hold();
+  onDestroy(releaseFooter);
+  $effect(() => { if (collection.ready) releaseFooter(); });
 </script>
 
 <svelte:head>
@@ -344,11 +351,17 @@
     </div>
   {/if}
 
+  <!-- The preview is drawn once the collection is open, and the footer waits for it: drawn before, under "Opening your
+       collection…", it was pushed down by the list's arrival on every load (the merge, round eighty-five; review-w W12:
+       a shift of 0.081 with 30 or 374 plants). Before the collection opens there is nothing to preview. -->
+  {#if collection.ready}
   <div class="secrule"><h2>Preview</h2><div class="line"></div><span class="n">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</span></div>
   <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
+  {/if}
 </div>
 
 <!-- The preview scrolls sideways on a narrow screen: reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
+{#if collection.ready}
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="sheets" tabindex="0" role="region" aria-label="Label sheets as they will print" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}">
   {#each pages as cellsOnPage, pi}
@@ -372,6 +385,7 @@
     </div>
   {/each}
 </div>
+{/if}
 
 <style>
   .opts .body { padding: 12px 17px; font-family: var(--ui); }

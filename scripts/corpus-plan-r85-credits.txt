@@ -1,0 +1,12 @@
+# Round eighty-five (N; the owner's decision 7), after corpus-plan-r85.txt's upload: every iNaturalist and Commons credit
+# read again and stamped with the day it was read (B2: the two Hibiscus rosa-sinensis credits). iNaturalist allows this
+# site 4,000 requests a day, so the fill stops at the day's allowance (exit 3, "asked again tomorrow"): run the same
+# command the next day (UTC) and it goes on where it stopped. Then the index, the check, a review, the upload and the
+# live check, as the round's plan.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r85-credits.txt
+dossier --fill credits
+dossier --index
+dossier --check-ranges
+review Read the fill's last line ("… pages read: … credits read again and stamped <day>, … corrected, … photographs dropped") and the check's count lines and "fixed:" lines, as the round's plan. If anything reads "NOT FIXED", stop and paste the end of corpus-step.log back.
+upload
+live-check

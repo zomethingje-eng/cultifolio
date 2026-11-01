@@ -86,6 +86,10 @@
  *                                                                # human observation (a herbarium scan, a drawing, a micrograph) is dropped; resumable; then the index
  *   npx tsx scripts/build-dossiers.ts --fill range-source --bulk bulk # a range Kew gives through a synonym row says whose entry it is; offline; then the index
  *   npx tsx scripts/build-dossiers.ts --fill kew-links          # every stored IPNI and POWO link set to Kew's number for the name and author; resumable; then the index
+ *   npx tsx scripts/build-dossiers.ts --fill credits             # every stored iNaturalist and Commons photograph's credit read again and stamped with the
+ *                                                                # day (round eighty-five); changed credits corrected, closed or missing files dropped
+ *   npx tsx scripts/build-dossiers.ts --fill summary-revisions   # every stored Wikipedia summary's revision recorded, and its text read again where the
+ *                                                                # article changed (round eighty-five)
  *   npx tsx scripts/build-dossiers.ts --fill kew-names --bulk bulk # Kew's names for every page (name.kew), its citation as Kew's row for the number it
  *                                                                # links (name.cited), common names that are scientific names dropped; offline; then the index
  *   npx tsx scripts/build-dossiers.ts --fill commons-kind       # Commons' categories for every stored Commons photograph, fifty files a request, kept with it; then the index
@@ -102,6 +106,8 @@
  *   npx tsx scripts/build-dossiers.ts --list-range-shapes        # rebuild-shapes.txt (round eighty): every page with an open in-range record outside every
  *                                                                # native region's shape (scripts/tdwg3-shapes.json), for --keys … --offline; offline
  *   npx tsx scripts/build-dossiers.ts --list-no-reason           # rebuild-no-reason.txt (round eighty-two): every page with a row not ok and no reason
+ *   npx tsx scripts/build-dossiers.ts --list-renamed             # rebuild-renamed.txt (round eighty-five): every page Kew's name heads where GBIF names
+ *                                                                # its key otherwise, not yet built by Kew's name, for --keys online
  *   npx tsx scripts/build-dossiers.ts --list-r83-repair <copy or none> <shapes before>
  *                                                                # rebuild-r83c.txt (round eighty-three): every page whose records the October 2026
  *                                                                # repair took out that the regions' shapes or the default points now keep; offline
@@ -142,9 +148,9 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { defaultPoints, formatDefaultPoints, parseDefaultPoints, pointKey, MIN_SPECIES, MIN_UNDATED } from '../src/lib/dossier/default-points';
 import { repairList, changedRegions, type RepairPage } from '../src/lib/dossier/repair-r83';
-import { regionTester, outsideShapes, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
+import { regionTester, outsideShapes, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE, ADMISSIONS, type RegionTester, type ShapesFile } from '../src/lib/dossier/tdwg-shapes';
 import { listingStore, readEach, unreadSentence, type ListingStore } from '../src/lib/dossier/listing-store';
-import { walkList, checkPage, caseLine, NAMED_CASES, cellTester, type CheckPage } from '../src/lib/dossier/range-check';
+import { walkList, checkPage, caseLine, reasonWords, NAMED_CASES, cellTester, type CheckPage } from '../src/lib/dossier/range-check';
 import { carriesCore } from '../src/lib/dossier/carry-core';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
@@ -152,7 +158,7 @@ import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, type VernacularName } from '../src/lib/dossier/index-entry';
+import { keptNames, englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -160,12 +166,16 @@ import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify } from '../src/lib/core/names';
 import { parseMostGrown, openingGenera } from '../src/lib/ui/ref/most-grown-rule';
 import { InfraNames, backboneRow, type BackboneRow } from '../src/lib/dossier/infra-names';
-import { gbifView } from '../src/lib/dossier/kew-heading';
+import { gbifView, kewHeadingOf, renamedLines, formerHeadings } from '../src/lib/dossier/kew-heading';
+import { stampRead, stampNew, applyCredits, readObservations, readFiles, observationOf, type CreditCounts, type CreditObs, type CreditFile } from '../src/lib/dossier/photo-read';
+import { readRevision, revisionWanted, type RevisionCounts, type RevisionPage } from '../src/lib/dossier/revision-fill';
 import type { GrownRule } from '../src/lib/dossier/catalogue';
 import { makeFetcher, fixtureFetcher, isThrottle } from '../src/lib/dossier/fetch';
 import { dayCached, type DayStore } from '../src/lib/dossier/day-cache';
 import { dayBudget, INAT_DAY_BUDGET } from '../src/lib/dossier/day-budget';
 import { writeAtomic } from './write-atomic';
+import { writeProduct, checkProducts, productsSentence } from './product-files';
+import { writeExamplesFixture } from './about-examples';
 import { loadKewInfra } from './kew-infra-load';
 import { inatKewFill, kewReading, type InatKewDossier } from '../src/lib/dossier/inat-kew-fill';
 import { inatBatched, wildGroups, CULTIVATED_BATCH } from '../src/lib/dossier/inat-batch';
@@ -212,6 +222,7 @@ import { parseExtraKeys, formatExtraKeys, byPage, byPageId, parseMerges, mergedT
 import { listExtraKeys } from './extra-keys-list';
 import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/clean';
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
+import { gbifAliasOf } from '../src/lib/dossier/gbif-alias';
 import { gbifPage, isPageId, type PageId } from '../src/lib/core/page-id';
 import { rekey, DOSSIER_FILE, V2_FILE, idsGbifLines, type RekeyStore, type RekeyReport } from '../src/lib/dossier/rekey';
 import { sharedKewLines } from '../src/lib/dossier/page-ids';
@@ -400,8 +411,8 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; kew?: string[]; hom?: string[]; homBy?: string[][]; changed?: number };
-type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; authorship?: string | null; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[]; kew?: { synonyms?: string[] } }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string; name?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
+type IndexEntry = { key: PageId; gbif?: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; spellings?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: PageId[]; syn?: string[]; older?: string[]; kew?: string[]; hom?: string[]; homBy?: string[][]; changed?: number; grown?: number };
+type Dossierish = { key: PageId; ids?: { gbif?: number }; slug: string; name: { scientific: string; authorship?: string | null; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[]; kew?: { synonyms?: string[]; elsewhere?: string[]; accepted?: { other?: string } }; gbif?: { scientific: string } | null; formerly?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ src?: string; id: string; url: string; thumb: string; width?: number; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number; keys?: Array<{ key: number; slug?: string; name?: string }> }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
 /**
  * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
  * `englishNames`'s rule, which sets back a name naming another genus of the corpus, and the corpus's genera are known
@@ -412,6 +423,10 @@ const vernOf = new Map<PageId, VernacularName[]>();
 const olderOf = new Map<PageId, string[]>();
 /** Each species' names GBIF files under its varieties (`name.infra`; round eighty-four, A8): what `nameEntries` keeps off another page's accepted name. */
 const infraOf = new Map<PageId, ReadonlySet<string>>();
+/** How many of each page's stored names Kew's file places only in another plant (`name.kew.elsewhere`; round eighty-five): left out, and counted. */
+const awayOf = new Map<PageId, number>();
+/** Each page's former headings that Kew's file places in another plant (round eighty-five): that plant's page takes them as older names. */
+const awayFormers = new Map<PageId, string[]>();
 /** Each species' own author and GBIF's older names as its record writes them, with their authors: what `homonymEntries` reads (round eighty-two; review 1's 3). */
 const recordOf = new Map<PageId, { authorship?: string | null; synonyms: string[] }>();
 /**
@@ -429,7 +444,9 @@ function nameEntries(index: IndexEntry[]): void {
   const genera = generaOf(index.map((e) => e.name));
   // The one-word names a species does not head with, another of its genus being given them more often (round eighty-four,
   // review-d D9; `sharedHeadlines`), written into each dossier whose answer changed, so its page reads the same.
-  const shared = sharedHeadlines(index.map((e) => ({ key: e.key, genus: genusOf(e.name), names: oneWordNames(vernOf.get(e.key) ?? []) })));
+  // Across genera too, where a species of another genus is given the name more often and grown more (round eighty-five, D13).
+  const grownBy = fixtures ? new Map<string, number>() : grownCounts();
+  const shared = sharedHeadlines(index.map((e) => ({ key: e.key, genus: genusOf(e.name), names: oneWordNames(vernOf.get(e.key) ?? []), grown: grownBy.get(e.key) })));
   markSharedNames(index, shared);
   // A name GBIF files under a species' variety that is another page's accepted name is that page's (round eighty-four, A8):
   // not searched as this one's.
@@ -440,6 +457,22 @@ function nameEntries(index: IndexEntry[]): void {
     const kept = e.kew.filter((n) => !infra.has(n) || !accepted.has(n.replace(/×\s*/g, '').toLowerCase()));
     if (kept.length !== e.kew.length) { if (kept.length) e.kew = kept; else delete e.kew; }
   }
+  // A former heading Kew's file holds for another plant (round eighty-five; outside review A15: /species/ceropegia-tanzaniensis
+  // answered 404) is an older name of that plant's page: the one page whose Kew names hold it.
+  if (awayFormers.size) {
+    const holders = new Map<string, IndexEntry[]>();
+    for (const e of index) for (const n of e.kew ?? []) { const k = n.replace(/×\s*/g, '').toLowerCase(); (holders.get(k) ?? holders.set(k, []).get(k)!).push(e); }
+    let moved = 0;
+    for (const [key, names] of awayFormers) for (const n of names) {
+      const hs = (holders.get(n.replace(/×\s*/g, '').toLowerCase()) ?? []).filter((e) => e.key !== key);
+      if (hs.length !== 1) continue;
+      const e = hs[0];
+      if (!(e.older ?? []).includes(n) && !(e.syn ?? []).includes(n)) { e.older = [...(e.older ?? []), n]; moved++; }
+    }
+    if (moved) console.log(`  ${moved} former heading${moved === 1 ? '' : 's'} Kew's file holds for another plant: an older name of that plant's page`);
+  }
+  const awayNames = [...awayOf.values()].reduce((a, b) => a + b, 0);
+  if (awayNames) console.log(`  ${awayNames} of GBIF's names on ${awayOf.size} pages left out: Kew's file places each only in another plant (name.kew.elsewhere)`);
   index.forEach((e, i) => {
     const lost = shared.get(e.key);
     const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera, older: olderOf.get(e.key) ?? [], shared: lost });
@@ -454,6 +487,13 @@ function nameEntries(index: IndexEntry[]): void {
     }
     index[i] = o as unknown as IndexEntry;
   });
+  // Growers' counts (round eighty-five; outside review A14): the search's tie-break before the photographs.
+  if (!fixtures) {
+    const counts = grownBy;
+    let n = 0;
+    for (const e of index) { const g = counts.get(e.key); if (g) { (e as IndexEntry & { grown?: number }).grown = g; n++; } else delete (e as IndexEntry & { grown?: number }).grown; }
+    if (n) console.log(`  ${n} species with a count of observations marked cultivated (scripts/species-list.txt): the search's tie-break before the photographs`);
+  }
 }
 /**
  * `name.shared` written into each dossier whose one-word names lost changed (round eighty-four, D9), with its stamp, so the
@@ -504,7 +544,11 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
   // merge, on F's need): a page built from Kew's file does not hold a name Kew files elsewhere or not at all (Echeveria
   // peacockii, which Kew files under Dudleya pulverulenta; Bisnaga hamatacantha, which Kew's file does not hold), and the
   // search found the old name's page, after the prune, nowhere or only elsewhere. The record's own names come first.
-  const own = d.name.synonyms ?? [];
+  // GBIF's names that Kew's file places only in another plant are not this page's (round eighty-five, the owner's decision
+  // 6; `name.kew.elsewhere`, written by `--fill kew-names`): neither shown, searched nor an address. A merged page's name
+  // is the owner's decision and stays (it is added back below).
+  const { own, away } = keptNames(d.name);
+  if (away.size) awayOf.set(d.key, away.size);
   const mergedHere = (d.occurrences.keys ?? []).flatMap((x) => (x.slug && x.name && !own.includes(x.name) ? [x.name] : []));
   const names = mergedHere.length ? [...own, ...mergedHere] : own;
   olderOf.set(d.key, [...names, ...(d.name.kew?.synonyms ?? [])]);
@@ -514,7 +558,13 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
   const { syn, older } = olderNamesOf(d.name.scientific, names);
   // Kew's older names the two do not hold, for the search alone (`kewOlderOf`; round eighty, review-d 5).
   // And the names GBIF files under the species' own varieties and subspecies (`name.infra`; round eighty-four, A8: San Pedro), read the same way.
-  const infra = Array.isArray((d.name as { infra?: unknown }).infra) ? ((d.name as { infra?: string[] }).infra ?? []) : [];
+  const { infra } = keptNames(d.name as Parameters<typeof keptNames>[0]);
+  // The page's former headings (round eighty-five; review-d D5, outside review A15, S10): GBIF's name for its key where
+  // Kew's now heads it, and a heading its Kew entry had before (`name.formerly`), each an address of the page and a name
+  // the search finds, unless Kew's file places it in another plant (then that plant's page takes it, `nameEntries`).
+  const formers = formerHeadings(d);
+  for (const x of formers.here) if (!syn.includes(x) && !older.includes(x) && slugify(x) !== d.slug) older.push(x);
+  if (formers.away.length) awayFormers.set(d.key, formers.away);
   const kew = kewOlderOf(d.name.scientific, [...syn, ...older], Array.isArray(d.name.kew?.synonyms) || infra.length ? [...(d.name.kew?.synonyms ?? []), ...infra] : undefined);
   if (infra.length) infraOf.set(d.key, new Set(infra));
   // The names of the pages merged here, marked (`mergedNamesOf`; round eighty-three): the search puts this page first for
@@ -558,6 +608,9 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
       if (st) { d.changed = st; writeAtomic(`${dir}/${f}`, JSON.stringify(d)); stamped++; }
       out.push(indexEntry(d));
       for (const x of d.occurrences.keys ?? []) if (x.slug) aliases.push({ slug: x.slug, key: d.key });
+      // GBIF's name for the page's key, where Kew's heads the page: the sheets answer a plant of that key by it (round eighty-five; review-c C4).
+      const viaGbif = gbifAliasOf(d);
+      if (viaGbif) aliases.push(viaGbif);
       forPhotos.push(`${dir}/${f}`);
       if (d.climate.status === 'ok' && d.climate.months?.length === 12) withClimate.push({ key: d.key, gbif: d.ids?.gbif, months: d.climate.months });
       if (d.name.status && d.name.status !== 'accepted') notAccepted.push({ key: d.key, name: d.name.scientific, status: d.name.status, records: d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0) + (d.occurrences.nOutsideRange ?? 0) });
@@ -759,7 +812,7 @@ async function fillGenera(): Promise<void> {
       : r.status === 'none'
         ? { genus: g, slug, status: 'none' as const, at: new Date().toISOString() }
         : { genus: g, slug, status: 'refused' as const, detail: `${r.status}: ${r.detail}`, at: new Date().toISOString() };
-    writeFileSync(p, JSON.stringify(rec, null, 1));
+    writeAtomic(p, JSON.stringify(rec, null, 1)); // an uploaded file of the corpus: whole or not at all (round eighty-five; A19)
     if (rec.status === 'ok') ok++;
     else if (rec.status === 'none') none++;
     else refused++;
@@ -1384,7 +1437,9 @@ async function fillCommonsKindStep(): Promise<void> {
  */
 function listWalk(): number {
   let since: string | undefined;
-  try { since = args.includes('--again') ? undefined : (JSON.parse(readFileSync(WALK_FILE, 'utf8')) as { since?: string }).since; } catch { since = undefined; }
+  // A walk begun under another round's rule (walk.json's `rule`) is done: this rule's walk begins anew (round eighty-five), so
+  // the plan's one line both begins it and resumes it.
+  try { const w = JSON.parse(readFileSync(WALK_FILE, 'utf8')) as { since?: string; rule?: string }; since = args.includes('--again') || w.rule !== RANGE_RULE ? undefined : w.since; } catch { since = undefined; }
   const began = !since;
   since ??= new Date().toISOString();
   const store = listingStore(diskStore());
@@ -1415,8 +1470,20 @@ function diskStore(): DossierStore {
   return {
     files: () => (existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)) : []),
     read: <T,>(file: string) => JSON.parse(readFileSync(`${dir}/${file}`, 'utf8')) as T,
-    write: (file: string, d: unknown) => writeAtomic(`${dir}/${file}`, JSON.stringify(d))
+    write: (file: string, d: unknown) => writeAtomic(`${dir}/${file}`, JSON.stringify(withReadDays(`${dir}/${file}`, d)))
   };
+}
+/**
+ * A dossier about to be written over the one on disk, its photographs the one on disk did not hold stamped with today's
+ * day (`stampNew`; round eighty-five, the owner's decision 7): a fill that adds a photograph read it today. A file not on
+ * disk yet (a page given a new id) is written as it is: its photographs' days are its own.
+ */
+function withReadDays(path: string, d: unknown): unknown {
+  const x = d as { photos?: Array<{ src?: string; id: string; read?: string }> };
+  if (!Array.isArray(x?.photos) || !x.photos.length || !existsSync(path)) return d;
+  let before: Array<{ src?: string; id: string; read?: string }> = [];
+  try { before = (JSON.parse(readFileSync(path, 'utf8')) as { photos?: typeof before }).photos ?? []; } catch { return d; }
+  return { ...x, photos: stampNew(before, x.photos, today()) };
 }
 
 /**
@@ -1481,7 +1548,7 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
   const store: DossierStore = keys ? { ...all, files: () => all.files().filter((f) => keys.has(f.replace(/\.json$/, '') as PageId)) } : all;
   // Only what `loadKewNames` reads of each page, not the page (the merge, round eighty-four): the walk's fill reads all
   // 48,357, and whole dossiers held at once took 1.4 GB at 8,940 of round seventy-seven's smaller pages.
-  const slim = (d: Dossier) => ({ key: d.key, name: { scientific: d.name.scientific, synonyms: d.name.synonyms, vernacular: d.name.vernacular?.map((v) => ({ name: v.name })), kew: d.name.kew?.entry ? { entry: d.name.kew.entry } : undefined, gbif: (d.name as { gbif?: { scientific: string } | null }).gbif?.scientific ? { scientific: (d.name as { gbif: { scientific: string } }).gbif.scientific } : undefined }, ids: { powo: d.ids.powo, ipni: d.ids.ipni } });
+  const slim = (d: Dossier) => ({ key: d.key, name: { scientific: d.name.scientific, synonyms: d.name.synonyms, infra: d.name.infra, vernacular: d.name.vernacular?.map((v) => ({ name: v.name })), kew: d.name.kew?.entry ? { entry: d.name.kew.entry } : undefined, gbif: (d.name as { gbif?: { scientific: string } | null }).gbif?.scientific ? { scientific: (d.name as { gbif: { scientific: string } }).gbif.scientific } : undefined }, distribution: d.distribution?.via?.name ? { via: { name: d.distribution.via.name } } : undefined, ids: { powo: d.ids.powo, ipni: d.ids.ipni } });
   const pages = store.files().flatMap((file) => { try { return [slim(store.read<Dossier>(file))]; } catch { return []; } });
   console.log(`Reading Kew's names for ${pages.length} dossiers from ${bulkDir}/wcvp_names.csv…`);
   const idx = await loadKewNames(bulkDir, pages);
@@ -1492,8 +1559,84 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
   const ids = new Set(all.files().map((f) => f.replace(/\.json$/, '')));
   const heldBy = (entry: string, page: string) => (ids.has(`k${entry}`) && page !== `k${entry}` ? `k${entry}` : undefined);
   const c = fillKewNames(store, idx, kewFileDay(bulkDir), reference, { heldBy });
-  console.log(`  ${c.read} dossiers read, ${c.changed} changed: ${c.cited} cite Kew's author, ${c.elsewhere} list older names Kew accepts as species of their own, ${c.vernacularDropped} common names dropped as scientific names${c.held ? `, ${c.held} not given a Kew entry another page holds` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  console.log(`  ${c.read} dossiers read, ${c.changed} changed: ${c.cited} cite Kew's author, ${c.elsewhere} list older names Kew accepts as species of their own, ${c.placedElsewhere ?? 0} of GBIF's names Kew places only in another plant (not the page's), ${c.vernacularDropped} common names dropped as scientific names${c.held ? `, ${c.held} not given a Kew entry another page holds` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // A page Kew's name headed and no longer heads (round eighty-five, outside review A23): said apart, at the end, where it is read.
+  if (c.unheaded) console.log(`  ${c.unheaded} page${c.unheaded === 1 ? '' : 's'} no longer headed by Kew's name:\n${c.unheadedLines!.map((l) => `    ${l}`).join('\n')}`);
   if (index) writeIndexFromDisk();
+}
+
+/**
+ * `--fill credits` (round eighty-five, the owner's decision 7; outside review B2): every stored iNaturalist and Commons
+ * photograph's credit and licence read again from its source, two hundred observations or fifty files a request
+ * (`photo-read.ts`): a credit that changed is corrected, a photograph whose licence is no longer open or whose file is
+ * gone is dropped and said, and each is stamped with the day it was read (`read`), which the page shows. A page whose
+ * every such photograph carries a day is passed by, so a run that stops resumes; `--again` reads every one. Under
+ * iNaturalist's day's allowance (`--inat-budget`), as `--fill inat`; at the allowance it stops (exit 3), and the same
+ * command the next day goes on. GBIF's photographs are read from their records by `--fill gbif-licence`. Then the index.
+ */
+async function fillCreditsStep(): Promise<void> {
+  const store = diskStore();
+  const f = upstreamApi();
+  const again = args.includes('--again');
+  const day = today();
+  type P = { key?: unknown; name?: { scientific?: string }; photos: Array<{ src: string; id: string; page?: string; attribution: string; licence: string; read?: string }> };
+  const wants = (d: P) => d.photos.some((p) => (p.src === 'inat' && observationOf(p.page) != null || p.src === 'commons') && (again || !p.read));
+  const files = store.files().filter((file) => { try { return wants(store.read<P>(file)); } catch { return false; } });
+  console.log(`Reading the credits of ${files.length} pages' iNaturalist and Commons photographs again${again ? ' (every one)' : ' (those with no day read)'}…`);
+  const c: CreditCounts = { pages: 0, read: 0, changed: 0, dropped: 0, unread: 0, lines: [] };
+  let failed = 0;
+  for (let i = 0; i < files.length; ) {
+    // As many pages as two hundred observations take, their Commons files read fifty a request.
+    const batch: string[] = [];
+    const ids = new Set<string>();
+    while (i < files.length) {
+      const d = store.read<P>(files[i]);
+      const own = d.photos.flatMap((p) => (p.src === 'inat' && (again || !p.read) ? [observationOf(p.page)].filter((x): x is string => x != null) : []));
+      if (batch.length && ids.size + own.length > 200) break;
+      own.forEach((x) => ids.add(x));
+      batch.push(files[i++]);
+    }
+    const obs = new Map<string, CreditObs>();
+    // By number and by uuid apart: iNaturalist reads one kind a request.
+    for (const idList of [[...ids].filter((x) => /^\d+$/.test(x)), [...ids].filter((x) => !/^\d+$/.test(x))]) {
+      for (let k = 0; k < idList.length; k += 200) { const r = await readObservations(f, idList.slice(k, k + 200)); if (!r) { failed++; continue; } for (const [x, o] of r) obs.set(x, o); }
+    }
+    const titles = [...new Set(batch.flatMap((file) => store.read<P>(file).photos.filter((p) => p.src === 'commons' && (again || !p.read)).map((p) => p.id)))];
+    const got = new Map<string, CreditFile>();
+    for (let k = 0; k < titles.length; k += 50) { const r = await readFiles(f, titles.slice(k, k + 50)); if (!r) { failed++; continue; } for (const [t, x] of r) got.set(t, x); }
+    for (const file of batch) {
+      const d = store.read<P>(file);
+      c.pages++;
+      if (applyCredits(d, obs, got, day, c)) store.write(file, d);
+    }
+    process.stdout.write(`\r  ${c.pages} pages read: ${c.read} credits read, ${c.changed} corrected, ${c.dropped} photographs dropped…   `);
+  }
+  console.log(`\r  ${c.pages} pages read: ${c.read} credits read again and stamped ${day}, ${c.changed} corrected, ${c.dropped} photographs dropped${c.recaptive ? `, ${c.recaptive} whose captive mark iNaturalist changed` : ''}${c.unread ? `, ${c.unread} not answered (left as they were, with no day)` : ''}${c.lines.length ? `:\n${c.lines.slice(0, 200).map((l) => `    ${l}`).join('\n')}${c.lines.length > 200 ? `\n    … ${c.lines.length - 200} more` : ''}` : '.'}`);
+  if (failed || c.unread) { console.log(`  ${failed} requests not answered: run --fill credits again; it reads only what is left.`); unfinished(); }
+  writeIndexFromDisk();
+}
+
+/**
+ * `--fill summary-revisions` (round eighty-five, the owner's decision 8): every stored Wikipedia summary's revision
+ * recorded, and its text read again where the article's lead changed (`revision-fill.ts`); a summary with a revision is
+ * passed by, so a run that stops resumes (`--again` reads every one). Then the index.
+ */
+async function fillRevisionsStep(): Promise<void> {
+  const store = diskStore();
+  const f = upstreamApi();
+  const again = args.includes('--again');
+  const day = today();
+  const files = store.files().filter((file) => { try { return revisionWanted(store.read<RevisionPage>(file), again); } catch { return false; } });
+  console.log(`Reading the Wikipedia revision of ${files.length} pages' summaries${again ? ' (every one)' : ' (those with none recorded)'}…`);
+  const c: RevisionCounts = { read: 0, same: 0, refreshed: 0, left: 0, unanswered: 0, lines: [] };
+  for (const [i, file] of files.entries()) {
+    const d = store.read<RevisionPage>(file);
+    if (await readRevision(f, d, day, c)) store.write(file, d);
+    if (i % 50 === 0) process.stdout.write(`\r  ${i + 1} of ${files.length}: ${c.same} unchanged, ${c.refreshed} refreshed…   `);
+  }
+  console.log(`\r  ${c.read} summaries read: ${c.same} unchanged, their revision recorded; ${c.refreshed} refreshed, the lead having changed; ${c.left} left for --fill summaries${c.unanswered ? `; ${c.unanswered} not answered` : ''}${c.lines.length ? `:\n${c.lines.slice(0, 300).map((l) => `    ${l}`).join('\n')}${c.lines.length > 300 ? `\n    … ${c.lines.length - 300} more` : ''}` : '.'}`);
+  if (c.unanswered) { console.log('  run --fill summary-revisions again: it reads only what is left.'); unfinished(); }
+  writeIndexFromDisk();
 }
 
 /** GBIF's backbone export: `--backbone <file>`, else `<bulk>/backbone/simple.txt.gz` when it is there. */
@@ -1526,6 +1669,7 @@ async function fillGbifInfraStep(keys?: Set<PageId>, index = true): Promise<void
   await pass((r) => infra.first(r));
   await pass((r) => infra.second(r));
   let changed = 0, pages = 0, names = 0;
+  const written = new Set<PageId>();
   for (const [key, f] of byGbif) {
     const d = store.read<Dossier & { name: { infra?: string[] } }>(f);
     const own = gbifView(d.name);
@@ -1534,9 +1678,14 @@ async function fillGbifInfraStep(keys?: Set<PageId>, index = true): Promise<void
     if (JSON.stringify(d.name.infra ?? []) === JSON.stringify(want)) continue;
     if (want.length) d.name.infra = want; else delete d.name.infra;
     store.write(f, d);
+    written.add(f.replace(/\.json$/, '') as PageId);
     changed++;
   }
   console.log(`  ${infra.usages} varieties and subspecies of the pages' species; ${names} names of species rank filed under them on ${pages} pages, searched as a name typed (name.infra); ${changed} dossiers written`);
+  // Each name Kew's file places in another plant is not the page's (round eighty-five, decision 6): the pages written here
+  // read Kew's names again, so a name this fill added is judged before the index reads it.
+  if (index && written.size && bulkDir && existsSync(`${bulkDir}/wcvp_names.csv`)) await fillKewNamesStep(written, false);
+  else if (index && written.size) console.log(`  ${written.size} page${written.size === 1 ? '' : 's'} with new names here: run --fill kew-names --bulk <dir> next, so Kew's file judges them (name.kew.elsewhere)`);
   if (index) writeIndexFromDisk();
 }
 
@@ -1776,14 +1925,16 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number, aliase
   const buckets = new Map<string, Sheet[]>();
   let n = 0;
   // The old addresses of pages merged into these (round seventy-three; `aliasesOf`): the kept page's sheet under each, so a plant under the old name finds it.
-  const alias = new Map<PageId, string[]>();
-  for (const { slug, entry } of aliasesOf(index, aliases)) alias.set(entry.key, [...(alias.get(entry.key) ?? []), slug]);
+  // And GBIF's name for a page's key, where Kew's name heads the page (round eighty-five; `gbif-alias.ts`): marked, so a
+  // device takes it only for a plant of the page's own key. Each copy carries its page's own address.
+  const alias = new Map<PageId, Array<{ slug: string; via: 'gbif' | 'merged' }>>();
+  for (const { slug, entry, via } of aliasesOf(index, aliases)) alias.set(entry.key, [...(alias.get(entry.key) ?? []), { slug, via: via ?? 'merged' }]);
   for (const e of index) {
     try {
       const d = parseDossier(JSON.parse(readFileSync(`${idxDir}/${e.key}.json`, 'utf8')));
       const b = bucketOf(e.slug, count);
       (buckets.get(b) ?? buckets.set(b, []).get(b)!).push({ ...sheetOf(d, e.thumb, e.credit), slug: e.slug }); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
-      for (const old of alias.get(e.key) ?? []) { const ob = bucketOf(old, count); (buckets.get(ob) ?? buckets.set(ob, []).get(ob)!).push({ ...sheetOf(d, e.thumb, e.credit), slug: old }); }
+      for (const old of alias.get(e.key) ?? []) { const ob = bucketOf(old.slug, count); (buckets.get(ob) ?? buckets.set(ob, []).get(ob)!).push({ ...sheetOf(d, e.thumb, e.credit), slug: old.slug, via: old.via, page: e.slug }); }
       n++;
     } catch {
       /* a dossier that does not parse is not served as a sheet either; the Worker derives what it can */
@@ -1807,10 +1958,11 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number, aliase
  * of iNaturalist's observations marked captive or cultivated from `scripts/species-list.txt` ("inat N", by Kew's
  * plant_name_id, the page id without its k). Null without the genera's file: the strip is then chosen as before, and said.
  */
-function grownRule(index: IndexEntry[]): GrownRule | null {
-  const generaFile = 'scripts/most-grown-genera.txt', listFile = 'scripts/species-list.txt';
-  if (!existsSync(generaFile)) { console.log(`  the front page's strip: no ${generaFile}, so chosen by the rule before the popular genera`); return null; }
-  const genera = openingGenera(parseMostGrown(readFileSync(generaFile, 'utf8')), index.map((e) => genusOf(e.name))).genera;
+/**
+ * Each species' count of iNaturalist's observations marked captive or cultivated, from `scripts/species-list.txt` ("inat
+ * N", by Kew's plant_name_id, the page id without its k): the strip's rule and the index's `grown` (round eighty-five).
+ */
+function grownCounts(listFile = 'scripts/species-list.txt'): Map<string, number> {
   const species = new Map<string, number>();
   if (existsSync(listFile)) for (const line of readFileSync(listFile, 'utf8').split(/\r?\n/)) {
     if (!line || line.startsWith('#')) continue;
@@ -1818,6 +1970,13 @@ function grownRule(index: IndexEntry[]): GrownRule | null {
     const n = /\binat (\d+)/.exec(f[4] ?? '');
     if (/^[1-9]\d*$/.test(f[0] ?? '') && n) species.set(`k${f[0]}`, Number(n[1]));
   }
+  return species;
+}
+function grownRule(index: IndexEntry[]): GrownRule | null {
+  const generaFile = 'scripts/most-grown-genera.txt', listFile = 'scripts/species-list.txt';
+  if (!existsSync(generaFile)) { console.log(`  the front page's strip: no ${generaFile}, so chosen by the rule before the popular genera`); return null; }
+  const genera = openingGenera(parseMostGrown(readFileSync(generaFile, 'utf8')), index.map((e) => genusOf(e.name))).genera;
+  const species = grownCounts(listFile);
   console.log(`  the front page's strip: from the ${genera.length} popular genera, each by its species most observed in cultivation (${species.size} species counted in ${listFile})`);
   return { genera, species };
 }
@@ -1830,9 +1989,10 @@ function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, s
   let written = 0, kept = 0, keyBytes = 0;
   const write = (hash: string, body: string) => {
     const path = `${idxDir}/${productPath(hash).slice(`s/v${DOSSIER_V}/`.length)}`;
-    if (existsSync(path)) { kept++; return; }
-    writeFileSync(path, body);
-    written++;
+    // Whole or not at all, and a file cut off by a stopped run written again (round eighty-five; A19, A24): kept only when
+    // its size is its content's (`scripts/product-files.ts`).
+    if (writeProduct(path, body)) written++;
+    else kept++;
   };
   // The search's key files are written as they are made (round seventy-seven): at fifty thousand species they are
   // gigabytes, and holding them all before writing would not fit.
@@ -2095,7 +2255,7 @@ function rekeyFromV2(): void {
   let genera = 0;
   if (existsSync(`${from}/g`)) {
     mkdirSync(`${to}/g`, { recursive: true });
-    for (const f of readdirSync(`${from}/g`).filter((x) => x.endsWith('.json'))) { writeFileSync(`${to}/g/${f}`, readFileSync(`${from}/g/${f}`)); genera++; }
+    for (const f of readdirSync(`${from}/g`).filter((x) => x.endsWith('.json'))) { writeAtomic(`${to}/g/${f}`, readFileSync(`${from}/g/${f}`, 'utf8')); genera++; }
   }
   console.log(`  ${genera} genus records copied to ${to}/g`);
   writeIndexFromDisk();
@@ -2131,8 +2291,17 @@ function writeIndexFromDisk(): void {
   const indexText = JSON.stringify(shownIndex, null, 1);
   writeAtomic(`${idxDir}/index.json`, indexText);
   console.log(`  index: ${index.length} species`);
+  // The about pages' search examples tested against this index, and its counts for their prerendered text (round
+  // eighty-five, A; the reviews' S4, A21): the fixture the unit test reads is made again from the index that goes live.
+  // In the tree the index is written in (the repository, as the owner runs it), never the script's own: a test that runs
+  // the step in a scratch directory leaves the repository's fixture alone.
+  if (!fixtures) writeExamplesFixture(shownIndex, process.cwd());
   // Old addresses of merged pages (round seventy-three): read from the kept pages' records, as `--prune-followed` reads them.
-  if (aliases.length) console.log(`  ${aliases.length} old address${aliases.length === 1 ? '' : 'es'} of pages merged into another answered by the kept page: ${aliases.map((a) => a.slug).join(', ')}`);
+  const mergedAliases = aliases.filter((a) => a.via !== 'gbif');
+  if (mergedAliases.length) console.log(`  ${mergedAliases.length} old address${mergedAliases.length === 1 ? '' : 'es'} of pages merged into another answered by the kept page: ${mergedAliases.map((a) => a.slug).join(', ')}`);
+  // GBIF's names for the keys of pages Kew's name heads (round eighty-five; review-c C4): the sheets answer a plant of that key by it.
+  const gbifAliases = aliasesOf(index, aliases).filter((a) => a.via === 'gbif');
+  if (gbifAliases.length) console.log(`  ${gbifAliases.length} page${gbifAliases.length === 1 ? '' : 's'} headed by Kew's name whose figures a plant of its GBIF key finds under GBIF's name too (e.g. ${gbifAliases.slice(0, 3).map((a) => `${a.slug} → ${a.entry.slug}`).join(', ')})`);
   // And their names, marked on the kept pages (round eighty-three): the search lists the kept page first for one typed.
   const marked = shownIndex.flatMap((e) => (e.merged ?? []).map((n) => `${n} → ${e.name}`));
   if (marked.length) console.log(`  ${marked.length} name${marked.length === 1 ? '' : 's'} of pages merged into another marked on the kept page, which the search lists first for it: ${marked.join(', ')}`);
@@ -2187,10 +2356,12 @@ async function main() {
   if (fill === 'gbif-basis') return fillGbifBasisStep();
   if (fill === 'range-source') return fillRangeSourceStep();
   if (fill === 'kew-links') return fillKewLinksStep();
+  if (fill === 'credits') return fillCreditsStep();
+  if (fill === 'summary-revisions') return fillRevisionsStep();
   if (fill === 'kew-names') return fillKewNamesStep();
   if (fill === 'kew-why') return fillKewWhyStep();
   if (fill === 'gbif-infra') return fillGbifInfraStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra or genus`);
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra, credits, summary-revisions or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
   // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.
@@ -2264,6 +2435,17 @@ async function main() {
     console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} to build again for Wikidata → rebuild-wd-retry.txt${lines.length ? '; run --keys rebuild-wd-retry.txt --grid climate --bulk bulk --skip inat' : ''}`);
     return;
   }
+  // Round eighty-five (the owner's decision 6; review-d D3): the pages Kew's name heads where GBIF names the key otherwise,
+  // to be built online by Kew's name (iNaturalist, Wikipedia, Wikidata and Commons asked by it first), for --keys.
+  if (args.includes('--list-renamed')) {
+    const store = listingStore(diskStore());
+    const { lines, done } = renamedLines(readEach<Parameters<typeof renamedLines>[0] extends Iterable<infer T> ? T : never>(store));
+    refuseUnread(store, 'rebuild-renamed.txt');
+    if (lines.length) writeFileSync('rebuild-renamed.txt', lines.join('\n') + '\n');
+    else if (existsSync('rebuild-renamed.txt')) unlinkSync('rebuild-renamed.txt');
+    console.log(`  ${lines.length} page${lines.length === 1 ? '' : 's'} headed by Kew's name to build online by it${done ? ` (${done} built so already)` : ''}${lines.length ? ' → rebuild-renamed.txt; run --keys rebuild-renamed.txt --grid climate --bulk bulk' : ''}`);
+    return;
+  }
   // Round eighty-two (F; review 1's 7): the pages with a row not ok and no reason, the build's "none" written before it
   // gave one (`no-reason.ts`), for --keys.
   if (args.includes('--list-no-reason')) {
@@ -2298,22 +2480,35 @@ async function main() {
     const lines: string[] = [];
     const named = new Map(NAMED_CASES.map((c) => [c.key, c]));
     const seen = new Map<string, { d: CheckPage; f: ReturnType<typeof checkPage> }>();
-    let read = 0, cells = 0, old = 0, open = 0;
+    let read = 0, cells = 0, old = 0, open = 0, edges = 0, uncounted = 0, differ = 0;
+    // Typical cells whose middle lies on another region's land (D4): said and listed, not a fault (`cellOnOtherLand`).
+    const otherLand: string[] = [];
+    // Round eighty-five (A23): the corpus's records and climate cells by why each is in range, as the dossiers count them.
+    const recTotal = { strict: 0, buffer: 0, coast: 0, island: 0 }, cellTotal = { strict: 0, buffer: 0, coast: 0, island: 0 };
     for (const d of readEach<CheckPage>(store)) {
       read++;
       const f = checkPage(d, cell, regions, RANGE_RULE);
       if (named.has(d.key)) seen.set(d.key, { d, f });
-      const why = [f.cellOutside ? `typical cell ${d.climate?.at?.lat} N, ${d.climate?.at?.lon} E outside every native region` : '', f.oldRule ? `records not tested by shapes rule ${RANGE_RULE}${d.upstream?.['gbif.occurrences']?.detail?.startsWith('carried from build of') ? ' (carried from a build before)' : ''}` : '', f.openOutside ? `${f.openOutside} open record${f.openOutside === 1 ? '' : 's'} outside every native region` : ''].filter(Boolean);
+      for (const h of ADMISSIONS) { recTotal[h] += f.admitted?.[h] ?? 0; cellTotal[h] += f.cellsAdmitted?.[h] ?? 0; }
+      const why = [f.cellOutside ? `typical cell ${d.climate?.at?.lat} N, ${d.climate?.at?.lon} E outside every native region` : '', f.oldRule ? `records not tested by shapes rule ${RANGE_RULE}${d.upstream?.['gbif.occurrences']?.detail?.startsWith('carried from build of') ? ' (carried from a build before)' : ''}` : '', f.openOutside ? `${f.openOutside} open record${f.openOutside === 1 ? '' : 's'} outside every native region` : '', f.edgeOutside ? `${f.edgeOutside} climate cell${f.edgeOutside === 1 ? '' : 's'} off the shapes beyond their reason's reach` : '', f.uncounted ? 'records or climate cells not counted by reason' : '', f.reasonDiffers ? `${f.reasonDiffers} open record${f.reasonDiffers === 1 ? '' : 's'} in range for another reason than the dossier gives` : ''].filter(Boolean);
       if (f.cellOutside) cells++;
       if (f.oldRule) old++;
       if (f.openOutside) open++;
+      if (f.edgeOutside) edges++;
+      if (f.uncounted) uncounted++;
+      if (f.reasonDiffers) differ++;
       if (why.length) lines.push(`${d.key} ${d.name.scientific}\t${why.join('; ')}`);
+      if (f.cellOnOtherLand) otherLand.push(`${d.key} ${d.name.scientific}\ttypical cell ${d.climate?.at?.lat} N, ${d.climate?.at?.lon} E, its middle on the land of ${f.cellOnOtherLand.land.join(', ')}; its best record in range: ${f.cellOnOtherLand.how}`);
     }
     refuseUnread(store, 'check-ranges.txt');
     const cases = NAMED_CASES.map((c) => caseLine(c, seen.get(c.key)?.d, seen.get(c.key)?.f, RANGE_RULE));
     if (lines.length) writeFileSync('check-ranges.txt', lines.sort().join('\n') + '\n');
     else if (existsSync('check-ranges.txt')) unlinkSync('check-ranges.txt');
-    console.log(`  ${read} dossiers read (shapes rule ${regions.rule ?? 'none'}, ${file.meta.regions ?? '?'} regions with a shape): ${cells} with a typical cell outside every native region, ${old} whose records were not tested by rule ${RANGE_RULE}, ${open} with an open record outside every native region${lines.length ? ` → check-ranges.txt (${lines.length} pages); derive them again with --keys check-ranges.txt --grid climate --bulk bulk --skip inat (not offline: a page whose range was carried was one an offline build could not read again, its range coming through GBIF's older names), then --index and this check` : ''}`);
+    console.log(`  in-range records by reason: ${reasonWords(recTotal)}; climate cells: ${reasonWords(cellTotal)}`);
+    if (otherLand.length) writeFileSync('check-ranges-cells.txt', otherLand.sort().join('\n') + '\n');
+    else if (existsSync('check-ranges-cells.txt')) unlinkSync('check-ranges-cells.txt');
+    console.log(`  ${otherLand.length} typical cell${otherLand.length === 1 ? '' : 's'} with its middle on another region's land, within half a cell of a native one${otherLand.length ? ' → check-ranges-cells.txt (not a fault: a cell is 5 km across; read them)' : ''}`);
+    console.log(`  ${read} dossiers read (shapes rule ${regions.rule ?? 'none'}, ${file.meta.regions ?? '?'} regions with a shape): ${cells} with a typical cell outside every native region, ${old} whose records were not tested by rule ${RANGE_RULE}, ${open} with an open record outside every native region, ${edges} with a climate cell off the shapes beyond its reason's reach, ${uncounted} not counted by reason, ${differ} whose open records' reasons differ${lines.length ? ` → check-ranges.txt (${lines.length} pages); derive them again with --keys check-ranges.txt --grid climate --bulk bulk --skip inat (not offline: a page whose range was carried was one an offline build could not read again, its range coming through GBIF's older names), then --index and this check` : ''}`);
     for (const c of cases) console.log(`    ${c.line}`);
     if (lines.length || cases.some((c) => !c.ok)) { console.log('  Not ready to upload.'); process.exit(2); }
     console.log('  Every page is inside its native range by this rule: ready to upload.');
@@ -2325,6 +2520,14 @@ async function main() {
   if (args.includes('--index-ready')) {
     const corpusDir = `${outDir}/s/v${DOSSIER_V}`;
     const same = upToDate('.', corpusDir, CODE_ROOT);
+    // And every product file the manifest names read whole (round eighty-five; A19, A24): the stamp covers the dossiers,
+    // the index, the manifest and the code, and a product cut off by a stopped --index passed it and went up.
+    if (same) {
+      const t0 = Date.now();
+      const products = checkProducts(corpusDir);
+      if (products.none || products.badCount) { console.error(`  ${productsSentence(products)}`); process.exit(2); }
+      console.log(`  every product file the manifest names is whole: ${products.whole} read and checked by their MD5 in ${Math.round((Date.now() - t0) / 1000)} s`);
+    }
     if (same) { console.log(`  the index on disk (${same.species} species, written ${same.at.replace('T', ' ').slice(0, 16)} UTC) is the one the dossiers and the code on disk would write: ready to upload`); return; }
     console.error(`  the index on disk is not the one the dossiers${existsSync(INDEX_STAMP) ? ' and the code' : ''} on disk would write (a dossier, or the builder's code, changed after it, or ${INDEX_STAMP} is missing): run npm run dossier -- --index first, then the upload again`);
     process.exit(2);
@@ -2538,7 +2741,7 @@ async function main() {
         console.log(`  ${ks.species.size} species without a GBIF key read from Kew's file, to be built from it`);
         // Round seventy-nine (the owner's decision on K's offer): how many of them read GBIF's records under Kew's synonymy.
         const withKeys = [...ks.species.keys()].filter((id) => kewExtra.has(`k${id}`));
-        console.log(`  ${withKeys.length} of them read GBIF's records under ${withKeys.reduce((n, id) => n + kewExtra.get(`k${id}`)!.length, 0)} keys Kew's synonymy gives them (${KEW_EXTRA_KEYS}); the other ${ks.species.size - withKeys.length} say GBIF's records not checked`);
+        console.log(`  ${withKeys.length} of them read GBIF's records under ${withKeys.reduce((n, id) => n + kewExtra.get(`k${id}`)!.length, 0)} keys Kew's synonymy gives them (${KEW_EXTRA_KEYS}); the other ${ks.species.size - withKeys.length} say why GBIF's records were not asked`);
       }
     }
   }
@@ -2613,6 +2816,8 @@ async function main() {
         kewInfra,
         // The other GBIF keys of this page (round seventy-three); the builder reads only those listed for the key it builds.
         extraKeys: extraKeys.get(j.key ?? existing.get(j.name.toLowerCase()) ?? -1),
+        // Kew's name, where it heads the page on disk (round eighty-five, decision 6; D3): the name-filing sources are asked by it first.
+        kewHeading: kewHeadingOf(prevOf(j.key)),
         // The page's id (round seventy-eight): the page on disk under the GBIF key the build ends on keeps its id; a new
         // page is `g<key>` until `--index` gives it the id by the rule.
         pageIdOf: idOfGbif,
@@ -2634,6 +2839,9 @@ async function main() {
       continue;
     }
     const d = r.dossier;
+    // Every photograph this build was answered with was read today (round eighty-five, the owner's decision 7); an offline
+    // build read none but the download's, which `stampNew` stamps below as any photograph the page did not hold.
+    if (!offline) d.photos = stampRead(d.photos, today());
     lag.after(d.upstream.wikidata);
     if (lag.run === 10) console.log('  Wikidata lagged for ten species in a row: not waiting for it again until it answers; the previous identifiers are kept meanwhile');
     // The names step's mark, kept by every build: a build that asked GBIF for the names writes it, as the step does, and
@@ -2751,6 +2959,13 @@ async function main() {
     // The day the page last changed in substance: the previous file's when this build changed nothing it shows, else this
     // build's (round sixty-three; src/lib/dossier/changed.ts), so a refresh that changes nothing does not move the sitemap.
     // What this build lost that the last had: the run fails at its end, so the corpus is read before it is uploaded (round sixty-seven; triage-66 N4).
+    // A photograph the page did not hold before was read today; one carried keeps its day (round eighty-five, decision 7).
+    d.photos = stampNew(prevFile?.photos, d.photos, today());
+    // A former heading (`name.formerly`, which --fill kew-names writes when Kew's entry for the page changes) stays the
+    // page's address through every build: the merge, round eighty-five, found the renamed pages' --keys build writing
+    // Stapelia hirsuta without "Stapelia hirsuta var. hirsuta", whose old address would then have answered 404.
+    const formerly = [...new Set([...(prevFile?.name.formerly ?? []), ...(d.name.formerly ?? [])])].filter((x) => x !== d.name.scientific);
+    if (formerly.length) d.name.formerly = formerly;
     if (prevFile) for (const why of dropsBetween(prevFile, d, held)) drops.push(`${d.name.scientific} [${d.key}]: ${why}`);
     instEffect.add(d, prevFile);
     d.changed = stampOnBuild(d, prevFile, sha1);
@@ -2774,9 +2989,10 @@ async function main() {
   // index then reads those dossiers from disk.
   if (bulkDir && !fixtures && thisRun.size) {
     const built = new Set(thisRun.keys());
-    await fillKewNamesStep(built, false);
-    // And the names GBIF files under the species' varieties and subspecies, where the folder holds GBIF's backbone export (round eighty-four, A8).
+    // The names GBIF files under the species' varieties and subspecies first, where the folder holds GBIF's backbone export
+    // (round eighty-four, A8), so Kew's names, read next, judge them too (`name.kew.elsewhere`; round eighty-five).
     if (backboneFile()) await fillGbifInfraStep(built, false);
+    await fillKewNamesStep(built, false);
     thisRun.clear();
   }
   // Each page under the id the rule gives (round seventy-eight): a new page, or one whose Kew entry this build changed.

@@ -35,10 +35,10 @@ describe('round eighty, X: a species a reference page holds through its range is
     expect(held!([line('507335', 'Huernia hadhramautica', 'N.E.Br.', null)], pages).size).toBe(0);
   });
 
-  it('the committed list leaves out the 11 and says so: 48,357 species', () => {
+  it('the committed list leaves out the 11 and says so: 48,375 species (round eighty-five: 18 added by decision 6)', () => {
     const text = readFileSync('scripts/species-list.txt', 'utf8');
     const list = lib.parseSpeciesList(text);
-    expect(list.length).toBe(48357);
+    expect(list.length).toBe(48375);
     const ids = new Set(list.map((e) => e.kewId));
     for (const id of ['533838', '507335', '502801', '507384', '2734941', '2752709', '2775831', '317146', '2839757', '2588843', '2434528']) expect(ids.has(id), id).toBe(false);
     // Their pages stay, by their GBIF keys.

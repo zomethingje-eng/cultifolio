@@ -534,7 +534,7 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   // triage-66 R1): the next open wipes the live stores and copies the file in again.
   if (!opts.copying && (await meta.get(STAGING_PENDING))) {
     tx.abort();
-    await tx.done.catch(() => {});
+    await tx.done.catch(() => { /* aborted on purpose: the abort's rejection is the expected end */ });
     throw new ReplacePendingError();
   }
   // A write for a sync run happens only while the stored sync record still carries that run's key, checked inside this
@@ -551,12 +551,12 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   for (const c of opts.requireMeta ?? []) {
     if (metaHolds(await meta.get(c.key), c)) continue;
     tx.abort();
-    await tx.done.catch(() => {});
+    await tx.done.catch(() => { /* aborted on purpose: the abort's rejection is the expected end */ });
     throw new MetaRefusedError(c.key);
   }
   if (opts.requireEmpty && (await ch.count()) > 0) {
     tx.abort();
-    await tx.done.catch(() => {});
+    await tx.done.catch(() => { /* aborted on purpose: the abort's rejection is the expected end */ });
     throw new MetaRefusedError('changes');
   }
   // Two changes under one stamp should not exist; when they do (a stamp minted twice by a bug, a file edited by hand), the store keeps one of them, and the same one on
@@ -735,7 +735,7 @@ export async function outboxAck(ts: string[], key?: string): Promise<void> {
       const s = (await tx.objectStore('meta').get('sync')) as { key?: string } | null | undefined;
       if (!s || s.key !== key) {
         tx.abort();
-        await tx.done.catch(() => {});
+        await tx.done.catch(() => { /* aborted on purpose: the abort's rejection is the expected end */ });
         throw new StoppedError();
       }
     }
@@ -786,10 +786,10 @@ export async function queueReadable(): Promise<Change[]> {
   return writing(async () => {
     const db = await openVault();
     const tx = db.transaction(['changes', 'outbox', 'meta'], 'readwrite');
-    tx.done.catch(() => {});
+    tx.done.catch(() => { /* held so an abort below is not an unhandled rejection; the commit is awaited, and its failure thrown, at the end */ });
     const meta = tx.objectStore('meta');
     const had = (await meta.get(UNSENT)) as unknown;
-    if (!Array.isArray(had) || !had.length || (await meta.get(STAGING_PENDING))) { await tx.done.catch(() => {}); return []; }
+    if (!Array.isArray(had) || !had.length || (await meta.get(STAGING_PENDING))) { await tx.done.catch(() => { /* nothing was written on this path, so how the transaction ends changes nothing */ }); return []; }
     const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
     const queued: Change[] = [];
     const wait: string[] = [];

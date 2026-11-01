@@ -47,7 +47,9 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // apart from those with none derived, for the chip (round eighty-two; the independent review's 11: "Without climate
   // 10,573" was 9,653 with none and 920 not checked). The rows partition the species under a chip, so their counts add up;
   // under the other chips, from the "noclimate" chip's rows (a file the build writes, kept as any product is).
-  const sum = (rs: ReadonlyArray<{ notChecked?: number; pending?: number }>) => rs.reduce<{ notChecked: number; pending: number }>((a, r) => ({ notChecked: a.notChecked + (r.notChecked ?? 0), pending: a.pending + (r.pending ?? 0) }), { notChecked: 0, pending: 0 });
+  // Of those not checked, the ones whose GBIF records were not asked (no GBIF key) are said apart where the build counted
+  // them (`notAsked`, round eighty-five); a file built before has none, and the page then says the two together.
+  const sum = (rs: ReadonlyArray<{ notChecked?: number; notAsked?: number; pending?: number }>) => rs.reduce<{ notChecked: number; notAsked: number | null; pending: number }>((a, r) => ({ notChecked: a.notChecked + (r.notChecked ?? 0), notAsked: a.notAsked == null || r.notAsked == null ? (r.notChecked ? null : a.notAsked) : a.notAsked + r.notAsked, pending: a.pending + (r.pending ?? 0) }), { notChecked: 0, notAsked: 0, pending: 0 });
   const without = chip === 'all' || chip === 'noclimate' ? sum(rows) : sum((await catalogueRows(platform, fetch, by, 'noclimate', c)).cat.rows);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]) : [];
   return {
@@ -66,6 +68,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     total: cat.total,
     withClimate: cat.withClimate,
     notChecked: without.notChecked,
+    notAsked: without.notAsked,
     pending: without.pending,
     grown
   };

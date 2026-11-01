@@ -22,7 +22,8 @@
   import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance, PlantEvent } from '$lib/db/types';
-  import { slugify, speciesOf, speciesSlug, parseName, isNamedHybrid, speciesNotStated } from '$core/names';
+  import { slugify, speciesOf, speciesSlug, parseName, isNamedHybrid, speciesNotStated, withoutSign } from '$core/names';
+  import { sameName } from '$lib/ui/picked-name';
   import { readSearch } from '$lib/import/check';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -111,7 +112,8 @@
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
   /** The species page's slug: the sheet's own (a homonym's is suffixed) when the sheet is here, else the name's (round eighteen, 6). */
-  const speciesHref = $derived(dossier?.slug ?? (a ? speciesSlug(a.taxonName) : ''));
+  // A sheet filed under another name for a plant of its key carries its page's own address (`page`; round eighty-five).
+  const speciesHref = $derived(dossier?.page ?? dossier?.slug ?? (a ? speciesSlug(a.taxonName) : ''));
   /** What the reference said about this plant's species: still being asked, could not be reached (a different fact from absent), not there, or read. */
   let ref = $state<'loading' | 'unreachable' | 'none' | 'ok'>('loading');
   /** Why the reference gave no answer, so a refusal or a limit is said as one, never as silence (round sixty-seven; triage-66 S8, R45-11). */
@@ -145,7 +147,7 @@
    * own page asks the reference by hash group, never by name, so the name goes to the catalogue's search only on that
    * press, as the search box sends it. `older` is the page found, with a way to file the plant under it.
    */
-  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null } | null>(null);
+  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null; via?: string } | null>(null);
   async function lookOlder() {
     if (!a) return;
     const name = speciesOf(a.taxonName);
@@ -154,24 +156,38 @@
     if (olderLook?.for !== a?.taxonName) return;
     if (got === null || !Array.isArray(got)) { olderLook = { for: a.taxonName, state: 'unreached' }; return; }
     const r = readSearch(name, true, got);
-    olderLook = r.s === 'near' && r.why === 'older name' ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key } : { for: a.taxonName, state: 'none' };
+    // A name below the one typed held as an older name is said as that (round eighty-five; review-w W2): "Trichocereus
+    // pachanoi" was told it is no older name, though Echinopsis macrogona holds its form f. peruvianus.
+    olderLook = r.s === 'near' && (r.why === 'older name' || r.why === 'infra') ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key, ...(r.why === 'infra' && r.via ? { via: r.via } : {}) } : { for: a.taxonName, state: 'none' };
   }
   $effect(() => { void a?.taxonName; untrack(() => { if (olderLook && olderLook.for !== a?.taxonName) olderLook = null; }); });
   /** Files the plant under the page its name is an older name of, as Edit would, the old name kept as received and in the log. */
   async function fileUnderOlder() {
-    if (!a || olderLook?.state !== 'older' || refiling) return;
-    const to = olderLook.name, key = olderLook.key;
+    const target = foundBy ? { name: foundBy.name, key: foundBy.key } : olderLook?.state === 'older' ? { name: olderLook.name, key: olderLook.key } : null;
+    if (!a || !target || refiling) return;
+    const to = target.name, key = target.key;
     const sub = a.taxonName.slice(speciesOf(a.taxonName).length).trim(); // a rank and epithet after the species stay with it
     const taxonName = sub ? `${to} ${sub}` : to;
     const oldFull = `${a.taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     const newFull = `${taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     refiling = true;
     try {
-      await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (the reference's name; the old one is an older name of it)`, auto: true }]);
+      const why = foundBy?.how === 'gbif' ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : "the reference's name; the old one is an older name of it";
+      await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull, ...(a.olderOf ? { olderOf: null } : {}) }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (${why})`, auto: true }]);
       olderLook = null;
       toast.show(`Now filed under ${taxonName}; the old name is kept as received.`);
     } catch { /* refused: the notice above says why */ } finally { refiling = false; }
   }
+  /**
+   * The species page found for a plant whose name has none of its own (round eighty-five; review-c C4, review-s S2,
+   * review-w W9, outside review A16a): `gbif`, the name is GBIF's name for the plant's own key, which the reference heads
+   * with Kew's name (the build files the page's figures under that name too, for a plant of that key only); `merged`, the
+   * name's page was merged into this one; `older`, the add form or the import found the name to be an older name of this
+   * page, and the plant's record carries it (`olderOf`). Read by hash group, as any plant's species is: the server never
+   * learns which. Null for a plant whose name is its page's.
+   */
+  type FoundBy = { how: 'gbif' | 'merged' | 'older'; name: string; key: number | null };
+  let foundBy = $state<FoundBy | null>(null);
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
   $effect(() => {
@@ -188,13 +204,24 @@
     if (want === askedFor) return; // the record was re-set (a watering, the key repaired) but the species is the same: nothing to ask again
     askedFor = want;
     const seq = ++asked;
-    dossier = null; ref = 'loading';
+    dossier = null; ref = 'loading'; foundBy = null;
+    const olderOf = a.olderOf ?? null;
     (async () => {
       // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name. The key
       // the reference gives is kept here, not written: a page that opens does not write to the log (round fifty-eight;
       // rule 5), and a key that differs is said below with a button to take it.
-      const got = await sheetForNameOr(name, key);
+      let got = await sheetForNameOr(name, key);
       if (seq !== asked) return;
+      let by: FoundBy | null = null;
+      // A sheet filed under another name than the page's: GBIF's name for the plant's key, or a merged page's old name.
+      if (got && got !== 'none' && !isUnreached(got) && !sameName(speciesOf(withoutSign(name)), speciesOf(withoutSign(got.name.scientific)))) by = { how: got.via === 'gbif' ? 'gbif' : 'merged', name: got.name.scientific, key: typeof got.gbif === 'number' ? got.gbif : null };
+      // The page the add form or the import named for this name, carried in the record: asked by its own hash group.
+      if (got === 'none' && olderOf && !sameName(olderOf, name)) {
+        const o = await sheetForNameOr(olderOf, null);
+        if (seq !== asked) return;
+        if (o && o !== 'none' && !isUnreached(o)) { got = o; by = { how: 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null }; }
+      }
+      foundBy = by;
       refWhy = isUnreached(got) ? got : null;
       const d = isUnreached(got) ? null : got;
       // The reference's GBIF key, which a plant's key is (round seventy-eight: the sheet's `key` is the page's id).
@@ -526,11 +553,12 @@
     const acq = events.find((e) => e.t === 'acquire');
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
-    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
+    // A page the add form found for the old name is not the new name's (round eighty-five; `olderOf`).
+    const all: Record<string, unknown> = { taxonName, taxonKey, ...(taxonName !== a.taxonName && a.olderOf ? { olderOf: null } : {}), cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
     // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place, and each other field on its own.
     const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
     const write = new Set<string>();
-    if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar']) write.add(k);
+    if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar', 'olderOf']) write.add(k);
     if (touched.has('locationId')) write.add('locationId');
     for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price', 'waterDays']) if (touched.has(k as keyof typeof f)) write.add(k);
     const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
@@ -634,7 +662,8 @@
   /** The key the reference files this plant's species under, when it answered. */
   let refKey = $state<number | null>(null);
   /** The plant records another key for a name at species rank: the grower may take the reference's. */
-  const keyDiffers = $derived(!!a && refKey != null && a.taxonKey != null && a.taxonKey !== refKey && speciesOf(a.taxonName) === a.taxonName);
+  // Not for a page found by another name than the plant's (`foundBy`): the plant's key is that name's, as filed.
+  const keyDiffers = $derived(!!a && !foundBy && refKey != null && a.taxonKey != null && a.taxonKey !== refKey && speciesOf(a.taxonName) === a.taxonName);
   async function useReferenceKey() {
     if (!a || refKey == null) return;
     await collection.put('accession', a.id, { taxonKey: refKey });
@@ -748,7 +777,9 @@
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
-        {#if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">An older name of {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
+        <!-- A page found for the plant by its key or by the form's answer, said as how (round eighty-five; review-c C4, review-s S2, outside review A16a). -->
+        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}Filed under GBIF's name for its key; the reference heads its page{:else if foundBy.how === 'merged'}Its page was merged into{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
+        {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
         {:else if asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{#if parseName(a.taxonName).epithet && !parseName(a.taxonName).qualifier}{#if olderLook?.state === 'asking'}{' '}<span class="muted" role="status">looking among older names…</span>{:else if olderLook?.state === 'none'}<span id="older-name-none" role="status">, nor is it an older name of one</span>{:else if olderLook?.state === 'unreached'}<span id="older-name-unreached" role="status">; the reference's search did not answer, so older names were not checked. <button class="linkish tap" type="button" onclick={lookOlder}>Try again</button></span>{:else}{' '}<button class="linkish tap" type="button" id="look-older" onclick={lookOlder} title="Sends this name to the reference's search, as the search box does">Is it an older name?</button>{/if}{/if}{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}
@@ -953,7 +984,7 @@
     </div>
     {#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}
       <!-- A species page without a GBIF key (round seventy-nine): nothing to compare this space with, and why. -->
-      <p class="small muted" id="habitat-not-checked">Habitat against this space: not checked. {NO_GBIF_SENTENCE} The habitat figures are read only from them.</p>
+      <p class="small muted" id="habitat-not-checked">Habitat against this space: not asked. {NO_GBIF_SENTENCE} The habitat figures are read only from them.</p>
     {/if}
     {#if habitat && a.locationId}
     <div class="factgrid hvh">
@@ -1026,7 +1057,7 @@
   .sub .date { white-space: nowrap; }
   .hero { margin-top: 14px; }
   /* Without a picture the card does not overlap a hero that is not there. */
-  .idcard.flat { margin-top: 14px; }
+  .idcard.flat { margin: 14px 0 0; } /* with no photograph to overlap, the card spans the column as the cards under it do (the merge, round eighty-five; review-w W11: 165 to 1101 against 143 to 1123 at 1280 px) */
   /* With the photographs' strip between the hero and the card (two photographs or more), the card overlaps nothing: its
      negative margin, for overlapping the hero, put it over the bottom 26 px of every thumbnail and its date on a phone, and
      a tap there landed on the card (round eighty; the phone review's 2). */

@@ -353,7 +353,12 @@
 
 <style>
   .keepline { margin: -6px 0 10px; }
-  .backupnudge { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid var(--warn, #b8692a); background: var(--card); border-radius: var(--r); font-size: var(--fs-md); }
+  .backupnudge { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid var(--warn, #b8692a); background: var(--card); border-radius: var(--r); font-size: var(--fs-md); font-family: var(--ui-local); }
+  /* Set in the system's own face, never the web font (round eighty-five; outside review A16f): drawn with the list, it
+     was set in the stand-in face on a cold phone and reflowed from three lines to two when Public Sans arrived, and the
+     whole list under it moved up (0.206 on a throttled phone with 421 plants; 0.22 measured here at 375 px). The
+     stand-in is the web font's width, so it reads the same. */
+  .backupnudge :global(button) { font-family: inherit; }
   .backupnudge .nudgehide { padding: 0 0 0 6px; color: var(--ink3); }
   /* The link in the sentence keeps the sentence's line but takes a thumb's height (round sixty-one; the accessibility review, 18). */
   .backupnudge a { display: inline-block; padding: 12px 2px; margin: -12px 0; }

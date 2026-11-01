@@ -31,7 +31,7 @@
  * (`occurrences.keys`). Pure: the script streams the files, the tests build the indexes from rows.
  */
 import { ownByAuthor, authorKey, publishingAuthor, parentheticalAuthor } from './authors';
-import { words, type KewRow, type KewNamesIndex } from './kew-names';
+import { words, plantOf, type KewRow, type KewNamesIndex } from './kew-names';
 
 /** One GBIF backbone usage, cut to what the rule reads (the backbone's simple export, or `/species/{key}`). */
 export interface Usage {
@@ -63,17 +63,8 @@ export function kewForm(u: Pick<Usage, 'canonical' | 'rank'>): string | null {
 export const isAutonym = (u: Pick<Usage, 'canonical' | 'rank' | 'author'>) => { const w = u.canonical.trim().split(/\s+/); return u.rank !== 'SPECIES' && w.length === 3 && w[1] === w[2] && !authorKey(u.author); };
 const isSynonym = (s: string) => /synonym/i.test(s);
 
-/**
- * The page's plant as Kew holds it (`kewNames`' reading): the entry, the species of an entry below species, and the
- * varieties and subspecies Kew accepts under those.
- */
-export function plantOf(entry: string, idx: Pick<KewNamesIndex, 'byId' | 'children'>): Set<string> {
-  const plant = new Set<string>(entry ? [entry] : []);
-  const e = entry ? idx.byId.get(entry) : undefined;
-  if (e && e.rank !== 'Species' && e.parent) plant.add(e.parent);
-  for (const id of [...plant]) for (const c of idx.children.get(id) ?? []) plant.add(c.id);
-  return plant;
-}
+/** The page's plant as Kew holds it (`kewNames`' reading, `plantOf` of `kew-names.ts` since round eighty-five). */
+export { plantOf };
 /** A Kew row is the plant's: one of its accepted taxa, or a name Kew files under one, misapplied names aside. */
 export const ofPlant = (r: KewRow, plant: ReadonlySet<string>) => r.status !== 'Misapplied' && (plant.has(r.id) || (!!r.accepted && plant.has(r.accepted)));
 /** A Kew row Kew places in another plant: accepted elsewhere or filed under another entry. An unplaced name is placed nowhere, and is no other plant's. */

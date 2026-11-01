@@ -74,6 +74,13 @@ export interface Accession {
    * lost those columns finds the plant (round seventy; triage-69 R7, R47-16). Never shown; absent otherwise.
    */
   importKeyBare?: string | null;
+  /**
+   * The reference's page the add form or the import found this plant's name to be an older name of (or the name of a page
+   * merged into it), by that page's name, when the grower kept the name as typed (round eighty-five; outside review A16a):
+   * the plant's page says so at once and shows that page's habitat, as the form said. Null or absent otherwise; cleared
+   * when the name is changed.
+   */
+  olderOf?: string | null;
 }
 
 /**

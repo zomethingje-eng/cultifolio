@@ -70,6 +70,17 @@ export const CHROMIUM_ONLY_TITLES: ReadonlyArray<readonly [title: string, reason
   ['round sixty: a numbering choice made before the collection opens is kept, at a 6x CPU throttle', 'a CDP CPU throttle']
 ];
 
+/**
+ * A test of what only Chromium has, and why (round eighty-five, Q; outside review A23): `test(title, chromiumOnly('the
+ * reason'), fn)`. It tags the test `@chromium`, which keeps it out of the WebKit and Firefox projects (`CHROMIUM_ONLY`
+ * below), and annotates it with its reason, which the run's report shows beside it. A bare `@chromium` tag, with no
+ * reason, is refused by tests/unit/r63h-engines.test.ts: a test taken out of the owner's iPhone engine says why, and
+ * names its every-engine form where it has one.
+ */
+export function chromiumOnly(reason: string): { tag: '@chromium'; annotation: { type: 'chromium-only'; description: string } } {
+  return { tag: '@chromium', annotation: { type: 'chromium-only', description: reason } };
+}
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Playwright matches `grepInvert` against "project file describe title tags"; a title's start follows a space. */
 export const CHROMIUM_ONLY = new RegExp(`(?:^|\\s)(?:${CHROMIUM_ONLY_TITLES.map(([t]) => escape(t)).join('|')})|@chromium\\b`);

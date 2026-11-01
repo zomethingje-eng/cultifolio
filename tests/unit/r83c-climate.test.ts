@@ -78,20 +78,23 @@ describe('2. a record at a default point placed to within 10 km is kept', () => 
 
 describe('3. a 1-in-100 night warmer than the coldest month is set aside', () => {
   const months = (cold: number) => Array.from({ length: 12 }, (_, i) => ({ tmin: i === 6 ? cold : cold + 5 }));
-  it("Eulychnia acida (live, 29 October 2026): 7.5 °C against 6.8 °C", () => {
-    const why = lapseSetAside({ months: months(6.8), extremes: { minAbs: 4.3, minP01: 7.5, lapseAppliedM: -432 } });
-    expect(why).toMatch(/the 1-in-100 night, 7.5 °C, is warmer than the coldest month's mean nightly low across the range, 6.8 °C/);
+  // Round eighty-five (G; decision 4, A7): the gap must pass the correction's own uncertainty, 1.5 °C. Eulychnia acida's
+  // 0.7 °C now stands; a gap of 1.6 °C is set aside.
+  it("Eulychnia acida (live, 29 October 2026): 7.5 °C against 6.8 °C stands; 8.4 °C would not", () => {
+    expect(lapseSetAside({ months: months(6.8), extremes: { minAbs: 4.3, minP01: 7.5, lapseAppliedM: -432 } })).toBeNull();
+    const why = lapseSetAside({ months: months(6.8), extremes: { minAbs: 4.3, minP01: 8.4, lapseAppliedM: -432 } });
+    expect(why).toMatch(/the 1-in-100 night, 8.4 °C, is warmer than the coldest month's mean nightly low across the range, 6.8 °C, by more than the 1.5 °C/);
   });
   it('Cedrus deodara (−2.8 °C against −2.4 °C) and a night equal to the mean stand', () => {
     expect(lapseSetAside({ months: months(-2.4), extremes: { minAbs: -11.1, minP01: -2.8, lapseAppliedM: -814 } })).toBeNull();
     expect(lapseSetAside({ months: months(6.8), extremes: { minAbs: 4.3, minP01: 6.8, lapseAppliedM: 0 } })).toBeNull();
   });
   it('the reader sets it aside and keeps it, as it does a lapse beyond 1,000 m', () => {
-    const c = { status: 'ok', months: months(6.8), extremes: { years: 44, minAbs: 4.3, minP01: 7.5, maxP99: 32.9, frostDaysPerYear: 0, frostNights: 0, lapseAppliedM: -432 }, extremesStatus: 'ok', landFraction: 1 } as unknown as Dossier['climate'];
+    const c = { status: 'ok', months: months(6.8), extremes: { years: 44, minAbs: 4.3, minP01: 8.4, maxP99: 32.9, frostDaysPerYear: 0, frostNights: 0, lapseAppliedM: -432 }, extremesStatus: 'ok', landFraction: 1 } as unknown as Dossier['climate'];
     const out = setAsideExtremes(c) as { extremes?: unknown; extremesLapse?: { minP01: number }; extremesStatus?: string };
     expect(out.extremes).toBeUndefined();
     expect(out.extremesStatus).toBe('lapse');
-    expect(out.extremesLapse?.minP01).toBe(7.5);
+    expect(out.extremesLapse?.minP01).toBe(8.4);
   });
 });
 

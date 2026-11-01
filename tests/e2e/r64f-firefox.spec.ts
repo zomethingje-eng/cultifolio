@@ -1,4 +1,6 @@
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -74,7 +76,7 @@ test.describe("Firefox's unanswered question about keeping the data", () => {
 
 // Chromium only: the second copy is made by routing the worker's own script fetch, which only Chromium's worker network
 // events let a route see (playwright.config.ts). r64f 7 is the same page flow in every engine, without the copy.
-test('r64f 4: a second worker of the build the page runs takes over without reloading the page, then or at the next tap', { tag: '@chromium' }, async ({ page, context }) => {
+test('r64f 4: a second worker of the build the page runs takes over without reloading the page, then or at the next tap', chromiumOnly('the second worker is made by routing the worker\'s own script fetch, which only Chromium\'s worker network lets a route see'), async ({ page, context }) => {
   test.setTimeout(90_000);
   // Every fetch of the worker's script answers different bytes of the same build: the browser installs each as a new
   // worker, as Firefox installed a second copy of one build on a first visit.
@@ -100,7 +102,7 @@ test('r64f 4: a second worker of the build the page runs takes over without relo
   await page.evaluate(() => { (window as unknown as { __r64f: number }).__r64f = 1; });
   await expect.poll(() => page.evaluate(() => Number(sessionStorage.getItem('__r64f_cc') ?? 0)), { timeout: 45_000 }).toBeGreaterThan(taken);
   // The takeover's answer is a message away; then the page is the same document, and a tap in the app stays in it.
-  await page.waitForTimeout(1500); // a negative: only a pause can show that no reload followed
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): no reload may follow
   expect(await page.evaluate(() => (window as unknown as { __r64f?: number }).__r64f)).toBe(1);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'My plants' }).click(); // a move inside the app (Back would be the history's)
   await expect(page).toHaveURL(/\/plants$/);
@@ -147,7 +149,7 @@ test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the exa
   await page.goto('/plants');
   await ready(page);
   await expect(page.locator('.rows > *')).toHaveCount(1);
-  await page.waitForTimeout(1500); // a negative: only a pause can show that no ask followed
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): no ask may follow
   expect(await asked()).toBe(0);
 });
 
@@ -215,7 +217,7 @@ test('r64f 7: on a first visit the second page is loaded once and keeps what was
     leftOut = true;
     console.log(`r64f 7: WebKit left the second page out of the first worker's claim; the registration: ${JSON.stringify(st)}`);
   }
-  await page.waitForTimeout(5000); // a negative: a takeover's reload comes within a page's first four seconds
+  await page.waitForTimeout(5000); // a negative, by the app's own rule: a takeover's reload comes within a page's first four seconds, so the page is read past them
   expect(await page.evaluate(() => sessionStorage.getItem('__r64f_loads'))).toBe('2');
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   if (leftOut) {

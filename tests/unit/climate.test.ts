@@ -189,13 +189,14 @@ describe('climate envelope', () => {
     expect(c.months[0].tmin).toBeCloseTo(15, 1); // the southern median, untouched by the +10 northern cells
     expect(c.src.envelope).toContain('on the southern side of the equator (3 cells poleward of 10° north, 5 poleward of 10° south: the two sides\' seasons are not combined, and cells within 10° of the equator stay in)');
     expect(c.records).toBe(5); // the records in the cells the envelope reads, not the eight (round thirty-three, 4)
-    // two northern cells is not "in strength": everything is used and nothing is said
+    // Round eighty-five (G; review D8): two cells on the smaller side are left out too, and said; before, they stayed in
+    // the median and could be the typical cell, a spot in one hemisphere under the other's months.
     const few = new Map(cells);
     few.delete(cellOf(h, -lat, lon - 2 * h.cell).id);
     const d = await makeClimateProvider({ grid: memoryGridSource(h, few), fetcher: fixtureFetcher({}), noExtremes: true }).envelope(points.slice(0, 7));
     if (d.status !== 'ok') throw new Error(d.status);
-    expect(d.hemispheres).toBeUndefined();
-    expect(d.cells).toBe(7);
+    expect(d.hemispheres).toEqual({ north: 2, south: 5, used: 'south', equatorial: 0 });
+    expect(d.cells).toBe(5);
     // an equatorial range, 5° N to 5° S, is one climate: nothing is split, however the cells fall either side of the line (round thirty-three, 8)
     const eq = new Map<string, ArrayBuffer>();
     const eqPoints: Array<[number, number]> = [];

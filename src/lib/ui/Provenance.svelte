@@ -1,16 +1,20 @@
 <script lang="ts">
   import type { Dossier } from '$dossier/schema';
-  import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail, foundNotShown } from '$lib/ui/ref/upstream';
+  import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail, foundNotShown, registerRow } from '$lib/ui/ref/upstream';
   import { readerWords } from '$lib/ui/ref/words';
   // What it reads of the record, and the count of the datasets its open records came from: the species page carries the count, not the list (round seventy-seven).
   let { dossier, datasets }: { dossier: Pick<Dossier, 'upstream' | 'built'> & Partial<Pick<Dossier, 'photos' | 'climate' | 'distribution'>>; datasets: number } = $props();
-  const rows = $derived(Object.entries(dossier.upstream));
+  // Each row as the page shows it: a source read and set aside is "answered", never "nothing to report" (round eighty-five; A8, S8).
+  const rows = $derived(Object.entries(dossier.upstream).map(([src, u]) => [src, registerRow(src, u, dossier)] as const));
   // "refused" for a refusal, as the photographs' line and the footer say it, never "did not answer"; each row named in
   // plain words with its id beside it, and the climate's reason read as its source did (round sixty-two; the grower
   // review's 2, the words review's 12).
   // An answer the page shows none of says what was found (round eighty-two, F; review 1's 29).
   // In a reader's words: no file of the repository, and a merged page's key said as that (round eighty-four; A6e).
-  const detail = (src: string, d: string | undefined) => readerWords([src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, dossier.upstream[src], dossier)].filter(Boolean).join('; '));
+  // The row's status word is its pill; a detail that opens with the same words does not say them twice (round eighty-five;
+  // "not asked not asked: two Wikidata items …").
+  const once = (status: string, t: string) => { const w = (label[status] ?? status).split(':')[0]; return t.startsWith(`${w}: `) ? t.slice(w.length + 2) : t; };
+  const detail = (src: string, d: string | undefined) => once(dossier.upstream[src] ? registerRow(src, dossier.upstream[src]!, dossier).status : '', readerWords([src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, registerRow(src, dossier.upstream[src]!, dossier), dossier)].filter(Boolean).join('; ')));
   // Two answers where one is taken is a settled answer, not a failure: no warning tone (round sixty-nine; triage-68 M8).
   const tone = (s: string) => (s === 'ok' ? 'ok' : s === 'none' || s === 'skipped' || s === 'ambiguous' ? '' : 'warn');
 </script>

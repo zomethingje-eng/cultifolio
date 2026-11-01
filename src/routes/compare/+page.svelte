@@ -7,6 +7,7 @@
    * other, each with its source, and a missing figure stays missing.
    */
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import Placeholder from '$lib/ui/Placeholder.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -69,7 +70,7 @@
   /** A sentence ended once: the climate's words may end their own (round sixty-seven; triage-66 P5, S-F11). */
   const ended = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
   // A page without a GBIF key (round seventy-nine): not checked, and why, before "pending".
-  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : recordsUnchecked(d) ? `Climate not checked. ${uncheckedSentence(d)}` : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
+  const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : recordsUnchecked(d) ? `Climate not asked. ${uncheckedSentence(d)}` : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
   $effect(() => {
     setCrumb([{ label: 'Species', href: '/' }, { label: 'Compare' }]);
     return () => setCrumb([]);
@@ -205,7 +206,8 @@
       <span class="visually-hidden" role="columnheader">Figure</span>
       {#each cols as c (c.d.key)}
         <div class="cell" role="columnheader">
-          <div class="hero">{#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="{c.d.name.scientific}; photograph {shownAttribution(c.hero)}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{/if}</div>
+          <!-- A photograph that failed, or none on file, is said in the box with the name, as the tiles say it, never a blank slab (the merge, round eighty-five; review-w W11). -->
+          <div class="hero">{#if c.hero && shownImg[c.d.key] !== 'fail'}<img src={c.hero.thumb ?? c.hero.url} alt="{c.d.name.scientific}; photograph {shownAttribution(c.hero)}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{:else}<Placeholder name={c.d.name.scientific} family={c.d.name.family ?? ''} caption={c.hero ? 'photograph did not load' : 'no open photograph on file'} />{/if}</div>
           {#if c.hero && shownImg[c.d.key] !== 'fail'}<a class="cred" href={c.hero.page ?? c.hero.url} rel="noopener">{creditOf(c.hero)}</a>{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <!-- The first two regions and how many more, as the species page's line under the name says them (round eighty-two; the independent review's 20). -->
@@ -295,7 +297,7 @@
   .rowlab { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 18px 0 6px; font-family: var(--ui); }
   .cell { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 14px; min-width: 0; }
   .head .cell { padding: 0 0 12px; overflow: hidden; }
-  .head .hero { width: 100%; aspect-ratio: 4 / 3; background: var(--sunk); } /* the box is there whether the photograph is or not, so the names line up */
+  .head .hero { width: 100%; aspect-ratio: 4 / 3; max-height: 240px; background: var(--sunk); } /* the box is there whether the photograph is or not, so the names line up; at most 240 px, so the first figures are on a laptop's first screen (review-w W11) */
   .head img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .rowlab .dif, .rowlab .kinds { margin-left: 8px; letter-spacing: 0.04em; text-transform: none; font-weight: 600; }
   .rowlab .dif { color: var(--warm-ink); }

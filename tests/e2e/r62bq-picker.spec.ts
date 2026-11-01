@@ -6,6 +6,7 @@
  * out"; see Q's report). The name service is the site's /api/names, answered here by the test.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -33,9 +34,8 @@ test('a species typed with a capitalised epithet is asked about, and is not said
   await input.fill('Copiapoa Tenuissima');
   await expect(page.locator('.picker [role=option]').first()).toBeVisible();
   await input.blur();
-  await page.waitForTimeout(800);
+  await expect(page.locator('.picker .pill.ok')).toContainText('GBIF 5384050'); // the check has answered
   await expect(page.locator('.picker .pill', { hasText: 'not in the backbone' })).toHaveCount(0); // base: said, though GBIF was never asked about the species
-  await expect(page.locator('.picker .pill.ok')).toContainText('GBIF 5384050');
   expect(asked.map((q) => q.toLowerCase())).toContain('copiapoa tenuissima'); // base: only "Copiapoa" is asked
 });
 
@@ -57,7 +57,7 @@ test('a title-case common name with a typo is not offered as a genus', async ({ 
   await page.goto('/plants/new');
   await ready(page);
   await page.locator('#species-name').fill('Snake Plnat');
-  await page.waitForTimeout(1500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the searches have answered
   await expect(page.locator('.picker [role=option]', { hasText: '· genus' })).toHaveCount(0); // base: "Snake 'Plnat' · genus · 'Plnat' kept as the cultivar; no key filed"
 });
 
@@ -112,7 +112,7 @@ test('a correct name with its author is not said to have matched nothing (search
   const box = page.getByLabel('Search the whole species catalogue');
   await box.fill('Copiapoa cinerea Phil.');
   await expect(page.getByText('Copiapoa cinerea').first()).toBeVisible();
-  await page.waitForTimeout(1500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the late answer has replaced the first line
   await expect(page.locator('.seccount.relaxed')).toContainText('Searched for “Copiapoa cinerea”, leaving out “Phil.”.');
   await expect(page.locator('.seccount.relaxed')).not.toContainText('Nothing matched'); // base: "Nothing matched “Copiapoa cinerea Phil.” as written. Showing results for “Copiapoa cinerea”."
 });

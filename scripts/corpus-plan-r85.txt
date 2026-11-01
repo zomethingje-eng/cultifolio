@@ -1,0 +1,25 @@
+# Round eighty-five (G and N; the owner's decisions 1 to 6): every page derived again offline by this round's code (the
+# border rule, the islands, TDWG's shapes, the extremes' margin, the sample by cell, the hemispheres, each record's reason
+# counted), Kew's names read, the new pages built and the online fills run, then the index, the check, a review, the upload
+# and the live check.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r85.txt
+# A step that stops is run again by the same command. The walk begins by itself (walk.json of round eighty-four's rule is
+# done) and resumes where it stopped. About an hour to read the download, then six to seven hours.
+backup
+dossier --walk --offline --grid climate --bulk bulk
+# The varieties' names first, so Kew's file judges them in the same pass (N); then the new pages (decision 6) and the
+# renamed pages asked again by Kew's name, online; then Wikipedia's revisions (decision 8), online and resumable. A page
+# built online after the walk began is not derived again by it. The credits' days (decision 7) take iNaturalist's
+# allowance over two or three days, so they are their own plan after this one's upload (corpus-plan-r85-credits.txt):
+# everything else goes live first.
+dossier --fill gbif-infra --bulk bulk
+dossier --fill kew-names --bulk bulk
+dossier scripts/species-new-r85.txt --grid climate --bulk bulk
+dossier --list-renamed
+if-exists rebuild-renamed.txt dossier --keys rebuild-renamed.txt --grid climate --bulk bulk
+dossier --fill summary-revisions
+dossier --index
+dossier --check-ranges
+review Read the nine lines the check printed ("fixed: Aloe vera …" to "fixed: Veronica bollonsii …"), its two count lines (records and climate cells by reason) and check-ranges-cells.txt if it names any; and the --index step's lines "of GBIF's names on … pages left out: Kew's file places each only in another plant" and "… former headings …". If anything reads "NOT FIXED", stop and paste the end of corpus-step.log back.
+upload
+live-check

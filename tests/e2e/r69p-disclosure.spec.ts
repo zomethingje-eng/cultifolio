@@ -6,7 +6,7 @@
  * pressed in turn. On the base 22 of the 25 were pressed by no test (and the list did not exist).
  */
 import { test, expect, type Page } from '@playwright/test';
-import { pressOnce, type Press } from './helpers/disclosure';
+import { pressOnce, expectOneTap } from './helpers/disclosure';
 import { DISCLOSURES, type Disclosure } from './helpers/disclosure-list';
 import { inject, injectChanges, type Row } from './helpers/inject';
 import { fromAddress } from './helpers/address';
@@ -17,9 +17,9 @@ test.beforeEach(async ({ context }) => {
 });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
-function oneTap(r: Press) {
-  expect({ opened: r.opened, clicks: r.clicks, toggles: r.toggles, moved: r.downTop !== r.upTop }, JSON.stringify(r)).toEqual({ opened: true, clicks: 1, toggles: 1, moved: false });
-}
+// One press, one click, one toggle, the summary still (helpers/disclosure.ts `expectOneTap`; a release the engine lost
+// is told apart from a missed tap there, helpers/press-kind.ts).
+const oneTap = expectOneTap;
 const plant = (id: string, no: string, extra: Record<string, unknown> = {}): Row[] => [
   ['accession', id, 'acc', no], ['accession', id, 'taxonName', 'Copiapoa cinerea'], ['accession', id, 'taxonKey', 5384013], ['accession', id, 'status', 'growing'], ['accession', id, 'nameKind', 'species'],
   ...Object.entries(extra).map(([f, v]) => ['accession', id, f, v] as Row)
@@ -32,6 +32,9 @@ const forecast = (alertsStatus: string) => JSON.stringify({ lat: 40.38, lon: -80
 const setups: Record<string, (page: Page) => Promise<Page>> = {
   how: async (page) => { await page.goto('/about/how'); await ready(page); return page; },
   species: async (page) => { await page.goto('/species/copiapoa-cinerea'); await ready(page); return page; },
+  // The folded names line is the phone's: drawn at 640 px and under (round eighty-five, E), so the desktop project narrows to 390.
+  'species-narrow': async (page) => { await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/species/copiapoa-cinerea'); await ready(page); return page; },
+  formats: async (page) => { await page.goto('/about/formats'); await ready(page); return page; },
   // A page without GBIF's records: the reason under the name behind "Why" (round eighty-four, E; the merge adds it here).
   'species-unchecked': async (page) => { await page.goto('/species/hesperocyparis-lusitanica'); await ready(page); return page; },
   add: async (page) => { await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page); return page; },

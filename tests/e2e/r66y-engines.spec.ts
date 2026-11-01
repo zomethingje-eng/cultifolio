@@ -73,7 +73,8 @@ test('r66y 3: a reference name typed in full is not called "Not a reference name
   // The field's search under way (its name service's silence said), then the field left: the check on leaving concludes.
   await expect(page.getByRole('status').filter({ hasText: 'The name service did not answer' })).toBeVisible();
   await page.locator('#species-name').blur();
-  await expect(page.locator('.picker .pill.warn')).toContainText('name service not reached'); // the check concluded first
+  // Round eighty-five (K's C2, the merge): the check on leaving awaits the reference's own search before it concludes, so it
+  // no longer says "name service not reached" first; the reference's key is filed as soon as its row arrives.
   await expect(page.locator('.picker .pill.ok')).toHaveText('GBIF 5384013', { timeout: 5_000 }); // base: never, until Add
   await expect(page.getByText('Not a reference name')).toHaveCount(0); // base: "Not a reference name. Did you mean Copiapoa cinerea?"
   await page.getByRole('button', { name: /^Add/ }).click();

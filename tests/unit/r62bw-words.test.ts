@@ -129,7 +129,8 @@ describe('the glance row (the words review\'s 1, the self-review\'s N10)', () =>
     expect(g).toMatch(/<span class="gt">Habitat figures(\{#if few\}.*?\{\/if\})?<\/span>/); // round eighty-two: the few-records mark beside it
   });
   it('states each gauge\'s scale, beside it and in its text alternative', () => {
-    expect(g).toContain('const RAIN_FULL = $derived(rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);'); // round eighty-four (A13): never shorter than its figure
+    // Round eighty-four (A13): never shorter than its figure; round eighty-five (W12): a round end in inches too (r85e's test renders it).
+    expect(g).toContain("rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);");
     expect(g).toContain('const DLI_FULL = 70;');
     expect(g).not.toMatch(/class="gauge" aria-hidden="true"/);
     expect(g.match(/class="gauge" role="img" aria-label="[^"]*on a bar from 0 to/g)).toHaveLength(2);
@@ -214,7 +215,7 @@ describe('/about/how (the words review\'s 16 to 20, 23, 25, 27; the outside tria
   });
   it('the glossary keeps "not asked" apart, and "held" has its threshold', () => {
     const gloss = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(gloss).toContain('<dt>Not asked</dt><dd>A source the build skipped, or a call this site held back');
+    expect(gloss).toContain('<dt>Not asked</dt><dd>A source the build did not ask, such as GBIF\'s records for a page with no GBIF key, or a call this site held back'); // round eighty-five (S9): the no-key case named
     expect(how).not.toContain('(it refused, failed or was not asked)');
     expect(gloss).toContain('<dt>Held</dt><dd>A change dated more than five minutes ahead');
   });

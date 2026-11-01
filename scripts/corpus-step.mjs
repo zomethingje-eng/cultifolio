@@ -40,6 +40,11 @@
 //     command (exit 2);
 //   - a step failed: paste the end of corpus-step.log back (exit 1);
 //   - you pressed Ctrl-C: run the same command to carry on (exit 130).
+//
+// An upload is not one transaction (round eighty-five; outside review B): the dossiers are overwritten in place as they go
+// up, and the manifest, last, switches the catalogue and the search to the new corpus. Between the two the site serves
+// each new dossier under the old index. upload-partial.json marks that time, from the first copy until the manifest is
+// up: --status and every run say it, with the command that finishes it, and the prune refuses while it is there.
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -154,6 +159,22 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
   }
 }
 
+/**
+ * An upload under way, or stopped part way (round eighty-five; outside review B's operations note). The upload is not one
+ * transaction: the dossiers are overwritten in place and the manifest, last, switches the catalogue and the search to the
+ * new corpus, so between the first copy and the manifest the site serves new dossiers under the old index. This file
+ * says so from the moment the first copy starts until the manifest is up: `--status` and every run read it, and the prune
+ * refuses while it is there. It names when the copying began and the corpus going up.
+ */
+export const UPLOAD_PARTIAL = 'upload-partial.json';
+/** The sentence `--status` and a run say while an upload is part way, or null. */
+export function partialSentence(root) {
+  const p = readJson(join(root, UPLOAD_PARTIAL));
+  if (!p) return null;
+  const since = typeof p.since === 'string' ? p.since.replace('T', ' ').slice(0, 16) + ' UTC' : 'a time not recorded';
+  return `An upload of corpus ${p.corpus ?? '(id not recorded)'} began copying at ${since} and has not finished: since then the site has served some new dossiers under the old corpus's index and search (each species page whole; the catalogue and the search the old corpus's). Run the upload again now to finish it: node scripts/corpus-step.mjs --plan scripts/corpus-plan-upload.txt`;
+}
+
 /** The upload as DEPLOY.md section 5 has it, with a check between the two lines: the manifest goes up only when the bucket holds every other file as it is on disk. */
 export function uploadCommands(corpus = CORPUS, bucket = BUCKET) {
   const ex = ['--exclude', 'report.txt', '--exclude', 'manifest.json', '--exclude', 'manifest.prev.json', '--exclude', '*.tmp'];
@@ -203,6 +224,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   const stamp = () => now().toISOString().replace('T', ' ').slice(0, 19);
   // Round eighty-one (review B5): --status reads, and writes nothing: no record renamed or put aside, no line in the log.
   if (argv.includes('--status')) return status({ root, argv, log });
+  { const half = partialSentence(root); if (half && !argv.includes('--compare')) say(`\n  ${half}\n`); }
   // And --compare, which reads the corpus and a copy of it.
   if (argv.includes('--compare')) { log(`${compareSentence(root, argv[argv.indexOf('--compare') + 1])}\n`); return EXIT.done; }
   // One run at a time (round eighty-one, review B6): the lock, released however the run ends.
@@ -335,12 +357,18 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
           if (code !== 0) result = { status: 'blocked', why: 'index older' };
         }
         if (result.status === 'done') say(`  the dossiers go up first and the manifest last: until the manifest is up, the site serves each new dossier as it arrives under the old corpus's index and search. Leave it to finish; if it stops, run the same command again at once.\n`);
+        // Said from the first copy until the manifest is up (round eighty-five; review B): a stop, a Ctrl-C or a crash
+        // between them leaves the file, which --status and the next run read out.
+        if (result.status === 'done' && !existsSync(at(UPLOAD_PARTIAL))) writeAtomic(at(UPLOAD_PARTIAL), JSON.stringify({ since: now().toISOString(), corpus: readJson(at(`${CORPUS}/manifest.json`))?.id ?? null }));
+        let manifestUp = false;
         for (const [cmd, args] of result.status === 'done' ? uploadCommands() : []) {
           say(`  ${cmd} ${args.join(' ')}\n`);
           const code = await exec(cmd, args, say, { cwd: root, env: process.env });
           if (interrupted) break;
           if (code !== 0) { result = { status: 'failed', why: args[0] === 'check' ? 'the bucket does not hold every file as it is on disk; the manifest was not uploaded, so the site still serves the corpus before' : `rclone ${args[0]} exit ${code}` }; break; }
+          if (args[1] === `${CORPUS}/manifest.json`) manifestUp = true;
         }
+        if (manifestUp && existsSync(at(UPLOAD_PARTIAL))) unlinkSync(at(UPLOAD_PARTIAL));
         if (interrupted) break;
         if (result.status === 'done') await unlistedReport(root, exec, say);
       } else if (step.kind === 'live-check') {
@@ -425,6 +453,8 @@ export function status({ root, argv, log }) {
   const steps = state?.steps ?? plan.map((p) => ({ line: p.line, status: 'to do' }));
   for (const [i, s] of steps.entries()) log(`${String(i + 1).padStart(2)}. ${s.status.padEnd(11)} ${s.line}${s.note ? `  (${s.note})` : ''}\n`);
   for (const n of notes) log(`  Note: ${n}. --status changed nothing.\n`);
+  const half = partialSentence(root);
+  if (half) log(`  ${half}\n`);
   return EXIT.done;
 }
 
@@ -592,6 +622,9 @@ export async function unlistedReport(root, exec, say) {
 /** The prune of the bucket's p/, DEPLOY.md section 5, with its dry run as a stop of its own. */
 async function prune({ root, argv, exec, say, fetchCorpus }) {
   const at = (p) => join(root, p);
+  // Not while an upload is part way (round eighty-five; review B): the live manifest is still the old corpus's, and the
+  // upload's own next run finishes it first.
+  if (existsSync(at(UPLOAD_PARTIAL))) { say(`\nThe prune stopped before reading anything: an upload has not finished. Nothing was deleted. Finish the upload first (node scripts/corpus-step.mjs --plan scripts/corpus-plan-upload.txt), then the prune.\n`); return EXIT.blocked; }
   if (!(await syncOnce(root, exec, say, {}))) return EXIT.failed;
   const live = at('live-manifest.json');
   if (existsSync(live)) unlinkSync(live); // never a live manifest from an earlier prune

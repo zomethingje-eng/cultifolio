@@ -10,8 +10,9 @@ const file = JSON.parse(readFileSync('scripts/tdwg3-shapes.json', 'utf8'));
 describe('the typical cell is tested with the coast reach widened by half a cell (the walk check)', () => {
   it('Semiaquilegia adoxoides: the cell holding the islet record is inside Korea', () => {
     expect(cellTester(file).inRegion(36.275, 126.275, 'KOR')).toBe(true);
-    // the base's tester (buffer widened, coast reach not) listed it
-    expect(regionTester(file, SHAPE_BUFFER_DEG + 0.036).inRegion(36.275, 126.275, 'KOR')).toBe(false);
+    // the base's tester (buffer widened, coast reach not) listed it; round eighty-five's minor islands (the islet is one
+    // of Natural Earth's) would take it too, so they are left out here to keep the comparison
+    expect(regionTester({ ...file, islands: {} }, SHAPE_BUFFER_DEG + 0.036).inRegion(36.275, 126.275, 'KOR')).toBe(false);
   });
   it('still outside: Aloe vera\'s old cell in Fujairah, and the open Yellow Sea', () => {
     expect(cellTester(file).inRegion(25.425, 56.175, 'OMA')).toBe(false);

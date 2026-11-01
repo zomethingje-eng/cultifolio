@@ -1,6 +1,7 @@
 // smoke.spec.ts, the third part: the round after deploy: search, first screen, related, compare, card, today (round seventy-two: split into four files that run in parallel, each in order).
 import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { controlledBy } from './helpers/controlled';
 import { inject, wipe } from './helpers/inject';
 import { fromAddress } from './helpers/address';
@@ -361,7 +362,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   await page.goto('/');
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
-  await page.waitForTimeout(1500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 1500); // a negative, read once the page has asked for nothing for 1500 ms (helpers/settled.ts): no request may follow
   expect(calls).toBeLessThanOrEqual(4); // the page's fetch and the worker's, once each: no loop
   await ctx.unroute(/\/api\/(index|entries)/);
   await page.getByRole('button', { name: 'Try again' }).click();
@@ -1016,7 +1017,8 @@ test('round thirty-seven: the old-name line shows for a variety of a listed olde
   await expect(page.locator('#was-synonym')).toContainText('Echinocactus cinereus var. columna-alba is a variety under an older name of this species');
   // The older name itself, as before.
   await page.goto('/species/copiapoa-cinerea?was=Echinocactus%20cinereus');
-  await expect(page.locator('#was-synonym')).toContainText('is a synonym');
+  // Round eighty-five (E; W1, P1, C1, A1): whose verdict it is, GBIF's here, never "is a synonym" said as the reference's.
+  await expect(page.locator('#was-synonym')).toContainText("is an older name of this species in GBIF's backbone");
   // A name the record does not hold is not printed as fact, trinomial or not.
   await page.goto('/species/copiapoa-cinerea?was=Copiapoa%20bogus%20var.%20alba');
   await expect(page.locator('#was-synonym')).toHaveCount(0);
@@ -1057,7 +1059,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', 'copiapoa');
   await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
-  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 500); // a negative, read once the page has asked for nothing for 500 ms (helpers/settled.ts): no request may follow
   expect(searches).toEqual([]);
   expect(page.url()).not.toContain('q=');
   // The catalogue is one explicit step away, and that step is the one that sends the text.
@@ -1070,7 +1072,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.fill('.searchbar', `${year()}-0001`);
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', '2031-07');
-  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 500); // a negative, read once the page has asked for nothing for 500 ms (helpers/settled.ts): no request may follow
   expect(searches.length).toBe(sent);
   expect(page.url()).not.toContain('q=');
   // Punctuation an iPhone types is not a refusal (R1-1).
@@ -1198,7 +1200,7 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   // rows, not while the chips and the letters above them are what is on screen (round forty-nine, 2: a jump to W on the
   // live site filled all the way to A and landed there)
   await expect(page.locator('.rows .grow').first()).toContainText('Welwitschia');
-  await page.waitForTimeout(700); // a negative: the rows before must not fill in while the chips and letters are on screen, and only a pause can show that they did not; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 700); // a negative, read once the page has asked for nothing for 700 ms: the rows before must not fill in while the chips and letters are on screen (round sixty; the harness review, 14)
   await expect(page.locator('.rows .grow')).toHaveCount(1);
   await expect(page.locator('.rows .before')).toHaveCount(1);
   // the reader scrolls the rows up under the pinned bar: the fill runs, and the row they were looking at stays where it was
@@ -1631,7 +1633,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await page.evaluate(() => sessionStorage.clear());
   await page.goto('/today');
   await expect(page.locator('#frost .risk')).toContainText('Frost forecast');
-  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 500); // a negative, read once the page has asked for nothing for 500 ms (helpers/settled.ts): no request may follow
   expect(asked).toBe(1);
   // twenty-five days on, the page is opened and left open across midnight: a watering after midnight is dated the new day
   await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000)));
@@ -1845,7 +1847,15 @@ test('round fifty-nine: a control reached by the keyboard is never left under a 
   };
   /** End scrolls by an animation in Chromium; a Shift+Tab pressed while it runs focuses an element the animation then carries
    *  on scrolling past (seen under load on /about/how, 54,000 px tall at 390, round eighty-four). Wait for the page to stop. */
-  const settle = () => page.waitForFunction(() => new Promise<boolean>((res) => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => res(scrollY === y))); }));
+  // The merge, round eighty-five: `waitForFunction` with a predicate that returns a promise reads the promise as truthy
+  // and returns at once, so this waited for nothing, and a Shift+Tab pressed while End's animation ran was carried past
+  // under the bar (the one failure a whole run, round 84's and twice in round 85's; traced: scrollY 1,567 → 10,722 after
+  // the press). Now the page itself is polled until it is at the bottom, End's state, and still for two frames.
+  const settle = () => page.evaluate(() => new Promise<void>((res, rej) => {
+    const t0 = performance.now();
+    const tick = () => { const y = scrollY; requestAnimationFrame(() => requestAnimationFrame(() => { if (Math.abs(scrollY + innerHeight - document.documentElement.scrollHeight) < 2 && scrollY === y) res(); else if (performance.now() - t0 > 15_000) rej(new Error(`End did not reach the bottom: ${scrollY}`)); else tick(); })); };
+    tick();
+  }));
   await page.goto('/about/how');
   await ready(page);
   expect(await hidden(30, false)).toEqual([]);

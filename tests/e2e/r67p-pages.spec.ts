@@ -2,6 +2,7 @@
  * Round sixty-seven, agent P (triage-66 P1, P3, P6, P7, P8, P10). Each test failed on the base.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 
 test.use({ serviceWorkers: 'block' });
@@ -67,7 +68,7 @@ test('r67p P3: hovering the compare tray on a private page sends nothing (S-F6, 
     // and the top bar and the footer, hovered, send nothing either.
     await expect(page.locator('.tray, .cmppill')).toHaveCount(0);
     await page.locator('footer.credits a[href="/compare"]').hover();
-    await page.waitForTimeout(1200);
+    await goneQuiet(page, 1_200); // a negative, read once the page has gone quiet (helpers/settled.ts): a hover may send nothing
   }
   expect(asked).toEqual([]);
   // A public page still preloads on hover: the rule is the private pages'.
@@ -124,11 +125,11 @@ test('r67p P8: after "Save and add another", a name check still in flight for th
   await page.route('**/api/search**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.goto('/plants/new'); await ready(page);
   await page.locator('#species-name').fill('Notacactus ignotus');
-  await page.waitForTimeout(400);
+  await goneQuiet(page); // the field's search asked and answered
   await page.locator('#species-name').press('Enter'); // arms: the next Add keeps the name as typed, without waiting for the check
   await page.getByRole('button', { name: 'Save and add another' }).click();
   await expect(page.locator('#species-name')).toHaveValue('', { timeout: 10_000 });
-  await page.waitForTimeout(3500); // the late answer arrives
+  await goneQuiet(page); // the late answer has arrived: the page is quiet once it has
   await expect(page.locator('.picker .pill.ok')).toHaveCount(0);
   await expect(page.locator('.picker .menu')).toBeHidden();
 });

@@ -11,6 +11,7 @@
  * the second because the browser's own unload question came after the page's.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
@@ -35,9 +36,9 @@ function staged(): void {
 const loads = async (p: Page) => (await p.evaluate(() => sessionStorage.getItem('__loads') ?? '')).split(';').filter(Boolean);
 /** The takeover, and the page's answer to it: a page not in its first seconds waits for its next move. */
 async function takeOver(p: Page) {
-  await p.waitForTimeout(4200); // past the first seconds, in which an untouched page reloads at once (round sixty-seven's rule, kept)
+  await p.waitForTimeout(4200); // the app's own rule: past the first seconds, in which an untouched page reloads at once (round sixty-seven's rule, kept)
   await p.evaluate(() => (window as unknown as { __takeOver: () => void }).__takeOver());
-  await p.waitForTimeout(300); // the worker's answer comes over a message channel
+  await goneQuiet(p, 300); // the worker's answer comes over a message channel: read once the page has gone quiet
 }
 
 test.beforeEach(async ({ context }) => {
@@ -77,7 +78,7 @@ test('r69p P2: a half-filled add form is asked about once, by the page; "no" kee
   await takeOver(page);
   await page.locator('a[href="/places"]:visible').first().click();
   await expect.poll(() => asked.length).toBeGreaterThan(0);
-  await page.waitForTimeout(1000);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): a second question would follow the first
   expect(asked).toEqual(['confirm']); // the base: the page's confirm and the browser's beforeunload
   await expect(page).toHaveURL(/\/plants\/new$/);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');

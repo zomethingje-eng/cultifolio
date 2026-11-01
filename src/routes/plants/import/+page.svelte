@@ -24,7 +24,7 @@
   import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, dateQuestion, readDate, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
   import { checkNames, checkKey, nameVerdict, ownVerdict, type NameCheck, type Lookup } from '$lib/import/check';
-  import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
+  import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, freshKeys, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
   import { settlePlaces } from '$lib/ui/places-pending';
   import type { Accession } from '$lib/db/types';
   import { commitImport, numbersSaid, type ImportResult } from '$lib/import/commit';
@@ -133,6 +133,26 @@
   let repeatedHeader = $state(0);
   /** Lines every plant of which is here by its import key (a first run added them): left out of the review, and counted. */
   let doneN = $state(0);
+  /**
+   * A paste's lines left out as imported before, and the import keys here: a second list of the same names is often new
+   * plants (round eighty-five; review-w W10), so the grower may add them as such (`addDoneAgain`).
+   */
+  let doneRows = $state.raw<ImportRow[]>([]);
+  let hereKeys: Map<string, unknown> = new Map();
+  /** The paste's lines left out as imported before, added as new plants, with keys of their own (`freshKeys`). */
+  async function addDoneAgain() {
+    if (!doneRows.length) return;
+    const fresh = freshKeys(doneRows, (k) => hereKeys.has(k));
+    // Not dropped either: a line imported before is marked done and dropped (`markSheet`), and kept so would add nothing
+    // (the merge, round eighty-five: the button's first browser test added 0 plants).
+    const back = doneRows.map((r, i) => ({ ...r, done: false, drop: false, matchedKeys: undefined, importKeys: fresh[i], qty: fresh[i].length }));
+    rows = [...rows, ...back];
+    status = `${back.length === 1 ? 'The line' : `The ${back.length} lines`} imported before ${back.length === 1 ? 'is' : 'are'} in the review below, as new plants.`;
+    doneN = 0;
+    doneRows = [];
+    replan();
+    await recheck();
+  }
   /** Lines past this pass's 2,000, for the next pass (round sixty-two; the records review, 5). */
   let laterN = $state(0);
   /**
@@ -156,7 +176,7 @@
   /** What the page says as it works, in one status line that is always there (round sixty-one; the accessibility review, 2). */
   let status = $state('');
   const look: Lookup = { entries: (slugs) => entriesFor(slugs), search: (q) => searchCatalogue(q, 5) };
-  function reset() { rows = []; checks = new Map(); result = null; noName = 0; repeatedHeader = 0; doneN = 0; laterN = 0; droppedKeys = new Set(); droppedBeforeN = 0; plan = null; onlyNeeds = false; pathsAnswer = null; rereadMsg = ''; reviewedWith = ''; }
+  function reset() { rows = []; checks = new Map(); result = null; noName = 0; repeatedHeader = 0; doneN = 0; doneRows = []; laterN = 0; droppedKeys = new Set(); droppedBeforeN = 0; plan = null; onlyNeeds = false; pathsAnswer = null; rereadMsg = ''; reviewedWith = ''; }
   function replan() {
     plan = collection.ready ? planNumbers(rows, new Set([...ledger, ...collection.accessions.map(accNo)]), collection.scheme, Number(localDate().slice(0, 4)), (n) => collection.isNumberTaken(n)) : null;
   }
@@ -204,6 +224,9 @@
       (byNo.get(k) ?? byNo.set(k, []).get(k)!).push(a);
     }
     const marked = markSheet(next, { has: (k) => here.get(k), isHere: (id) => collection.exists('accession', id), dropped: droppedKeys, held: (no) => byNo.get(numberKey(no)) ?? [], plants: all });
+    // A paste's lines a plant here answers to, kept so the grower can add them as new plants (round eighty-five; review-w W10).
+    doneRows = mode === 'paste' ? marked.filter((r) => r.done) : [];
+    hereKeys = here;
     // The ledger is read before the rows are set, so the review and its numbering sentence are drawn together and nothing
     // above the place box moves under a tap as the plan arrives (round sixty-three, the strict run).
     ledger = (await getMeta<string[]>('issued:accession').catch(() => undefined)) ?? [];
@@ -258,8 +281,8 @@
   const statusOf = (r: ImportRow) => ownVerdict(r.name, r.nameKind) ?? checks.get(checkKey(r.name));
   /** The summary counts each line by the verdict its row shows (`nameVerdict`), so the two never disagree. */
   const counts = $derived.by(() => {
-    const c = { found: 0, keyless: 0, near: 0, older: 0, missing: 0, unchecked: 0, hybrid: 0, genus: 0, waiting: 0 };
-    for (const r of live) { const v = nameVerdict(statusOf(r), r.name); if (v === 'near' && statusOf(r)?.s === 'near' && (statusOf(r) as { why?: string }).why === 'older name') c.older++; else c[v]++; }
+    const c = { found: 0, keyless: 0, near: 0, older: 0, infra: 0, missing: 0, unchecked: 0, hybrid: 0, genus: 0, waiting: 0 };
+    for (const r of live) { const v = nameVerdict(statusOf(r), r.name); const why = (statusOf(r) as { why?: string } | undefined)?.why; if (v === 'near' && why === 'older name') c.older++; else if (v === 'near' && why === 'infra') c.infra++; else c[v]++; }
     return c;
   });
   /**
@@ -479,13 +502,13 @@
     <div class="secrule"><h2 id="imp-review-h" tabindex="-1">Review</h2><div class="line"></div><span class="n">{plantsN} plant{plantsN === 1 ? '' : 's'}</span></div>
     <p class="small" id="imp-summary">
       {live.length} line{live.length === 1 ? '' : 's'}{rows.length - live.length ? ` (${rows.length - live.length} dropped)` : ''}, {plantsN} plant{plantsN === 1 ? '' : 's'}.
-      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.older ? ` · an older name, the reference's name for it suggested: ${counts.older}` : ''}{counts.near ? ` · not under this name, a near spelling suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.genus ? ` · cultivars with no species named, filed under the genus: ${counts.genus}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
+      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.older ? ` · an older name, the reference's name for it suggested: ${counts.older}` : ''}{counts.infra ? ` · a name below it is an older name, the reference's name suggested: ${counts.infra}` : ''}{counts.near ? ` · not under this name, a near spelling suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.genus ? ` · cultivars with no species named, filed under the genus: ${counts.genus}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
       {#if counts.unchecked && !checking}<button class="linkish" type="button" onclick={recheck}>Check again</button>{/if}
       <!-- One press for every line under an older name the reference holds under one species (round eighty-one; review-w 4: 24 lines of a 300-plant sheet, a press each). Each line keeps the sheet's name as received. -->
       {#if olderLines.length}<button class="linkish" type="button" id="imp-use-older" onclick={useOlderAll}>Use the reference's name on {olderLines.length === 1 ? 'the line' : `all ${olderLines.length} lines`} with an older name</button>{/if}
       {#if noName}{noName} {mode === 'paste' ? 'line' : 'row'}{noName === 1 ? '' : 's'} with no name {noName === 1 ? 'was' : 'were'} left out.{/if}
       {#if repeatedHeader}{repeatedHeader === 1 ? 'A row repeating the header was' : `${repeatedHeader} rows repeating the header were`} left out.{/if}
-      {#if doneN}<span id="imp-done-lines">{doneN === 1 ? 'One line was' : `${doneN} lines were`} imported before (every plant {doneN === 1 ? 'it makes is' : 'they make is'} here), so {doneN === 1 ? 'it is' : 'they are'} left out.</span>{/if}
+      {#if doneN}<span id="imp-done-lines">{doneN === 1 ? 'One line was' : `${doneN} lines were`} imported before (every plant {doneN === 1 ? 'it makes is' : 'they make is'} here), so {doneN === 1 ? 'it is' : 'they are'} left out.{#if doneRows.length}{' '}A paste matches a plant by its line's words alone. <button class="linkish" type="button" id="imp-add-done" onclick={addDoneAgain}>{doneRows.length === 1 ? 'It is a new plant: add it' : `They are new plants: add all ${doneRows.length}`}</button>{/if}</span>{/if}
       {#if droppedBeforeN}<span id="imp-dropped-before">{droppedBeforeN === 1 ? 'One line you dropped' : `${droppedBeforeN} lines you dropped`} in an earlier pass of this sheet {droppedBeforeN === 1 ? 'stays' : 'stay'} dropped, and {droppedBeforeN === 1 ? 'is' : 'are'} left out.</span>{/if}
       {#if laterN}<span id="imp-later">{MAX_ROWS} lines are read at a time: add these, then press Check names again for the next {laterN === 1 ? 'line' : `${laterN} lines`} of this sheet.</span>{/if}
     </p>
@@ -530,7 +553,7 @@
                 {#if !c}<span class="muted">checking…</span>
                 {:else if c.s === 'found' && v === 'keyless'}<span class="ok">filed as written, with no reference key{qual === 'sp.' || qual === 'spp.' ? '' : `; the reference has ${c.refName}`}</span>
                 {:else if c.s === 'found'}<span class="ok">matched{c.refName.toLowerCase() !== checkKey(r.name).toLowerCase() ? ` as ${c.refName}` : ''}</span>
-                {:else if c.s === 'near'}{@const same = sameName(r)}<span class="warn">{qual ? 'filed as written, with no reference key; ' : ''}{#if c.why === 'older name'}an older name: the reference has this species as <SpeciesName name={c.suggestion} />.{:else}not under this name; did you mean <SpeciesName name={c.suggestion} />?{/if} <button class="linkish use" type="button" aria-label="Use {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button>{#if same.length > 1}{' · '}<button class="linkish useall" type="button" aria-label="Use {c.suggestion} on all {same.length} lines of {checkKey(r.name)}" onclick={() => useOn(same, c.suggestion)}>on all {same.length} lines of this name</button>{/if}</span>
+                {:else if c.s === 'near'}{@const same = sameName(r)}<span class="warn">{qual ? 'filed as written, with no reference key; ' : ''}{#if c.why === 'older name'}an older name: the reference has this species as <SpeciesName name={c.suggestion} />.{:else if c.why === 'infra' && c.via}not under this name, but a name below it, <SpeciesName name={c.via} />, is an older name of <SpeciesName name={c.suggestion} />.{:else}not under this name; did you mean <SpeciesName name={c.suggestion} />?{/if} <button class="linkish use" type="button" aria-label="Use {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button>{#if same.length > 1}{' · '}<button class="linkish useall" type="button" aria-label="Use {c.suggestion} on all {same.length} lines of {checkKey(r.name)}" onclick={() => useOn(same, c.suggestion)}>on all {same.length} lines of this name</button>{/if}</span>
                 {:else if qual}<span class="muted">filed as written, with no reference key</span>
                 {:else if c.s === 'missing'}<span class="warn">not in the reference; added as typed</span>
                 {:else if c.s === 'hybrid'}<span class="muted">a cross, filed under its genus</span>

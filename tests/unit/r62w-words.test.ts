@@ -44,7 +44,7 @@ describe('the link preview and the one-line forms (A3, visitor-words 3 and 4)', 
   });
   it('the printed label says "floor … (1 in 100, NASA POWER)" and "open sky"', () => {
     const line = careLine({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', climateStatus: 'ok', months: cinerea, extremes: ex, lat: -26 } as never);
-    expect(line).toContain('floor 6.5 °C (1 in 100, NASA POWER)');
+    expect(line).toContain('floor 6.5 °C (1\u00a0in\u00a0100, NASA POWER)');
     expect(line).toContain('open sky 30–41 DLI');
     expect(line).not.toMatch(/hab\. night|· sky /);
   });
@@ -142,7 +142,7 @@ describe('the species page, compare and the 404 (A13, A21, A33, A35, visitor-wor
     expect(page).toContain('Compared with this species:');
   });
   it('the other English names are separated by semicolons; a Related tile with no photograph draws no square', () => {
-    expect(page).toContain("common.join('; ')");
+    expect(page).toMatch(/common\.slice\(1\)\.join\('; '\)/); // round eighty-five: the first, then the others, which a phone folds (B3)
     expect(page).not.toMatch(/class="noim"/);
   });
   it('the photograph lines use the gaps words, never a bare "did not answer" for every source', () => {
@@ -217,14 +217,15 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
     expect(home).not.toMatch(/class="feature"|featureBlock|<Climograph|<Glance|cultivationSheet|climograph\(/);
     expect(code('src/routes/+page.server.ts')).not.toMatch(/getDossier|feature\b/);
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);
+    // Round eighty-five: a summary, then the rules folded under it.
+    expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<p class="sum">The front page's photographs are picked by rule from the popular genera, not by hand\.<\/p>\s*<details class="full in-full"><summary>The rules in full<\/summary>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);
     expect(how).not.toMatch(/shown whole/);
   });
   it('the phone search placeholder fits', () => {
     expect(home).toContain('placeholder="Search species, genus, family or origin…"');
   });
   it('the offline page says only opened pages are kept', () => {
-    expect(code('src/routes/offline/+page.svelte')).toContain('the ones you have opened are here');
+    expect(code('src/routes/offline/+page.svelte')).toContain('A species page you have opened on this device is kept here; when the app updates itself, the last fifty you opened are read again, so they stay; one you have not opened needs the network once.'); // round eighty-five (U, C6)
   });
   it("the README's SYNC_OPEN sentence and its map of the review files", () => {
     const r = readFileSync('README.md', 'utf8');

@@ -13,6 +13,11 @@
  */
 import { test, expect } from '@playwright/test';
 import { ready } from './helpers/smoke';
+import { readFileSync } from 'node:fs';
+
+/** The counts the page carries, as of the day of the index the build last wrote (round eighty-five: `scripts/about-examples.ts`). */
+const ON = JSON.parse(readFileSync('src/lib/ui/about-counts-on.json', 'utf8')) as { species: number; genera: number; withClimate: number; on: string };
+const n = (x: number) => x.toLocaleString('en-GB');
 
 test.use({ serviceWorkers: 'block' });
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
@@ -29,7 +34,7 @@ test('r84a about 1: the counts are the reference\'s now, and the dated ones when
   await page.route('**/api/counts', (r) => r.abort());
   await page.reload();
   await ready(page);
-  await expect(counts).toContainText('The reference held, on 29 October 2026, 48,357 species pages in 6,529 genera, and 37,727 of those pages have a habitat climate.');
+  await expect(counts).toContainText(`The reference held, on ${ON.on}, ${n(ON.species)} species pages in ${n(ON.genera)} genera, and ${n(ON.withClimate)} of those pages have a habitat climate.`);
 });
 
 for (const width of [320, 375, 430]) {

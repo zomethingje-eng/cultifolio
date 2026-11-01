@@ -22,6 +22,7 @@
  * (Back left the page, three times); 4 FAILED (the file not named); 5 FAILED (Follow 42 px, the search box 41 px, the
  * chips missed).
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
 import { ready, addPlant } from './helpers/smoke';
 import { inject } from './helpers/inject';
@@ -60,7 +61,7 @@ test('r81u phone 1: in landscape the menu is no taller than the screen, and its 
   await expect(page).toHaveURL(/\/settings$/);
 });
 
-test('r81u phone 2a: in landscape with a notch, the top bar\'s end buttons stand inside the safe area', { tag: '@chromium' }, async ({ page, browserName }) => {
+test('r81u phone 2a: in landscape with a notch, the top bar\'s end buttons stand inside the safe area', chromiumOnly('the notch\'s safe areas are emulated through Chromium\'s protocol alone'), async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium', 'the safe areas are emulated through Chromium\'s protocol');
   await page.setViewportSize({ width: 750, height: 342 });
   const cdp = await page.context().newCDPSession(page);

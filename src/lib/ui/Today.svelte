@@ -146,9 +146,13 @@
     if (PAGE_IN_DEMO) return { text: 'The example collection is kept nowhere: it is deleted when you leave it.', tone: 'muted' };
     // Each instant read on this device's calendar, against the shared day (`daysSince`; round eighty-four, A14: the UTC
     // date of a backup taken after 8 pm in Pittsburgh was tomorrow, and the line said "backup -1 d ago").
-    const ago = (iso: string) => { const d = daysSince(iso, day.current); return d === 0 || d == null ? 'today' : `${d} d ago`; };
-    const backup = lastBackup ? `backup ${ago(lastBackup)}` : 'no backup yet';
-    const synced = sync.configured ? (sync.lastSync ? `synced ${ago(sync.lastSync)}` : 'sync set up, not yet synced') : 'not synced';
+    // A mark that is no instant is said as that, never "today" (round eighty-five; outside review A19: a `lastBackup` of
+    // "garbage" read "backup today"), and counts as no recent backup for the line's tone.
+    const ago = (iso: string) => { const d = daysSince(iso, day.current); return d == null ? null : d === 0 ? 'today' : `${d} d ago`; };
+    const backupAgo = lastBackup ? ago(lastBackup) : null;
+    const backup = !lastBackup ? 'no backup yet' : backupAgo ? `backup ${backupAgo}` : 'a backup of a date this device cannot read';
+    const syncAgo = sync.lastSync ? ago(sync.lastSync) : null;
+    const synced = sync.configured ? (sync.lastSync ? (syncAgo ? `synced ${syncAgo}` : 'synced on a date this device cannot read') : 'sync set up, not yet synced') : 'not synced';
     const waiting = collection.incomplete ? `, ${collection.incomplete} record${collection.incomplete === 1 ? '' : 's'} waiting` : '';
     const stale = !lastBackup || (daysSince(lastBackup, day.current) ?? Infinity) > 30;
     return { text: `Kept on this device: ${backup}, ${synced}${waiting}.`, tone: stale && !sync.configured ? 'warn' : 'muted' };

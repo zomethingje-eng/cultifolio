@@ -15,7 +15,13 @@
  *
  * Read from the list's lines whose name carries "×" and from those lines' rows in Kew's file (`wcvp_names.csv`): a line
  * whose row Kew's file does not give the same name, the sign and Kew's acceptance is refused and named, never guessed.
- * Node only.
+ *
+ * Round eighty-five (review-d D6): also every `k` page of an index (`--index <index.json>`, the corpus's) whose Kew entry
+ * Kew's file writes with the sign, accepted or held as an artificial hybrid: a page reaches its Kew entry by its names
+ * as well as by the list's line (k2759463, Kew's artificial hybrid Delphinium × barlowii, is the list's "Delphinium
+ * cultorum" by GBIF's key), and its heading lacked the sign. Node only.
+ *
+ *   npx tsx scripts/hybrid-names.ts --bulk bulk --index static/s/v3/index.json
  */
 import { readFileSync, writeFileSync, existsSync, createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -43,21 +49,27 @@ export function listHybrids(text: string): Map<string, string> {
 async function main() {
   if (!bulk || !existsSync(`${bulk}/wcvp_names.csv`)) { console.error('needs --bulk <dir> with wcvp_names.csv'); process.exit(2); }
   const wanted = listHybrids(readFileSync(listPath, 'utf8'));
+  // The index's `k` pages (round eighty-five, D6): their entries are read whatever the list writes, and taken when signed.
+  const indexPath = arg('--index');
+  const fromIndex = new Set<string>();
+  if (indexPath) for (const e of JSON.parse(readFileSync(indexPath, 'utf8')) as Array<{ key: string }>) { const id = /^k([1-9]\d*)$/.exec(e.key)?.[1]; if (id && !wanted.has(id)) fromIndex.add(id); }
   const rows = new Map<string, Record<string, string>>();
   const rl = createInterface({ input: createReadStream(`${bulk}/wcvp_names.csv`, { encoding: 'utf8' }), crlfDelay: Infinity });
   let h: string[] | null = null;
   for await (const line of rl) {
     const c = line.split('|');
     if (!h) { h = c; continue; }
-    if (!wanted.has(c[0])) continue;
+    if (!wanted.has(c[0]) && !fromIndex.has(c[0])) continue;
     rows.set(c[0], Object.fromEntries(h.map((k, i) => [k, c[i] ?? ''])));
   }
   const out: Record<string, HybridRow> = {};
   const refused: string[] = [];
+  // A page of the index whose entry Kew writes with the sign, accepted or as an artificial hybrid, by Kew's own name.
+  for (const id of fromIndex) { const r = rows.get(id); if (r && (r.genus_hybrid === '×' || r.species_hybrid === '×') && /^(?:Accepted|Artificial Hybrid)$/.test(r.taxon_status)) wanted.set(id, r.taxon_name); }
   for (const [id, name] of [...wanted].sort((a, b) => Number(a[0]) - Number(b[0]))) {
     const r = rows.get(id);
     const signed = !!r && (r.genus_hybrid === '×' || r.species_hybrid === '×');
-    if (!r || r.taxon_name !== name || !signed || r.taxon_status !== 'Accepted') { refused.push(`${id} ${name}: ${!r ? 'no row in Kew\'s file' : r.taxon_name !== name ? `Kew's file names it ${r.taxon_name}` : !signed ? 'Kew\'s file marks no hybrid' : `Kew's file holds it as ${r.taxon_status}`}`); continue; }
+    if (!r || r.taxon_name !== name || !signed || !(r.taxon_status === 'Accepted' || (fromIndex.has(id) && r.taxon_status === 'Artificial Hybrid'))) { refused.push(`${id} ${name}: ${!r ? 'no row in Kew\'s file' : r.taxon_name !== name ? `Kew's file names it ${r.taxon_name}` : !signed ? 'Kew\'s file marks no hybrid' : `Kew's file holds it as ${r.taxon_status}`}`); continue; }
     out[id] = { name, ...(r.ipni_id ? { ipni: r.ipni_id } : {}), ...(r.powo_id ? { powo: r.powo_id } : {}), ...(r.hybrid_formula ? { parents: r.hybrid_formula } : {}) };
   }
   const body = JSON.stringify({ note: HYBRIDS_FILE_NOTE, list: listPath, kew: kewFileDay(bulk), rows: out }, null, 0).replace(/\},"/g, '},\n"') + '\n';

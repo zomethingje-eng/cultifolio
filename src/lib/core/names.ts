@@ -36,7 +36,7 @@ function tidyHead(t: string): string {
     .replace(/\b(var|v|variety)\.?\s/gi, 'var. ')
     .replace(/\b(f|fa|fo|forma)\.?\s/gi, 'f. ')
     // "cv. Blue Curls" → 'Blue Curls': the rest of the line is the cultivar name, closed as well as opened.
-    .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (/^['‘’"“”]/.test(c) ? c : `'${c.trim()}'`))
+    .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (new RegExp(`^[${QUOTES}]`).test(c) ? c : `'${c.trim()}'`))
     // "xGraptoveria" / "XGraptoveria": a nothogenus written without its space.
     .replace(/^[xX](?=[A-Z][a-z])/, '× ')
     .replace(/^([a-z])/, (m) => m.toUpperCase());
@@ -72,8 +72,12 @@ export interface ParsedName {
 const QUALIFIER = /^(cf|cfr|aff|nr|near|sp|spp)\.?$/i;
 /** Each written one way, so a second parse changes nothing: "cfr." is "cf.", "near" is "nr.". */
 const QUALIFIER_AS: Record<string, string> = { cf: 'cf.', cfr: 'cf.', aff: 'aff.', nr: 'nr.', near: 'nr.', sp: 'sp.', spp: 'spp.' };
-/** Every quote a keyboard writes: straight, and curly single and double, either way round (a phone writes ’ to open). */
-export const QUOTES = `'"‘’“”`;
+/**
+ * Every quote a keyboard writes: straight, and curly single and double, either way round (a phone writes ’ to open), and
+ * the low-high and angle quotes a German, Polish or French keyboard writes, „…“, ‚…‘, «…» and ‹…› (round eighty-five;
+ * review-s S7: "Crassula ovata „Gollum“" was filed as a name nobody holds, with no cultivar).
+ */
+export const QUOTES = `'"‘’“”„‚«»‹›`;
 /** The whole text in one pair of quotes, nothing quoted inside. */
 const QUOTE_WHOLE = new RegExp(`^[${QUOTES}]([^${QUOTES}]+)[${QUOTES}]$`);
 /** A cultivar: an opening quote at the start, after a space or a bracket, to the last quote. */

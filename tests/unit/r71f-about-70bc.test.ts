@@ -142,7 +142,9 @@ describe('"Another spelling of the species\' epithet is the species\'" (70b): ea
 describe('"An article Wikipedia reaches through a redirect is quoted only when" (70b): Kew\'s combinations of one basionym', () => {
   const s = said('how', 'Or when GBIF holds the title as a synonym of this species');
   it('"Zephyranthes formosissima" for Sprekelia formosissima, by Kew\'s rows', () => {
-    const [title, of] = [claim(s, /\("(Zephyranthes formosissima)" for Sprekelia formosissima\)/), claim(s, /\("Zephyranthes formosissima" for (Sprekelia formosissima)\)/)];
+    // Round eighty-five (A; review S4): the page no longer quotes this example, whose heading the walk changed; the rule is still driven with it here.
+    expect(s.text).toMatch(/both combinations of one basionym/);
+    const [title, of] = ['Zephyranthes formosissima', 'Sprekelia formosissima'];
     const who = { name: of, synonyms: [], item: 'Q1' };
     const kewSays = (accepted: string) => ({ rows: [{ status: 'SYNONYM', authorship: '(L.) Herb.', accepted }] });
     expect(proofByItem(title, who, { title: null, kew: kewSays(`${title} (L.) Z.H.Feng`) })?.proof, s.where).toBe('older-name');
@@ -177,7 +179,8 @@ describe('"When Wikidata finds no item that does" (70b, 70c), "Failing these" an
   });
   it('of two items found by the older names, the one carrying the IPNI of Kew\'s accepted entry: Parrycactus flavovirens', async () => {
     const s = said('how', 'Of two items found by the older names');
-    expect(claim(s, /\((Parrycactus flavovirens), Kew's synonym of Ferocactus flavovirens\)/), s.where).toBe('Parrycactus flavovirens');
+    // Round eighty-five (A; review S4): the page no longer quotes this example, whose heading the walk changed; the rule is still driven with it here.
+    expect(s.text, s.where).toMatch(/the one that carries the IPNI identifier of the entry Kew accepts is taken/);
     expect(await item(3946677)).toMatchObject({ status: 'ok', data: { wikidata: 'Q309595' } });
   });
 });
@@ -213,7 +216,9 @@ describe('"An id iNaturalist has made inactive is followed" (70b, 70c), "A taxon
   const slip = fixtureFill('r70c-slip.json');
   const s = said('how', 'Or, where neither places it in this reference');
   it('Kew holding this species under the other genus: Zephyranthes formosissima for Sprekelia formosissima', async () => {
-    const species = claim(s, /\(Zephyranthes formosissima for (Sprekelia formosissima)\)/);
+    // Round eighty-five (A; review S4): the page no longer quotes this example, whose heading the walk changed; the rule is still driven with it here.
+    expect(s.text).toMatch(/it is this species' epithet in another genus/);
+    const species = 'Sprekelia formosissima';
     const d = await follow42(species, 1640238);
     expect(d.ids.inat, s.where).toBe(1640238);
   });

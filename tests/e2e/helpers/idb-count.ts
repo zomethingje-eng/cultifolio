@@ -89,7 +89,7 @@ export async function idbQuiet(page: Page, quietMs = 1_000, maxMs = 60_000): Pro
     if (s.n !== last || s.open) { last = s.n; since = Date.now(); }
     else if (Date.now() - since >= quietMs) return;
     if (Date.now() - t0 > maxMs) throw new Error(`IndexedDB was still busy after ${maxMs} ms (${s.open} transactions open)`);
-    await page.waitForTimeout(100);
+    await new Promise((r) => setTimeout(r, 100)); // the poll's interval, in the runner: the page is read again
   }
 }
 

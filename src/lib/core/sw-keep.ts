@@ -112,3 +112,84 @@ export async function capCache(cache: CacheLike, max: number, counts: (url: stri
   for (const k of keys.slice(0, over)) await cache.delete(k);
   return over;
 }
+
+/**
+ * The species pages read before an update, read again after it (round eighty-five; review-c C6). A species page and its
+ * data are kept in the build's own cache, because the page's HTML names that build's scripts; an update deletes that
+ * cache, so a grower who read their species before a deploy found "No connection" in the greenhouse after it. Now the new
+ * worker, as it takes over, lists the species pages the builds before it held (`carryList`), and while the device is
+ * online asks for each one's data again from the new server (`carryOver`), with the species page's scripts and styles of
+ * the new build: a page read before the update opens offline after it, from the offline page's own path (it opens a page
+ * whose data the worker holds), in the new build's format, never an old copy under new scripts.
+ *
+ * At most `CARRY_MAX` pages, the most recently read first: one request each, once per update and device.
+ */
+export const CARRY_MAX = 50;
+/** Where the list waiting to be read again is kept: in this build's cache, under a path no page asks for. */
+export const CARRY_KEY = '/__cultifolio-worker/carry';
+/** A species page's own path, as the worker keeps it: its HTML, or its data. */
+const SPECIES_PATH = /^\/species\/([a-z0-9][a-z0-9-]*)(?:\/__data\.json)?$/;
+
+/** The species pages (`/species/<slug>`) the other builds' caches hold, the most recently written first, at most `max`. */
+export async function carryList(storage: CacheStorageLike, current: string, corpus: string, max = CARRY_MAX): Promise<string[]> {
+  const seen: string[] = [];
+  for (const k of otherBuilds(await storage.keys(), current, corpus)) {
+    for (const r of await (await storage.open(k)).keys()) {
+      let u: URL;
+      try { u = new URL(r.url); } catch { continue; /* not a URL: nothing of a page's */ }
+      // A page's own copy has no query but the framework's own on its data: one asked with another (`?was=`) is not it.
+      const q = new URLSearchParams(u.search);
+      q.delete('x-sveltekit-invalidated');
+      if ([...q.keys()].length) continue;
+      const m = SPECIES_PATH.exec(u.pathname);
+      if (!m) continue;
+      const page = `/species/${m[1]}`;
+      const at = seen.indexOf(page);
+      if (at >= 0) seen.splice(at, 1);
+      seen.push(page); // written later, read later: the end of the list is the most recent
+    }
+  }
+  return seen.reverse().slice(0, max);
+}
+
+/** Keeps the list for `carryOver`, in this build's cache. */
+export async function saveCarry(storage: CacheStorageLike, current: string, pages: string[]): Promise<void> {
+  const cache = await storage.open(current);
+  if (pages.length) await cache.put(CARRY_KEY, new Response(JSON.stringify(pages), { headers: { 'content-type': 'application/json' } }));
+  else await cache.delete(CARRY_KEY);
+}
+
+export interface Carried { read: number; gone: number; left: number }
+
+/**
+ * Each page on the list read again (its `__data.json` from the network) and kept in this build's cache, with `files` (the
+ * species page's build files) first. A page the server no longer has (404, 410) is dropped; a request that does not reach
+ * the server, or a 5xx, stops the round, and what is left waits on the list for the next. The list is written back as it
+ * shrinks, so a worker stopped half-way goes on where it was.
+ */
+export async function carryOver(storage: CacheStorageLike, current: string, fetcher: (url: string) => Promise<Response>, origin: string, files: readonly string[] = []): Promise<Carried> {
+  const cache = await storage.open(current);
+  const r = await cache.match(CARRY_KEY);
+  let pages: string[] = [];
+  try { pages = r ? ((await r.json()) as unknown[]).filter((p): p is string => typeof p === 'string' && SPECIES_PATH.test(p)) : []; } catch { pages = []; /* an unreadable list is no list */ }
+  const done: Carried = { read: 0, gone: 0, left: pages.length };
+  if (!pages.length) return done;
+  for (const f of files) {
+    if (await cache.match(origin + f)) continue;
+    const got = await fetcher(origin + f).catch(() => null);
+    if (!got || !got.ok) return done; // not reached: the next round tries again
+    await cache.put(origin + f, got);
+  }
+  while (pages.length) {
+    const page = pages[0];
+    const url = `${origin}${page}/__data.json`;
+    const got = await fetcher(url).catch(() => null);
+    if (!got || got.status >= 500) break; // not reached, or the server failing: the rest wait
+    if (got.ok) { await cache.put(url, got); done.read++; }
+    else done.gone++; // a page the server no longer has: nothing to keep
+    pages.shift();
+    await saveCarry(storage, current, pages);
+  }
+  done.left = pages.length;
+  return done;
+}

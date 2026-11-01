@@ -31,12 +31,14 @@ export function namesSpecies(text: string, scientificName: string): boolean {
 /**
  * Literature is off from round seventy-eight (the owner's decision 2, 2026-10-19): the build asks OpenAlex nothing, and
  * a page built since records its papers as not asked, with these words, which the page and Provenance show beside "not
- * checked", never "none" (rule 2). A later round fills the papers from OpenAlex's free snapshot. A dossier built before
+ * checked", never "none" (rule 2). A dossier built before
  * keeps the papers it holds until it is built again; an offline re-derivation, which asks no source, carries them.
  */
-export const LITERATURE_OFF = "not yet asked for this reference; a later fill takes the papers from OpenAlex's snapshot";
+export const LITERATURE_OFF = 'the reference does not ask OpenAlex for papers';
+/** The words a page built from round seventy-eight to eighty-four carries, which promised a fill no round has planned (round eighty-five; outside review A's 9f): read as literature off still, and said as `LITERATURE_OFF` (`readerWords`). */
+export const LITERATURE_OFF_BEFORE = "not yet asked for this reference; a later fill takes the papers from OpenAlex's snapshot";
 /** Whether a dossier's OpenAlex record is literature switched off (`LITERATURE_OFF`, carried by a re-derivation too), not a source that did not answer. */
-export const literatureOff = (u?: { status?: string; detail?: string } | null): boolean => u?.status === 'skipped' && (u.detail ?? '').includes(LITERATURE_OFF);
+export const literatureOff = (u?: { status?: string; detail?: string } | null): boolean => u?.status === 'skipped' && ((u.detail ?? '').includes(LITERATURE_OFF) || (u.detail ?? '').includes(LITERATURE_OFF_BEFORE));
 
 /**
  * OpenAlex is CC0. Not load-bearing: a species page reads fine without it.

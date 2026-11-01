@@ -14,7 +14,12 @@ export type NameCheck =
    */
   | { s: 'found'; slug: string; refName: string; key: number | null }
   /** Not under this name; the search offers another, for the grower to take or not: never taken on its own. Its GBIF key, when the reference gives one, and its page's address (round eighty-four, for the plant page's older-name line). */
-  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'spelling' | 'similar'; slug?: string }
+  /**
+   * `infra`: no page holds the name typed, but one holds a name below it (a variety, a form or a subspecies of it) as an
+   * older name, which `via` gives (round eighty-five; review-w W2, outside review A11: "Trichocereus pachanoi" was "not in
+   * the reference" while Echinopsis macrogona holds "Trichocereus pachanoi f. peruvianus").
+   */
+  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'infra' | 'spelling' | 'similar'; slug?: string; via?: string }
   | { s: 'missing' }
   /** The reference was not reached, or the search allowance was spent: not checked, which is not "missing". */
   | { s: 'unchecked' }
@@ -123,6 +128,13 @@ export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry
   // And Kew's older names, which the search reads too (round eighty; review-d 5).
   const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].some((n) => n.toLowerCase() === want));
   if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name', slug: older.slug };
+  // A name below the species typed, held as an older name: its first two words, past a rank word, are the name typed.
+  const binomial = (n: string) => n.toLowerCase().split(/\s+/).filter((w) => w !== '×').slice(0, 2).join(' ');
+  const below = (n: string) => n.trim().split(/\s+/).filter((w) => w !== '×').length > 2 && binomial(n) === want;
+  for (const h of hits) {
+    const via = [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].find(below);
+    if (via) return { s: 'near', suggestion: h.name, key: h.gbif ?? null, why: 'infra', slug: h.slug, via };
+  }
   const genus = want.split(' ')[0];
   const close = hits.find((h) => plain(h.name).split(' ')[0] === genus && editDistance(plain(h.name), want) <= 2);
   if (close) return { s: 'near', suggestion: close.name, key: close.gbif ?? null, why: 'spelling', slug: close.slug };

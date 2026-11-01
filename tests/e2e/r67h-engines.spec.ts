@@ -16,6 +16,7 @@
  * written: these were run in Chromium here, and written against Playwright's API for the others.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { positionsFromStart, positionMoves } from './helpers/positions';
 import { rootText } from './helpers/text-size';
 
@@ -103,7 +104,7 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
     const page = await ctx.newPage();
     await page.goto(path); await ready(page);
     await drawn(page);
-    await page.waitForTimeout(2_000);
+    await goneQuiet(page, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): the late faces have arrived and every move is made
     // Firefox is allowed one line of small text (round sixty-nine, the owner's run on Windows): there one of the two pages
     // had its first heading move down 17 px as the fonts landed (482 to 499 at 1,795 ms), the title and the tab bar still,
     // which is one line of 11 to 13.5 px text gained above it in Firefox's layout of the web face against its fallback.
@@ -129,7 +130,7 @@ test("r67h engines 5: an example page is drawn with the example's bar from the f
   await expect(page.locator('html')).toHaveAttribute('data-demo', '1');
   await expect(page.locator('.demobar')).toBeVisible();
   await drawn(page);
-  await page.waitForTimeout(1_000);
+  await goneQuiet(page, 1_000); // a negative, read once the page has gone quiet (helpers/settled.ts): every move is made
   const { moves, frames } = await positionMoves(page, 4);
   expect(frames).toBeGreaterThan(10);
   expect(moves).toEqual([]);

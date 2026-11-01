@@ -8,7 +8,9 @@
  *
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r63v-visitor.spec.ts
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -80,7 +82,7 @@ test('r63v V2: Today by tab on an empty device does not open the example; its bu
   await page.locator('#tabbar a[href="/today"]').click();
   await expect(page).toHaveURL(/\/today$/);
   await offered(page, 'No growing plants yet.');
-  await page.waitForTimeout(1000);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   // My spaces and Propagation the same: their own empty state, the button, no example.
@@ -123,13 +125,13 @@ test('r63v V2: Today opened by a link, and by its address, on an empty device do
   const fresh = await page.context().newPage();
   await fresh.goto('/today'); await ready(fresh);
   await offered(fresh, 'No growing plants yet.');
-  await fresh.waitForTimeout(800);
+  await goneQuiet(fresh); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(fresh).toHaveURL(/\/today$/);
   await expect(fresh.locator('html[data-demo]')).not.toBeAttached();
   await fresh.close();
 });
 
-test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the example page)', { tag: '@chromium' }, async ({ page }) => {
+test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the example page)', chromiumOnly('a layout-shift reading, which only Chromium reports; r67h engines 5 reads an example page\'s positions every frame in every engine'), async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __cls: number }).__cls = 0;
     new PerformanceObserver((l) => { for (const e of l.getEntries() as Array<PerformanceEntry & { value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) (window as unknown as { __cls: number }).__cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
@@ -138,7 +140,7 @@ test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the
   await page.locator('#see-example').click(); // opened by its button since round seventy-four
   await inExample(page, '/today');
   await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
-  await page.waitForTimeout(1500);
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): every shift of the way in is made
   const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
   console.log(`r63v: layout shift on the example's Today after the way in: ${cls.toFixed(3)}`);
   expect(cls).toBeLessThan(0.1);
@@ -169,7 +171,7 @@ test('r63v V2: "Add your first plant" leaves the example for the add form, and t
   // With a plant of its own, Today is the grower's own page now, not the example.
   await page.locator('#tabbar a[href="/today"]').click();
   await expect(page).toHaveURL(/\/today$/);
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
 });
 
@@ -178,7 +180,7 @@ test('r63v V2: a grower with plants is never taken into the example, and can loo
   await grower(page, 2);
   for (const path of ['/today', '/places', '/propagation']) {
     await page.goto(path); await ready(page);
-    await page.waitForTimeout(800);
+    await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.locator('html[data-demo]')).not.toBeAttached();
     await expect(page.locator('#example-offer')).toHaveCount(0);
@@ -209,7 +211,7 @@ test('r63v V2: with the tab\'s storage refused, an empty Today shows its own emp
   const page = await ctx.newPage();
   await page.goto('/today'); await ready(page);
   await expect(page.locator('#example-offer')).toBeVisible();
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   await page.locator('#see-example').click();
@@ -227,7 +229,7 @@ test('r63v V2: My plants keeps its own empty page and offers the example first',
   // The first step adds a place: the add form, not the example.
   await page.locator('.firststeps a[href="/places#add"]').click();
   await expect(page.locator('#loc-name')).toBeVisible();
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
 });
 

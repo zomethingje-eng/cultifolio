@@ -138,7 +138,9 @@ describe('an English name is read in the Latin alphabet (S12)', async () => {
     expect(latinName('Asian Indian mallow ا')).toBe('Asian Indian mallow');
     expect(latinName('Hairy phloxا')).toBe('Hairy phlox');
     for (const n of ['アマミナキリスゲ（Amami-nakirisuge）', 'Китайски лептопус', 'قهوة سنا', '玉蕊 / 穗花棋盤腳', 'אבוקדו']) expect(latinName(n), n).toBeNull();
-    for (const n of ['Northern rātā', 'ʻŌhiʻa lehua', 'Chinese Incense‒cedar', "Kaapsehoop Cycad – includes Dedekind's Cycad", 'Ætihvönn']) expect(latinName(n), n).toBe(n);
+    for (const n of ['Northern rātā', 'ʻŌhiʻa lehua', 'Chinese Incense‒cedar', "Kaapsehoop Cycad – includes Dedekind's Cycad"]) expect(latinName(n), n).toBe(n);
+    // Round eighty-five (N; review-s S12): eth, thorn and ash are no letters of English spelling, so "Ætihvönn" is not one.
+    expect(latinName('Ætihvönn')).toBeNull();
   });
   it('the names shown', () => {
     const vs = [{ name: 'Asian Indian mallow ا', lang: 'eng' }, { name: 'قهوة سنا', lang: 'eng' }, { name: 'Indian mallow', lang: 'eng' }];

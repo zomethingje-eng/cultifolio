@@ -112,8 +112,8 @@ describe('numbering stops at an unsafe integer (R3)', () => {
     const rows = read('number,species\n9007199254740993,Copiapoa cinerea\n9007199254740993,Lithops lesliei\n9007199254740993,Aloe vera\n');
     const plan = planNumbers(rows, [], DEFAULT_SCHEME, 2026);
     const nos = rows.map((r) => plan.byRow.get(r.key)!.numbers[0]);
-    expect(nos[0]).toBe('9007199254740993');
-    expect(nos.slice(1)).toEqual(['2026-0001', '2026-0002']);
+    // Round eighty-five (outside review A10): sixteen digits are no plant number (`isPlantNumber`); every line is numbered.
+    expect(nos).toEqual(['2026-0001', '2026-0002', '2026-0003']);
   });
 });
 

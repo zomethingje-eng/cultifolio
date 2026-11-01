@@ -332,7 +332,11 @@ export async function sheetForNameOr(name: string, key: number | null | undefine
   const slug = speciesSlug(name);
   const m = await sheetsOr([slug]);
   if (isUnreached(m)) return m;
-  const s = m.get(slug);
+  const filed = m.get(slug);
+  // A copy of a page's sheet under GBIF's name for the page's key, where Kew's name heads the page (round eighty-five;
+  // review-c C4, review-s S2): it answers a plant of that key only, which the plant's page then says. A plant of another
+  // key, or of none, under that name is not taken for the page's.
+  const s = filed?.via === 'gbif' && filed.gbif !== key ? undefined : filed;
   // A homonym's sheet is filed under `<slug>-<GBIF key>`, and a plant's key is a GBIF key: compared with the sheet's
   // `gbif`, never its page id (round seventy-eight). When the plain slug answers with another key than the plant's, that
   // is looked for first (round seventeen, 6): one more bucket request only in that case, so the ordinary plant still

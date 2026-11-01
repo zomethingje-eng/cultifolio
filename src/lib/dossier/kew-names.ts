@@ -17,6 +17,7 @@
  * rows. Nothing here asks a source.
  */
 import { ownByAuthor, plainlyAnother } from './authors';
+import type { RangeVia } from './range-via';
 import { headWithKew, unhead, kewAcceptedOf, type KewAccepted, type GbifName } from './kew-heading';
 /** The record's words of a homonym key (`build.ts` `KEW_NAME`), kept here so a reader of `name.kew` need not load the builder. */
 const KEW_NAME = /is cited as Kew (?:accepts|cites) it/;
@@ -35,6 +36,8 @@ export interface KewRow {
   homotypic?: boolean;
   /** ipni_id (round eighty-four): IPNI's number for the name, where IPNI holds it; absent in rows read before. */
   ipni?: string;
+  /** family (round eighty-five, A9a): Kew's family of the row, which heads a `k` page as Kew's name does; absent in rows read before. */
+  family?: string;
 }
 
 /**
@@ -43,7 +46,7 @@ export interface KewRow {
  * is then not this page's, so `entry` is '' and `synonyms` empty (they are the other page's plant's names), and the
  * page keeps its GBIF id. Echeveria peacockii (g7530398) read to Dudleya pulverulenta's 2778991, page k2778991's.
  */
-export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string; accepted?: KewAccepted }
+export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string; accepted?: KewAccepted; elsewhere?: string[] }
 /** `name.cited`: the page cites Kew's author; `gbif` is the backbone's citation, `kew` the Kew row cited. */
 export interface KewCited { gbif: string; kew: string }
 
@@ -82,7 +85,8 @@ export function splitName(s: string): { name: string; author: string } | null {
 type Page = {
   key: number;
   slug?: string;
-  name: { scientific: string; authorship?: string | null; rank?: string | null; genus?: string | null; synonyms?: string[]; vernacular?: Array<{ name: string; lang?: string; source?: string }>; kew?: KewNames; cited?: KewCited; gbif?: GbifName | null };
+  distribution?: { via?: Pick<RangeVia, 'kind' | 'entry' | 'name'> | null } | null;
+  name: { scientific: string; authorship?: string | null; rank?: string | null; genus?: string | null; family?: string | null; synonyms?: string[]; infra?: string[]; formerly?: string[]; vernacular?: Array<{ name: string; lang?: string; source?: string }>; kew?: KewNames; cited?: KewCited; gbif?: GbifName | null };
   ids: { powo?: string | null; ipni?: string | null };
   links?: Record<string, string>;
   upstream?: Record<string, { status: string; at: string; detail?: string } | undefined>;
@@ -106,8 +110,44 @@ export function kewCitation(d: Page, rowOf: (n: string) => KewRow | undefined): 
   return { authorship: r.authors.trim(), cited: { gbif: d.name.cited?.gbif ?? was, kew: r.id } };
 }
 
+/**
+ * An autonym (round eighty-five; review-d D7, outside review A9b): a name below species whose last epithet repeats the
+ * species' ("Stapelia hirsuta var. hirsuta"). It is the species' typical part, and has no author of its own.
+ */
+export const isAutonymName = (name: string) => { const w = name.replace(/×\s*/g, '').trim().split(/\s+/); return w.length >= 4 && INFRA.test(w[w.length - 2]) && w[w.length - 1] === w[1]; };
+
+/**
+ * The plant a Kew entry is (round eighty-five; moved here from `extra-keys.ts`, which reads it too): the entry, the
+ * species of an entry that is its autonym (Fragaria virginiana Duchesne is filed under F. virginiana subsp. virginiana,
+ * which is the species), and the varieties and subspecies Kew accepts under those. The species of any other subspecies
+ * is another plant (review-d D7, A9b: Conophytum calculus listed as an older name of its own subspecies vanzylii).
+ */
+export function plantOf(entry: string, idx: Pick<KewNamesIndex, 'byId' | 'children'>): Set<string> {
+  const plant = new Set<string>(entry ? [entry] : []);
+  const e = entry ? idx.byId.get(entry) : undefined;
+  if (e && e.rank !== 'Species' && e.parent && isAutonymName(e.name)) plant.add(e.parent);
+  for (const id of [...plant]) for (const c of idx.children.get(id) ?? []) plant.add(c.id);
+  return plant;
+}
+
+/**
+ * A species is headed by its species entry (round eighty-five, the owner's brief on review-d D7 and outside review A9b):
+ * an entry that is an autonym ("Stapelia hirsuta var. hirsuta", where GBIF's Ceropegia hamata reads to) is its species'
+ * entry (Stapelia hirsuta L.), which then heads the page; a subspecies of its own (Conophytum calculus subsp. vanzylii)
+ * stays itself.
+ */
+export function speciesEntry(entry: string, idx: Pick<KewNamesIndex, 'byId'>): string {
+  const e = entry ? idx.byId.get(entry) : undefined;
+  if (!e || e.rank === 'Species' || !e.parent || !isAutonymName(e.name)) return entry;
+  const p = idx.byId.get(e.parent);
+  return p && p.status === 'Accepted' && p.rank === 'Species' ? p.id : entry;
+}
+
 /** The Kew entry the page's plant is: the linked number's (its accepted entry), else the one the name and author read to. */
 export function kewEntry(d: Page, idx: KewNamesIndex): string {
+  return speciesEntry(entryRead(d, idx), idx);
+}
+function entryRead(d: Page, idx: KewNamesIndex): string {
   const n = linkedNumber(d.ids);
   const r = n ? idx.byPowo.get(n) : undefined;
   // A linked number Kew files under another species, where Kew also accepts these words by the same author, is not the
@@ -120,18 +160,68 @@ export function kewEntry(d: Page, idx: KewNamesIndex): string {
   const own = ownByAuthor(rows, d.name.authorship ?? undefined, (x) => x.authors);
   const pick = own.length ? own : rows.filter((x) => x.status === 'Accepted');
   const entries = [...new Set(pick.map((x) => (x.status === 'Accepted' ? x.id : x.accepted)).filter(Boolean))];
-  return entries.length === 1 ? entries[0] : '';
+  if (entries.length === 1) return entries[0];
+  // A page Kew holds no row of under its own words, whose range was read through one Kew entry by a spelling or a
+  // synonym row (`distribution.via`; round eighty-five, review-d D6: Tylecodon cacaliodes, Kew's T. cacalioides): that
+  // entry, where Kew accepts exactly one species of the entry's words.
+  return viaEntry(d, idx);
+}
+
+/** The entry a page's range note names, for a range read by a spelling or a synonym row (D6); '' for any other. */
+export function viaEntry(d: Page, idx: Pick<KewNamesIndex, 'rowsOf'>): string {
+  const v = d.distribution?.via;
+  if (!v || (v.kind !== 'spelling' && v.kind !== 'synonym-of') || !v.entry) return '';
+  const nm = v.name ?? splitName(v.entry)?.name;
+  if (!nm) return '';
+  const acc = idx.rowsOf(nm).filter((r) => r.status === 'Accepted' && r.rank === 'Species');
+  const own = acc.length > 1 ? ownByAuthor(acc, v.entry.slice(nm.length).trim() || undefined, (r) => r.authors) : acc;
+  return own.length === 1 ? own[0].id : '';
+}
+
+/**
+ * Where Kew's file places a name a page holds (round eighty-five, the owner's decision 6; review-d D1, outside review
+ * A11). Kew's rows of the name's words at its rank, misapplied rows aside; where the name carries an author and Kew holds
+ * the words by that author (`ownByAuthor`), those rows alone. Each row leads to an entry: itself when Kew accepts it, the
+ * entry it is filed under otherwise; an unplaced row leads nowhere. The name is
+ *   - `here` when a row leads into the page's plant (`plantOf`);
+ *   - `elsewhere` when its rows lead only to other entries: Kew accepts the name as another plant, or files it under one;
+ *   - `unread` when Kew holds no row of it, or only unplaced ones, or the page has no entry: Kew says nothing of it.
+ * A name `elsewhere` is not the page's: not searched, not an older name and not an address (`name.kew.elsewhere`).
+ */
+export type KewPlace = 'here' | 'elsewhere' | 'unread';
+export function kewPlace(stored: string, plant: ReadonlySet<string>, idx: Pick<KewNamesIndex, 'rowsOf'>): KewPlace {
+  if (!plant.size) return 'unread';
+  const n = nameWithAuthor(stored);
+  if (!n) return 'unread';
+  const rows = idx.rowsOf(n.name).filter((r) => r.status !== 'Misapplied' && (n.infra ? r.rank !== 'Species' : r.rank === 'Species'));
+  const byAuthor = n.author ? ownByAuthor(rows, n.author, (r) => r.authors) : [];
+  const read = byAuthor.length ? byAuthor : rows;
+  const to = new Set(read.map((r) => (r.status === 'Accepted' ? r.id : r.status === 'Unplaced' ? '' : r.accepted)).filter(Boolean));
+  if (!to.size) return 'unread';
+  return [...to].some((x) => plant.has(x)) ? 'here' : 'elsewhere';
+}
+
+/** A stored name as its words (with its rank word, "ssp." read as "subsp.") and its author: "Trichocereus pachanoi Britton & Rose". Null for what is not a name of species rank or below. */
+export function nameWithAuthor(s: string): { name: string; author: string; infra: boolean } | null {
+  // A hybrid formula ("Mentha aquatica × spicata", "Mentha aquatica x suaveolens") is two parents, not a name.
+  if (/^\S+\s+(?:[×x]\s*)?\S+\s+(?:[×x])(?:\s|$)/.test(s.trim())) return null;
+  // The sign of a nothospecies stands before its epithet ("Mentha × piperita", "Mentha ×atrata", "Mentha xpiperita").
+  const w = s.replace(/×\s*/g, '').trim().split(/\s+/).map((x, i) => (i === 1 && /^x[a-z]{3,}$/.test(x) && !/^x[aeiouy]/.test(x) ? x.slice(1) : x));
+  if (w.length < 2 || !/^[A-Z][a-z-]+$/.test(w[0]) || !/^[a-z][a-z-]+$/.test(w[1])) return null;
+  if (w.length >= 4 && INFRA.test(w[2]) && /^[a-z][a-z-]+$/.test(w[3])) {
+    const rank = /^s(?:ub)?sp\.?$/.test(w[2]) ? 'subsp.' : /^var\.?$/.test(w[2]) ? 'var.' : /^(?:f|fo|forma)\.?$/.test(w[2]) ? 'f.' : w[2].endsWith('.') ? w[2] : `${w[2]}.`;
+    return { name: `${w[0]} ${w[1]} ${rank} ${w[3]}`, author: w.slice(4).join(' '), infra: true };
+  }
+  if (INFRA.test(w[2] ?? '')) return null;
+  return { name: `${w[0]} ${w[1]}`, author: w.slice(2).join(' '), infra: false };
 }
 
 /** `name.kew` for a page: its entry, Kew's other names for the plant, and the older names Kew accepts apart. */
 export function kewNames(d: Page, idx: KewNamesIndex, file: string): KewNames {
   const entry = kewEntry(d, idx);
   const e = entry ? idx.byId.get(entry) : undefined;
-  // The plant: the entry, the species of an entry below species (Fragaria virginiana Duchesne is filed under F.
-  // virginiana subsp. virginiana), and the accepted varieties and subspecies of an entry that is a species.
-  const plant = new Set<string>(entry ? [entry] : []);
-  if (e && e.rank !== 'Species' && e.parent) plant.add(e.parent);
-  for (const id of [...plant]) for (const c of idx.children.get(id) ?? []) plant.add(c.id);
+  // The plant: the entry, the species of an entry that is its autonym, and the accepted varieties and subspecies (`plantOf`).
+  const plant = plantOf(entry, idx);
   const own = words(d.name.scientific);
   const synonyms = new Set<string>();
   // The entry's own name, where it is other words than the page's (Ferocactus glaucescens for Bisnaga glaucescens).
@@ -152,9 +242,15 @@ export function kewNames(d: Page, idx: KewNamesIndex, file: string): KewNames {
     const rank = (d.name.rank ?? 'SPECIES').toLowerCase();
     const held = idx.rowsOf(d.name.scientific).filter((r) => r.status !== 'Misapplied' && r.rank.toLowerCase() === rank);
     const to = [...new Set(held.map((r) => (r.status === 'Accepted' ? r.id : r.accepted)).filter(Boolean))];
-    if (to.length && !to.includes(entry)) other = idx.byId.get(to[0])?.name ?? `Kew's entry ${to[0]}`;
+    // Into the plant (an autonym's species takes its autonym's names: Ceropegia pulvinata under Stapelia hirsuta var. hirsuta is Stapelia hirsuta's).
+    if (to.length && !to.some((t) => plant.has(t))) other = idx.byId.get(to[0])?.name ?? `Kew's entry ${to[0]}`;
   }
-  return { entry, synonyms: [...synonyms].sort(), acceptedElsewhere, file, ...(e ? { accepted: { ...kewAcceptedOf(e), ...(other ? { other } : {}) } } : {}) };
+  // GBIF's names on the page that Kew places only in another plant (round eighty-five, the owner's decision 6; review-d
+  // D1): its synonyms and the names filed under its varieties (`name.infra`). Each is left out of the page's names by
+  // the index (`kewPlace`): "Echinopsis pachanoi", which Kew accepts, was a search name of Echinopsis macrogona, and
+  // "Dypsis lutescens", which Kew files under Chrysalidocarpus lutescens alone, an older name of Hyophorbe indica too.
+  const elsewhere = [...new Set([...(d.name.synonyms ?? []), ...(d.name.infra ?? [])])].filter((s) => kewPlace(s, plant, idx) === 'elsewhere');
+  return { entry, synonyms: [...synonyms].sort(), acceptedElsewhere, file, ...(e ? { accepted: { ...kewAcceptedOf(e), ...(other ? { other } : {}) } } : {}), ...(elsewhere.length ? { elsewhere } : {}) };
 }
 
 /** POWO's address and IPNI's number of a Kew row: Kew's `powo_id`, and IPNI's `ipni_id` (else the `powo_id`) unless it is Kew's own number ("-4"), which IPNI does not hold. */
@@ -200,7 +296,7 @@ export function scientificVernacular(v: string, holds: (name: string) => boolean
 export const onlyAnotherAuthor = (others: string[]) => `Kew holds this name only under another author (${others.join('; ')}); no POWO link`;
 
 /** What `fillKewNames` changed, one line a dossier. `held`: pages not given an entry another page holds (round eighty-two). */
-export type KewNamesCounts = { read: number; changed: number; cited: number; elsewhere: number; vernacularDropped: number; held: number; lines: string[] };
+export type KewNamesCounts = { read: number; changed: number; cited: number; elsewhere: number; vernacularDropped: number; held: number; lines: string[]; placedElsewhere?: number; unheaded?: number; unheadedLines?: string[] };
 
 /**
  * A page's `name.kew` when the entry its rows read to is another page's (round eighty-two, F; review 1's 4): no entry, no
@@ -220,16 +316,34 @@ export const heldByWords = (entry: string, heldBy: string) => `Kew's rows read t
  * `reference` is the reference's own names (lower case), for the common names.
  */
 export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; write(f: string, d: unknown): void }, idx: KewNamesIndex, file: string, reference: Set<string> = new Set(), o: { heldBy?: (entry: string, page: string) => string | undefined } = {}): KewNamesCounts {
-  const c: KewNamesCounts = { read: 0, changed: 0, cited: 0, elsewhere: 0, vernacularDropped: 0, held: 0, lines: [] };
+  const c: KewNamesCounts = { read: 0, changed: 0, cited: 0, elsewhere: 0, vernacularDropped: 0, held: 0, lines: [], placedElsewhere: 0, unheaded: 0, unheadedLines: [] };
   for (const f of store.files()) {
     let d: Page;
     try { d = store.read<Page>(f); } catch { continue; }
     c.read++;
     const before = JSON.stringify(d);
     const what: string[] = [];
+    // The heading before this fill (round eighty-five, outside review A23): a page Kew's name headed and no longer heads
+    // is said, never left to pass in silence (Kew's row gone from a newer file, or the entry now another page's).
+    const headedBefore = d.name.gbif ? `${d.name.scientific}${d.name.authorship ? ` ${d.name.authorship}` : ''}` : null;
+    const elsewhereBefore = JSON.stringify(d.name.kew?.elsewhere ?? []);
     // Kew's entry is read by GBIF's name for the key, as the build read it (round eighty-four): a heading of an earlier fill is taken off first, and put back by the rule below.
+    const heading = d.name.scientific;
+    // Whether Kew's name headed the page before this fill: its stored row's name is the heading.
+    const kewHeaded = !!d.name.kew?.accepted?.name && words(d.name.kew.accepted.name) === words(heading);
     unhead(d);
     d.name.kew = kewNames(d, idx, file);
+    // Kew's heading of the page changed (round eighty-five: an autonym's page now its species', Stapelia hirsuta var.
+    // hirsuta to Stapelia hirsuta): the heading it had is kept as a former heading, so its address still leads here.
+    const nowKew = d.name.kew.accepted?.name;
+    if (kewHeaded && nowKew && words(nowKew) !== words(heading) && !(d.name.formerly ?? []).includes(heading)) {
+      d.name.formerly = [...(d.name.formerly ?? []), heading];
+      what.push(`Kew's entry is now ${nowKew}: ${heading} kept as a former heading`);
+    }
+    if (d.name.kew.elsewhere?.length) {
+      c.placedElsewhere! += d.name.kew.elsewhere.length;
+      if (JSON.stringify(d.name.kew.elsewhere) !== elsewhereBefore) what.push(`not this plant's names by Kew's file: ${d.name.kew.elsewhere.join(', ')}`);
+    }
     // One Kew entry, one page (round eighty-two, F; review 1's 4): an entry another page holds is not given to this one.
     const holder = d.name.kew.entry ? o.heldBy?.(d.name.kew.entry, String(d.key)) : undefined;
     const up = (d.upstream ??= {});
@@ -272,7 +386,12 @@ export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; 
     // Kew's accepted name heads the page while its id is `k<entry>` (round eighty-four, decision 1), and the page links that entry.
     const id = String(d.key);
     const wasName = d.name.scientific;
-    headWithKew(d, id);
+    headWithKew(d, id, heading);
+    // A genus that is not an accepted name's own first word is a misreading (round eighty-five; review-d D13: Hereroa
+    // incurva's genus read "Schwantes", GBIF's genus row named by its author): the name's genus, which the field says.
+    // A page under a synonym carries its accepted species' genus, and is left as it is.
+    const first = d.name.scientific.replace(/^×\s*/, '').split(' ')[0];
+    if ((d.name as { status?: string }).status === 'accepted' && d.name.genus && d.name.genus !== first && /^[A-Z][a-z-]+$/.test(first)) { what.push(`genus ${d.name.genus} read as ${first}`); d.name.genus = first; }
     const entryRow = d.name.kew.entry && id === `k${d.name.kew.entry}` ? idx.byId.get(d.name.kew.entry) : undefined;
     if (entryRow && linkKewEntry(d, entryRow)) {
       what.push(`linked Kew's entry ${d.name.kew.entry}`);
@@ -295,6 +414,12 @@ export function fillKewNames(store: { files(): string[]; read<T>(f: string): T; 
         up.wikidata = { ...wd, detail: wd.detail.replace(/IPNI and POWO linked by Kew's number, none/, onlyAnotherAuthor(others.map((r) => `${r.name} ${r.authors}`))) };
         what.push('no POWO link said');
       }
+    }
+    if (headedBefore && !d.name.gbif) {
+      c.unheaded!++;
+      const line = `${headedBefore} [${d.key}]: no longer headed by Kew's name (${!entryRow ? (d.name.kew.entry ? `Kew's entry is ${d.name.kew.entry}, not this page's id; the index gives the id by the rule` : "Kew's rows no longer read this page to one entry") : "Kew's row has no name"}); headed by GBIF's ${d.name.scientific} until it is`;
+      c.unheadedLines!.push(line);
+      what.push(line);
     }
     if (JSON.stringify(d) === before) continue;
     store.write(f, d);

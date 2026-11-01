@@ -28,9 +28,17 @@ export function daysBetween(from: string, to: string = localDate()): number {
  * The one rule for an instant against a local day (round eighty-four; outside review A14 and A23). An instant (an ISO
  * string with a time, `toISOString()`'s, or a millisecond count) is read on the reader's own calendar before it is
  * compared with a day: its first ten characters are the UTC date, which in Pittsburgh after 8 pm is tomorrow, and Today
- * said "backup -1 d ago". Null for something that is not an instant.
+ * said "backup -1 d ago". Null for something that is not an instant. A calendar date (`YYYY-MM-DD`) is its own day.
  */
 export function localDateOf(instant: string | number | Date): string | null {
+  // A calendar date is a day already, not an instant (round eighty-five; outside review A19): `Date.parse('2026-10-31')`
+  // is midnight in Greenwich, which west of it is the 30th, so a date passed here came back a day early. It is returned
+  // as it is when it is a real day of the calendar, and is null when it is not (`2026-02-30`).
+  if (typeof instant === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(instant)) {
+    const [y, m, d] = instant.split('-').map(Number);
+    const at = new Date(Date.UTC(y, m - 1, d));
+    return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d ? instant : null;
+  }
   const ms = instant instanceof Date ? instant.getTime() : typeof instant === 'number' ? instant : Date.parse(instant);
   return Number.isFinite(ms) ? localDate(new Date(ms)) : null;
 }

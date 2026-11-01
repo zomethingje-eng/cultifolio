@@ -170,7 +170,7 @@
     navigator.serviceWorker.getRegistration().then(async (reg) => {
       if (!reg) return;
       if (reg.waiting) return skipTo(reg.waiting);
-      await reg.update().catch(() => {});
+      await reg.update().catch(() => { /* no update found is the usual answer; the version poll asks again */ });
       if (reg.waiting) skipTo(reg.waiting);
     });
   });
@@ -412,7 +412,7 @@
   <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
   <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
-  <nav class="crumb" aria-label="Breadcrumb">
+  <nav class="crumb" class:detail={parts.length > 1} aria-label="Breadcrumb">
     <ol>
       {#each parts as c, i}
         <li>{#if i}<span class="sep" aria-hidden="true">›</span>{/if}{#if c.href && i < parts.length - 1}<a href={c.href}>{c.label}</a>{:else}<span class:last={i === parts.length - 1 && parts.length > 1} aria-current={i === parts.length - 1 ? 'page' : undefined}>{c.label}</span>{/if}</li>
@@ -489,8 +489,10 @@
 <nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)} {@attach (bar: HTMLElement) => {
   const tight = () => [...bar.querySelectorAll<HTMLElement>('a > span')].some((s) => s.offsetParent !== null && s.scrollWidth > s.clientWidth + 1);
   const fit = () => {
-    delete bar.dataset.icons; // an attribute, not a class: the bar's class is Svelte's to set, and it changes as the bar hides
-    delete bar.dataset.small;
+    // An attribute, not a class: the bar's class is Svelte's to set, and it changes as the bar hides. Taken off only when
+    // there, so a fit that changes nothing invalidates no style.
+    if ('icons' in bar.dataset) delete bar.dataset.icons;
+    if ('small' in bar.dataset) delete bar.dataset.small;
     // First a smaller step, closer set: "Propagation" was 72 px in a 68 px column at 360 px with normal text, and five
     // bare icons on the commonest phone width was the fallback taking over too soon (round sixty-two; the verification
     // review's grower 1). Icons only when even that step breaks a word.
@@ -498,7 +500,9 @@
     bar.dataset.small = '1';
     if (tight()) bar.dataset.icons = '1';
   };
-  fit();
+  // Not measured here, during hydration: reading a label's width then laid the whole page out once more before its first
+  // frame (round eighty-five; the cold front page's blocking time, outside review A). The observer's first call, made
+  // after the browser's own layout of the frame, measures it.
   const ro = new ResizeObserver(fit);
   ro.observe(bar);
   for (const a of bar.querySelectorAll('a')) ro.observe(a); // a label's own width changes as the web font comes in, not the bar's
@@ -544,9 +548,24 @@
   .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
   .crumb a:hover { color: var(--ink); text-decoration: none; }
   .crumb .sep { opacity: 0.45; margin: 0 5px; }
-  /* The trail as a list that reads as the one line it was (round fifty-eight; the accessibility review). */
-  .crumb ol { display: inline; margin: 0; padding: 0; list-style: none; }
-  .crumb li { display: inline; }
+  /* The trail as a list that reads as the one line it was (round fifty-eight; the accessibility review). Each part before
+     the last is whole, and the last (the page's own name) takes what is left and ends in an ellipsis when cut: the
+     section's link is a box the ellipsis cannot enter, so a narrow bar cut "SPECIES" to "SPECIE" with no mark, and at
+     320 px the name was all ellipsis (round eighty-five; review-w W14, review-p P7). */
+  .crumb ol { display: flex; align-items: baseline; margin: 0; padding: 0; list-style: none; min-width: 0; }
+  .crumb li { flex: none; white-space: nowrap; }
+  .crumb li:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  /* On a phone (480 px or less) a page's own name is the trail: Back leads to the part before it. */
+  @media (max-width: 480px) {
+    .crumb.detail li:not(:last-child) { display: none; }
+    .crumb.detail li:last-child .sep { display: none; }
+  }
+  /* Where the five places are in the bar (short and narrow: a phone in landscape, a laptop at 200%), they name the
+     section, Back leads up, and the page's heading names the page; what was left for the crumb at 640 x 400 was 50 px.
+     The trail is read, not drawn, and the nav still holds the bar's space. */
+  @media (max-width: 700px) and (max-height: 480px) {
+    .crumb ol { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  }
   .crumb li a { text-decoration: none; } /* not the prose link's underline, which the theme gives every link in a list item (round fifty-eight; the accessibility review) */
   .crumb .last { color: var(--ink); }
   #topbar .topseg { margin: 0 6px; flex: none; }

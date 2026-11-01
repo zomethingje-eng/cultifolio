@@ -15,6 +15,7 @@
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf, speciesName } from '$core/names';
   import { numberOrNull } from '$core/units';
+  import { plantNumberProblem, PLANT_NUMBER_MAX } from '$core/accession';
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Accession, Provenance } from '$lib/db/types';
   import { plantLabel } from '$lib/ui/plant-label';
@@ -130,13 +131,15 @@
   let useOwnNumber = $state(false);
   let ownNumber = $state('');
   const ownTaken = $derived(useOwnNumber && !!ownNumber.trim() && collection.isNumberTaken(ownNumber));
+  /** Why the number typed is not one the app keeps (`isPlantNumber`; round eighty-five, outside review A10), or null. */
+  const ownBad = $derived(useOwnNumber && !!ownNumber.trim() ? plantNumberProblem(ownNumber) : null);
   let busy = $state(false);
   let checking = $state(false); // the name (or the link's key) is being checked against the reference: the button says so rather than sitting there (round twenty-four, 15)
   const nextNo = $derived(collection.ready ? collection.nextAccessionNumber(undefined, acquired) : '…'); // the year the number will carry is the acquired date's, so the preview and the number agree across New Year (round twenty-five, 4)
 
   let nameUnresolved = $state(false);
   let nameArmed = $state(false);
-  let picker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean> } | null>(null);
+  let picker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean>; olderAnswer: () => string | null } | null>(null);
   let dateMsg = $state('');
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
@@ -184,8 +187,10 @@
   let moreOpen = $state(false);
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!name.trim() || busy || checking) return; // a second tap during a slow name check made a second plant (round fifty-one, 4)
-    if (ownTaken) return;
+    // A second tap during a slow name check made a second plant (round fifty-one, 4); one after the plant was written, while
+    // the form waited for the plant's page, made a second and a third (round eighty-five; review-c C3): one press, one plant.
+    if (!name.trim() || busy || checking || saved) return;
+    if (ownTaken || ownBad) return;
     // The number is minted for the acquisition year and never reused, so a future date (2099 for 2026) would give the plant a wrong identity for good; refused before anything is checked or written (round twenty-six, 3).
     // And a year before any living collection (1026 for 2026) would mint 1026-0001 for good, the same way (round fifty-two, 4).
     dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : acquired && acquired < '1900-01-01' ? `${acquired} is before 1900; the number would be minted for that year, for good.` : '';
@@ -196,11 +201,13 @@
     if (waterMsg) { moreOpen = true; setTimeout(() => document.getElementById('f-watered')?.focus(), 0); return; }
     checking = true;
     try {
-      if (keyCheck) await keyCheck.catch(() => undefined);
+      if (keyCheck) await keyCheck.catch(() => undefined /* the key check's own failure leaves the key unconfirmed, which the save below says */);
       // A name nothing resolved is filed on the second Add, not the first: the first arms and the picker says so (round twenty-three, 4).
       // A name with "cf.", "aff." or "sp." is filed as written, with no key: it names no species of the reference, and the
       // species part it compares with is what its page and its care line read (round sixty-one; the grower review, 5).
-      if (!taxonKey && kind !== 'hybrid' && !nameArmed && !parseName(name).qualifier && !(await picker?.check())) { nameArmed = true; return; }
+      // Asked with a key in hand too: a key the name service gave while the reference's search was out gives way to the
+      // reference's own for a name the reference heads (round eighty-five; review-c C2). A key the link or a pick gave stands.
+      if (kind !== 'hybrid' && !nameArmed && !parseName(name).qualifier && (picker ? !(await picker.check()) : !taxonKey)) { nameArmed = true; return; }
       // A name the field resolved that is an older name of a reference page is asked about once, with the page named
       // (round eighty-four; review-w W6).
       if (!nameArmed && !parseName(name).qualifier && (await picker?.olderFirst())) { nameArmed = true; return; }
@@ -208,6 +215,8 @@
       checking = false;
     }
     void nameUnresolved;
+    // The page the field's line named, when the name is filed as typed after it (round eighty-five; outside review A16a).
+    const olderOf = picker?.olderAnswer() ?? null;
     busy = true;
     const wanted = countN;
     try {
@@ -237,7 +246,8 @@
         price: price.trim() || null,
         sourceForm,
         locationId,
-        notes: notes.trim() || null
+        notes: notes.trim() || null,
+        ...(olderOf ? { olderOf } : {})
       });
       // The last watering, one line per plant, as Water writes it; a second commit, after the plants exist.
       // The plants stand if it fails; the toast says the line did not, and why (round eighty-four; outside review A16: it was
@@ -260,7 +270,8 @@
       saved = true;
       if (wanted > 1) toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, labelsFor);
       else toast.show(addedWords({ count: 1, firstId, waterFailed }), waterFailed ? 12000 : undefined);
-      goto(wanted > 1 ? '/plants' : plantHref(recs[0])); // by identity while another plant shares the number (round sixty)
+      // Awaited, so the form stays busy until it has left (round eighty-five; review-c C3).
+      await goto(wanted > 1 ? '/plants' : plantHref(recs[0])); // by identity while another plant shares the number (round sixty)
     } catch {
       /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
          was typed, and nothing was written: the batch is one commit (round fifteen, 9; round sixteen, 14) */
@@ -340,8 +351,9 @@
   <details class="own">
     <summary class="faint">Use my own number</summary>
     <!-- Both with visible names: the box's placeholder was its only one, and "accession" is the trade's word, not the app's (round fifty-eight; the accessibility review). -->
-    <div class="ownrow"><label class="ownchk"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> Use my own number</label> <label class="ownno"><span class="eyebrow">Your plant number</span><input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken} aria-describedby={ownTaken ? 'f-own-taken' : undefined} /></label></div>
+    <div class="ownrow"><label class="ownchk"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> Use my own number</label> <label class="ownno"><span class="eyebrow">Your plant number</span><input id="f-own-no" type="text" maxlength={PLANT_NUMBER_MAX} bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken || !!ownBad} aria-describedby={ownTaken ? 'f-own-taken' : ownBad ? 'f-own-bad' : undefined} /></label></div>
     <!-- Every plant that holds the number, never one picked by load order; a number held only by a removed plant names it and links its own page, never /plants/undefined (round sixty-two; A35). -->
+    {#if ownBad && !ownTaken}<p class="bad small" id="f-own-bad" role="alert">This number cannot be used: {ownBad}.</p>{/if}
     {#if ownTaken}{@const sharers = collection.withNumber('accession', ownNumber.trim()) as Accession[]}{@const gone = sharers.length ? undefined : collection.removedAccession(ownNumber.trim())}<p class="bad small" id="f-own-taken" role="alert">{ownNumber.trim()} is already used by {#each sharers as a, i (a.id)}{i ? (i === sharers.length - 1 ? ' and ' : ', ') : ''}<a href="/plants/{a.id}">{plantLabel(a)}</a>{/each}{#if !sharers.length}{#if gone}<a href="/plants/{gone.id}">{plantLabel(gone)}</a>, a plant you removed{:else}a plant no longer here{/if}{/if}. A number is never reused; pick another.</p>{/if}
   </details>
   </div>
@@ -349,11 +361,12 @@
   <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
   <!-- Add is first in the markup, so Enter (the phone's Go) is Add, not "Save and add another"; the order on screen is set by CSS (round fifty-one, 4). -->
   <!-- The second press keeps the count in its words: "Add as typed" read as one plant when ten were asked for, and growers set the count back to one (round fifty-eight; the grower review). -->
-  <div class="actions sticky" class:loose={actsLoose} bind:this={actsEl}>
+  <!-- data-cover: a bar pinned over the page's foot, which the species list stops above (round eighty-five; outside review A16b). -->
+  <div class="actions sticky" class:loose={actsLoose} bind:this={actsEl} data-cover="bottom">
     <span class="sr" role="status">{addStatus}</span>
-    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken}>{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || saved || ownTaken || !!ownBad}>{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
     <a class="btn cancel" href="/plants">Cancel</a>
-    <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the space, date, source and provenance kept">Save and add another</button>
+    <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || saved || ownTaken || !!ownBad} title="Add this plant and keep the form open for the next, with the space, date, source and provenance kept">Save and add another</button>
   </div>
 </form>
 

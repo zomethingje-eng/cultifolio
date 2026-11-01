@@ -32,18 +32,23 @@ import { worldSvg } from '$lib/map/still';
 
 type Clim = { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10: never[]; p90: never[]; cells: number; extremesLapse: { years: number; minAbs: number; minP01: number; maxP99: number; frostDaysPerYear: number; lapseAppliedM?: number }; annualRain?: { p50?: number }; at: { lat: number } };
 const LIVE = JSON.parse(readFileSync('tests/unit/fixtures/r84e-lapse-climates.json', 'utf8')) as Record<string, { key: string; climate: Clim }>;
-const c = (slug: string) => LIVE[slug].climate;
+const c0 = (slug: string) => LIVE[slug].climate;
+// Round eighty-five (G; the owner's decision 4): a warm night or a record low sets the extremes aside only beyond 1.5 °C.
+// Eulychnia acida's live gap (0.7 °C) and Nephelium lappaceum's (0.3 °C) now stand, so their warm nights are raised by
+// 1.5 °C here to test the words of a page still set aside; the elevation cases are unchanged.
+const c = (slug: string): Clim => { const x = c0(slug); return /eulychnia|nephelium/.test(slug) ? { ...x, extremesLapse: { ...x.extremesLapse, minP01: Math.round((x.extremesLapse.minP01 + 1.5) * 10) / 10 } } : x; };
 const OLD = /too far off|too far above or below/;
 
 describe('1. each cause of extremes set aside, worded as itself', () => {
   it('the causes, read from the live dossiers', () => {
-    expect(lapseCause({ months: c('eulychnia-acida').months, extremes: c('eulychnia-acida').extremesLapse })).toEqual({ kind: 'warm-night', minP01: 7.5, coldest: 6.8 });
+    expect(lapseCause({ months: c0('eulychnia-acida').months, extremes: c0('eulychnia-acida').extremesLapse })).toBeNull(); // 0.7 °C: stands (round eighty-five)
+    expect(lapseCause({ months: c('eulychnia-acida').months, extremes: c('eulychnia-acida').extremesLapse })).toEqual({ kind: 'warm-night', minP01: 9, coldest: 6.8 });
     expect(lapseCause({ months: c('nephelium-lappaceum').months, extremes: c('nephelium-lappaceum').extremesLapse })?.kind).toBe('warm-night');
     expect(lapseCause({ months: c('echinopsis-thelegona').months, extremes: c('echinopsis-thelegona').extremesLapse })).toEqual({ kind: 'elevation', m: -1257 });
     expect(lapseCause({ months: c('solanum-lycopersicum').months, extremes: c('solanum-lycopersicum').extremesLapse })).toEqual({ kind: 'elevation', m: -1129 });
     // Round eighty's record-low case (Ruellia simplex's figures, review A's 3)
     const months = Array.from({ length: 12 }, (_, i) => ({ tmin: i === 6 ? 16.6 : 20 }));
-    expect(lapseCause({ months, extremes: { minAbs: 17.8, minP01: 18, lapseAppliedM: 40 } })?.kind).toBe('record-low');
+    expect(lapseCause({ months, extremes: { minAbs: 18.2, minP01: 18.4, lapseAppliedM: 40 } })?.kind).toBe('record-low');
   });
   it('the glance card and the share card: the warm night as two sources that disagree, the elevation as the cell\'s height, in the reader\'s units', () => {
     const e = c('eulychnia-acida');
@@ -60,7 +65,7 @@ describe('1. each cause of extremes set aside, worded as itself', () => {
     const e = c('eulychnia-acida');
     const sheet = cultivationSheet({ scientific: 'Eulychnia acida', months: e.months, extremes: null, extremesStatus: 'lapse', extremesLapse: e.extremesLapse, lat: -30 });
     const row = sheet.rows.find((r) => r.k === 'Temperature')!;
-    expect(row.s).toContain('The daily extremes were read and set aside: the 1-in-100 night, 7.5 °C, is warmer than the coldest month\'s mean nightly low across the range, 6.8 °C.');
+    expect(row.s).toContain('The daily extremes were read and set aside: the 1-in-100 night, 9.0 °C, is warmer than the coldest month\'s mean nightly low across the range, 6.8 °C, by more than the 1.5 °C a correction can be out by.');
     expect(row.s).toContain('This is a check that two sources disagree, not proof that either is wrong.');
     expect(row.plain!.lead).toBe("Coldest month, mean nightly low 6.8 °C, not a cold floor: the weather cell's coldest nights run warmer than the habitat's coldest month, so the two sources disagree and its extremes are set aside.");
     expect(JSON.stringify(sheet.rows)).not.toMatch(OLD);
@@ -72,9 +77,9 @@ describe('1. each cause of extremes set aside, worded as itself', () => {
   });
   it("a plant's page and the record-low words", () => {
     const months = Array.from({ length: 12 }, (_, i) => ({ tmin: i === 6 ? 16.6 : 20 }));
-    const rl = lapseCause({ months, extremes: { minAbs: 17.8, minP01: 18 } });
+    const rl = lapseCause({ months, extremes: { minAbs: 18.2, minP01: 18.4 } });
     expect(extremesWhyShort('lapse', rl)).toBe("the weather cell's record low is warmer than the habitat's coldest month's nights, so the two sources disagree and its extremes are set aside");
-    expect(lapseSetAside({ months, extremes: { minAbs: 17.8 } }, 'us')).toContain('the record low, 64.0 °F, is warmer than the coldest month\'s mean nightly low across the range, 61.9 °F');
+    expect(lapseSetAside({ months, extremes: { minAbs: 18.2 } }, 'us')).toContain('the record low, 64.8 °F, is warmer than the coldest month\'s mean nightly low across the range, 61.9 °F');
     expect(extremesWhyShort('lapse', null)).toContain('the species page says why');
   });
   it('the share card names the cause and keeps its small print inside the card', () => {
@@ -92,7 +97,7 @@ describe('1. each cause of extremes set aside, worded as itself', () => {
     const d = parseDossier({ ...base, climate: { ...base.climate, months: e.months, extremes: e.extremesLapse, extremesStatus: 'ok' } });
     const s = sheetOf(d);
     expect(s.climate.status === 'ok' && s.climate.extremesStatus).toBe('lapse');
-    expect(s.climate.status === 'ok' && s.climate.extremesLapse).toEqual({ minAbs: 4.3, minP01: 7.5, lapseAppliedM: -432 });
+    expect(s.climate.status === 'ok' && s.climate.extremesLapse).toEqual({ minAbs: 4.3, minP01: 9, lapseAppliedM: -432 });
   });
 });
 
@@ -111,8 +116,14 @@ describe("2. the chart at a phone's width", () => {
     expect(g.temp.minAbs!.label).toBe('-24.1° lowest night in 44 years, NASA POWER');
     expect(g.months[0]).toBe('Jan');
   });
-  it('the component draws at the shown width down to 260 px, 720 only before it is known', () => {
-    expect(readFileSync('src/lib/ui/Climograph.svelte', 'utf8')).toContain('shown === 0 ? 720 : Math.max(260, Math.min(shown - 20, 960))');
+  // The component draws at the shown width down to 260 px, 720 only before it is known: tests/unit/r85q-behaviour.test.ts
+  // 1, which draws it in a page at four widths (round eighty-five; this read the line of source, outside review A23).
+  it('before the width is known the component draws for a phone and for wider, each its own drawing (round eighty-five, A20)', async () => {
+    const { render } = await import('svelte/server');
+    const Climograph = (await import('$lib/ui/Climograph.svelte')).default;
+    const body = render(Climograph, { props: { climate: { months: c('eulychnia-acida').months, p10: c('eulychnia-acida').months, p90: c('eulychnia-acida').months, cells: 3, extremes: null } as never, name: 'Eulychnia acida' } }).body;
+    expect(body).toMatch(/<svg class="narrow[^"]*" viewBox="0 0 340 /);
+    expect(body).toMatch(/<svg class="wide[^"]*" viewBox="0 0 720 /);
   });
 });
 
@@ -171,7 +182,9 @@ describe('5. the photographs', () => {
     expect(heroOf([p('small', { width: 374, height: 318 }), p('big', { width: 2048, height: 1536 })])!.id).toBe('big');
     expect(heroOf([p('small', { width: 374, height: 318 }), p('upright', { width: 1536, height: 2048 })])!.id).toBe('upright');
     expect(heroOf([p('small', { width: 374, height: 318 })])!.id).toBe('small');
-    expect(heroOf([p('unstated'), p('big', { width: 2048, height: 1536 })])!.id).toBe('unstated'); // a size not stated keeps its place
+    // Round eighty-five (A9g): a size not stated leads only where no photograph states one at the floor.
+    expect(heroOf([p('unstated'), p('big', { width: 2048, height: 1536 })])!.id).toBe('big');
+    expect(heroOf([p('unstated'), p('small', { width: 374, height: 318 })])!.id).toBe('unstated');
   });
   it("the first row takes one photograph from each observer before a second from any (W2: Echeveria elegans's three and three)", () => {
     const xs = ['J1', 'J2', 'J3', 'O1', 'O2', 'O3', 'K1', 'L1'].map((id) => p(id, { attribution: `(c) ${id[0]}, some rights reserved (CC BY)` }));

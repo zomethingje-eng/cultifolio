@@ -7,7 +7,6 @@
  * `foundNotShown`, and Provenance showed a row's own words only.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import * as up from '$lib/ui/ref/upstream';
 
 const found = (up as unknown as { foundNotShown?: typeof up.foundNotShown }).foundNotShown;
@@ -21,7 +20,7 @@ describe('an answer the page shows none of says what was found', () => {
   });
   it('the daily extremes set aside: at a cell mostly sea, and by the lapse rule in its own words', () => {
     expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'sea', landFraction: 0.31 } })).toBe("read, and set aside: NASA POWER's cell is mostly sea (31% land), so no cold floor is shown");
-    expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'lapse', months: [{ tmin: 4 }, { tmin: 2 }], extremesLapse: { minAbs: -3, lapseAppliedM: -1181 } } })).toBe("read, and set aside: the correction for elevation, -1181 m, is beyond the 1,000 m either way that a lapse rate is applied over: the weather cell's ground is 1,181 m higher than the typical spot's, so the cell stands for other terrain, so no cold floor is shown");
+    expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'lapse', months: [{ tmin: 4 }, { tmin: 2 }], extremesLapse: { minAbs: -3, lapseAppliedM: -1181 } } })).toBe("read, and set aside, so no cold floor is shown: the weather cell's ground is 1,181 m higher than the typical spot's, more than the 1,000 m over which a correction for height is applied, so the cell stands for other terrain"); // round eighty-five (P8): one figure, once
     expect(found?.('climate.extremes', ok, { climate: { status: 'ok', extremesStatus: 'ok' } })).toBeNull();
   });
   it("Kew's range with no native region, unless the row says so already", () => {
@@ -30,9 +29,6 @@ describe('an answer the page shows none of says what was found', () => {
     expect(found?.('wcvp.distribution', { status: 'ok', detail: 'Kew holds Lantana × strigocamara R.W.Sanders, with no native range' }, { distribution: { native: [] } })).toBeNull();
     expect(found?.('wcvp.distribution', ok, { distribution: { native: [1] } })).toBeNull();
   });
-  it('"Where this page came from" shows it beside the row\'s own words', () => {
-    const p = readFileSync('src/lib/ui/Provenance.svelte', 'utf8');
-    expect(p).toContain('foundNotShown(src, dossier.upstream[src], dossier)');
-    expect(p).toContain('{#if detail(src, u.detail)}');
-  });
+  // "Where this page came from" shows it beside the row's own words: tests/unit/r85q-species-page.test.ts mounts the page
+  // with no native region and reads the line (round eighty-five; this read the component's source, outside review A23).
 });

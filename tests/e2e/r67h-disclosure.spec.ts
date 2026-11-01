@@ -13,7 +13,8 @@
  * phones (`@phone`).
  */
 import { test, expect, type Page } from '@playwright/test';
-import { pressOnce, type Press } from './helpers/disclosure';
+import { goneQuiet } from './helpers/settled';
+import { pressOnce, expectOneTap } from './helpers/disclosure';
 import { startPositions, positionMoves } from './helpers/positions';
 
 // No service worker: in Safari's engine a page the worker controls sends its requests past `page.route`, and the late
@@ -22,9 +23,9 @@ test.use({ serviceWorkers: 'block' });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 
-function oneTap(r: Press) {
-  expect({ opened: r.opened, clicks: r.clicks, toggles: r.toggles, moved: r.downTop !== r.upTop }, JSON.stringify(r)).toEqual({ opened: true, clicks: 1, toggles: 1, moved: false });
-}
+// One press, one click, one toggle, the summary still (helpers/disclosure.ts `expectOneTap`; a release the engine lost
+// is told apart from a missed tap there, helpers/press-kind.ts).
+const oneTap = expectOneTap;
 
 test('r67h disclosure 1: the import\'s "paste the sheet\'s text" opens on one press', async ({ page }) => {
   await page.goto('/plants/import'); await ready(page);
@@ -66,8 +67,8 @@ test('r67h disclosure 4: "Use my own number" and Add stay put while the name che
   const fontsAtStart = await page.evaluate(async () => { const before = document.fonts.status; await document.fonts.ready; return before; });
   await startPositions(page, ['details.own > summary', 'form button[type="submit"]']);
   await page.locator('#species-name').blur();
-  // Long enough for both answers and what they draw.
-  await page.waitForTimeout(2_500);
+  // Both answers in, and what they draw (the page quiet once the held answers have come).
+  await goneQuiet(page);
   const { moves, frames } = await positionMoves(page);
   expect(frames, 'frames were read').toBeGreaterThan(10);
   // What a failure needs to be read where only WebKit fails: the words under the field, the room kept for them and the

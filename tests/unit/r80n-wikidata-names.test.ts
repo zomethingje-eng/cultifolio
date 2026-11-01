@@ -280,9 +280,10 @@ describe("the page's line under the name", () => {
   it('names Wikidata\'s item and the day, or says why the names were not checked, never none', () => {
     expect(namesSource(d({ rec: { status: 'ok', at: '2026-10-21T00:00:00.000Z', detail: "Wikidata's item Q50843040; 1 English name taken" }, wd: true }))).toEqual({ item: 'Q50843040', day: '2026-10-21' });
     expect(namesSource(d({ rec: { status: 'none', at: 'x' } }))).toBeNull();
-    expect(namesSource(d({}))).toEqual({ unchecked: "Wikidata's common names were not read for this page" });
-    expect(namesSource(d({ rec: wdNamesNoItem({ status: 'error', detail: 'HTTP 503' }, 'x') }))).toEqual({ unchecked: 'Wikidata did not answer for the item (HTTP 503)' });
-    expect(namesSource(d({ rec: wdNamesNoItem({ status: 'ambiguous', detail: "not taken: two items carry Kew's IPNI identifier 1-1, POWO 1-1 (Q1, Q2)" }, 'x') }))).toEqual({ unchecked: "two items carry Kew's IPNI identifier 1-1, POWO 1-1 (Q1, Q2), so no item was taken" });
+    // Round eighty-five (A16d, A16g): with the glossary's word for the state, and the reason in a reader's words.
+    expect(namesSource(d({}))).toEqual({ word: 'not read', unchecked: "Wikidata's common names were not read for this page" });
+    expect(namesSource(d({ rec: wdNamesNoItem({ status: 'error', detail: 'HTTP 503' }, 'x') }))).toEqual({ word: 'not checked', unchecked: 'Wikidata did not answer for the item (HTTP 503)' });
+    expect(namesSource(d({ rec: wdNamesNoItem({ status: 'ambiguous', detail: "not taken: two items carry Kew's IPNI identifier 1-1, POWO 1-1 (Q1, Q2)" }, 'x') }))).toEqual({ word: 'not taken', unchecked: "two Wikidata items carry Kew's identifier for this plant (Q1, Q2), so neither was taken" });
     // A page with a GBIF key says nothing of Wikidata unless names were taken from it.
     expect(namesSource(d({ gbif: 5 }))).toBeNull();
     expect(UPSTREAM_NAME[WD_NAMES]).toBe('Wikidata common names');

@@ -22,12 +22,16 @@ const list = listHybrids(readFileSync('scripts/species-list.txt', 'utf8'));
 const table = JSON.parse(readFileSync('src/lib/core/hybrids.json', 'utf8')) as { rows: Record<string, { name: string; ipni?: string; powo?: string; parents?: string }> };
 
 describe('the table is the species list’s hybrids, by Kew’s plant_name_id', () => {
-  it('485 hybrids, 473 nothospecies and 12 nothogenera, each under the list’s own name', () => {
-    expect(list.size).toBe(485);
-    expect(hybridCount()).toBe(485);
-    expect(Object.keys(table.rows).sort()).toEqual([...list.keys()].sort());
+  // Round eighty-five (N; review-d D6): and every `k` page of the index whose Kew entry Kew writes with the sign, accepted
+  // or held as an artificial hybrid, whatever name the list's line gives it: k2759463, Kew's Delphinium × barlowii, is the
+  // list's "Delphinium cultorum" by GBIF's key.
+  const fromIndex = Object.keys(table.rows).filter((id) => !list.has(id));
+  it('the list’s hybrids, each under the list’s own name, and the index’s signed Kew entries', () => {
+    expect(hybridCount()).toBe(list.size + fromIndex.length);
+    expect(fromIndex).toEqual(['2759463']);
     for (const [id, name] of list) expect(table.rows[id].name).toBe(name);
-    expect(Object.values(table.rows).filter((r) => r.name.startsWith('× ')).length).toBe(12);
+    expect(table.rows['2759463'].name).toBe('Delphinium × barlowii');
+    expect(Object.values(table.rows).filter((r) => r.name.startsWith('× ')).length).toBe([...list.values()].filter((n) => n.startsWith('× ')).length);
   });
   it('Kew’s file gives each the same name, a hybrid marker, acceptance and the numbers kept (where Kew’s file is here)', async () => {
     const csv = ['bulk/wcvp_names.csv', '/home/claude/r73data/bulk/wcvp_names.csv'].find((p) => existsSync(p));
@@ -43,12 +47,12 @@ describe('the table is the species list’s hybrids, by Kew’s plant_name_id', 
       const row = Object.fromEntries(h.map((k, i) => [k, c[i] ?? '']));
       expect(row.taxon_name).toBe(r.name);
       expect(row.genus_hybrid === '×' || row.species_hybrid === '×').toBe(true);
-      expect(row.taxon_status).toBe('Accepted');
+      expect(fromIndex.includes(c[0]) ? ['Accepted', 'Artificial Hybrid'] : ['Accepted']).toContain(row.taxon_status);
       expect(r.ipni ?? '').toBe(row.ipni_id);
       expect(r.powo ?? '').toBe(row.powo_id);
       seen++;
     }
-    expect(seen).toBe(485);
+    expect(seen).toBe(hybridCount());
   }, 120_000);
 });
 

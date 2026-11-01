@@ -4,10 +4,17 @@
  * that day; once the page runs it asks `/api/counts`, which reads them from the corpus the Worker serves, and shows those
  * instead, said as the reference now. An answer that is not three whole counts in order is not shown.
  */
+import ON from './about-counts-on.json';
+
 export interface Counts { species: number; genera: number; withClimate: number }
 
-/** The counts of the live reference on 29 October 2026 (corpus e8885155673882ba): what the page says before, or without, an answer. */
-export const COUNTS_ON: Counts & { on: string } = { species: 48_357, genera: 6_529, withClimate: 37_727, on: '29 October 2026' };
+/**
+ * The counts of the index the build last wrote, and the day it was read: what the page says before, or without, an answer.
+ * `scripts/about-examples.ts` writes the file at each `--index`, with the about pages' search examples' fixture (round
+ * eighty-five; the reviews' S4, A21: a hand-kept 29 October here went stale with the next upload). `gPages` is the
+ * pages headed by GBIF's name, which `/api/counts` does not give, so the page says it as of that day only.
+ */
+export const COUNTS_ON: Counts & { gPages: number; on: string } = ON;
 
 const whole = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
 

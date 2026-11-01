@@ -68,6 +68,39 @@ export function offlineBuild(manifest, routeOf) {
   return [...out].sort();
 }
 
+/** The species page's own nodes: its page and the layout of its address (`species/[slug]/+layout.svelte`), both loaded to open it. */
+export const SPECIES_NODES = /(^|\/)src\/routes\/species\/\[slug\]\/\+(page|layout)\.svelte$/;
+
+/**
+ * The species page's build files that the install does not fetch (round eighty-five; review-c C6): its node and
+ * everything it imports, statically or on demand, less what `offlineBuild` already lists. The service worker fetches them
+ * only when an update carries species pages over, so the offline page can open a page read before the update.
+ *
+ * @param {Record<string, { file: string; imports?: string[]; dynamicImports?: string[]; css?: string[]; assets?: string[]; isEntry?: boolean }>} manifest
+ * @param {(key: string) => string | null} routeOf
+ * @param {Iterable<string>} have the files the install fetches already
+ * @returns {string[]}
+ */
+export function speciesBuild(manifest, routeOf, have = []) {
+  const out = new Set();
+  const seen = new Set();
+  const walk = (key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const e = manifest[key];
+    if (!e) return;
+    out.add(e.file);
+    for (const f of e.css ?? []) out.add(f);
+    for (const f of e.assets ?? []) out.add(f);
+    for (const k of e.imports ?? []) walk(k);
+    for (const k of e.dynamicImports ?? []) walk(k);
+  };
+  for (const key of Object.keys(manifest)) if (/\/nodes\/\d+\.js$/.test(key) && SPECIES_NODES.test(routeOf(key) ?? '')) walk(key);
+  const held = new Set(have);
+  // Only scripts and styles: an image or a font the page names is fetched as the page draws it.
+  return [...out].filter((f) => !held.has(f) && /\.(js|css)$/.test(f)).sort();
+}
+
 /** The route file a generated node re-exports, read from its source beside the build. */
 export function routeFromNode(root, key) {
   const f = join(root, key);
@@ -83,7 +116,7 @@ export function offlineFiles() {
   return {
     name: 'cultifolio-offline-files',
     apply: 'build',
-    config: () => ({ define: { __OFFLINE_BUILD__: 'null' } }),
+    config: () => ({ define: { __OFFLINE_BUILD__: 'null', __SPECIES_BUILD__: 'null' } }),
     configResolved(c) {
       root = c.root;
       client = !c.build.ssr;
@@ -98,9 +131,14 @@ export function offlineFiles() {
         console.warn('offline-files: no client manifest or no server build to hand the list to; the service worker caches the whole build');
         return;
       }
-      const list = offlineBuild(JSON.parse(readFileSync(at, 'utf8')), (key) => routeFromNode(root, key)).map((f) => `/${f}`);
+      const manifest = JSON.parse(readFileSync(at, 'utf8'));
+      const routeOf = (key) => routeFromNode(root, key);
+      const files = offlineBuild(manifest, routeOf);
+      const list = files.map((f) => `/${f}`);
       define.__OFFLINE_BUILD__ = JSON.stringify(list);
-      console.log(`offline-files: the service worker caches ${list.length} build files at install`);
+      const species = speciesBuild(manifest, routeOf, files).map((f) => `/${f}`);
+      define.__SPECIES_BUILD__ = JSON.stringify(species);
+      console.log(`offline-files: the service worker caches ${list.length} build files at install, and the species page's ${species.length} more when an update carries pages over`);
     }
   };
 }

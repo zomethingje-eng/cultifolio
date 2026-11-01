@@ -169,7 +169,8 @@
   /** "today", "yesterday", "3 days ago": the instant read on this device's calendar (`daysSince`; round eighty-four, A14), not by 24-hour spans, which called a backup taken at 11 pm "today" at 1 am the next day. */
   const ago = (iso: string) => {
     const d = daysSince(iso, day.current);
-    return d == null || d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+    // A mark that is no instant is not "today" (round eighty-five; outside review A19, Today's same line).
+    return d == null ? 'on a date this device cannot read' : d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
   };
 </script>
 

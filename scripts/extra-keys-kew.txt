@@ -1,5 +1,6 @@
 # The GBIF keys whose records the species list's species without a GBIF key read (round seventy-nine; the owner's decision on K's offer, 2026-10-20). scripts/kew-extra-keys.ts says the rule: round seventy-three's (src/lib/dossier/extra-keys.ts), Kew's synonymy read, never a name matched.
 # Made 2026-10-20 by scripts/kew-extra-keys.ts from scripts/species-list.txt (Kew's file of 2026-06-04) and GBIF's backbone export (simple.txt.gz): 1956 keys on 1415 of the 2327 pages without a GBIF key.
+# The merge, round eighty-five: the 18 pages of decision 6 (scripts/species-new-r85.txt) were run by the same script on 2026-10-31, with their names' usages read from GBIF's API (api.gbif.org/v1/species, the backbone dataset) in place of the export: 4 of them read a key of their own name and author, added below; the other 14 are in scripts/extra-keys-kew-none.txt.
 # page id, key, GBIF's name, GBIF's status, Kew's row (plant_name_id), Kew's reading, how, - , the keys under it not read (or -)
 k3311876	7707106	Sorbus ×thuringiaca (Nyman) Schönach.	ACCEPTED	2992433	Sorbus × thuringiaca (Nyman) Fritsch (synonym under × Arsorbus thuringiaca (Nyman) Z.H.Feng & Su Liu)	filed	-	-
 k3311876	9471386	Hedlundia ×thuringiaca (Ilse ex Nyman) Sennikov & Kurtto	ACCEPTED	3015014	Hedlundia × thuringiaca (Nyman) Sennikov & Kurtto (synonym under × Arsorbus thuringiaca (Nyman) Z.H.Feng & Su Liu)	filed	-	3012797,3012968,5362595,5362999,5365074,7617898,7810438,7876385,8146634,8404723,9408784,12045486,12285873,12290899,12304121,12336690,12355763,12388481
@@ -1957,3 +1958,7 @@ k2469557	3987181	Tetraena fontanesii (Webb & Berthel.) Beier & Thulin	ACCEPTED	2
 k3225995	6384908	Fagonia mollis Delile	ACCEPTED	2807237	Fagonia mollis Delile (synonym under Zygophyllum molle (Delile) Christenh. & Byng)	filed	-	3986901,3987073,3987106,3987423,3987432,3987441,7389054,7452853,7546703,8209230,8547291,11330553
 k2469698	9562766	Tetraena hamiensis var. qatarensis (Hadidi) Alzahrani & Albokhari	ACCEPTED	3016488	Tetraena hamiensis var. qatarensis (Hadidi) Alzahrani & Albokhari (synonym under Zygophyllum qatarense Hadidi)	filed	-	-
 k2469722	3986990	Tetraena simplex (L.) Beier & Thulin	ACCEPTED	2522131	Tetraena simplex (L.) Beier & Thulin (synonym under Zygophyllum simplex L.)	filed	-	3986690,3986733,3986873,3987175,7584835,7880563,7896681,12270430,12354693
+k2938230	5371172	Acaena echinata Nees	ACCEPTED	2938230	Acaena echinata Nees (accepted)	entry	-	5370785,5371167,5371168,5371173,5371174,5371176,11016656
+k322761	7665536	Ixia fuscocitrina Desf. ex Redouté	ACCEPTED	322761	Ixia fuscocitrina Desf. ex Redouté (accepted)	entry	-	-
+k2383347	2882425	Nymphaea amazonum Mart. & Zucc.	ACCEPTED	2383347	Nymphaea amazonum Mart. & Zucc. (accepted)	entry	-	3697309,3697411,3697414,3697501,3697550,3697647,3697690,6434960,7745755
+k2461487	8347707	Viola stipularis Sw.	ACCEPTED	2461487	Viola stipularis Sw. (accepted)	entry	-	5663302,5663498,5664202,5665193

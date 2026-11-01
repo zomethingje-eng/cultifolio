@@ -47,7 +47,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const headers = { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400' };
   const out: unknown[][] = [];
   for (const b of buckets) {
-    const hit = edge && current ? await edge.match(keyOf(b)).catch(() => undefined) : undefined;
+    const hit = edge && current ? await edge.match(keyOf(b)).catch(() => undefined /* an edge cache that cannot be read is a miss: the bucket is read from the corpus */) : undefined;
     if (hit) {
       out.push((await hit.json()) as unknown[]);
       continue;
@@ -72,7 +72,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     out.push(sheets);
     if (edge && current) {
       const body = JSON.stringify(sheets);
-      const put = edge.put(keyOf(b), new Response(body, { headers })).catch(() => {});
+      const put = edge.put(keyOf(b), new Response(body, { headers })).catch(() => { /* the answer is given; a copy not kept at the edge is read from the corpus next time */ });
       platform?.context?.waitUntil?.(put);
     }
   }

@@ -9,6 +9,7 @@
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r63fv-guard.spec.ts
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject } from './helpers/inject';
 
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
@@ -36,7 +37,7 @@ test('r63fv 1: a tab tapped from a half-typed first plant asks first; Cancel kee
   await page.locator('#tabbar a[href="/today"]').click();
   await expect.poll(() => asked.length).toBe(1);
   expect(asked[0]).toContain('What you typed for this plant will be lost');
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the move refused stays refused
   await expect(page).toHaveURL(/\/plants\/new$/);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
@@ -46,7 +47,7 @@ test('r63fv 1: a tab tapped from a half-typed first plant asks first; Cancel kee
   await page.locator('#tabbar a[href="/today"]').click();
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('#see-example')).toBeVisible();
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   expect(await flag(page)).toBeNull();
   await page.locator('#see-example').click();
@@ -62,7 +63,7 @@ test('r63fv 2: the menu\'s "See the example collection" from a half-typed plant 
   await page.locator('#menu-example').click();
   await expect.poll(() => asked.length).toBe(1);
   expect(asked[0]).toContain('What you typed for this plant will be lost');
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the move refused stays refused
   await expect(page).toHaveURL(/\/plants\/new$/);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   expect(await flag(page)).toBeNull();
@@ -76,7 +77,7 @@ test('r63fv 3: the Places tab tapped with the add form open keeps the form, not 
   await expect(page.locator('#loc-name')).toBeVisible();
   await page.fill('#loc-name', 'Greenhouse');
   await page.locator('#tabbar a[href="/places"]').click();
-  await page.waitForTimeout(1200);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page).toHaveURL(/\/places(#add)?$/);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   await expect(page.locator('#loc-name')).toHaveValue('Greenhouse');
@@ -88,7 +89,7 @@ test('r63fv 4: an empty device whose records are all held is not taken into the 
   // A plant stamped a year ahead of this device's clock, as a fast peer's sync leaves it: held, folded into nothing yet.
   await inject(page, [['accession', 'r63fvheld', 'acc', '2026-0001'], ['accession', 'r63fvheld', 'taxonName', 'Copiapoa cinerea'], ['accession', 'r63fvheld', 'status', 'growing'], ['accession', 'r63fvheld', 'nameKind', 'species']], Date.now() + 365 * 86_400_000, 'r63fvfastpeer000');
   await page.goto('/today'); await ready(page);
-  await page.waitForTimeout(1500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   expect(await flag(page)).toBeNull();

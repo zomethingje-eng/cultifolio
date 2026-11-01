@@ -305,7 +305,10 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchG
     // Every month that ties for the coldest night, as printed (round sixty-one; visitor 5).
     const at = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
     const cause = exStatus === 'lapse' && setAside ? lapseCause({ months: m, extremes: setAside }) : null;
-    return { habitat: f, kind: 'mean', s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus, cause)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus, cause, U)}.`, rule: 'CHELSA' } };
+    // The floor's state in the glossary's words, never "none read" of extremes that were read (round eighty-five; W13, S8):
+    // set aside where the checks set them aside, not checked or not asked where the source did not answer or was skipped.
+    const state = exStatus === 'lapse' || exStatus === 'sea' ? 'set aside' : exStatus === 'refused' ? 'not checked' : exStatus === 'skipped' ? 'not asked' : 'none on file';
+    return { habitat: f, kind: 'mean', s: `Cold floor: ${state}. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus, cause)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus, cause, U)}.`, rule: 'CHELSA' } };
   }
   return null;
 }

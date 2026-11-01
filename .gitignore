@@ -44,3 +44,6 @@ live-search.txt
 extra-keys-kew-refused.txt
 /corpus-step.lock
 /kew-shared.txt
+
+# a unit test's scratch folder (tests/unit/r75h-harness.test.ts), left behind when a run is stopped
+tests/.r75h-harness-*/

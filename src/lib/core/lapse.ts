@@ -1,4 +1,4 @@
-import { temp, METRIC, type Units } from './units';
+import { temp, deltaT, METRIC, type Units } from './units';
 /**
  * The guard on the daily extremes' correction for elevation (round eighty, A; review-d 6). Pure, and read by the dossier's
  * parser, the builder and the species page alike.
@@ -13,6 +13,16 @@ import { temp, METRIC, type Units } from './units';
 export const MAX_LAPSE_M = 1000;
 
 /**
+ * Round eighty-five (G; the owner's decision 4, outside review A7): how much warmer than the coldest month's mean nightly low
+ * the weather cell's record low or 1-in-100 night must be before the two sources are held to disagree, in °C. The lapse
+ * correction itself carries about this much uncertainty (Cedrus deodara's cell corrected by 311 m, 2.0 °C, at 6.5 °C/km;
+ * a lapse rate's spread over a season is about 1 °C a kilometre, and CHELSA's monthly lows and POWER's nights are different
+ * grids), so a gap inside it is no disagreement: Lonicera alberti, Cedrus deodara and Eulychnia acida lost their record lows
+ * on a gap of 0.7 °C, Tectaria prolifera on 1.0 and Aloe vera on 1.2.
+ */
+export const DISAGREE_MARGIN_C = 1.5;
+
+/**
  * Which of the three causes set a page's daily extremes aside (round eighty-four; the three reviews' D1, S1, A3 and B2).
  * The dossier records one status, `'lapse'`, for all three, and every surface worded it as the first: Eulychnia acida's
  * card said "the weather cell's ground is too far off" of a correction of -432 m. Each surface now words the cause that
@@ -21,7 +31,8 @@ export const MAX_LAPSE_M = 1000;
  * - `elevation`: the correction for elevation is beyond `MAX_LAPSE_M` either way, so the weather cell stands for other
  *   ground than the typical spot's (`m`, the correction: negative where the cell's ground is higher than the spot's);
  * - `record-low`: the cell's record low is warmer than the coldest month's mean nightly low across the range;
- * - `warm-night`: the cell's 1-in-100 night is warmer than that month's mean nightly low (round eighty-three, C).
+ * - `warm-night`: the cell's 1-in-100 night is warmer than that month's mean nightly low (round eighty-three, C);
+ * each by more than `DISAGREE_MARGIN_C` (round eighty-five: before, by any amount).
  *
  * The last two are a check that two sources disagree (NASA POWER's nights at one cell, CHELSA's monthly lows across the
  * range), not a proof that either is wrong: a skewed month can put its mean low under the year's 1st percentile (outside
@@ -37,23 +48,27 @@ export function lapseCause(c: LapseIn): LapseCause | null {
   const m = e.lapseAppliedM;
   if (m != null && Math.abs(m) > MAX_LAPSE_M) return { kind: 'elevation', m };
   const coldest = c.months.length ? Math.min(...c.months.map((x) => x.tmin)) : NaN;
-  if (Number.isFinite(coldest) && e.minAbs > coldest) return { kind: 'record-low', minAbs: e.minAbs, coldest };
+  if (Number.isFinite(coldest) && e.minAbs > coldest + DISAGREE_MARGIN_C) return { kind: 'record-low', minAbs: e.minAbs, coldest };
   // Round eighty-three (C; review 1's 40, Eulychnia acida). On 462 pages with a land cell's extremes, from the live site
   // of 29 October 2026, 6 were so.
-  if (Number.isFinite(coldest) && e.minP01 != null && e.minP01 > coldest) return { kind: 'warm-night', minP01: e.minP01, coldest };
+  if (Number.isFinite(coldest) && e.minP01 != null && e.minP01 > coldest + DISAGREE_MARGIN_C) return { kind: 'warm-night', minP01: e.minP01, coldest };
   return null;
 }
 
 /** A height in the reader's units, the metric figure kept beside feet so the rule stays checkable: "3,704 ft (1,129 m)". */
 const height = (m: number, u: Units) => (u === 'us' ? `${Math.round(Math.abs(m) * 3.28084).toLocaleString('en-US')} ft (${Math.abs(m).toLocaleString('en-US')} m)` : `${Math.abs(m).toLocaleString('en-US')} m`);
+/** A height in the reader's units alone: "4,124 ft", "1,257 m". */
+const feetOrMetres = (m: number, u: Units) => (u === 'us' ? `${Math.round(Math.abs(m) * 3.28084).toLocaleString('en-US')} ft` : `${Math.abs(m).toLocaleString('en-US')} m`);
 /** Where the cell's ground lies against the typical spot's: the correction is the spot's height less the cell's. */
 const side = (m: number) => (m < 0 ? 'higher' : 'lower');
 
 /** The cause as a sentence's clause (no capital, no full stop), with its figures, in the reader's units. */
 export function causeSentence(c: LapseCause, u: Units = METRIC): string {
-  if (c.kind === 'elevation') return `the correction for elevation, ${c.m > 0 ? '+' : ''}${c.m} m, is beyond the ${MAX_LAPSE_M.toLocaleString('en-GB')} m either way that a lapse rate is applied over: the weather cell's ground is ${height(c.m, u)} ${side(c.m)} than the typical spot's, so the cell stands for other terrain`;
-  if (c.kind === 'record-low') return `the record low, ${temp(c.minAbs, u, 1)}, is warmer than the coldest month's mean nightly low across the range, ${temp(c.coldest, u, 1)}. At any one spot a record low is colder than any month's mean night, so the weather cell's nights and the habitat's monthly lows disagree`;
-  return `the 1-in-100 night, ${temp(c.minP01, u, 1)}, is warmer than the coldest month's mean nightly low across the range, ${temp(c.coldest, u, 1)}. Usually several of that month's nights fall below its mean, more than one in a hundred of the year's, so the weather cell's nights and the habitat's monthly lows disagree. This is a check that two sources disagree, not proof that either is wrong`;
+  // One figure, once, in the reader's units, and no "lapse rate" (round eighty-five; P8, W12: "-1257 m" and "4,124 ft
+  // (1,257 m)" stood in one sentence of a page in °F).
+  if (c.kind === 'elevation') return `the weather cell's ground is ${feetOrMetres(c.m, u)} ${side(c.m)} than the typical spot's, more than the ${u === 'us' ? `${feetOrMetres(MAX_LAPSE_M, u)} (${MAX_LAPSE_M.toLocaleString('en-US')} m)` : feetOrMetres(MAX_LAPSE_M, u)} over which a correction for height is applied, so the cell stands for other terrain`;
+  if (c.kind === 'record-low') return `the record low, ${temp(c.minAbs, u, 1)}, is warmer than the coldest month's mean nightly low across the range, ${temp(c.coldest, u, 1)}, by more than the ${deltaT(DISAGREE_MARGIN_C, u, 1)} a correction can be out by. At any one spot a record low is colder than any month's mean night, so the weather cell's nights and the habitat's monthly lows disagree`;
+  return `the 1-in-100 night, ${temp(c.minP01, u, 1)}, is warmer than the coldest month's mean nightly low across the range, ${temp(c.coldest, u, 1)}, by more than the ${deltaT(DISAGREE_MARGIN_C, u, 1)} a correction can be out by. Usually several of that month's nights fall below its mean, more than one in a hundred of the year's, so the weather cell's nights and the habitat's monthly lows disagree. This is a check that two sources disagree, not proof that either is wrong`;
 }
 
 /** The cause in a few words, for a card's small print beside the mean nightly low; `null` (a sheet built before) says only that they were set aside. */

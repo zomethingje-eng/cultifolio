@@ -53,26 +53,51 @@ export const isSpecimenMedia = (p: { src?: string; url?: string; specimen?: bool
 
 /**
  * The photograph to show first (round eighty-two; the independent review's 13: Echeveria elegans led with a cropped
- * flower stalk, an upright photograph cut to the hero's band). In this order, each set in the photographs' own order:
+ * flower stalk, an upright photograph cut to the hero's band). The photographs are taken in this order, each set in the
+ * photographs' own order:
  *
  *   1. iNaturalist's cultivated set, the first of it where there is one: the plant as it is grown;
- *   2. the rest by `leadRank`, as before (iNaturalist's wild, GBIF's, Commons', a specimen last);
+ *   2. the rest by `leadRank`, as before (iNaturalist's wild, GBIF's, Commons', a specimen last).
  *
- * and of those the first that is not upright (taller than wide, by the shape its source states), when there is one: the
- * hero is a 4:3 box on a desktop and a wide band on a phone, and an upright photograph is cut to its middle third there.
- * A photograph whose shape is not stated (GBIF's) keeps its place. A still image over a GIF when there is one.
+ * The lead is the first of them, in this order of preference (round eighty-five; outside review A's 9g and 16c, the desktop
+ * review's W6):
+ *
+ *   1. a size its source states, at the floor (`HERO_MIN_PX`), not upright, and the first photograph of its observation;
+ *   2. a stated size at the floor, not upright;
+ *   3. a stated size at the floor, the first of its observation;
+ *   4. a stated size at the floor;
+ *   5. where none states one: as before, one not stated small first, then any.
+ *
+ * So a photograph whose size is not stated (GBIF's media never carry one) leads only where no other qualifies: Weingartia
+ * fidana's lead was a 921 by 2048 GBIF file, and Hoodia alstonii's a 319 by 480 stem, cut to the band. An observation's
+ * first photograph is the one its observer put first, which iNaturalist shows for the observation: the plant, where the
+ * later ones are its flowers, its label or a hand (Echeveria elegans led with the seventh of one observer's eight, a hand
+ * holding a label in a planter). An observation is its page; a photograph with no page is the first of its own. The hero
+ * is a 4:3 box on a desktop and a wide band on a phone, and an upright photograph is cut to its middle third there.
+ * A still image over a GIF when there is one.
  */
-export function heroOf<T extends { url: string; captive?: boolean; src?: string; width?: number | null; height?: number | null; specimen?: boolean }>(photos: readonly T[]): T | undefined {
+export function heroOf<T extends { url: string; captive?: boolean; src?: string; width?: number | null; height?: number | null; specimen?: boolean; page?: string }>(photos: readonly T[]): T | undefined {
   const still = photos.filter((p) => !isGif(p.url));
   const pool = still.length ? still : photos;
   const rank = (p: T) => (p.captive === true && p.src === 'inat' ? -1 : leadRank(p));
   const ordered = pool.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map((x) => x.p);
   const upright = (p: T) => !!p.width && !!p.height && p.height > p.width;
+  const stated = (p: T) => !!p.width && !!p.height;
   // Nor a photograph its source states smaller than the box it fills (round eighty-four; outside review A's 6h and 13):
   // Lithops lesliei led with a 374 by 318 px close-up, blown up to the 400 px hero and twice that on a phone's screen.
-  // One that is both full size and not upright first; then full size; then, where every photograph is small, as before.
-  const small = (p: T) => !!p.width && !!p.height && Math.max(p.width, p.height) < HERO_MIN_PX;
-  return ordered.find((p) => !upright(p) && !small(p)) ?? ordered.find((p) => !small(p)) ?? ordered.find((p) => !upright(p)) ?? ordered[0];
+  const small = (p: T) => stated(p) && Math.max(p.width!, p.height!) < HERO_MIN_PX;
+  const atFloor = (p: T) => stated(p) && !small(p);
+  const seen = new Set<string>();
+  const firsts = new Set<T>();
+  for (const p of photos) { if (!p.page) { firsts.add(p); continue; } if (!seen.has(p.page)) { seen.add(p.page); firsts.add(p); } }
+  const first = (p: T) => firsts.has(p);
+  return ordered.find((p) => atFloor(p) && !upright(p) && first(p))
+    ?? ordered.find((p) => atFloor(p) && !upright(p))
+    ?? ordered.find((p) => atFloor(p) && first(p))
+    ?? ordered.find((p) => atFloor(p))
+    ?? ordered.find((p) => !small(p) && !upright(p))
+    ?? ordered.find((p) => !small(p))
+    ?? ordered[0];
 }
 
 /** The smallest long side, in pixels as the source states it, a lead photograph may have: the hero is 400 CSS px wide on a desktop, 800 device pixels at twice the density, and a phone's band is as wide as the screen. */

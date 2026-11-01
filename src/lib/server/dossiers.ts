@@ -748,6 +748,12 @@ function keyReader(c: Loaded, platform: Platform, fetch: Fetch): SearchReader<In
       const bl = await blocks();
       return need<number[]>(stored<number[]>(c, platform, fetch, bl.photos[b] ?? ''), `photo block ${b}`, Array.isArray);
     },
+    // Growers' counts (round eighty-five), where the corpus's files carry them; none in a corpus built before.
+    grown: async (b) => {
+      const bl = await blocks();
+      if (!Array.isArray(bl.grown) || !bl.grown[b]) return null;
+      return need<number[]>(stored<number[]>(c, platform, fetch, bl.grown[b]), `growers' block ${b}`, Array.isArray);
+    },
     show: async (b) => {
       const bl = await blocks();
       return need<IndexEntry[]>(stored<IndexEntry[]>(c, platform, fetch, bl.show[b] ?? ''), `show block ${b}`, Array.isArray);
@@ -773,7 +779,7 @@ export function warmSearch(c: Loaded, platform: Platform, fetch: Fetch, q?: stri
   // was cancelled when its request answered first, and left in flight for the next request to meet (`Held`).
   const ctx = platform?.context;
   const keep = ctx?.waitUntil ? (p: Promise<unknown>) => ctx.waitUntil(p) : () => {};
-  const quiet = (p: Promise<unknown>) => { const q = p.catch(() => {}); keep(q); };
+  const quiet = (p: Promise<unknown>) => { const q = p.catch(() => { /* a warming read: the request that needs the file reads it again and says its own failure */ }); keep(q); };
   quiet(product(c, platform, fetch, 'search/tables.json'));
   quiet(product(c, platform, fetch, 'search/genera.json'));
   quiet(product<Blocks>(c, platform, fetch, 'search/blocks.json').then((b) => { if (b && Array.isArray(b.photos)) for (const h of b.photos) if (typeof h === 'string') quiet(stored(c, platform, fetch, h)); }));

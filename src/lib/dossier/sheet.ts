@@ -32,6 +32,13 @@ export type Sheet = {
    */
   keys?: number[];
   slug: string;
+  /**
+   * On a copy of a page's sheet filed under another name's address (round seventy-three's merged pages; round eighty-five,
+   * review-c C4: GBIF's name for the page's key, where Kew's name heads the page): how (`via`), and the page's own address
+   * (`page`). A copy `via: 'gbif'` answers only a plant of the page's own GBIF key. Absent on a page's own sheet.
+   */
+  via?: 'gbif' | 'merged';
+  page?: string;
   name: { scientific: string; family?: string };
   thumb?: string;
   /** The thumbnail's credit as a tile gives it (licence, then author), so a plant's page credits the species photograph it shows (round sixty-three). */

@@ -15,29 +15,37 @@ names the source of each figure and photograph, with its licence:
   GBIF occurrence records                         CC0 or CC BY per record, as published;
                                                   CC BY-NC records are read for derived
                                                   figures (the map marker, the habitat
-                                                  climate) and never published
+                                                  climate) and never published. Records of
+                                                  living collections were also counted, once,
+                                                  to make the species list
+  National checklists, as GBIF publishes them     per checklist; read only for a name Kew's
+                                                  checklist has no entry for, and shown as
+                                                  the countries they report
   World Checklist of Vascular Plants, RBG Kew     CC BY 4.0
   CHELSA V2.1 climatologies                       CC0 1.0
   ETOPO 2022, NOAA NCEI (elevation, land)         public domain (US Government)
   NASA POWER (daily temperatures)                 public domain (US Government)
-  Natural Earth coastlines, and its states and    public domain
+  Natural Earth coastlines, its states and        public domain
     provinces, from which the regions' shapes
-    are made
+    are made, and its minor islands, which place
+    records on islands too small to draw
   Wikidata (identifiers, article titles, English  CC0 1.0
     names for pages without a GBIF key, the
     list of botanic gardens, arboreta,
     herbaria and zoos)
   iNaturalist and GBIF photographs                CC0, public domain, CC BY, CC BY-SA per photo
+  iNaturalist's counts of observations marked     read through iNaturalist's API, under its
+    captive or cultivated, from which the         terms, when the list and the count were
+    species list and "Popular genera" were made   made; published only as counts
   Wikimedia Commons photographs                   CC0, public domain, CC BY, CC BY-SA per file
   Wikipedia summaries                             CC BY-SA 4.0
-  OpenAlex (papers listed on pages built          CC0 1.0
-    before October 2026)
 
 Read, and published only as codes, names or links: the level-3 region codes
 and names of TDWG's World Geographical Scheme for Recording Plant
 Distributions, 2nd edition, and its tables that place states and provinces in
 regions (github.com/tdwg/wgsrpd; TDWG's own boundary polygons are not used);
-IPNI and POWO identifiers (RBG Kew); iNaturalist taxon identifiers; and the
+IPNI and POWO identifiers (RBG Kew), and IPNI's records of names, read to
+prove an identifier; iNaturalist taxon identifiers; and the
 titles and descriptions of GBIF's datasets, read to tell living collections
 from genebanks when the species list was made.
 

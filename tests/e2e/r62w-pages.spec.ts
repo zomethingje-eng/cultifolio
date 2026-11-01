@@ -6,6 +6,7 @@
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r62w-pages.spec.ts
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { servePhotos, liveShapedHome } from './r62w-shapes';
 
 async function ready(p: Page) {
@@ -46,7 +47,7 @@ test.describe('the species notes draft (A13)', () => {
     await draftOnCinerea(page);
     page.once('dialog', (d) => void d.dismiss());
     await humilisTile(page).click();
-    await page.waitForTimeout(500);
+    await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the refused move would have begun
     expect(page.url()).toMatch(/copiapoa-cinerea$/);
     await expect(page.locator('#my-notes')).toHaveValue('CINEREA draft');
   });

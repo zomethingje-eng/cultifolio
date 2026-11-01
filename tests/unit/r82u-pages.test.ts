@@ -144,7 +144,7 @@ describe('r82u: the about page is true of each change', () => {
     expect(how).not.toContain('under a dozen the page says the evidence is thin');
   });
   it('says a page built now has no Papers section, and why its record says so', () => {
-    expect(how).toContain('so a page built since has no Papers section, and its record of sources says OpenAlex was not asked, and why.');
+    expect(how).toContain("No page lists papers. The reference does not ask OpenAlex for them, and each page's record of its sources says OpenAlex was not asked, and why."); // round eighty-five: every page is built since
   });
   it('names the regions\' scheme where the species page links it', () => {
     expect(how).toMatch(/<span id="regions">A range is in Kew's units, the level-3 regions of the World Geographical Scheme/);

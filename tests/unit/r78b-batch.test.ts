@@ -11,6 +11,10 @@
  *     every rank count, as the search counts them.
  *   - The REST summary's shape: the lead's first paragraph, a disambiguation page said as one, a redirect's title.
  * Each case FAILED on r78base (no `batch.ts`) unless it says "guard".
+ *   - Round eighty-five (the merge; the owner's decision 8): the batch asks TextExtracts for each page's `lastrevid` too
+ *     (`prop=...|info`), so a batched build records the summary's revision as the per-species REST answer does. The
+ *     recorded batch answer was recorded with the REST answers of the same moment; each page's `lastrevid` in it is the
+ *     revision its REST answer carried, and its address gains `|info`.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

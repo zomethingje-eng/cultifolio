@@ -38,7 +38,7 @@ import { byNumberNewest } from './number-order';
 import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, FIELD_TYPES, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
-import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
+import { nextAccession, plantNumberProblem, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type MetaCondition, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
 import { askToKeep } from '$lib/ui/keep-ask';
@@ -619,7 +619,7 @@ class Collection {
     this.parkedDone = new Set();
     await this.rereadParked();
     const seq = await lastArrival(); // before anything is read: a change stored after this number is folded again next time, which is harmless; one stored before it is in what is read
-    const had = await readFold().catch(() => undefined);
+    const had = await readFold().catch(() => undefined /* a snapshot that cannot be read is no snapshot: the whole log is folded instead */);
     const f = had?.fold;
     // Keyed by the stored correction and whether a reading confirms it, not by the clock in force (round sixty-nine;
     // triage-68 R2, R46-17): a load waits for a reading before a large correction is in force, and a snapshot keyed by
@@ -1953,6 +1953,9 @@ class Collection {
       const result: Accession[] = [];
       for (const [i, id] of ids.entries()) {
         const no = given[i] ?? nextAccession(taken, this.scheme, yearOf(a.acquired));
+        // A number given is one this app keeps (round eighty-five; outside review A10): one of 309 digits hung the form.
+        const bad = given[i] ? plantNumberProblem(no) : null;
+        if (bad) throw new Error(`Plant number ${no.length > 40 ? `${no.slice(0, 40)}…` : no} cannot be used: ${bad}. Pick another.`);
         if (given[i] && issued.has(no)) throw new Error(`Plant number ${no} is already used. A number is never reused; pick another.`);
         taken.add(no);
         const r: Accession = { status: 'growing', ...a, ...each?.[i], id, acc: no };
@@ -1969,7 +1972,7 @@ class Collection {
   private claimChain: Promise<unknown> = Promise.resolve();
   private claim<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
     const run = this.claimChain.then(() => this.claimNow(kind, build));
-    this.claimChain = run.catch(() => undefined);
+    this.claimChain = run.catch(() => undefined /* the chain only orders the claims; each caller awaits its own run and meets its own failure */);
     return run;
   }
   private async claimNow<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {

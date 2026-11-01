@@ -110,7 +110,7 @@ describe('the owner\'s decision on K\'s offer (round seventy-nine, M): the keys 
     writeFileSync(join(dir, 'bulk/occurrence.csv'), [head.join('\t'), at(1, '19.432', '-99.133'), at(2, '19.292', '-99.653'), at(3, '19.041', '-98.206'), ''].join('\n'));
     const r = builder(dir, 'list.txt', '--bulk', 'bulk', '--skip', 'wikidata,wikipedia,inat,commons', '--no-batch');
     expect(r.status, r.stderr + r.stdout).toBe(0);
-    expect(r.stdout).toContain("1 of them read GBIF's records under 1 keys Kew's synonymy gives them (scripts/extra-keys-kew.txt); the other 0 say GBIF's records not checked");
+    expect(r.stdout).toContain("1 of them read GBIF's records under 1 keys Kew's synonymy gives them (scripts/extra-keys-kew.txt); the other 0 say why GBIF's records were not asked");
     const d = JSON.parse(readFileSync(join(dir, 'static/s/v3/k457911.json'), 'utf8'));
     expect(d.ids.gbif).toBeUndefined();
     expect(d.occurrences.nOpenInRange).toBe(3);

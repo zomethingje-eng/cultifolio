@@ -9,11 +9,16 @@
  *
  * Run against a server already up: PW_REUSE=1 PW_PORT=4211 npx playwright test tests/e2e/r69x-example.spec.ts --project chromium
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 const quiet = () => { try { sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
 test.use({ serviceWorkers: 'block', viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
+/** Why the tests of two example tabs are Chromium's (round eighty-five, Q, from r67v-example's note): the second tab is opened by `window.open`, which copies the opener's session storage, the example's flag, in Chromium; Firefox's phone profile gives the child none. */
+const TWO_TABS = 'the second tab is opened by window.open, which copies the opener\'s session storage (the example\'s flag) in Chromium alone';
+
 test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached', timeout: 60_000 }); }
@@ -81,7 +86,7 @@ test('r69x X3: Places carries the name and the kind', async ({ page }) => {
   expect(seen).not.toContain('beforeunload');
 });
 
-test('r69x X2: a tab away when another tab left opens the grower\'s own collection, and no new example is set out @chromium', async ({ page, context }) => {
+test('r69x X2: a tab away when another tab left opens the grower\'s own collection, and no new example is set out', chromiumOnly(TWO_TABS), async ({ page, context }) => {
   test.setTimeout(150_000);
   await intoExample(page);
   const [second] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/plants'); })]);
@@ -95,11 +100,11 @@ test('r69x X2: a tab away when another tab left opens the grower\'s own collecti
   await second.goBack(); await ready(second);
   await expect(second.locator('html[data-demo]')).not.toBeAttached(); // base: a new example, set out again
   await expect(second.locator('.toast')).toContainText('The example collection was closed in another tab. This is your own collection.');
-  await second.waitForTimeout(2000);
+  await goneQuiet(second, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): no new example is set out
   expect(await databases(second)).not.toContain('cultifolio-demo');
 });
 
-test('r69x X2, X9: a Places form with a name typed keeps it when another tab leaves @chromium', async ({ page, context }) => {
+test('r69x X2, X9: a Places form with a name typed keeps it when another tab leaves', chromiumOnly(TWO_TABS), async ({ page, context }) => {
   test.setTimeout(150_000);
   await intoExample(page);
   const [second] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/places#add'); })]);
@@ -109,12 +114,12 @@ test('r69x X2, X9: a Places form with a name typed keeps it when another tab lea
   dialogs(page);
   await page.locator('#demo-leave').click();
   await expect(second.locator('#demobar')).toContainText('The example collection was closed in another tab.', { timeout: 20_000 });
-  await second.waitForTimeout(1000);
+  await goneQuiet(second); // a negative, read once the page has gone quiet (helpers/settled.ts): the form is not taken away
   await expect(second).toHaveURL(/\/places/);
   await expect(second.locator('#loc-name')).toHaveValue('My real cold frame'); // base: gone at once, with no question
 });
 
-test('r69x X1: the closed bar\'s way home deletes no example opened since in another tab @chromium', async ({ page, context }) => {
+test('r69x X1: the closed bar\'s way home deletes no example opened since in another tab', chromiumOnly(TWO_TABS), async ({ page, context }) => {
   test.setTimeout(150_000);
   await intoExample(page);
   const [second] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/places#add'); })]);
@@ -134,7 +139,7 @@ test('r69x X1: the closed bar\'s way home deletes no example opened since in ano
   await second.locator('#demo-home').click();
   await ready(second);
   await expect(second.locator('html[data-demo]')).not.toBeAttached();
-  await second.waitForTimeout(2000);
+  await goneQuiet(second, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): the way home deletes nothing
   await page.reload(); await ready(page); // the first tab lets go of its lock for a moment
   await expect(page.locator('html[data-demo]')).toBeAttached();
   await expect(page.locator('.tree')).toContainText('Visitor shelf', { timeout: seedWait() }); // base: deleted by the second tab's address, and a fresh example set out

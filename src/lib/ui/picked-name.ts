@@ -1,4 +1,4 @@
-import { parseName } from '$core/names';
+import { parseName, QUOTES } from '$core/names';
 
 /**
  * What is typed, read as the server reads a query: NFKC, with no format character (a zero-width space, a soft hyphen).
@@ -57,7 +57,7 @@ const sameEpithet = (typed: string, picked: string) => fold(typed) === fold(pick
  */
 export function cultivarRest(typedRaw: string): { genus: string; rest: string } | null {
   const typed = cleanTyped(typedRaw);
-  if (/[‘'"“”’()×]/.test(typed)) return null;
+  if (new RegExp(`[${QUOTES}()×]`).test(typed)) return null; // any quote a keyboard writes opens a cultivar (round eighty-five; review-s S7)
   const ts = typed.trim().split(/\s+/);
   if (ts.length < 2 || !/^\p{Lu}\p{Ll}+$/u.test(ts[0]) || !/^\p{Lu}/u.test(ts[1]) || /^\p{Lu}{2,3}$/u.test(ts[1])) return null;
   if (/^(?:cf|cfr|aff|nr|sp|spp|cv|var|v|subsp|ssp|f|fo|forma|x)\.?$/i.test(ts[1]) || ts.slice(1).some((t) => /\d/.test(t))) return null;

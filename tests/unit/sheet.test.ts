@@ -113,7 +113,9 @@ describe('the sheet', () => {
     // lows is warmer than the nights a floor is read from (round thirty-seven, R1-2).
     for (const extremesStatus of ['sea', 'none', 'refused'] as const) {
       const sea = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus });
-      expect(sea.floor?.s).toMatch(/^Cold floor: none read\. The nearest figure is 6\.0 °C, the coldest month's mean nightly low, .*warmer than the nights a floor is read from/);
+      // Round eighty-five (W13, S8): the floor's state in the glossary's words, never "none read" of extremes that were read.
+      expect(sea.floor?.s).toMatch(new RegExp(`^Cold floor: ${({ sea: 'set aside', none: 'none on file', refused: 'not checked' } as const)[extremesStatus]}\\. `));
+      expect(sea.floor?.s).toMatch(/The nearest figure is 6\.0 °C, the coldest month's mean nightly low, .*warmer than the nights a floor is read from/);
       expect(sea.floor?.short).toMatch(/^Coldest month, mean nightly low 6\.0 °C \(CHELSA; no floor read\)\.$/); // round sixty-two (visitor-words 3)
       expect(sea.floor?.kind).toBe('mean');
     }

@@ -136,11 +136,9 @@ describe('r83w 2: the species page\'s data, for its HTML and for a move inside t
     expect(data.points.length).toBe(52);
     expect(data.d.name.vernacular.length).toBe(3);
   });
-  it('the page draws from the points when it has them, else holds the mark the server\'s map stands in', () => {
-    const page = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
-    expect(page).toContain("const regionMap = $derived(data.points ? describedBy(regionSvg(d.distribution.boxes, data.points, d.centroid, `Openly licensed records of ${d.name.scientific}`, d.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))), 'records-caption') : (data.regionMark ?? ''));");
-    expect(page).toContain('<div class="mapbox">{@html regionMap}');
-  });
+  // The page draws from the points when it has them, else holds the mark the server's map stands in: tests/unit/
+  // r85q-guards.test.ts 2 mounts the page both ways and finds the map, tied to its caption (round eighty-five; this read
+  // the page's source, outside review A23).
 });
 
 describe('r83w 3: the stylesheets stay in the HTML; the species page\'s are kept at install; the rest', () => {

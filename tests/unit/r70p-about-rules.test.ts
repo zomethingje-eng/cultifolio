@@ -91,7 +91,9 @@ describe('the summary under another title (/about/how)', () => {
   const sp = (o: Partial<{ sitelink: string; parents: string[]; basionyms: string[]; sourceOf: string[] }> = {}) => ({ id: 'Q100', parents: [], basionyms: [], sourceOf: [], ...o });
   const ti = (o: Partial<{ id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[] }> = {}) => ({ id: 'Q200', productOf: [], taxonNames: [], ranks: [], basionyms: [], ...o });
   it('a title whose item has the same type, by Wikidata\'s basionym statements, is proved ("Huernia zebrina" for Ceropegia zebrina)', () => {
-    const [title, of] = [claim(sameType, /\("([A-Z][a-z]+ [a-z]+)" for [A-Z][a-z]+ [a-z]+\)/), claim(sameType, /\("[A-Z][a-z]+ [a-z]+" for ([A-Z][a-z]+ [a-z]+)\)/)];
+    // Round eighty-five (A; review S4): the page no longer quotes this example, whose heading the walk changed; the rule is still driven with it here.
+    expect(sameType.text).toMatch(/another item has the same type as the species' item by Wikidata's basionym statements/);
+    const [title, of] = ['Huernia zebrina', 'Ceropegia zebrina'];
     const w = { name: of, synonyms: [], item: 'Q100' };
     expect(proofByItem(title, w, { species: sp({ basionyms: ['Q200'] }), title: ti({ ranks: [SPECIES_RANK] }) })?.proof, s.where).toBe('older-name');
     expect(proofByItem(title, w, { species: sp(), title: ti({ ranks: [SPECIES_RANK] }) })).toBeNull(); // no shared type, no proof

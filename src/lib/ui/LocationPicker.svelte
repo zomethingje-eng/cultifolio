@@ -96,7 +96,7 @@
       {#if wasInside && !newParent}<p class="small muted" id="{id}-was-inside">In the example it was inside {wasInside}, which is not one of your spaces, so it goes at the top level unless you choose one.</p>{/if}
       <p class="small muted path">{newParent ? `${collection.locationName(newParent)} › ` : ''}{newName.trim() || '…'}</p>
       {#if err}<p class="small bad" role="alert" id="{id}-err">The space was not made. {err}</p>{/if}
-      <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => {})} disabled={!newName.trim()}>Add space</button></div>
+      <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => { /* create() puts the failure in the form's own line (err) before it throws */ })} disabled={!newName.trim()}>Add space</button></div>
     </div>
   {/if}
 </div>

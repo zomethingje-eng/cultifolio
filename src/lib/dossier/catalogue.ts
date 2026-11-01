@@ -53,6 +53,12 @@ export type Row = {
    * checked: GBIF's records were not asked.
    */
   notChecked?: number;
+  /**
+   * Of `notChecked`, the species whose GBIF records were not asked, having no GBIF key: "not asked", as the glossary says
+   * (the merge, round eighty-five; review-s S9, A's need). `notChecked` keeps its meaning, so a server built before reads
+   * the same total; a server of this round says the two apart. Absent in a file built before: the two are not told apart.
+   */
+  notAsked?: number;
   /** Species whose habitat climate is still to be built (round sixty; the self-review, 14; A10). Absent in an older corpus's file: read as 0. */
   pending?: number;
   thumb?: string;
@@ -218,6 +224,7 @@ export function catalogueFrom(shown: Item[], by: By, total: number, withClimate:
       // A refusal or a pending build is not an absence: counted apart from the species with no habitat climate (round fifty-two, 6),
       // and apart from each other, since "not checked" and "still to be built" are different facts (round sixty; A10).
       notChecked: sorted.filter((c) => c.climate === 'refused' || (c.climate === 'pending' && c.gbif == null)).length,
+      notAsked: sorted.filter((c) => c.climate === 'pending' && c.gbif == null).length,
       pending: sorted.filter((c) => c.climate === 'pending' && c.gbif != null).length,
       thumb: by === 'origin' ? undefined : hero?.thumb,
       alt: hero?.name,

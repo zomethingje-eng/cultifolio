@@ -4,6 +4,7 @@ import { cellText, readDate, readRow, unmappedColumns, type DateOrder, type Fiel
 import type { PastedLine } from './paste';
 import { readPrice } from '$lib/ui/grow/spend';
 import { blankRow, keyLines, keySheet, numberKey, type AltCells, type ImportRow } from './plan';
+import { plantNumberProblem } from '$core/accession';
 
 /**
  * A name cell as the reference and the collection read it (round sixty-two, second pass; the verification grower
@@ -26,17 +27,21 @@ export function rowsFromPaste(lines: PastedLine[], common: { placeId: string | n
   const named_ = lines.filter((l) => cleanName(l.name));
   // Each line's own parts are what make it that line: the same list pasted again is the same plants (round sixty-two).
   const keys = keyLines(named_.map((l) => ({ cells: [l.name, l.cultivar ?? '', l.number ?? '', l.source ?? '', l.notes ?? ''], qty: 1 })));
-  return named_.map((l, i) => ({
-    ...named(`p${l.line}`, l.line, l.name),
-    importKeys: keys[i],
-    cultivar: l.cultivar,
-    number: l.number,
-    notes: l.notes,
-    placeId: common.placeId,
-    acquired: common.acquired,
-    source: l.source ?? common.source,
-    problems: l.problem ? [l.problem] : []
-  }));
+  return named_.map((l, i) => {
+    const r: ImportRow = {
+      ...named(`p${l.line}`, l.line, l.name),
+      importKeys: keys[i],
+      cultivar: l.cultivar,
+      number: null,
+      notes: l.notes,
+      placeId: common.placeId,
+      acquired: common.acquired,
+      source: l.source ?? common.source,
+      problems: l.problem ? [l.problem] : []
+    };
+    r.number = keptNumber(r, l.number);
+    return r;
+  });
 }
 
 /**
@@ -154,6 +159,19 @@ export interface SheetOpts {
 }
 
 /** Text added to a plant's notes, after what the notes column holds: one line each. */
+/**
+ * A sheet's or a paste's plant number, when it is one this app keeps (`isPlantNumber`); otherwise none, and the text is
+ * kept in the notes and said on the review (round eighty-five; outside review A10: a number of 309 digits hung the add
+ * form for good). The plant is then given the next free number.
+ */
+function keptNumber(r: ImportRow, no: string | null): string | null {
+  if (!no) return null;
+  const why = plantNumberProblem(no);
+  if (!why) return no;
+  r.problems.push(`its number was not kept, since ${why}; it is in the notes, and the plant gets the next free number`);
+  addNote(r, `Number: ${no.trim().slice(0, 200)}`);
+  return null;
+}
 const addNote = (r: ImportRow, line: string) => { r.notes = r.notes ? `${r.notes}${/\n$/.test(r.notes) ? '' : '\n'}${line}` : line; };
 /** A whole number of plants, one to two hundred, as the add form takes. */
 const QTY_MAX = 200;
@@ -188,7 +206,7 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     const r = named(`s${i + 1}`, i + 1, name);
     r.cultivar = orNull(v.cultivar);
     r.fieldNumber = orNull(v.fieldNumber);
-    r.number = orNull(v.number);
+    r.number = keptNumber(r, orNull(v.number));
     r.placePath = orNull(v.place);
     r.source = orNull(v.source);
     r.notes = v.notes && v.notes.trim() ? v.notes : null; // as written: a note's own spaces and line breaks are the grower's (round sixty-one; the records review, 6)

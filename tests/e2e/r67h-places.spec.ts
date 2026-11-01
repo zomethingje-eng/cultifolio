@@ -17,7 +17,11 @@
  * stored, not what a page happens to draw. Nothing here is Chromium's alone.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { countRequests, idbQuiet } from './helpers/idb-count';
 import { inject, type Row } from './helpers/inject';
+
+// The database's transactions counted from each page's start, so a negative can wait for it to go quiet (round eighty-five).
+test.beforeEach(async ({ context }) => { await countRequests(context); });
 
 test.use({ serviceWorkers: 'block' });
 
@@ -94,7 +98,7 @@ test('r67h places 1: "Add place" pressed twice while the place is being written 
   await add.click();
   await add.click({ timeout: 2_000 }); // still on screen: the first is being written
   await expect.poll(async () => (await vault(page)).places['Shelf twice']?.length ?? 0, { timeout: 15_000 }).toBe(1);
-  await page.waitForTimeout(2_000); // a second write would land within this
+  await idbQuiet(page); // a negative, read once the database has gone quiet (helpers/idb-count.ts): a second write would come before
   expect((await vault(page)).places['Shelf twice']).toHaveLength(1); // reverted: 2
 });
 
@@ -107,7 +111,7 @@ test('r67h places 2: Move pressed while "Add place" is still writing moves the p
   await page.getByRole('button', { name: 'Add space' }).click();
   await page.locator('.actions button.pri', { hasText: 'Move' }).click(); // the place's write has not completed
   await expect(page.locator('.idcard .place', { hasText: 'Shelf race' })).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(2_000);
+  await idbQuiet(page); // a negative, as above
   const v = await vault(page);
   expect(v.places['Shelf race']).toHaveLength(1);
   expect(v.latest['accession:rPl:locationId']).toBe(v.places['Shelf race'][0]);
@@ -183,7 +187,7 @@ test("r67h places 7: Move settles Move's picker alone, not the open Edit form's 
   await nameNew(page, 'mv-loc', 'Move destination');
   await page.locator('.actions button.pri', { hasText: 'Move' }).click();
   await expect(page.locator('.idcard .place', { hasText: 'Move destination' })).toBeVisible();
-  await page.waitForTimeout(1_000);
+  await idbQuiet(page); // a negative, as above
   const v = await vault(page);
   expect(v.places['Move destination']).toHaveLength(1);
   expect(v.latest['accession:rPl:locationId']).toBe(v.places['Move destination'][0]);

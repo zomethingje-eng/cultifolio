@@ -57,22 +57,24 @@ describe('the rule, for a page without a GBIF key', () => {
 describe('the download asks for them', () => {
   const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
   const kew = parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8'));
-  it('scripts/extra-keys-kew.txt: 1,956 keys on 1,415 of the list\'s 2,336 pages without a GBIF key (round eighty, A: Xanthoceras sorbifolium\'s key refused), none of them a list key', () => {
+  it('scripts/extra-keys-kew.txt: 1,960 keys on 1,419 of the list\'s 2,354 pages without a GBIF key (round eighty, A: Xanthoceras sorbifolium\'s key refused), none of them a list key', () => {
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     // Round eighty (X): 11 that a reference page holds through its range left out of the list, none of which read a key;
     // 19 whose key Kew's file reads as another species' name read none now, and no key of Kew's synonymy yet.
-    expect(keyless.size).toBe(2336);
-    expect(kew.length).toBe(1956);
+    // Round eighty-five (N): 18 more, the species of decision 6's rule, built from Kew's file; 4 of them read a key of
+    // their own name and author (the merge ran the rule for the 18 with GBIF's API in place of the export).
+    expect(keyless.size).toBe(2354);
+    expect(kew.length).toBe(1960);
     expect(kew.every((k) => k.pageId && keyless.has(k.pageId) && k.page === 0)).toBe(true);
-    expect(new Set(kew.map((k) => k.pageId)).size).toBe(1415);
+    expect(new Set(kew.map((k) => k.pageId)).size).toBe(1419);
     const listKeys = new Set(downloadKeysOf(list).keys);
     expect(kew.some((k) => listKeys.has(k.key))).toBe(false);
-    expect(new Set(kew.map((k) => k.key)).size).toBe(1956); // no key read by two pages
+    expect(new Set(kew.map((k) => k.key)).size).toBe(1960); // no key read by two pages
   });
   it('every request\'s keys hold them beside the list\'s, written into keys.json by page id', () => {
     const k = kewDownloadKeysOf(list, kew);
-    expect(k.keys.length).toBe(1956);
-    expect(k.pages).toBe(1415);
+    expect(k.keys.length).toBe(1960);
+    expect(k.pages).toBe(1419);
     expect(Object.keys(k.byName)[0]).toMatch(/^k\d+ by /);
     const fetch = readFileSync('scripts/bulk-fetch.ts', 'utf8');
     expect(fetch).toContain("const kewFile = 'scripts/extra-keys-kew.txt';");
@@ -161,7 +163,7 @@ describe('the about page says it', () => {
   it('/about/how names the keys of Kew\'s synonymy and the file that lists them', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
     expect(how).toContain("Its GBIF records are read only under GBIF's keys for the names Kew's file holds as this plant");
-    expect(how).toContain('<code>scripts/extra-keys-kew.txt</code>');
+    expect(how).toContain('<a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/extra-keys-kew.txt">the list of keys from Kew</a>'); // round eighty-five: a link, not a path
     expect(how).toContain('A page Kew\'s synonymy gives no such key has its GBIF records not asked');
   });
 });

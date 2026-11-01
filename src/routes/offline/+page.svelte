@@ -36,6 +36,7 @@
 <svelte:head><title>Offline · Cultifolio</title></svelte:head>
 
 <!-- Said once: the species pages' line was here twice (round sixty-one; visitor 17). Only pages opened are kept, grown or
-     not (round sixty-two; visitor-words 17); since the app's last update, which starts its copies afresh (round eighty-one). -->
+     not (round sixty-two; visitor-words 17); an update reads the last fifty opened again, in its own format (round
+     eighty-five; review-c C6), where before it started the copies afresh. -->
 <PageHead title="No connection" sub="Your collection is on this device and works without one." />
-<div class="cult"><div class="body"><p>Your plants, spaces, propagation, labels and backups all work offline. <a href="/plants">Go to your plants.</a></p><p class="small muted" id="offline-kept">{opening ? 'This page is kept on this device; opening it…' : 'A species page is kept once you have opened it on this device since the app last updated itself, so the ones you have opened are here; one you have not opened needs the network once.'}</p></div></div>
+<div class="cult"><div class="body"><p>Your plants, spaces, propagation, labels and backups all work offline. <a href="/plants">Go to your plants.</a></p><p class="small muted" id="offline-kept">{opening ? 'This page is kept on this device; opening it…' : 'A species page you have opened on this device is kept here; when the app updates itself, the last fifty you opened are read again, so they stay; one you have not opened needs the network once.'}</p></div></div>

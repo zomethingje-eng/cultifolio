@@ -82,8 +82,11 @@
   // fill the bar.
   // A year over 1,200 mm takes a bar to the next thousand, so the bar is never shorter than its figure: "bar 0 to 1,200 mm"
   // stood under 1,235 mm (round eighty-four; A13).
-  const RAIN_FULL = $derived(rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);
+  // The bar's end is a round figure in the reader's units (round eighty-five; W12: "bar 0 to 47.2 in" is 1,200 mm in
+  // inches): 1,200 mm, or the next thousand above; in inches 48, or the next 40 above (1,016 mm a step).
+  const RAIN_FULL = $derived(u === 'us' ? (rainYear > 48 * 25.4 ? Math.ceil(rainYear / 25.4 / 40) * 40 : 48) * 25.4 : rainYear > 1200 ? Math.ceil(rainYear / 1000) * 1000 : 1200);
   const DLI_FULL = 70;
+  const rainFullN = $derived(u === 'us' ? String(Math.round(RAIN_FULL / 25.4)) : rainN(RAIN_FULL, u));
 
   /* ---- the season, in the reader's months: built only from the rules' outputs (the year the sheet read) ---- */
   const strip = $derived(seasonStrip(year, months, readerLat));
@@ -117,8 +120,8 @@
     {/if}
   </div>
   <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean daily high</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
-  <div class="card"><div class="lab" role="heading" aria-level="3">{yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} in the median year <span class="src">CHELSA</span></div></div>
-  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
+  <div class="card"><div class="lab" role="heading" aria-level="3">{yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainFullN} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainFullN} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} in the median year <span class="src">CHELSA</span></div></div>
+  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a class="help" href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
 </div>
 <!-- The season card under the four, outside their grid: spanning the grid's every track, it kept six 153 px tracks at a
      desktop's width, two of them empty, and the four cards filled two thirds of the row (round eighty-four; W3). -->
@@ -148,6 +151,12 @@
   .gt { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   /* The mark of a climate read from few records (round eighty-two): the warm dashed edge the page's other cautions wear. */
   a.few { text-decoration: none; }
+  /* A help link and the few-records mark take a finger's 44 px as an invisible margin, as \`.linkish\` does, so the line
+     keeps its height (round eighty-five; outside review B's 4: the DLI help was 18.66 by 22 px). */
+  @media (pointer: coarse) {
+    a.help, a.few { position: relative; }
+    a.help::after, a.few::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: max(100%, var(--tap)); transform: translate(-50%, -50%); }
+  }
   a.few:hover { text-decoration: underline; }
   .few { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.04em; text-transform: none; font-weight: 700; }
   /* The switch works by script: with scripts off it stood pressed and did nothing (round eighty-four; A13). Hidden, not

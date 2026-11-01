@@ -296,7 +296,8 @@ describe('the collector genera (H67)', () => {
     const n = Number(claim(s, /of (\d+) collector genera/));
     const file = new Set(raw('scripts/specialist-genera.txt').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))).size;
     expect(file, s.where).toBe(n);
-    expect(claim(said('how', 'The list is scripts/specialist'), /The list is (scripts\/specialist-genera\.txt)/)).toBe('scripts/specialist-genera.txt');
+    // Round eighty-five (A22): the page links the file by a plain name, not by its path.
+    expect(raw('src/routes/about/how/+page.svelte')).toMatch(/<a href="https:\/\/github\.com\/zomethingje-eng\/cultifolio\/blob\/main\/scripts\/specialist-genera\.txt">the list of collector genera<\/a>/);
   });
 });
 

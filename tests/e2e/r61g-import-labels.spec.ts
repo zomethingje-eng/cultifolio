@@ -39,6 +39,9 @@ test('r61g 2: the printed sheet is exactly the paper width, so nothing is shrunk
   await ready(page);
   await page.emulateMedia({ media: 'print' });
   await page.setViewportSize({ width: 794, height: 1123 }); // A4 at 96 dpi
+  // The sheet is drawn once the collection is open (round eighty-five, W12: the footer waits for it): WebKit's IndexedDB
+  // opens it after the page is ready, so the test waits for the sheet before measuring it (the owner's WebKit run).
+  await page.locator('.page').first().waitFor({ state: 'attached' });
   const r = await page.evaluate(() => ({ scrollW: document.documentElement.scrollWidth, left: document.querySelector('.page')!.getBoundingClientRect().left, width: document.querySelector('.page')!.getBoundingClientRect().width }));
   expect(r.left).toBe(0);
   expect(r.scrollW).toBeLessThanOrEqual(794);

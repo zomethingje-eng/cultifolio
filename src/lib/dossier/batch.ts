@@ -93,7 +93,7 @@ export const kewItemsOf = (k: KewIds, r: KewItemAnswer): string[] => {
   return out;
 };
 export const entitiesUrl = (ids: readonly string[]) => `${WD_API}?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims|sitelinks&sitefilter=enwiki`;
-export const extractsUrl = (titles: readonly string[]) => `${WP_API}?action=query&format=json&formatversion=2&prop=extracts|pageprops&ppprop=disambiguation&exintro=1&explaintext=1&exlimit=${EXTRACT_TITLES}&redirects=1&titles=${titles.map((t) => encodeURIComponent(t)).join('|')}`;
+export const extractsUrl = (titles: readonly string[]) => `${WP_API}?action=query&format=json&formatversion=2&prop=extracts|pageprops|info&ppprop=disambiguation&exintro=1&explaintext=1&exlimit=${EXTRACT_TITLES}&redirects=1&titles=${titles.map((t) => encodeURIComponent(t)).join('|')}`;
 
 type SparqlAnswer = { results?: { bindings?: Array<{ k?: { value?: string }; item?: { value?: string } }> } };
 type Entity = { id?: string; missing?: string; claims?: unknown; sitelinks?: Record<string, { title: string }> };
@@ -102,7 +102,7 @@ type ExtractsAnswer = {
   query?: {
     normalized?: Array<{ from: string; to: string }>;
     redirects?: Array<{ from: string; to: string; tofragment?: string }>;
-    pages?: Array<{ title: string; missing?: boolean; invalid?: boolean; extract?: string; pageprops?: { disambiguation?: string } }>;
+    pages?: Array<{ title: string; missing?: boolean; invalid?: boolean; extract?: string; pageprops?: { disambiguation?: string }; lastrevid?: number }>;
   };
   continue?: unknown;
   error?: { code?: string; info?: string };
@@ -305,7 +305,7 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
         const disambiguation = p.pageprops?.disambiguation != null;
         hold(summaryUrl(t), {
           status: 'ok',
-          data: { type: disambiguation ? 'disambiguation' : 'standard', title: p.title, extract: restExtract(p.extract ?? ''), content_urls: { desktop: { page: articleUrl(p.title) } } }
+          data: { type: disambiguation ? 'disambiguation' : 'standard', title: p.title, extract: restExtract(p.extract ?? ''), content_urls: { desktop: { page: articleUrl(p.title) } }, ...(p.lastrevid ? { revision: p.lastrevid } : {}) }
         });
       }
     }

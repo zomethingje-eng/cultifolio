@@ -30,7 +30,6 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['src/routes/about/how/+page.svelte', /"Succulent" or "semisucculent" for a cactus or succulent\. A geophyte, bulb, corm, tuber or caudex for a bulb, tuber or caudex\.|Groundsel would be "a cactus or succulent" by its genus, Senecio, and bitter melon "a bulb, tuber or caudex"/],
   ['src/routes/about/how/+page.svelte', /The list: bulb, buttercup, cactus,|shrub, snowdrop, succulent, sumac|lily, daisy, palm, fern, cactus or orchid|"Pariette Cactus"/],
   ['src/routes/about/how/+page.svelte', /of 173 collector genera taken whole: the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs and their like/],
-  ['src/routes/about/how/+page.svelte', /"Trichocereus pachanoi", the San Pedro cactus,/],
   // a caudex's diameter, a measurement a grower records
   ['src/lib/db/types.ts', /caudex|Caudex/],
   ['src/routes/plants/[acc]/+page.svelte', /^caudex$/],

@@ -3,7 +3,7 @@
  * plant will get, the places it goes to and the ones that would be made, and what was not read as given. The page shows
  * this as the review list; `commit.ts` then writes exactly it, through the collection's own add functions.
  */
-import type { NumberingScheme } from '$core/accession';
+import { PLANT_NUMBER_DIGITS, type NumberingScheme } from '$core/accession';
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
 import { parseName } from '$core/names';
 import { yearOf } from '$core/year';
@@ -279,6 +279,25 @@ export function markDroppedBefore(rows: ImportRow[], dropped: ReadonlySet<string
  * lines that look already imported are kept (said, and overridable), and of the rest the first `max` are read; the
  * others wait for the next pass, which reads the same file again and finds these here.
  */
+/**
+ * Keys for lines of a later paste that a plant here already answers to, so they are filed as new plants when the grower
+ * says they are (round eighty-five; review-w W10: a second pasted list of the same names in another order left 26 new
+ * plants out as "imported before"). Each key "<hash>#n" becomes the first "<hash>#m", m ≥ n, that no plant here holds and
+ * no earlier key of this batch took: a run of the same list then finds both plants.
+ */
+export function freshKeys(rows: ReadonlyArray<{ importKeys?: string[] }>, has: (key: string) => unknown): string[][] {
+  const given = new Set<string>();
+  return rows.map((r) => (r.importKeys ?? []).map((k) => {
+    const m = /^(.*)#(\d+)$/.exec(k);
+    if (!m) return k;
+    let n = Number(m[2]);
+    let key = k;
+    for (let steps = 0; (has(key) || given.has(key)) && steps < 1_000_000; steps++) key = `${m[1]}#${++n}`;
+    given.add(key);
+    return key;
+  }));
+}
+
 export function passOf(rows: ImportRow[], max: number): { rows: ImportRow[]; done: number; later: number; droppedBefore: number } {
   const out: ImportRow[] = [];
   let done = 0, taken = 0, later = 0, droppedBefore = 0;
@@ -384,12 +403,16 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
     let n = top.get(prefix);
     if (n === undefined) {
       n = 0;
-      const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`);
+      // Fifteen digits at most count, as `nextAccession` reads them (round eighty-five; outside review A10).
+      const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d{1,${PLANT_NUMBER_DIGITS}})$`);
       for (const id of used) { const m = re.exec(id); if (m) n = Math.max(n, Number(m[1])); }
     }
     let id: string;
-    do id = `${prefix}-${String(++n).padStart(scheme.width, '0')}`;
-    while (used.has(id) || isTaken(id));
+    let steps = 0;
+    do {
+      id = `${prefix}-${String(++n).padStart(scheme.width, '0')}`;
+      if (++steps > used.size + 1_000_000) throw new Error('No free plant number was found.'); // bounded (A10)
+    } while (used.has(id) || isTaken(id));
     top.set(prefix, n);
     used.add(id);
     return id;

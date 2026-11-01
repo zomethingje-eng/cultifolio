@@ -34,8 +34,12 @@ export interface Products {
   storedHashes: Set<string>;
 }
 
-/** A page merged into another by the owner's decision (round seventy-three): its old address, and the id of the page it joined. */
-export type Alias = { slug: string; key: PageId };
+/**
+ * A page merged into another by the owner's decision (round seventy-three): its old address, and the id of the page it
+ * joined. Or GBIF's name for a page's key, where Kew's name heads it (`via: 'gbif'`; round eighty-five, `gbif-alias.ts`),
+ * which only the sheets answer to, for a plant of that key.
+ */
+export type Alias = { slug: string; key: PageId; via?: 'gbif' };
 
 /**
  * The old addresses the products answer for (round seventy-three): each alias whose page the index lists and whose slug no
@@ -44,16 +48,31 @@ export type Alias = { slug: string; key: PageId };
  * the device's own lookup matches; a link to it is the old address, which the species route redirects as an older name.
  * Never in the index: the reference is its pages, and `/api/dossier/<old key>` answers 404 (its GBIF key is no page's own).
  */
-export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[]): Array<{ slug: string; entry: IndexEntry }> {
+export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[]): Array<{ slug: string; entry: IndexEntry; via?: 'gbif' }> {
   const bySlug = new Set(index.map((e) => e.slug));
   const byKey = new Map(index.map((e) => [e.key, e]));
-  const out: Array<{ slug: string; entry: IndexEntry }> = [];
-  for (const a of aliases) {
+  const out: Array<{ slug: string; entry: IndexEntry; via?: 'gbif' }> = [];
+  // A merged page's old address before GBIF's name of another page's key, where the two are one address (round eighty-five).
+  for (const a of [...aliases].sort((x, y) => Number(x.via === 'gbif') - Number(y.via === 'gbif'))) {
     const e = byKey.get(a.key);
     if (!e || bySlug.has(a.slug) || out.some((x) => x.slug === a.slug)) continue;
-    out.push({ slug: a.slug, entry: e });
+    out.push({ slug: a.slug, entry: e, ...(a.via ? { via: a.via } : {}) });
   }
   return out;
+}
+
+/**
+ * The genera of the older names (`syn`, `older`) that are no genus of the reference, with how many pages hold a name in
+ * each, three pages at least (round eighty-five; review-s S6): "Sansevieria", every name of it now a Dracaena's. Sorted.
+ */
+export function olderGeneraOf(index: readonly Pick<IndexEntry, 'name' | 'syn' | 'older'>[]): Array<[string, number]> {
+  const own = new Set(index.map((e) => e.name.replace(/^×\s*/, '').split(' ')[0]));
+  const n = new Map<string, number>();
+  for (const e of index) {
+    const gs = new Set([...(e.syn ?? []), ...(e.older ?? [])].map((x) => x.replace(/^×\s*/, '').split(' ')[0]).filter((g) => /^[A-Z][a-z-]+$/.test(g) && !own.has(g)));
+    for (const g of gs) n.set(g, (n.get(g) ?? 0) + 1);
+  }
+  return [...n].filter(([, c]) => c >= 3).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
 
 export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = [], synonymsOf?: (key: PageId) => readonly string[] | undefined, sink?: (hash: string, body: string) => void, o: { grown?: GrownRule } = {}): Products {
@@ -64,7 +83,8 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   const buckets = bucketsFor(index.length);
   const entries = new Map<string, IndexEntry[]>();
   for (const e of index) { const b = bucketOf(e.slug, buckets); (entries.get(b) ?? entries.set(b, []).get(b)!).push(e); }
-  for (const { slug, entry } of aliasesOf(index, aliases)) { const b = bucketOf(slug, buckets); (entries.get(b) ?? entries.set(b, []).get(b)!).push({ ...entry, slug }); }
+  // Not GBIF's name of a page's key: an entry answers whatever plant asks by its name, and only the sheet checks the key.
+  for (const { slug, entry, via } of aliasesOf(index, aliases)) { if (via === 'gbif') continue; const b = bucketOf(slug, buckets); (entries.get(b) ?? entries.set(b, []).get(b)!).push({ ...entry, slug }); }
   for (const b of bucketNames(buckets)) put(`entries/${b}.json`, JSON.stringify(entries.get(b) ?? []));
   const sheets = sheetsOf(buckets);
   for (const b of bucketNames(buckets)) put(`sheets/${b}.json`, JSON.stringify(sheets.get(b) ?? []));
@@ -91,6 +111,9 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   for (const [f, body] of buildOlderFiles(index)) put(`older/${f}.json`, JSON.stringify(body));
   for (const by of BYS) for (const [f, body] of buildRowFiles(index, by)) put(`rows/${by}/${f}.json`, JSON.stringify(body));
   put('genera.json', JSON.stringify(generaOfIndex(index)));
+  // The older genera the reference's older names are in (round eighty-five; review-s S6): a misspelt older genus
+  // ("sansiveria") is read as the one it is nearest (`nearestGenus`), as a misspelt genus is. A Worker built before reads none.
+  put('older-genera.json', JSON.stringify(olderGeneraOf(index)));
   // The front page's strip from the popular genera (round eighty-four, the owner's decision 4), where the build reads their files.
   put('featured.json', JSON.stringify(featuredFile(index, o.grown)));
   const urls = sitemapUrls(index), days = sitemapDays(index);

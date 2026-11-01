@@ -169,9 +169,14 @@ export function lookupOf(c: Loaded, platform: Platform, fetch: Fetch): Lookup {
  * under Dudleya pulverulenta, answered 404 as a shared name). `records` are the holders' dossiers in their order, null
  * where one was not read. Null unless exactly one record read says so.
  */
-export function mergedHolder(address: string, holders: readonly Ref[], records: ReadonlyArray<{ occurrences?: { keys?: ReadonlyArray<{ slug?: string }> } } | null | undefined>): Ref | null {
+export function mergedHolder(address: string, holders: readonly Ref[], records: ReadonlyArray<{ occurrences?: { keys?: ReadonlyArray<{ slug?: string }> }; name?: { gbif?: { slug?: string } | null; formerly?: readonly string[] } } | null | undefined>): Ref | null {
   const hit = holders.filter((_, i) => (records[i]?.occurrences?.keys ?? []).some((k) => k?.slug === address));
-  return hit.length === 1 ? hit[0] : null;
+  if (hit.length === 1) return hit[0];
+  // Or the page whose own heading the address was until Kew's name headed it (round eighty-five; review-d D5, review-s
+  // S10: /species/ceropegia-edulis, Caudanthera edulis's heading until 31 October, answered 404, since Ceropegia bulbosa
+  // holds the name too): `name.gbif.slug`, or a former heading's (`name.formerly`). Exactly one.
+  const was = holders.filter((_, i) => { const n = records[i]?.name; return n?.gbif?.slug === address || (n?.formerly ?? []).some((f) => slugify(f) === address); });
+  return hit.length === 0 && was.length === 1 ? was[0] : null;
 }
 
 /**

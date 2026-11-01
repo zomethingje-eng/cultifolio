@@ -11,11 +11,16 @@
  *
  * Run against a server already up: PW_REUSE=1 PW_PORT=4306 npx playwright test tests/e2e/r70x-example.spec.ts --project chromium
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 const quiet = () => { try { sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
 test.use({ serviceWorkers: 'block', viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
+/** Why the tests of two example tabs are Chromium's (round eighty-five, Q, from r67v-example's note): the second tab is opened by `window.open`, which copies the opener's session storage, the example's flag, in Chromium; Firefox's phone profile gives the child none. */
+const TWO_TABS = 'the second tab is opened by window.open, which copies the opener\'s session storage (the example\'s flag) in Chromium alone';
+
 test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached', timeout: 60_000 }); }
@@ -48,7 +53,7 @@ async function slowScripts(page: Page, ms: number) {
   return s;
 }
 
-test('r70x X1: another tab neither offers back nor deletes an example whose tab is only reloading @chromium', async ({ page, context }) => {
+test('r70x X1: another tab neither offers back nor deletes an example whose tab is only reloading', chromiumOnly(TWO_TABS), async ({ page, context }) => {
   test.setTimeout(150_000);
   accept(page);
   await intoExample(page);
@@ -62,10 +67,11 @@ test('r70x X1: another tab neither offers back nor deletes an example whose tab 
   await other.goto('/'); await ready(other);
   await expect(other.locator('#example-left')).toHaveCount(0);
   const slow = await slowScripts(page, 8000);
+  const reloading = page.waitForEvent('framenavigated', { timeout: 15_000 });
   void page.reload().catch(() => {});
-  await page.waitForTimeout(800);
+  await reloading; // the reload has begun; its scripts are held
   await other.reload(); await ready(other);
-  await other.waitForTimeout(2000);
+  await goneQuiet(other, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): the other tab offers nothing back and deletes nothing
   await expect(other.locator('#example-left')).toHaveCount(0); // base: "You left an example collection with 1 record…", and its Delete it deleted it
   expect(await databases(other)).toContain('cultifolio-demo');
   slow.on = false;
@@ -76,16 +82,17 @@ test('r70x X1: another tab neither offers back nor deletes an example whose tab 
   await expect(page.locator('.tree')).toContainText('Visitor shelf');
 });
 
-test('r70x X1: with nothing of the visitor\'s in it, another tab\'s page does not delete it under the reloading tab @chromium', async ({ page, context }) => {
+test('r70x X1: with nothing of the visitor\'s in it, another tab\'s page does not delete it under the reloading tab', chromiumOnly(TWO_TABS), async ({ page, context }) => {
   test.setTimeout(150_000);
   accept(page);
   await intoExample(page);
   const other = await context.newPage();
   const slow = await slowScripts(page, 8000);
+  const reloading = page.waitForEvent('framenavigated', { timeout: 15_000 });
   void page.reload().catch(() => {});
-  await page.waitForTimeout(800);
+  await reloading; // the reload has begun; its scripts are held
   await other.goto('/'); await ready(other);
-  await other.waitForTimeout(2000);
+  await goneQuiet(other, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): the other tab deletes nothing
   expect(await databases(other)).toContain('cultifolio-demo'); // base: deleted, and the reloading tab set out a second seed
   slow.on = false;
   await ready(page);
@@ -156,7 +163,7 @@ test('r70x X2: Keep does not leave the example when the tab\'s storage refuses t
   });
   await page.locator('#example-keep').click();
   await expect(page.locator('#example-keep-refused')).toContainText('could not be kept'); // base: none; the tab left without the draft
-  await page.waitForTimeout(1500);
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): the refused keep leaves nothing
   await expect(page.locator('html[data-demo]')).toBeAttached();
   await expect(page).toHaveURL(/\/plants\/new$/);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
@@ -202,6 +209,6 @@ test('r70x P need 2: the batch form\'s "Start batch" does not move when the name
   const before = (await start.boundingBox())!.y;
   await page.locator('#species-name').blur();
   await expect(page.locator('#species-name').locator('xpath=ancestor::div[contains(@class,"picker")][1]').locator('.status')).not.toBeEmpty({ timeout: 15_000 });
-  await page.waitForTimeout(500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the words drawn
   expect(Math.abs((await start.boundingBox())!.y - before)).toBeLessThan(1); // base: moved down by the words
 });

@@ -12,7 +12,9 @@ import { carryRederivedRows } from '$dossier/rederive';
 import * as openalex from '$dossier/sources/openalex';
 import { welwitschia } from '../../fixtures/upstream';
 
-const OFF = "not yet asked for this reference; a later fill takes the papers from OpenAlex's snapshot";
+// Round eighty-five (outside review A's 9f): the words say what is true, with no fill promised; the old words still read as literature off.
+const OFF = 'the reference does not ask OpenAlex for papers';
+const OFF_BEFORE = "not yet asked for this reference; a later fill takes the papers from OpenAlex's snapshot";
 const opts = (fetcher: JsonFetcher) => ({ fetcher, builtBy: 'node' as const, now: () => new Date('2026-10-19T12:00:00Z') });
 
 describe('the build asks OpenAlex nothing', () => {
@@ -33,6 +35,7 @@ describe('the build asks OpenAlex nothing', () => {
     expect((openalex as Record<string, unknown>).LITERATURE_OFF).toBe(OFF); // base: undefined
     const off = (openalex as unknown as { literatureOff: (u?: { status?: string; detail?: string }) => boolean }).literatureOff;
     expect(off({ status: 'skipped', detail: OFF })).toBe(true);
+    expect(off({ status: 'skipped', detail: OFF_BEFORE })).toBe(true);
     // A re-derivation carries the row with the build that wrote it named first: still literature off.
     const prev = { upstream: { openalex: { status: 'skipped', at: '2026-10-19T12:00:00Z', detail: OFF } } };
     const d = { upstream: { openalex: { status: 'skipped', at: '2026-10-20T12:00:00Z', detail: OFF } } as Record<string, { status: string; at?: string; detail?: string }>, photos: [] };
@@ -61,7 +64,8 @@ describe('a page built now: not checked, with why, in one sentence', () => {
   });
   it('the about page says the same, and no longer that literature is carried', () => {
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-    expect(how).toContain('so a page built since has no Papers section, and its record of sources says OpenAlex was not asked, and why.'); // base: "Recent literature comes from OpenAlex."
+    // Round eighty-five (S4): every page is built since, so no page lists papers.
+    expect(how).toContain("No page lists papers. The reference does not ask OpenAlex for them, and each page's record of its sources says OpenAlex was not asked, and why."); // base: "Recent literature comes from OpenAlex."
     expect(how).not.toContain('What is carried is exact: literature,');
   });
 });

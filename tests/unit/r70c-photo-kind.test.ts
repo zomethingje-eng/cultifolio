@@ -260,7 +260,11 @@ describe('C5: among files of one rank, a lead at least 500 pixels wide (S-C12)',
   });
   it('a file whose width was not kept is not set back, and the title\'s epithet still ranks first (guards)', () => {
     const a = { ...photo({ title: 'File:Aloe vera 1.jpg' }), width: undefined };
-    expect(leadOf([a, photo({ title: 'File:Aloe vera 2.jpg' })], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 1.jpg');
+    // Round eighty-five (A9g, the owner's decision on the lead): a lead states a size at the floor where any photograph
+    // does, so a file whose width was not kept yields to one that states its size; alone, or among files that state none,
+    // it keeps its place.
+    expect(leadOf([a, photo({ title: 'File:Aloe vera 2.jpg' })], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 2.jpg');
+    expect(leadOf([a, { ...photo({ title: 'File:Aloe vera 2.jpg' }), width: undefined }], { scientific: 'Aloe vera' })?.id).toBe('File:Aloe vera 1.jpg');
     // A landscape 300-pixel file (round eighty-two passes over an upright lead where one that is not is there; this
     // fixture's 2,000-pixel height had made it upright).
     // Round eighty-four (E; the merge): a lead is never under 640 pixels on its long side where a larger one exists

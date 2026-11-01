@@ -18,6 +18,7 @@
  * Counted in Chromium alone (`@chromium`): a count is the same in every engine, so the other engines would only repeat
  * it, at their own pace.
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
 import { countRequests, countSince, idbQuiet, markCount } from './helpers/idb-count';
 import { inject, injectTail, snapshotSaved, type Row } from './helpers/inject';
@@ -46,7 +47,9 @@ async function setOut(page: Page) {
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 30_000 });
 }
 
-test('r67h budget 1: the example set out costs at most 1,400 requests, its whole page life', { tag: '@chromium' }, async ({ browser }) => {
+const BUDGET_WHY = 'a count of requests is the same in every engine, so the other engines would only repeat it, at their slower pace';
+
+test('r67h budget 1: the example set out costs at most 1,400 requests, its whole page life', chromiumOnly(BUDGET_WHY), async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await countRequests(ctx);
@@ -58,7 +61,7 @@ test('r67h budget 1: the example set out costs at most 1,400 requests, its whole
   await ctx.close();
 });
 
-test("r67h budget 2: the example's next page load costs at most 60 requests", { tag: '@chromium' }, async ({ browser }) => {
+test("r67h budget 2: the example's next page load costs at most 60 requests", chromiumOnly(BUDGET_WHY), async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await countRequests(ctx);
@@ -75,7 +78,7 @@ test("r67h budget 2: the example's next page load costs at most 60 requests", { 
   await ctx.close();
 });
 
-test('r67h budget 3: one Water on a fresh page costs at most 20 requests', { tag: '@chromium' }, async ({ browser }) => {
+test('r67h budget 3: one Water on a fresh page costs at most 20 requests', chromiumOnly(BUDGET_WHY), async ({ browser }) => {
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await countRequests(ctx);
   const page = await ctx.newPage();
@@ -92,7 +95,7 @@ test('r67h budget 3: one Water on a fresh page costs at most 20 requests', { tag
   await ctx.close();
 });
 
-test('r67h budget 4: an import of 100 costs at most 70 requests a plant, and one Water right after it, in the same page life, at most 60', { tag: '@chromium' }, async ({ browser }) => {
+test('r67h budget 4: an import of 100 costs at most 70 requests a plant, and one Water right after it, in the same page life, at most 60', chromiumOnly(BUDGET_WHY), async ({ browser }) => {
   test.setTimeout(240_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await countRequests(ctx);
@@ -133,7 +136,7 @@ test('r67h budget 4: an import of 100 costs at most 70 requests a plant, and one
   await ctx.close();
 });
 
-test('r67h budget 5: a page load with fewer than 50 changes since the snapshot costs at most 40 requests', { tag: '@chromium' }, async ({ browser }) => {
+test('r67h budget 5: a page load with fewer than 50 changes since the snapshot costs at most 40 requests', chromiumOnly(BUDGET_WHY), async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   await countRequests(ctx);

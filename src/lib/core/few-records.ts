@@ -30,14 +30,18 @@ export const FEW_RECORDS = 12;
 export const FEW_CELLS = 5;
 
 /** The two counts of a climate read from few records, or null when it is not one (or there is no climate). */
-export function fewRecords(c: { status: string; records?: number | null; cells?: number | null } | null | undefined): { records: number; cells: number } | null {
+export function fewRecords(c: { status: string; records?: number | null; cells?: number | null; place?: string | null } | null | undefined): { records: number; cells: number; place?: string } | null {
   if (!c || c.status !== 'ok' || typeof c.records !== 'number' || typeof c.cells !== 'number') return null;
-  return c.records < FEW_RECORDS || c.cells < FEW_CELLS ? { records: c.records, cells: c.cells } : null;
+  // Round eighty-five (G; outside review A5): the typical cell's place, where a build of this round gives it (`climate.place`).
+  return c.records < FEW_RECORDS || c.cells < FEW_CELLS ? { records: c.records, cells: c.cells, ...(c.place ? { place: c.place } : {}) } : null;
 }
 
 /** The mark's sentence, with the counts: what the figures rest on, and the line, never advice. */
-export function fewRecordsSentence(f: { records: number; cells: number }): string {
+export function fewRecordsSentence(f: { records: number; cells: number; place?: string }): string {
   const rec = `${f.records} record${f.records === 1 ? '' : 's'}`;
   const cel = `${f.cells} grid cell${f.cells === 1 ? '' : 's'}`;
-  return `From few records: this habitat climate is read from ${rec} in ${cel}; a page says so under ${FEW_RECORDS} records or ${FEW_CELLS} cells, and shows the figures as read.`;
+  // Round eighty-five (A5): where its cold figures are read, so a grower can see it is one place (Schlumbergera truncata's,
+  // São Paulo, though the plant is of Rio de Janeiro's mountains).
+  const at = f.place ? ` The typical spot, where the cold figures are read, is in ${f.place}.` : '';
+  return `From few records: this habitat climate is read from ${rec} in ${cel}; a page says so under ${FEW_RECORDS} records or ${FEW_CELLS} cells, and shows the figures as read.${at}`;
 }

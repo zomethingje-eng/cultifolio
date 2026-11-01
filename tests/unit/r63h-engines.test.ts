@@ -14,7 +14,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { enginesNamed, CHROMIUM_ONLY, CHROMIUM_ONLY_TITLES } from '../e2e/helpers/engines';
+import { enginesNamed, CHROMIUM_ONLY, CHROMIUM_ONLY_TITLES, chromiumOnly } from '../e2e/helpers/engines';
 
 const root = resolve(__dirname, '../..');
 type Project = { name: string; grep?: RegExp | RegExp[]; grepInvert?: RegExp | RegExp[]; use?: Record<string, unknown> };
@@ -109,7 +109,9 @@ describe('the engines a run names (tests/e2e/helpers/engines.ts)', () => {
  * title on the same line.
  */
 function chromiumUses(): Array<{ file: string; line: number; title: string; tagged: boolean }> {
-  const FEATURE = /newCDPSession|launchPersistentContext|['"]layout-shift['"]|\.pdf\(|\btextSize\(/; // textSize: helpers/text-size.ts, CDP
+  // textSize: helpers/text-size.ts, CDP. Since round eighty-five (Q) also a Chromium launched by name, the coverage API and
+  // the performance entries only Chromium reports (long tasks, the largest paint, the first input).
+  const FEATURE = /newCDPSession|launchPersistentContext|chromium\.launch\b|page\.coverage|['"](?:layout-shift|longtask|largest-contentful-paint|first-input)['"]|\.pdf\(|\btextSize\(/;
   const TEST = /^\s*test(?:\.(?:only|skip|fixme|fail))?\(\s*(['"`])((?:\\.|(?!\1).)*)/;
   const FN = /^(?:export )?(?:async )?function (\w+)|^(?:export )?const (\w+) = (?:async )?\(/;
   const dir = join(root, 'tests', 'e2e');
@@ -137,7 +139,7 @@ function chromiumUses(): Array<{ file: string; line: number; title: string; tagg
         if (i < 0) { out.push({ file, line: n + 1, title: '(outside any test)', tagged: false }); continue; }
         const m = TEST.exec(lines[i])!;
         const raw = m[1] === '`' ? m[2].split('${')[0] : m[2];
-        out.push({ file, line: n + 1, title: raw.replace(/\\(.)/g, '$1'), tagged: /@chromium\b/.test(lines[i]) });
+        out.push({ file, line: n + 1, title: raw.replace(/\\(.)/g, '$1'), tagged: /@chromium\b|\bchromiumOnly\(/.test(lines[i]) });
       }
     });
   }
@@ -161,6 +163,39 @@ describe('Chromium-only tests are kept out of the other engines (H2)', () => {
   it('the pattern matches each listed title as Playwright presents it, and not an ordinary title', () => {
     for (const [t] of CHROMIUM_ONLY_TITLES) expect(CHROMIUM_ONLY.test(`webkit some.spec.ts ${t} and the rest`)).toBe(true);
     expect(CHROMIUM_ONLY.test('webkit smoke.spec.ts round sixty: the front page opens')).toBe(false);
+  });
+});
+
+/**
+ * Every test marked Chromium's alone says why (round eighty-five, Q; outside review A23: r84u-frame's P2 and P3 were
+ * Chromium's with no word of what the iPhone's engine checks instead). A test is marked by `chromiumOnly('reason')`
+ * (tests/e2e/helpers/engines.ts), which tags it and carries its reason into the run's report; a bare `@chromium`, in a
+ * title or a tag, is refused here, as is an empty reason. FAILED on r85base: 18 tests were tagged bare. The merge reads a
+ * test written in a loop's line too (`for (const w of …) test(…)`): r85u-plants-cls's three were tagged bare so.
+ */
+describe('a Chromium-only test says why (A23)', () => {
+  const dir = join(root, 'tests', 'e2e');
+  const marks = readdirSync(dir).filter((f) => f.endsWith('.spec.ts')).flatMap((file) => readFileSync(join(dir, file), 'utf8').split('\n').map((l, i) => ({ file, line: i + 1, l })).filter(({ l }) => /^\s*(?:for \(.*\)\s*)?test(?:\.(?:only|skip|fixme|fail))?\(/.test(l) && (/@chromium\b/.test(l) || /\bchromiumOnly\(/.test(l))));
+  it('finds the marked tests (the reader works)', () => {
+    expect(marks.length).toBeGreaterThanOrEqual(18);
+  });
+  it('each is marked by chromiumOnly with a reason, never by a bare tag', () => {
+    const bare = marks.filter(({ l }) => !/\bchromiumOnly\(\s*(?:'(?:[^'\\]|\\.){20,}|"(?:[^"\\]|\\.){20,}|`[^`]{20,}|[A-Z_]{4,}\))/.test(l));
+    expect(bare.map(({ file, line }) => `${file}:${line}`)).toEqual([]);
+  });
+  it('each named reason is a sentence of its own file', () => {
+    for (const { file, l } of marks) {
+      const name = /\bchromiumOnly\(([A-Z_]{4,})\)/.exec(l)?.[1];
+      if (!name) continue;
+      const src = readFileSync(join(dir, file), 'utf8');
+      expect(new RegExp(`const ${name} = ['"\`][^'"\`]{20,}`).test(src), `${file}: ${name}`).toBe(true);
+    }
+  });
+  it('chromiumOnly tags the test as the projects read it, and carries its reason', () => {
+    const d = chromiumOnly('a reason long enough to read');
+    expect(d.tag).toBe('@chromium');
+    expect(CHROMIUM_ONLY.test(`webkit a.spec.ts a test ${d.tag}`)).toBe(true);
+    expect(d.annotation).toEqual({ type: 'chromium-only', description: 'a reason long enough to read' });
   });
 });
 

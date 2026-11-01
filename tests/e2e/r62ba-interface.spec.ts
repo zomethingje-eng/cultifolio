@@ -11,6 +11,7 @@
  * keep line with the list, the Linux font swap, and no sideways scroll at 320 px with 200% text.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet, framesSettled } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
@@ -185,7 +186,7 @@ test('r62ba grower 5 (guard): "Check again" that is refused again keeps focus on
   await again.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('li.stop .restnc')).toHaveCount(1);
-  await page.waitForTimeout(1500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing may take the focus from Check again
   await expect(again).toBeFocused();
 });
 
@@ -247,7 +248,7 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
     const page = await ctx.newPage();
     await page.goto(path); await ready(page);
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(2000);
+    await goneQuiet(page, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): every shift the page makes is made
     const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
     // Measured on Linux (Liberation and DejaVu, no Arial): 0.148 on the front page and 0.144 on the species page before
     // this round's fallback faces, 0.000 and 0.001 with them.
@@ -271,7 +272,7 @@ for (const path of ['/plants/2026-0001', '/plants/2026-0002', '/species/copiapoa
     rows.push(['accession', 't2', 'acc', '2026-0002'], ['accession', 't2', 'taxonName', 'Copiapoa cf. cinerea'], ['accession', 't2', 'status', 'growing'], ['accession', 't2', 'nameKind', 'species'], ['accession', 't2', 'locationId', 'gh']);
     await seeded(page, rows, path);
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(800);
+    await framesSettled(page);
     const text = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     // The front page's row names (W's `.grow .gname { overflow-wrap: anywhere }`, merged): "Welwitschiaceae" wraps in its column.

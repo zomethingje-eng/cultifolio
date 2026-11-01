@@ -6,6 +6,7 @@
  */
 
 import { lapseSetAside } from '$core/lapse';
+import { readerWords } from './words';
 
 type Up = Record<string, { status: string; detail?: string } | undefined>;
 
@@ -92,7 +93,7 @@ export function namesSource(d: {
   ids: { gbif?: number | null; wikidata?: string };
   name: { vernacular: ReadonlyArray<{ source?: string; name?: string }> };
   upstream: Record<string, { status: string; at?: string; detail?: string } | undefined>;
-}, shown?: readonly string[]): { item: string; day: string; hidden?: string[] } | { unchecked: string } | null {
+}, shown?: readonly string[]): { item: string; day: string; hidden?: string[] } | { unchecked: string; word: string } | null {
   const rec = d.upstream['wikidata.names'];
   const item = /\b(Q\d+)\b/.exec(rec?.detail ?? '')?.[1] ?? d.ids.wikidata;
   const wd = d.name.vernacular.filter((v) => v.source === 'Wikidata');
@@ -103,14 +104,34 @@ export function namesSource(d: {
     return shown.some((n) => own.has(plainName(n))) ? { item, day } : { item, day, hidden: [...new Set(wd.map((v) => String(v.name ?? '')).filter(Boolean))] };
   }
   if (d.ids.gbif != null || rec?.status === 'none' || rec?.status === 'ok') return null;
-  if (!rec) return { unchecked: "Wikidata's common names were not read for this page" };
-  return { unchecked: (rec.detail ?? `Wikidata ${notAnswered(rec.status)}`).replace(/^not (?:checked|asked): /, '') };
+  if (!rec) return { word: 'not read', unchecked: "Wikidata's common names were not read for this page" };
+  // In a reader's words, with one word for one state (round eighty-five; outside review A's 16d and 16g): the build's log
+  // ("carried from build of 2026-10-22 (rederive); that build: not asked: two items carry Kew's IPNI identifier …") said
+  // as what happened. Two items for one plant is "not taken", as the record of sources says it; a skip "not asked".
+  const why = readerWords(rec.detail ?? `Wikidata ${notAnswered(rec.status)}`).replace(/^not (?:checked|asked|taken): /, '');
+  const word = rec.status === 'ambiguous' || /two Wikidata items/.test(why) ? 'not taken' : rec.status === 'skipped' ? 'not asked' : 'not checked';
+  return { word, unchecked: why };
+}
+
+/**
+ * A row of the record of sources as the page shows it (round eighty-five; outside review A's 8, review S's 8). A build
+ * wrote NASA POWER's daily extremes as "nothing to report" wherever it set them aside (`extremesStatus` 'lapse'), though
+ * they were read: 44 years of them on Aloe vera, Cedrus deodara and Eulychnia acida. "Nothing to report" is the one word
+ * the record keeps for an absence, so a source that was read is "answered" here, and `foundNotShown` says what was done
+ * with it; the build's own "; not used: …" clause, which that sentence says again, is left off. Read from the climate the
+ * page shows, so a page built before says it too, and a page whose extremes the rule now keeps reads "answered" plainly.
+ */
+export function registerRow(src: string, u: { status: string; detail?: string; at?: string; asOf?: string }, d: Shown): { status: string; detail?: string; at?: string; asOf?: string } {
+  if (src !== 'climate.extremes' || d.climate?.status !== 'ok') return u;
+  const read = !!d.climate.extremesStatus && ['lapse', 'sea', 'ok'].includes(d.climate.extremesStatus) || !!d.climate.extremesLapse || !!(d.climate as { extremes?: unknown }).extremes;
+  if (u.status !== 'none' || !read) return u;
+  return { ...u, status: 'ok', ...(u.detail ? { detail: u.detail.replace(/; not used: .*$/s, '') } : {}) };
 }
 
 /** What of a dossier the page shows, as `foundNotShown` reads it. */
 type Shown = {
   photos?: ReadonlyArray<{ src?: string }>;
-  climate?: { status?: string; extremesStatus?: string; landFraction?: number; months?: ReadonlyArray<{ tmin: number }>; extremesLapse?: { minAbs: number; lapseAppliedM?: number } };
+  climate?: { status?: string; extremesStatus?: string; landFraction?: number; months?: ReadonlyArray<{ tmin: number }>; extremesLapse?: { minAbs: number; minP01?: number; lapseAppliedM?: number } };
   distribution?: { native?: readonly unknown[]; introduced?: readonly unknown[] };
 };
 
@@ -126,7 +147,7 @@ export function foundNotShown(src: string, u: { status: string; detail?: string 
   if (src === 'gbif.media' && d.photos && !d.photos.some((p) => p.src === 'gbif')) return 'none of the photographs on this page is credited to GBIF: those shown are other sources\', and GBIF\'s were the same photographs or were set aside by the photograph rules';
   if (src === 'climate.extremes' && d.climate?.status === 'ok') {
     if (d.climate.extremesStatus === 'sea') return `read, and set aside: NASA POWER's cell is mostly sea${d.climate.landFraction != null ? ` (${Math.round(d.climate.landFraction * 100)}% land)` : ''}, so no cold floor is shown`;
-    if (d.climate.extremesStatus === 'lapse') { const why = d.climate.months && d.climate.extremesLapse ? lapseSetAside({ months: d.climate.months, extremes: d.climate.extremesLapse }) : null; return `read, and set aside${why ? `: ${why}` : ''}, so no cold floor is shown`; }
+    if (d.climate.extremesStatus === 'lapse') { const why = d.climate.months && d.climate.extremesLapse ? lapseSetAside({ months: d.climate.months, extremes: d.climate.extremesLapse }) : null; return `read, and set aside, so no cold floor is shown${why ? `: ${why}` : ''}`; }
   }
   if (src === 'wcvp.distribution' && d.distribution && !(d.distribution.native ?? []).length && !/no native range/.test(u.detail ?? '')) {
     const n = (d.distribution.introduced ?? []).length;

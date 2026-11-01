@@ -12,7 +12,9 @@
  *
  * Run against a server already up: PW_REUSE=1 PW_PORT=4211 npx playwright test tests/e2e/r67v-example.spec.ts --project chromium
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -80,7 +82,7 @@ test('r67v V3: a second example tab told of another tab\'s Leave, its "Leave sit
   await second.locator('button.add').click();
   await expect(second.locator('#write-error')).toContainText('The example collection was closed in another tab, so nothing more is saved on this page; what you typed is still here to copy.');
   await expect(second.locator('#write-error')).not.toContainText('Free space'); // not a full phone
-  await second.waitForTimeout(1000);
+  await goneQuiet(second); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing more is written, and the page stays
   await expect(second).toHaveURL(/\/plants\/new$/);
   expect(await databases(page)).not.toContain('cultifolio-demo'); // base: re-created, empty, and the plant saved into it
   expect(await page.evaluate(() => [localStorage.getItem('cultifolio.lastLocation'), localStorage.getItem('probe.persist'), localStorage.getItem('cultifolio.persistAfterFirst')])).toEqual(['private-real-location', null, null]); // base: the example's place id, and a persist ask from the example
@@ -104,7 +106,7 @@ test('r67v V3: a Leave answered Cancel where the browser does not say so writes 
   await page.locator('#demo-leave').click(); // "Leave site?" … Cancel, said by nothing for 3 s
   await page.locator('button.add').click();
   await expect(page).toHaveURL(/\/plants\/(?!new)[^/]+$/, { timeout: 20_000 });
-  await page.waitForTimeout(1500);
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing reaches the grower's settings
   expect(await page.evaluate(() => [localStorage.getItem('cultifolio.lastLocation'), localStorage.getItem('probe.persist'), localStorage.getItem('cultifolio.persistAfterFirst'), !!sessionStorage.getItem('cultifolio.demo.lastLocation')])).toEqual(['private-real-location', null, null, true]); // base: the example's place as the grower's, and the persist question asked from the example
   await expect(page.locator('html[data-demo]')).toBeAttached();
 });
@@ -130,7 +132,7 @@ test('r67v V2: an example left by closing its tab, with a plant the visitor adde
   await expect(again.locator('#example-left')).toHaveCount(0);
   const third = await context.newPage();
   await third.goto('/'); await ready(third);
-  await third.waitForTimeout(1500);
+  await goneQuiet(third, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): no offer follows
   await expect(third.locator('#example-left')).toHaveCount(0); // answered "Not now"
   expect(await databases(third)).toContain('cultifolio-demo'); // and still kept
   await again.close(); await third.close();
@@ -168,7 +170,7 @@ for (const [name, setUp] of [
   test(`r67v V4: Today on a device with only ${name} stays the grower's own (S-A2)`, async ({ page }) => {
     await setUp(page);
     await page.goto('/today'); await ready(page);
-    await page.waitForTimeout(1500);
+    await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open over it
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.locator('html[data-demo]')).not.toBeAttached(); // base: the example opened over it
   });
@@ -206,7 +208,7 @@ test('r67v V5: the seed comes with its mark and boundary, a cut-off mark is repa
   // One watering, then Leave: the visitor's line is counted and asked about.
   await page.goto('/today'); await ready(page);
   await page.locator('#water .stop .waterbtn, #water .stop button').first().click();
-  await page.waitForTimeout(500);
+  await goneQuiet(page); // the watering written
   const asked: string[] = [];
   page.on('dialog', (d) => { asked.push(d.message()); void d.accept(); });
   await page.locator('#demo-leave').click();
@@ -260,7 +262,7 @@ test('r67v V6: a copied "?left=sample" link opened beside an example tab deletes
   await intoExample(page);
   const other = await context.newPage();
   await other.goto('/?left=sample'); await ready(other);
-  await other.waitForTimeout(2000);
+  await goneQuiet(other, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): the other tab deletes nothing
   expect(await databases(other)).toContain('cultifolio-demo'); // base: deleted from under the open tab
   await expect(page.locator('#demobar')).not.toContainText('closed in another tab');
   await page.goto('/plants'); await ready(page);
@@ -301,7 +303,7 @@ test('r67v V9: on a phone the welcome\'s lead says what the site is, and the str
   }
 });
 
-test('r67v V10: a returning visitor\'s own line is drawn from the server, so the rows do not move (R45-8) @chromium', async ({ browser, baseURL }) => {
+test('r67v V10: a returning visitor\'s own line is drawn from the server, so the rows do not move (R45-8)', chromiumOnly('a layout-shift reading, which only Chromium reports; r67h engines 4 reads the front page\'s positions every frame in every engine'), async ({ browser, baseURL }) => {
   const ctx: BrowserContext = await browser.newContext({ baseURL, viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
   await ctx.addInitScript(() => {
     localStorage.setItem('cultifolio.welcomed', '1');
@@ -314,7 +316,7 @@ test('r67v V10: a returning visitor\'s own line is drawn from the server, so the
   await page.goto('/'); await ready(page);
   await expect(page.locator('#welcome-after')).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
-  await page.waitForTimeout(1500);
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): every shift is made
   expect(await page.evaluate(() => (window as unknown as { __cls: number }).__cls)).toBeLessThan(0.01); // base: 0.039 at 390
   await ctx.close();
 });

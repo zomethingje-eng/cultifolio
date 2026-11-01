@@ -11,7 +11,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { units } from '$lib/ui/units.svelte';
-  import { site } from '$lib/ui/site.svelte';
+  import { site, SITE_NAME_MAX } from '$lib/ui/site.svelte';
   import { frost } from '$lib/ui/frost.svelte';
   import { theme } from '$lib/ui/theme.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -58,6 +58,7 @@
       return;
     }
     site.set({ lat: +la.toFixed(4), lon: +lo.toFixed(4), name: siteName.trim() || undefined });
+    siteName = site.current?.name ?? ''; // the name as kept, bounded (round eighty-five; A19)
     // The watch reads the new site now: the old site's nights are not this site's, and are not shown meanwhile (round fifty-eight).
     void frost.check(true);
     siteMsg = 'Saved on this device.';
@@ -160,7 +161,7 @@
     <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length}{' '}Until it is set, the first space with coordinates decides the hemisphere for the months; the frost watch here and on the front page needs the site itself, and a space with coordinates is watched on its own page regardless.{/if}</p>
     <!-- Placeholders that read as examples, muted, not as figures already set (round fifty-eight; the grower review). -->
     <div class="fields">
-      <label><span>Name</span><input type="text" bind:value={siteName} placeholder="e.g. home, the greenhouse" /></label>
+      <label><span>Name</span><input type="text" bind:value={siteName} placeholder="e.g. home, the greenhouse" maxlength={SITE_NAME_MAX} /></label>
       <label><span>Latitude (decimal degrees)</span><input id="site-lat" type="text" inputmode="decimal" bind:value={lat} placeholder="e.g. 51.5" /></label>
       <label><span>Longitude (decimal degrees)</span><input id="site-lon" type="text" inputmode="decimal" bind:value={lon} placeholder="e.g. -0.12" /></label>
     </div>

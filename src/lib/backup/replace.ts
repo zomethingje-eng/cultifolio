@@ -86,7 +86,7 @@ export async function replaceThroughStaging(file: ReadBackup, open: () => Promis
     await stage.promote();
     return { changes: changes.length, photos, photosMissing: photosWithoutPixels(file).length };
   } catch (e) {
-    if (!switching) await stage.discard().catch(() => {});
+    if (!switching) await stage.discard().catch(() => { /* the restore's own failure is thrown just below; a staging copy not discarded is wiped by the next open */ });
     throw switching ? new ReplaceBegunError(e) : e;
   }
 }

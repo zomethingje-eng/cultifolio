@@ -54,6 +54,13 @@ export interface Searchable {
   spellings?: string[];
   /** How many photographs the species has: the last tie-break among common names before the alphabet (round sixty-nine; triage-68 N2). */
   photos?: number;
+  /**
+   * How many of iNaturalist's observations are marked captive or cultivated for the species (the species list's count; round
+   * eighty-five, outside review A14): growers' own measure of which species a name means, a tie-break before the
+   * photographs ("saffron" is Crocus sativus, grown 359 times, before Elaeodendron croceum, 65, whose page has more
+   * photographs). Absent in an index built before, and for a page the list does not count: then the photographs decide.
+   */
+  grown?: number;
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -505,6 +512,9 @@ export function relaxedQuery(q: string): string | null {
  * the answer says which letters it read ("Showing results for …").
  */
 export function shorterReadings(q: string): string[] {
+  // Not a nothogenus typed with its sign ("x Gasteraloe", "× Gasteraloe"; round eighty-five, review-s S6): a hybrid genus
+  // the reference does not hold is not a typing error, and its first letters answered Solidago and Salvia.
+  if (/^\s*(?:×|x\s)/i.test(q)) return [];
   const ws = rankedWords(q);
   if (!ws.length || ws.length > 3 || RANK_MARKERS.has(ws[ws.length - 1]) || wholeReading(q) || ws.some((w) => SENTENCE_WORDS.has(w) || RETRY_SMALL.has(w))) return [];
   const last = ws[ws.length - 1];
@@ -512,6 +522,34 @@ export function shorterReadings(q: string): string[] {
   const lens = [...new Set([last.length - 1, last.length - 2, last.length - 3, 4])].filter((n) => n >= 4 && n < last.length);
   return lens.map((n) => [...ws.slice(0, -1), last.slice(0, n)].join(' '));
 }
+
+/**
+ * The genus a misspelt first word means (round eighty-five; review-s S6: "mamilaria" answered Cocos nucifera and
+ * Pelargonium crassicaule, "euforbia obesa" nothing): the one genus of the reference nearest to it, two letters off at
+ * most (one for a word of under seven letters), when no other genus is as near. Null for a word that is a genus, of
+ * under five letters, or near two genera alike. The search route reads the query again with it, and says so.
+ */
+export function nearestGenus(word: string, genera: Iterable<string>): string | null {
+  const w = fold(word).replace(/[^a-z-]/g, '');
+  if (w.length < 5) return null;
+  const cap = w.length >= 7 ? 2 : 1;
+  let at = cap + 1;
+  let near: string[] = [];
+  for (const g of genera) {
+    const x = fold(g);
+    if (x === w) return null;
+    if (Math.abs(x.length - w.length) > cap) continue;
+    const d = distance(w, x, cap);
+    if (d < at) { near = [g]; at = d; } else if (d === at && !near.includes(g)) near.push(g);
+  }
+  if (at > cap || !near.length) return null;
+  if (near.length === 1) return near[0];
+  // Of two as near, the one the word typed is with letters left out ("mamilaria" is Mammillaria with two l and m written
+  // once, where Maxillaria has another letter), when exactly one is.
+  const dropped = near.filter((g) => isSubsequence(w, fold(g)));
+  return dropped.length === 1 ? dropped[0] : null;
+}
+const isSubsequence = (a: string, b: string) => { let i = 0; for (const c of b) if (c === a[i]) i++; return i === a.length; };
 
 /** A name or a query as written, for the tie-break of a name written as typed: folded, apostrophes out, a trailing full stop off, spaces closed up. */
 const typedText = (s: string) => fold(s).replace(APOSTROPHES, '').replace(/\.+\s*$/, '').replace(/\s+/g, ' ').trim();
@@ -902,13 +940,17 @@ function commonTie(p: Prepared<unknown>, qs: string[], typed: string): [number, 
   if (at < 0) at = p.commonNames.findIndex((cn) => holds(cn, qs, commonMatch(EXACT, qs)));
   if (at < 0) at = p.commonNames.length;
   const asTyped = p.commonTexts.includes(typed) ? 0 : 1;
-  return [at, asTyped, -photosOf(p), 0];
+  return [at, asTyped, -grownOf(p), -photosOf(p)];
 }
 /** From how many letters a word typed that several genera answer orders them by their distance from it (`collect`). */
 const GENUS_NEAREST = 4;
 /** The place of a headline another species of its genus holds with more photographs: after every other holder of the name. */
 const SHARED_HEADLINE = 1e6;
 const photosOf = (p: Prepared<unknown>) => { const n = (p.item as Searchable).photos; return typeof n === 'number' ? n : 0; };
+/** How many times growers record the species (`grown`; round eighty-five), 0 where not counted. */
+const grownOf = (p: Prepared<unknown>) => { const n = (p.item as Searchable).grown; return typeof n === 'number' && n > 0 ? n : 0; };
+/** Growers' count first, then the photographs, as one number to compare (the larger the better). */
+const weightOf = (p: Prepared<unknown>) => grownOf(p) * 1e6 + Math.min(photosOf(p), 999_999);
 /** How known a species is, for a genus word's order (`collect`): its English names shown, then its photographs, as one number, the larger the better. */
 function known(e: Searchable): number {
   const names = (e.common ? 1 : 0) + (Array.isArray(e.commons) ? e.commons.length : 0);
@@ -935,8 +977,14 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
   // rose, was not in the first thirty). A name typed as a name keeps its place where its genus is typed whole ("aloe ver"
   // is Aloe vera) or every word typed is a whole word of it; a genus still being typed with no such common name ("echev")
   // is untouched.
+  // A species set back so that holds the words as whole words of a common name of its own is a common names' hit itself,
+  // ranked among them (round eighty-five; review-s S5: "tulip" put every Tulipa after 41 other tulips, since its genus
+  // begins with the word, and Tulipa gesneriana, which holds "Tulip", was 42nd).
   if (!near && hits.some((h) => h.g === Group.Common && h.p.commonNames.some((cn) => qs.every((q) => cn.includes(q))))) {
-    for (const h of hits) if (h.g === Group.Name && h.p.nameWords[0] !== qs[0] && !qs.every((q) => h.p.nameWords.includes(q))) h.g = Group.Common + 0.5;
+    for (const h of hits) if (h.g === Group.Name && h.p.nameWords[0] !== qs[0] && !qs.every((q) => h.p.nameWords.includes(q))) {
+      if (h.p.commonNames.some((cn) => qs.every((q) => cn.includes(q)))) { h.g = Group.Common; h.c = closeness(h.p, qs, Group.Common); h.t = commonTie(h.p, qs, typed); }
+      else h.g = Group.Common + 0.5;
+    }
   }
   // A common name of one word, the query itself, that species of two genera or more are called is no evidence of which
   // was meant, as a generic noun is not (`genericAlone`; round eighty-one, review-c 2: a source calls two Cotoneasters
@@ -968,7 +1016,15 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
     // An older genus typed whole that names none of the reference's (round eighty-four; outside review A8: "Notocactus" and
     // "Neoporteria" answered their species in the alphabet): where every hit holds an older name of that genus, by the genus
     // word's order too, the best known first ("notocactus" is Parodia magnifica, P. leninghausii … before P. alacriportana).
-    else if (!named.length && hits.length > 1 && !hits[0].p.genera.has(qs[0]) && hits.every((h) => h.p.synWords.some((g) => g[0] === qs[0]))) for (const h of hits) h.k = -known(h.p.item as Searchable);
+    // The genus most of them belong to first (round eighty-five; outside review A14: "Sulcorebutia" put Copiapoa
+    // cinerascens first, which holds one stray Sulcorebutia name and more photographs, before the 29 Weingartia that most
+    // of the genus's names now lead to): by how many of the hits each genus holds, then the genus word's order.
+    // Its first four letters or more, still being typed, the same ("sans" is every Dracaena once a Sansevieria).
+    else if (!named.length && hits.length > 1 && !hits[0].p.genera.has(qs[0]) && hits.every((h) => h.p.synWords.some((g) => g[0] === qs[0] || (qs[0].length >= 4 && g[0].startsWith(qs[0]))))) {
+      const size = new Map<string, number>();
+      for (const h of hits) size.set(h.p.nameWords[0], (size.get(h.p.nameWords[0]) ?? 0) + 1);
+      for (const h of hits) h.k = -size.get(h.p.nameWords[0])! * 1e12 - known(h.p.item as Searchable);
+    }
     else if (of.size > 1 && qs[0].length >= GENUS_NEAREST) {
       // A genus of four letters or more still being typed, or misspelt, that several genera answer (round eighty-four;
       // review-s S10: "lithop" listed Lithophragma before Lithops, and "mamillaria", one letter from Mammillaria and from
@@ -991,10 +1047,12 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
     // too; nor Sempervivum marmoreum, "Houseleek", "houseleek" before S. tectorum's "houseleek"; nor four Agaves headed
     // "Century plant" "century plant" before A. americana, headed "Century-plant". Ficus carica, "Fig", leads "fig" as
     // before: no Ficus called so has more photographs.
+    // By growers' count first, then the photographs (`weightOf`; round eighty-five, review-s S5: "baobab" put Adansonia
+    // gregorii, 84 photographs, before A. digitata, "Baobab", 82, which growers record 1,163 times to its 120).
     const best = new Map<string, number>();
     const holdsIt = (p: Prepared<unknown>) => p.commonNames.some((cn) => sameName(cn, qs));
-    for (const h of hits) if (h.g === Group.Common && holdsIt(h.p)) best.set(h.p.nameWords[0], Math.max(best.get(h.p.nameWords[0]) ?? 0, photosOf(h.p)));
-    for (const h of hits) if (h.g === Group.Common && h.c === 0 && photosOf(h.p) < (best.get(h.p.nameWords[0]) ?? 0)) { h.c = 1; h.t[0] = SHARED_HEADLINE; }
+    for (const h of hits) if (h.g === Group.Common && holdsIt(h.p)) best.set(h.p.nameWords[0], Math.max(best.get(h.p.nameWords[0]) ?? 0, weightOf(h.p)));
+    for (const h of hits) if (h.g === Group.Common && h.c === 0 && weightOf(h.p) < (best.get(h.p.nameWords[0]) ?? 0)) { h.c = 1; h.t[0] = SHARED_HEADLINE; }
     // Of the species that hold the name exactly, one whose own headline holds the word too comes before one that holds it
     // only among its other names, whatever the name's place among them (`headlineHolds`; review-s S2): "snowdrop" is
     // Galanthus nivalis, "Common snowdrop", whose plain "Snowdrop" is kept as a spelling only (a generic noun), then the

@@ -28,6 +28,7 @@
  * mark); 13 FAILED ("no rights reserved"); 14 FAILED ("TypeError: n is not a function" in Chromium's run).
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { goneQuiet, framesSettled } from './helpers/settled';
 import * as devalue from 'devalue';
 import { ready } from './helpers/smoke';
 
@@ -70,7 +71,7 @@ test('r82u 1: why GBIF\'s records were not asked is said once, under the name, a
   await noThirdParty(page);
   await page.goto('/species/hesperocyparis-lusitanica'); await ready(page);
   const note = page.locator('#records-unchecked');
-  await expect(note).toContainText(`GBIF's records not checked.`);
+  await expect(note).toContainText(`GBIF's records not asked.`);
   await expect(note.locator('details.why')).toContainText(WHY); // round eighty-four (P7): behind "Why"
   // Under the name card, before the section row.
   expect(await note.evaluate((n) => !!(document.querySelector('.top')!.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(n.compareDocumentPosition(document.querySelector('nav.tabs')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
@@ -80,7 +81,7 @@ test('r82u 1: why GBIF\'s records were not asked is said once, under the name, a
   // Each place made from the records points to it, and does not say "not checked" again (round eighty-four; A10).
   await expect(page.locator('#no-gbif-climate')).toContainText('No habitat climate');
   await expect(page.locator('.note-slot .none')).toContainText('No sheet');
-  await expect(page.locator('#near-not-checked')).toContainText('None to compare');
+  await expect(page.locator('#near-not-checked')).toContainText('Not compared');
   await expect(page.locator('.mapcap').nth(1)).toContainText('No records drawn');
   expect(await page.locator('article a[href="#records-unchecked"]').count()).toBeGreaterThanOrEqual(3);
 });
@@ -92,22 +93,23 @@ test('r82u 2: no Papers section or tab while papers are not asked, and the recor
   await page.locator('details.prov summary').click();
   const row = page.locator('details.prov .row', { hasText: 'OpenAlex papers' });
   await expect(row).toContainText('not asked');
-  await expect(row).toContainText('not yet asked for this reference');
+  await expect(row).toContainText('the reference does not ask OpenAlex for papers'); // round eighty-five (A9f): no fill promised
   // A page that lists papers keeps the section and its tab (guard).
   await page.goto('/species/welwitschia-mirabilis'); await ready(page);
   await expect(page.locator('#s-research')).toHaveText('Papers naming this species');
   await expect(page.locator('a[href="#s-research"]')).toHaveCount(1);
 });
 
-test('r82u 3: the climate chip says none apart from not checked, under every chip @phone', async ({ page }) => {
+// The merge, round eighty-five (review-s S9, A's need): the page without a GBIF key is "not asked", the refused one "not checked".
+test('r82u 3: the climate chip says none apart from not asked and not checked, under every chip @phone', async ({ page }) => {
   await noThirdParty(page);
   for (const q of ['/', '/?chip=climate', '/?chip=noclimate']) {
     await page.goto(q); await ready(page);
     const chip = page.locator('.chiprow a[href*="chip=noclimate"]');
-    await expect(chip).toHaveText(/^No climate,?\s*0,\s*2 not checked$/); // base: "Without climate, 3"
-    await expect(chip).toHaveAttribute('title', /0 with no habitat climate derived, 2 not checked/);
+    await expect(chip).toHaveText(/^No climate,?\s*0,\s*1 not asked, 1 not checked$/); // base: "Without climate, 3"; round 84: "2 not checked"
+    await expect(chip).toHaveAttribute('title', /0 with no habitat climate derived; besides them, 1 not asked, 1 not checked/);
   }
-  await expect(page.locator('.seccount:visible').last()).toContainText('3 species without habitat climate: 0 with none derived, 2 not checked, 1 pending');
+  await expect(page.locator('.seccount:visible').last()).toContainText('3 species without habitat climate: 0 with none derived, 1 not asked, 1 not checked, 1 pending');
 });
 
 test('r82u 4: the close-up map names the page\'s region, with a scale bar and a graticule @phone', async ({ page }) => {
@@ -139,7 +141,7 @@ test('r82u 6: the section row marks the section an address or a tab scrolled to 
   await page.goto('/species/copiapoa-cinerea#s-climate'); await ready(page);
   await expect(page.locator('nav.tabs a.on')).toHaveText('Climate'); // base: Cultivation
   await page.locator('nav.tabs a', { hasText: 'Habitat' }).click();
-  await page.waitForTimeout(1500); // past the 1.2 s the tapped tab is held marked
+  await page.waitForTimeout(1500); // the app's own timer: past the 1.2 s the tapped tab is held marked, which nothing on the page shows the end of
   await page.evaluate(() => window.scrollBy(0, 1));
   await expect(page.locator('nav.tabs a.on')).toHaveText('Habitat'); // base: Climate
 });
@@ -244,12 +246,12 @@ test('r82u 14: compare\'s photographs failing after its columns are drawn again 
   await page.route(/^https:\/\/(?!127\.0\.0\.1)/, async (r: Route) => { await held; await r.abort(); });
   await page.goto('/compare?s=copiapoa-cinerea,hesperocyparis-lusitanica'); await ready(page);
   await page.locator('html[data-collection="open"]').waitFor({ state: 'attached' }).catch(() => {});
-  await page.waitForTimeout(500);
+  await framesSettled(page); // the page drawn with its photographs still held
   release();
   // Each photograph failed is said by its column: no credit under a photograph that is not there (on the base the
   // handler threw before it could say so, and the credits stayed).
   await expect.poll(() => page.locator('.head img').evaluateAll((xs) => xs.every((i) => (i as HTMLImageElement).complete))).toBe(true);
-  await page.waitForTimeout(500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): an error would follow the photographs' arrival
   expect(errors).toEqual([]); // base: ["n is not a function"] in Chromium's build
   await expect(page.locator('.head .cred')).toHaveCount(0);
 });

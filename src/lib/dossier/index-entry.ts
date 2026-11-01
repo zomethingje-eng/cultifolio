@@ -59,6 +59,12 @@ export interface IndexEntry {
   merged?: string[];
   /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
   changed?: number;
+  /**
+   * How many of iNaturalist's observations are marked captive or cultivated for the species, as `scripts/species-list.txt`
+   * counts them by Kew's plant_name_id (round eighty-five; outside review A14): the search's tie-break before the
+   * photographs ("saffron" is Crocus sativus). Absent in an index built before, and for a page the list does not count.
+   */
+  grown?: number;
 }
 
 /** One vernacular name as a dossier holds it (src/lib/dossier/schema.ts `Vernacular`); `preferred`, `sources` and `alsoFrom` are absent in a dossier whose names were fetched before, and read as "not preferred" and "one source". */
@@ -111,6 +117,16 @@ export function olderNamesOf(accepted: string, synonyms: readonly string[] = [])
   // first two words it was the first parent, shown as an older name of the hybrid (k125188 "older name: Mentha aquatica").
   const all = [...new Set(synonyms.filter((s) => !isHybridFormula(s)).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted && !isOwn(x)))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' ')));
   return { syn: all.slice(0, 6), older: all.slice(6).filter((x) => x.split(' ').length === 2) };
+}
+
+/**
+ * A page's own older names for the index (round eighty-five, the owner's decision 6; review-d D1): GBIF's synonyms of
+ * the record and the names GBIF files under the species' varieties (`name.infra`), less those Kew's file places only in
+ * another plant (`name.kew.elsewhere`, written by `--fill kew-names`). `away` is that set, for the count.
+ */
+export function keptNames(name: { synonyms?: readonly string[]; infra?: readonly string[]; kew?: { elsewhere?: readonly string[] } | null }): { own: string[]; infra: string[]; away: ReadonlySet<string> } {
+  const away = new Set(name.kew?.elsewhere ?? []);
+  return { own: (name.synonyms ?? []).filter((s) => !away.has(s)), infra: (Array.isArray(name.infra) ? name.infra : []).filter((s) => typeof s === 'string' && !away.has(s)), away };
 }
 
 /**
@@ -258,9 +274,17 @@ const FOREIGN_LETTER = /(?![\p{Script=Latin}\p{Script=Common}\p{Script=Inherited
  * whatever their accents ("Northern rātā", "ʻōhiʻa"): which language a name in it is cannot be read from its letters.
  */
 export function latinName(name: string): string | null {
-  const t = name.trim().replace(/\s*(?:(?![\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}[\p{M}]*)+\s*$/u, '').trim();
-  return t && !FOREIGN_LETTER.test(t) ? t : null;
+  // A modifier letter left at the end is a slip of the source, not a letter of the name ("Wild Bell Appleˌ"; round
+  // eighty-five, review-s S12); one at the start stays ("ʻōhiʻa").
+  const t = name.trim().replace(/\s*(?:(?![\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}[\p{M}]*)+\s*$/u, '').replace(/[\p{Lm}\p{Sk}]+$/u, '').trim();
+  return t && !FOREIGN_LETTER.test(t) && !NOT_ENGLISH.test(t) ? t : null;
 }
+/**
+ * The Latin alphabet's letters that modern English spelling does not use (round eighty-five; review-s S12: Icelandic
+ * "Ætihvönn" on Angelica archangelica, "Garðabrúða" on Valeriana officinalis, given as English names): eth, thorn and
+ * ash. A name in which one stands is another language's. A Danish ø in a person's name ("Holbøll's Rockcress") stays.
+ */
+const NOT_ENGLISH = /[ðÐþÞæÆ]/u;
 
 /**
  * Single words that name a kind of plant, not a species: shown only when no source gives a fuller name, as a bare genus
@@ -409,16 +433,29 @@ export function oneWordNames(vernacular: VernacularName[]): Map<string, number> 
  * "Rose" on a Cotoneaster is the search's to set back (`$core/search`), and "Sycamore" names a maple in Britain and a plane
  * in America. By page key, the names lost, sorted; a page that loses none is not listed.
  */
-export function sharedHeadlines(pages: Iterable<{ key: string; genus: string; names: ReadonlyMap<string, number> }>): Map<string, string[]> {
+export function sharedHeadlines(pages: Iterable<{ key: string; genus: string; names: ReadonlyMap<string, number>; grown?: number }>): Map<string, string[]> {
+  const all = [...pages];
   const by = new Map<string, Array<{ key: string; n: number }>>();
-  for (const p of pages) for (const [k, n] of p.names) { const id = `${foldWord(p.genus)} ${k}`; const xs = by.get(id); if (xs) xs.push({ key: p.key, n }); else by.set(id, [{ key: p.key, n }]); }
+  for (const p of all) for (const [k, n] of p.names) { const id = `${foldWord(p.genus)} ${k}`; const xs = by.get(id); if (xs) xs.push({ key: p.key, n }); else by.set(id, [{ key: p.key, n }]); }
   const out = new Map<string, string[]>();
+  const lose = (key: string, k: string) => { const l = out.get(key) ?? []; if (!l.includes(k)) l.push(k); out.set(key, l); };
   for (const [id, xs] of by) {
     if (xs.length < 2) continue;
     const max = Math.max(...xs.map((x) => x.n));
     const winners = xs.filter((x) => x.n === max);
     const k = id.slice(id.indexOf(' ') + 1);
-    for (const x of xs) if (winners.length > 1 || x.n < max) { const l = out.get(x.key) ?? []; l.push(k); out.set(x.key, l); }
+    for (const x of xs) if (winners.length > 1 || x.n < max) lose(x.key, k);
+  }
+  // Across genera (round eighty-five; review-d D13: "Beet" headed Patellifolia procumbens, once Beta procumbens, beside
+  // Beta vulgaris; "Chestnut" Pochota fendleri, where Castanea is the chestnut): a one-word name a species of another
+  // genus is given more often, and that growers grow more (`grown`, the species list's count), is that species'; both must
+  // say so, so a name each genus has its own claim to ("Sycamore", a maple in Britain and a plane in America; "Pawpaw")
+  // is taken from neither on one count alone, and a tie takes nothing away.
+  const across = new Map<string, Array<{ key: string; genus: string; n: number; g: number }>>();
+  for (const p of all) for (const [k, n] of p.names) { const xs = across.get(k); const x = { key: p.key, genus: foldWord(p.genus), n, g: p.grown ?? 0 }; if (xs) xs.push(x); else across.set(k, [x]); }
+  for (const [k, xs] of across) {
+    if (new Set(xs.map((x) => x.genus)).size < 2) continue;
+    for (const x of xs) if (x.g > 0 && xs.some((y) => y.genus !== x.genus && y.n > x.n && y.g > x.g)) lose(x.key, k);
   }
   for (const l of out.values()) l.sort();
   return out;
@@ -648,7 +685,7 @@ function recordTexts(n: string, synonyms: readonly string[]): { formula: boolean
  * the index given is not changed, so the photograph judgement reads the names it read before. `pages`: entries
  * changed; `names`: names moved; `kept`: names the record holds by the other page's own author, left as older names.
  */
-export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn' | 'older' | 'hom' | 'homBy'>>(index: readonly E[], recordOf: (key: E['key']) => { authorship?: string | null; synonyms?: readonly string[] | null } | undefined): { index: E[]; pages: number; names: number; kept: number } {
+export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn' | 'older' | 'hom' | 'homBy'> & { kew?: string[] }>(index: readonly E[], recordOf: (key: E['key']) => { authorship?: string | null; synonyms?: readonly string[] | null } | undefined): { index: E[]; pages: number; names: number; kept: number } {
   const accepted = new Map<string, E>();
   for (const e of index) { const k = plainOf(e.name); if (!accepted.has(k)) accepted.set(k, e); }
   let pages = 0, names = 0, kept = 0;
@@ -668,6 +705,13 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
     };
     const syn = (e.syn ?? []).filter((n) => !moved(n));
     const older = (e.older ?? []).filter((n) => !moved(n));
+    // Kew's older names spelt as another page's accepted name too (round eighty-five; outside review A9c: Acacia
+    // linearifolia's row said "older name: Acacia adunca", Kew's Acacia adunca Maiden, while Acacia adunca A.Cunn. ex G.Don
+    // has its page): Kew files the other author's name here, so it is another author's name, said as one. Kew's list
+    // carries no author, and Kew never files a name under one entry and accepts it by the same author as another.
+    const kewHom = (e.kew ?? []).filter((n) => { const o = accepted.get(plainOf(n)); return !!o && o.key !== e.key && !hom.includes(n); });
+    for (const n of kewHom) { hom.push(n); homBy.push([]); names++; }
+    const kew = (e.kew ?? []).filter((n) => !kewHom.includes(n));
     if (!hom.length) return e;
     pages++;
     // In the entry's own order, `hom` and `homBy` where `older` was (or after `syn`), so a rebuilt index differs only there.
@@ -679,6 +723,7 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
       if (k === 'older') { if (older.length) o.older = older; place(); continue; }
       if (k === 'hom' || k === 'homBy') continue;
       if (k === 'kew' || k === 'merged' || k === 'changed' || k === 'near') place();
+      if (k === 'kew') { if (kew.length) o.kew = kew; continue; }
       o[k] = v;
     }
     place();

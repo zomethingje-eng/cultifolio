@@ -86,7 +86,7 @@ export function speciesDescription(h: HeadInput, u: Units = METRIC): string {
   }
   const has = [h.native ? 'native range' : '', h.photos ? 'photographs' : '', h.summary ? 'a quoted, credited Wikipedia summary' : ''].filter(Boolean);
   // `unchecked`: a page without a GBIF key, whose records were not asked (round seventy-nine; `$core/no-gbif`).
-  const state = c.status === 'pending' ? 'habitat climate pending' : c.status === 'refused' || c.status === 'unchecked' ? 'habitat climate not checked' : '';
+  const state = c.status === 'pending' ? 'habitat climate pending' : c.status === 'refused' ? 'habitat climate not checked' : c.status === 'unchecked' ? 'habitat climate not asked' : ''; // round eighty-five (S9): the glossary's two words
   const lead = `${h.name.scientific}${h.name.family ? `, ${h.name.family}` : ''}`;
   const body = has.length ? `${and(has)}, ${has.length === 1 ? 'with its source' : 'each with its source'}` : 'names and registers, each with its source';
   return clip(`${lead}: ${body}${state ? `; ${state}` : ''}.`, 155);

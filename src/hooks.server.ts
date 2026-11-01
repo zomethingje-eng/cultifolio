@@ -204,7 +204,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     copy.headers.set('cache-control', `public, max-age=${PAGE_CACHE_S}`);
     copy.headers.delete('vary');
     r.headers.set('x-cultifolio-page', 'rendered');
-    const put = cache.put(key, copy).catch(() => {});
+    const put = cache.put(key, copy).catch(() => { /* the page is answered whatever: a copy not kept is rendered again on the next request */ });
     if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(put);
     else await put;
   }

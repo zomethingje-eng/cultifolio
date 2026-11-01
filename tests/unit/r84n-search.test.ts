@@ -152,10 +152,12 @@ describe('through the search route: fewer letters, said (S10)', () => {
   beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {}); });
   afterEach(() => vi.restoreAllMocks());
 
-  it('"lithops lesleyi", two letters off, answers Lithops lesliei, read from "lithops lesle" (one letter from "leslie")', async () => {
+  // Round eighty-five (N; review-s S6): a reading of fewer letters answers only as written, so "lithops lesle", one letter
+  // from "leslie", is passed for "lithops lesl", the start of Lithops lesliei's own epithet.
+  it('"lithops lesleyi", two letters off, answers Lithops lesliei, read from "lithops lesl"', async () => {
     const a = await ask('lithops lesleyi');
     expect(a.hits[0]?.name).toBe('Lithops lesliei');
-    expect(a.relaxed?.query).toBe('lithops lesle');
+    expect(a.relaxed?.query).toBe('lithops lesl');
   });
   it('"sanseveria", one letter off, answers as before, with no fewer letters read (guard)', async () => {
     const a = await ask('sanseveria');

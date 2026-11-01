@@ -41,12 +41,25 @@ export class InfraNames {
   }
   /** How many usages below species the first pass found. */
   get usages(): number { return this.infra.size; }
-  /** A page's names, sorted, without its own name and the names its record holds already; empty when none. */
+  /**
+   * A page's names, sorted, without its own name and the names its record holds already; empty when none. A name is held
+   * when the record holds it as a binomial: the first two words of a name below species are not held (round eighty-five;
+   * outside review A11: "Trichocereus pachanoi f. peruvianus" made "Trichocereus pachanoi" held, and San Pedro's own
+   * name was left out of the page's names, so the add form said it was no older name).
+   */
   of(page: number, own: { scientific: string; synonyms?: readonly string[] }): string[] {
     const plain = (n: string) => n.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const held = new Set([own.scientific, ...(own.synonyms ?? [])].map((s) => plain(s.split(' ').slice(0, 2).join(' '))));
+    const held = new Set([own.scientific, ...(own.synonyms ?? [])].flatMap((s) => { const b = binomialOf(s); return b ? [plain(b)] : []; }));
     return [...(this.names.get(page) ?? [])].filter((n) => n.split(' ').length === 2 && !held.has(plain(n))).sort();
   }
+}
+
+/** A stored name's binomial ("Trichocereus pachanoi" of "Trichocereus pachanoi Britton & Rose"), or null for a name below species ("Trichocereus pachanoi f. peruvianus (Britton & Rose) F.Ritter") or what is not a name. */
+export function binomialOf(s: string): string | null {
+  const w = s.replace(/×\s*/g, '').trim().split(/\s+/);
+  if (w.length < 2 || !/^[A-Z][a-z-]+$/.test(w[0]) || !/^[a-z][a-z-]+$/.test(w[1])) return null;
+  if (/^(?:subsp|ssp|var|subvar|f|fo|forma|nothosubsp|nothovar|proles)\.?$/.test(w[2] ?? '')) return null;
+  return `${w[0]} ${w[1]}`;
 }
 
 /** A line of the export (tab-separated, no header) as a `BackboneRow`; null for a line of another kingdom or one that does not read. Columns as `scripts/backbone-load.ts` reads them. */

@@ -6,7 +6,6 @@
  * r82base: the text ended "…specta" and nothing said more followed.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { summary } from '$dossier/sources/wikipedia';
 import { firstSentences } from '$core/text';
 import type { JsonFetcher } from '$dossier/fetch';
@@ -39,6 +38,7 @@ describe('the summary is cut where a sentence ends', () => {
     expect(firstSentences(s(3), 4)).toEqual({ text: s(3), more: false });
     expect(firstSentences(s(4), 4)).toEqual({ text: s(4), more: false });
     expect(firstSentences('Opuntia stricta subsp. dillenii grows here. Another sentence follows.', 1)).toEqual({ text: 'Opuntia stricta subsp. dillenii grows here.', more: true });
-    expect(readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8')).toContain('{#if excerpt?.more || d.summary.cut}');
+    // The page's link for a cut text: tests/unit/r85q-species-page.test.ts mounts the page with a cut summary and finds it
+    // (round eighty-five; this read the page's source, outside review A23).
   });
 });

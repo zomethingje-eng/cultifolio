@@ -10,6 +10,9 @@ import type { Climate } from '$dossier/schema';
 
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import type { ClimateProvider } from '$dossier/build';
+import type { Admission } from '$dossier/tdwg-shapes';
+/** The reasons a record is in range, best first (`Admission`): a cell keeps its best record's. */
+const ADMISSIONS: ReadonlyArray<Admission> = ['strict', 'buffer', 'coast', 'island'];
 import type { GridSource } from './source';
 import { decodeCell, cellOf, cellCentre, type ClimateVar } from './grid';
 import { fetchPowerSeries, extremesFor, powerCell, type PowerSeries } from './power';
@@ -158,19 +161,21 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       // One read per distinct cell: a site visited a hundred times is one cell of climate, not a hundred votes. The cell is
       // known by its centre, never by a record's coordinate: a restricted record's position is not published, and the
       // typical cell's position on the page is the cell's, which any record in it shares.
-      const byCell = new Map<string, { lat: number; lon: number; n: number }>();
-      for (const [lat, lon] of points) {
+      // Each cell keeps the best reason one of its records is in range by (round eighty-five; A23): strict before the margin,
+      // the margin before the coast reach, the coast reach before an island.
+      const byCell = new Map<string, { lat: number; lon: number; n: number; how: Admission }>();
+      for (const [lat, lon, how = 'strict'] of points) {
         const c = cellOf(h, lat, lon);
         const e = byCell.get(c.id);
-        if (e) e.n++;
-        else byCell.set(c.id, { ...cellCentre(h, c.row, c.col), n: 1 });
+        if (e) { e.n++; if (ADMISSIONS.indexOf(how) < ADMISSIONS.indexOf(e.how)) e.how = how; }
+        else byCell.set(c.id, { ...cellCentre(h, c.row, c.col), n: 1, how });
       }
-      const read: Array<{ id: string; lat: number; lon: number; n: number; months: Month[]; elevationM?: number }> = [];
+      const read: Array<{ id: string; lat: number; lon: number; n: number; how: Admission; months: Month[]; elevationM?: number }> = [];
       let sea = 0;
       try {
         for (const [, p] of byCell) {
           const c = await readCell(p.lat, p.lon);
-          if (c) read.push({ ...c, lat: p.lat, lon: p.lon, n: p.n });
+          if (c) read.push({ ...c, lat: p.lat, lon: p.lon, n: p.n, how: p.how });
           else sea++;
         }
       } catch (e) {
@@ -186,15 +191,20 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       // 5° S is one climate, not two, and round thirty-one's rule split it and threw half its range away: round
       // thirty-three, 8). When the smaller side has three such cells and a fifth of them, its poleward cells are left
       // out, the split is recorded, and the page says so; the equatorial cells stay in whichever way (round thirty-one, 1).
+      // Round eighty-five (G; review D8): whenever both sides hold such cells, however few on the smaller side. Round
+      // thirty-one split only at three cells and a fifth; below that the smaller side's cells stayed in the median and could
+      // be the typical cell, so 39 pages showed months of one hemisphere and a typical spot in the other (Physalis viscosa:
+      // the spot 20.8° N, the coldest month July). A side's calendar is one calendar.
       const northPole = read.filter((c) => c.lat >= 10), southPole = read.filter((c) => c.lat <= -10);
       const sided = northPole.length + southPole.length;
       const minor = Math.min(northPole.length, southPole.length);
       let hemispheres: ClimateOk['hemispheres'];
       let used = read;
-      if (minor >= 3 && minor >= 0.2 * sided) {
+      if (minor >= 1) {
         const useNorth = northPole.length >= southPole.length;
         used = read.filter((c) => (useNorth ? c.lat > -10 : c.lat < 10));
         hemispheres = { north: northPole.length, south: southPole.length, used: useNorth ? 'north' : 'south', equatorial: read.length - sided }; // the cells within 10° of the equator, which stay in (round thirty-five, R2-5)
+        if (used.length < 3) return { status: 'none', detail: `only ${used.length} distinct land cell${used.length === 1 ? '' : 's'} of the climate grid on the ${useNorth ? 'north' : 'south'}ern side of the equator hold${used.length === 1 ? 's' : ''} an in-range record placed to within 10 km (${northPole.length} poleward of 10° north, ${southPole.length} poleward of 10° south: the two sides' seasons are not combined); three are needed for an envelope` };
       }
       const records = used.reduce((a, c) => a + c.n, 0); // the records in the cells the envelope reads, not every in-range record (round thirty-three, 4)
       const years = used.map((c) => c.months);
@@ -234,7 +244,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
-      return { status: 'ok', cells: used.length, records, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, ...(hemispheres ? { hemispheres } : {}), ...(sea ? { seaCells: sea } : {}), landFraction: r2(landFraction), src };
+      const admitted = { strict: 0, buffer: 0, coast: 0, island: 0 };
+      for (const c of used) admitted[c.how]++;
+      const edge = used.filter((c) => c.how !== 'strict').map((c) => [+c.lat.toFixed(3), +c.lon.toFixed(3), c.how] as [number, number, Exclude<Admission, 'strict'>]);
+      return { status: 'ok', cells: used.length, records, cell: typical.id, ...(points.some((p) => p[2]) ? { admitted, ...(edge.length ? { edge } : {}) } : {}), at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, ...(hemispheres ? { hemispheres } : {}), ...(sea ? { seaCells: sea } : {}), landFraction: r2(landFraction), src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.

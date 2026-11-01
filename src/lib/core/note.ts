@@ -45,7 +45,7 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const from: string[] = [];
   const items: Array<{ lead: string; rule: string }> = [];
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
-  const why = input.climateStatus === 'unchecked' ? "the habitat climate was not checked (GBIF's records were not asked for this name)" : input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
+  const why = input.climateStatus === 'unchecked' ? "the habitat climate was not asked for (GBIF's records were not asked for this name)" : input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
   if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)}, ${arch.why}${year ? '.' : `; ${why}.`}`);
   if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: "growers' groups" });
   else if (!year) items.push({ lead: `${why[0].toUpperCase()}${why.slice(1)}.`, rule: 'the dossier' });
@@ -69,7 +69,8 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
 export function careParts(input: SheetInput, o: NoteOpts = {}): string[] {
   // A climate that was not checked (the source refused when the page was built) is said so, never printed as the blank a
   // species with no climate gets: the label follows the same refusal rule as the pages (round fifteen, 5).
-  if (input.climateStatus === 'refused' || input.climateStatus === 'unchecked') return ['climate not checked'];
+  if (input.climateStatus === 'refused') return ['climate not checked'];
+  if (input.climateStatus === 'unchecked') return ['climate not asked']; // GBIF's records not asked (round eighty-five, S9: the glossary's word)
   if (input.climateStatus === 'pending') return ['climate pending']; // a build still to run is not a refusal (round fifty-two, 6)
   const { rows, year } = cultivationSheet(input);
   if (!rows.length) return [];
@@ -99,7 +100,7 @@ export function careParts(input: SheetInput, o: NoteOpts = {}): string[] {
     const nightUnchecked = !input.extremes;
     // Named as the pages name it, with its rate and source: "hab. night" read as a typical habitat night (round sixty-two;
     // visitor-words 4, outside review A3).
-    if (fl.habitat != null && !nightUnchecked) bits.push(`floor ${temp(fl.habitat, input.units ?? METRIC, 1)} (1 in 100, NASA POWER)`);
+    if (fl.habitat != null && !nightUnchecked) bits.push(`floor ${temp(fl.habitat, input.units ?? METRIC, 1)} (1\u00a0in\u00a0100, NASA POWER)`); // non-breaking: the label's line never breaks inside "1 in 100" (the merge, round eighty-five; review-w W12)
   }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   // With its source, as the floor has its own (round sixty-two, second pass; the words review's 27, rule 1).

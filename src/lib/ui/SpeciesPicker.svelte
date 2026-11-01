@@ -16,7 +16,8 @@
   import { parseName, speciesNotStated } from '$core/names';
   import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
-  import { mergedOf, mergedSentence, olderNameOf, homonymOf } from '$lib/ui/ref/searched';
+  import { mergedSentence } from '$lib/ui/ref/searched';
+  import { localRow, olderLine, offeredReading, genusReading, type PickerRow } from '$lib/ui/picker-rows';
   import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick, rankedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
@@ -30,13 +31,21 @@
   // `merged`: a reference row found by the name of a page merged into it, which the search lists first for that name (round eighty-three).
   // `older`: a reference row found by one of its older names, which the row says, as the catalogue's row does; `hom`, by
   // the name of its record under another author (round eighty-four; review-s S8).
-  type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string; merged?: string; older?: string; hom?: { name: string; text: string } };
+  // Round eighty-five: the rows and the older-name line are read by `$lib/ui/picker-rows`, tested over real index entries.
+  type Sugg = PickerRow;
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** Bumped on every keystroke: a search or exact check answers only if it is still the latest, so a slow answer for text since changed never replaces the menu (round eighteen, B2). */
   let reqGen = 0;
   let resolved = $state<'yes' | 'no' | 'unknown' | 'unreached'>('unknown');
+  /**
+   * Where the key in `taxonKey` came from: a pick, the reference's own row, GBIF's name service, or the form (a link's key,
+   * a draft). The reference's key wins over the name service's for a name the reference heads, whichever answered first
+   * (round eighty-five; review-c C2: "Hoodia alstonii" was filed under GBIF's synonym key 5525665 whenever the search was
+   * slower than the leave's check, and the plant opened with an amber "key differs" notice).
+   */
+  let keyFrom: 'pick' | 'ref' | 'names' | null = null;
   // Said to the form: a name that nothing resolved (not a reference name, or the service did not answer) is not filed on
   // one click; the form arms first, as Enter does here, so a half-typed name in a greenhouse without signal is not a plant (round twenty-three, 4).
   $effect(() => { unresolved = !taxonKey && (resolved === 'no' || resolved === 'unreached'); });
@@ -75,6 +84,7 @@
     open = false;
     hi = -1;
     resolved = 'unknown';
+    keyFrom = null;
     keyless = false;
     readAsCultivar = null;
   });
@@ -87,7 +97,18 @@
   const focused = () => !!root && typeof document !== 'undefined' && root.contains(document.activeElement);
   const uid = $props.id();
   const listId = `species-menu-${uid}`;
-  const menuOpen = $derived(open && suggestions.length > 0);
+  /**
+   * The rows the list shows: every suggestion, or, when the name typed is the first row's own (a page of the reference),
+   * only the rows of that name (round eighty-five; review-p P5: with "Crassula ovata" typed, the list of six covered the
+   * next three fields, and a tap meant for Acquired picked its fourth row). The rest come back with the next letter.
+   */
+  const rows = $derived.by(() => {
+    const want = parseName(value).scientific;
+    const first = suggestions[0];
+    if (!first?.local || first.similar || !want || !sameName(first.name, want)) return suggestions;
+    return suggestions.filter((x) => sameName(x.name, want));
+  });
+  const menuOpen = $derived(open && rows.length > 0);
   const optionId = (i: number) => `${listId}-${i}`;
 
   type Row = { key: number; canonicalName?: string; scientificName?: string; family?: string; rank?: string; status?: string };
@@ -101,11 +122,15 @@
   class GbifRefused extends Error {}
 
   let lastRows: { q: string; rows: Promise<Row[]> } | null = null;
+  /** How long the name service is waited for. */
+  const NAMES_WAIT_MS = 10_000;
   function namesFor(q: string): Promise<Row[]> {
     if (lastRows && lastRows.q === q) return lastRows.rows;
     // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
     // The build in the URL, so the adapter's cache does not answer a new build with the old one's (round sixty-seven; S7).
-    const rows = fetch(`/api/names?q=${encodeURIComponent(q)}&v=${encodeURIComponent(version)}`).then(async (r) => {
+    // Ten seconds at most, as every reference request waits (round eighty-five; outside review A13): a half-open connection
+    // held Add's check for as long as the browser kept the request, and the name service is never what the check needs first.
+    const rows = fetch(`/api/names?q=${encodeURIComponent(q)}&v=${encodeURIComponent(version)}`, { signal: AbortSignal.timeout(NAMES_WAIT_MS) }).then(async (r) => {
       // A call the site refused or held back is said as that, with the server's own reason, not as a silence (round
       // sixty-one; the server review, 4; round sixty-two: the server review, 1 and 7; A8): a 400 is what is typed, a 429
       // this address's part (held or not), a held 503 the site's minute.
@@ -140,14 +165,17 @@
    * already answered (round eighty-four; review-c C2: the name service's answer filled the list, the reference's search was
    * still out, and Add armed "Add as typed" for a name the reference holds).
    */
-  let current: { q: string; gen: number; done: Promise<void> } | null = null;
+  // `ref` settles when the reference's own search has answered and been read, `names` when the name service has: the check
+  // before a plant is filed awaits the reference's alone, and the name service only for a name the reference does not
+  // settle (round eighty-five; outside review A13: Add waited for GBIF's answer, with no timeout, behind the reference's).
+  let current: { q: string; gen: number; ref: Promise<void>; names: Promise<void> } | null = null;
   /** `quiet`: asked by the form's check, under a press; it never opens the list (outside review A22). */
   function search(q: string, quiet = false): Promise<void> {
-    const done = runSearch(q, quiet); // its first step, synchronous, takes the next generation
-    current = { q, gen: reqGen, done };
-    return done;
+    const run = runSearch(q, quiet); // its first step, synchronous, takes the next generation
+    current = { q, gen: reqGen, ...run };
+    return Promise.all([run.ref, run.names]).then(() => undefined);
   }
-  async function runSearch(q: string, quiet: boolean) {
+  function runSearch(q: string, quiet: boolean): { ref: Promise<void>; names: Promise<void> } {
     const gen = ++reqGen;
     const live = () => gen === reqGen;
     const p = reparse(q);
@@ -167,7 +195,6 @@
     // index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
     // Both asked at once (round forty, R2-3): the reference's own suggestions and the name service are independent, and a
     // slow catalogue search must not hold the backbone's answer for its ten seconds.
-    const typedGenus = (needle.split(/\s+/)[0] ?? '').toLowerCase();
     let local: Sugg[] = [];
     let remote: Sugg[] = [];
     let genusRows: Sugg[] = [];
@@ -185,7 +212,7 @@
       if (shape && !exact.length && (g || refGenus)) genus = [{ key: g?.key ?? -1, name: g?.name ?? shape.genus, family: g?.family, rank: 'GENUS', asCultivar: shape.rest }];
       const listed = [...exact, ...exactRemote, ...genus, ...local.filter((l) => l.similar)];
       suggestions = [...listed, ...remote.filter((x) => !listed.some((l) => l.key === x.key))];
-      if (hi >= suggestions.length) hi = -1;
+      if (hi >= rows.length) hi = -1;
       open = !quiet && focused();
     };
     hi = -1;
@@ -205,37 +232,34 @@
       // An answer by a similar spelling says so on each row (round sixty-two; A7, B2).
       const hits = Array.isArray(answer) ? answer : [];
       const relaxed = Array.isArray(answer) && 'relaxed' in answer ? answer.relaxed?.query : undefined;
-      const words = (s: string) => s.trim().split(/\s+/).slice(0, 2).join(' ');
-      const species = q.trim().split(/\s+/).length >= 2 ? words(cleanTyped(q)) : '';
       refGenus = !!shape && !!relaxed && sameName(relaxed, shape.genus);
-      const similar = Array.isArray(answer) && 'near' in answer && answer.near === true;
+      const similar = (Array.isArray(answer) && 'near' in answer && answer.near === true) || genusReading(relaxed, q);
       // Its first two words are the genus and epithet typed, whatever the reading left out after them: a pasted label
       // ("Lithops lesliei (N.E.Br.) N.E.Br. subsp. lesliei var. lesliei C001 Kimberley") was answered "Lithops lesliei
       // subsp. lesliei …", which was not offered, though the catalogue lists Lithops lesliei first (round eighty-four;
-      // review-s S9).
-      const offered = !relaxed || (relaxed.trim().split(/\s+/).length >= 2 && !!species && sameName(words(relaxed), species));
+      // review-s S9); or the genus typed and the start of the epithet, the server's reading of a misspelt epithet
+      // ("lithops lesleyi"; round eighty-five, review-s S7). `offeredReading`.
+      const offered = offeredReading(relaxed, q);
       // A row's key is the GBIF key a plant files (round seventy-eight): the page's `gbif`, never its id.
       // A row found by an older name, or by the name of its record under another author, says so, as the catalogue's
-      // row does (round eighty-four; review-s S8: "Haworthia fasciata" offered "Aloe humilis · has a species page,
-      // under another genus", with nothing to say it was reached by "Haworthia fasciata subsp. armata").
-      local = (offered ? hits : []).map((e) => {
-        const merged = similar ? null : mergedOf(text, e);
-        const older = similar || merged ? null : olderNameOf(text, e);
-        const hom = similar || merged || older ? null : homonymOf(text, e as Found & { homBy?: string[][] });
-        return { key: e.gbif ?? -1, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))), ...(merged ? { merged } : {}), ...(older ? { older } : {}), ...(hom ? { hom } : {}) };
-      });
+      // row does (round eighty-four; review-s S8). "Under another genus" only for a row not found by a common name
+      // (round eighty-five; review-s S7). `localRow`.
+      local = (offered ? hits : []).map((e) => localRow(text, e as Found & { homBy?: string[][] }, similar));
       show();
       // The reference answered after the field's check had concluded (a leave, or Enter, before this answer, with the name
       // service silent), or after the grower had left the field (a leave within the search's 180 ms, whose check this
       // search made stale): a name typed in full that the reference holds is resolved by it now, as the check would have.
       // Otherwise the field said "Not a reference name. Did you mean Copiapoa cinerea?" of Copiapoa cinerea, or nothing,
       // and the line arriving moved Add under the press (round sixty-six; the all-engines run, r60 12 in Firefox; rule 2).
-      if (!taxonKey && !keyless && (resolved === 'no' || resolved === 'unreached' || (resolved === 'unknown' && !root?.contains(document.activeElement)))) {
+      // And a key the name service gave for a name the reference heads is the reference's now (round eighty-five;
+      // review-c C2): the reference's own key wins, whichever answered first.
+      const fromNames = !!taxonKey && keyFrom === 'names';
+      if ((!taxonKey || fromNames) && !keyless && (fromNames || resolved === 'no' || resolved === 'unreached' || (resolved === 'unknown' && !root?.contains(document.activeElement)))) {
         const exact = local.find((s) => !s.similar && sameName(s.name, p.scientific));
         // A page without a GBIF key (round seventy-nine) resolves the name and files no key: there is none to file.
         // And the button's "Add as typed" goes with the line that asked for it: the name is the reference's (round
         // eighty-four; review-c C2).
-        if (exact) { taxonKey = exact.key > 0 ? exact.key : null; keyless = exact.key <= 0; resolved = 'yes'; armed = false; }
+        if (exact && !readAsCultivar) { taxonKey = exact.key > 0 ? exact.key : null; keyFrom = 'ref'; keyless = exact.key <= 0; resolved = 'yes'; armed = false; }
       }
     });
     // Rows the name service answered: the species part asked; for a genus followed by capitalised words with no species
@@ -265,7 +289,7 @@
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
       if (live()) { nameServiceDown = true; nameRefusal = e instanceof Refused ? e.message : null; gbifRefused = e instanceof GbifRefused; } // offline: local suggestions only, and said
     });
-    await Promise.all([indexP, namesP]);
+    return { ref: indexP, names: namesP };
   }
 
   /** The grower has typed in the field: the full room for the check's words is kept from then on. */
@@ -279,6 +303,7 @@
     ownValue = value;
     reqGen++;
     taxonKey = null;
+    keyFrom = null;
     keyless = false;
     received = null;
     readAsCultivar = null;
@@ -300,15 +325,32 @@
     reparse(value);
     readAsCultivar = null;
     taxonKey = key;
+    keyFrom = 'pick';
     keyless = key == null;
     resolved = 'yes';
     armed = false;
     open = false;
     hi = -1;
   }
+  /**
+   * The search for the text in the field, asked now if none is out for it (a leave within the keystroke's 180 ms, or a
+   * press): it never opens the list. The reference's part, to be awaited.
+   */
+  function searchNow(): Promise<void> {
+    if (!(current && current.q === value && current.gen === reqGen)) { clearTimeout(timer); void search(value, true); }
+    return current!.ref;
+  }
+  /**
+   * The name settled before it is filed, as the leave and the press ask: the reference's own search first, whatever has
+   * answered already, so a name the reference heads takes its key (round eighty-five; review-c C2: a leave's check took the
+   * name service's key while the search was still out); then the name service, waited for at most ten seconds, only for
+   * a name the reference does not settle (outside review A13).
+   */
   async function checkExact() {
-    if (taxonKey || keyless || value.trim().length < 4) return;
+    if ((taxonKey && keyFrom !== 'names') || keyless || value.trim().length < 4) return;
+    await searchNow();
     const gen = reqGen;
+    if ((taxonKey && keyFrom !== 'names') || keyless) return; // the reference's answer settled it meanwhile
     const p = parseName(value);
     // A reference name typed in full resolves from the reference's own index, with or without the name service: the
     // greenhouse case (round twenty-three, 4).
@@ -316,21 +358,27 @@
     if (local) {
       // A page without a GBIF key (round seventy-nine): the name stands, and no key is filed.
       taxonKey = local.key > 0 ? local.key : null;
+      keyFrom = 'ref';
       keyless = local.key <= 0;
       resolved = 'yes';
+      armed = false; // an Enter that armed for a name nothing had answered yet: the reference holds it
       return;
     }
+    if (taxonKey) return; // the name service's key, for a name the reference does not head
     try {
       // An exact spelling among the suggestions resolves the name; a genus-only name (a hybrid, a cultivar of unstated parentage) resolves at genus rank.
       // The question asked is the search's (`requestName`): a species typed with a capitalised epithet is asked about,
       // and never called "not in the backbone" unasked (round sixty-two; the verification review's search 4).
       const rows = await namesFor(requestName(value));
       if (gen !== reqGen) return; // the field changed while this was asked
+      if (taxonKey || keyless) return; // the reference's late answer settled it while the name service was asked
       const m = rows.find((x) => (sameName(x.canonicalName ?? x.scientificName ?? '', p.scientific) || sameName(rankedName(x.canonicalName ?? x.scientificName ?? '', x.rank), p.scientific)) && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));
       const shape = cultivarRest(value);
       if (m) {
         taxonKey = m.key;
+        keyFrom = 'names';
         resolved = 'yes';
+        armed = false;
       } else if (shape) {
         // No species of that name: a genus followed by capitalised words is the genus with a cultivar, when the genus is
         // one (the backbone's, or the reference's genus row), and the field says so before Add files it ("Echeveria
@@ -345,6 +393,7 @@
         reqGen++;
         readAsCultivar = shape.genus;
         taxonKey = genusRow?.key ?? null;
+        keyFrom = 'names';
         keyless = !genusRow;
         resolved = 'yes';
         armed = true;
@@ -359,53 +408,75 @@
     // A pick that filed no key on purpose stands as picked; a cross, and a cultivar whose species is not stated, are filed
     // under the genus with nothing to ask (round eighty-four; review-w W5).
     if (kind === 'hybrid' || keyless || speciesNotStated(parseName(value))) return !readAsCultivar || !armed;
+    // A key a pick, the reference or the link gave stands, with nothing to ask.
+    if (taxonKey && keyFrom !== 'names') return !readAsCultivar || !armed;
     clearTimeout(timer);
     // The search for this text: the one out, awaited whatever has answered already, or a new one, which never opens the
-    // list under the press (round eighty-four; review-c C2, outside review A22).
-    if (value.trim()) await (current && current.q === value && current.gen === reqGen ? current.done : search(value, true));
+    // list under the press (round eighty-four; review-c C2, outside review A22). A key the name service gave while it was
+    // out gives way to the reference's (round eighty-five; review-c C2).
+    if (value.trim()) await searchNow();
     await checkExact();
     // A name the check has just read as the genus and a cultivar is shown before it is filed: the next Add files it.
     if (readAsCultivar && armed) return false;
     return !!taxonKey || resolved === 'yes';
   }
   /**
-   * For the form, before a name the field resolved is filed: when it is an older name of a page of the reference, the
-   * first press asks, as an unknown name does, and the line says which page (round eighty-four; review-w W6: "Aloe
-   * aristata", which GBIF keeps as a synonym with a key, was filed at once with no species page). True when it asked.
-   * Never for a name that came with the link and was not typed.
+   * For the form, before a name the field resolved is filed: when it is an older name of a page of the reference, or the
+   * name of a page merged into one, the first press asks, as an unknown name does, and the line says which page (round
+   * eighty-four; review-w W6: "Aloe aristata", which GBIF keeps as a synonym with a key, was filed at once with no species
+   * page). True when it asked. Never for a name that came with the link and was not typed, and never for a name the
+   * reference heads (round eighty-five; review-s S1, review-p P2: `olderLine`).
    */
   export async function olderFirst(): Promise<boolean> {
     if (!typed || armed || !value.trim()) return false;
-    if (current && current.q === value && current.gen === reqGen) await current.done;
+    if (current && current.q === value && current.gen === reqGen) await current.ref; // the reference's answer alone (outside review A13)
     if (!olderRow) return false;
     armed = true;
     return true;
+  }
+  /**
+   * The page the line named, when the grower files the name as typed after it: the form carries it into the plant's record
+   * (`olderOf`), so the plant's page says it at once (round eighty-five; outside review A16a: the plant page said "No
+   * species page under this name" right after the form had said whose older name it is). Null when no line was shown.
+   */
+  export function olderAnswer(): string | null {
+    return olderRow?.name ?? null;
   }
   /**
    * What a row says beyond its name and rank (round sixty-two; A7, B3): a similar spelling as that; a reference row
    * whose pick would file no key as "compared species is in the reference; no key filed"; a genus offered for a
    * cultivar as the cultivar kept; any other row with no key to file as that.
    */
-  function rowNote(s: Sugg): string {
-    if (s.asCultivar) return ` · '${s.asCultivar}' kept as the cultivar${s.key > 0 ? '' : '; no key filed'}`;
-    if (s.similar) return s.far ? ' · similar spelling, another genus' : ' · similar spelling';
+  /**
+   * What a row says beyond its name and rank, `shown` on the screen and `sr` to a screen reader only (round eighty-five;
+   * outside review A16g: every reference row ended "· has a species page", which a list headed "Species pages" says once).
+   */
+  function rowNote(s: Sugg): { sr: string; shown: string } {
+    const said = (shown: string) => ({ sr: '', shown });
+    if (s.asCultivar) return said(` · '${s.asCultivar}' kept as the cultivar${s.key > 0 ? '' : '; no key filed'}`);
+    if (s.similar) return said(s.far ? ' · similar spelling, another genus' : ' · similar spelling');
     const keyed = s.key > 0 && filesKey(value, s);
     // "Compared" is the wording of "cf." and "aff."; a variety or a cultivar typed after its species is that species' own
     // (round sixty-two; the grower review, 9).
     const q = parseName(value).qualifier;
     const compared = q === 'cf.' || q === 'aff.' || q === 'nr.' || q === 'vel aff.';
-    // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that.
+    const page = { sr: ' · has a species page' };
     // A row found by the name of a page merged into it says so, as the catalogue's row does (round eighty-three).
-    if (s.local && s.merged) return ` · ${mergedSentence(s.merged)}${keyed ? '' : '; no key filed'}`;
+    if (s.local && s.merged) return { ...page, shown: ` · ${mergedSentence(s.merged)}${keyed ? '' : '; no key filed'}` };
     // Why the row is offered, when it is by an older name or another author's (round eighty-four; review-s S8).
-    if (s.local && (s.older || s.hom)) return ` · has a species page; ${s.older ? `older name: ${s.older}` : `older name under another author: ${s.hom!.text}`}${keyed ? '' : '; no key filed'}`;
-    if (s.local && s.key <= 0 && !compared && sameName(s.name, parseName(value).scientific)) return s.far ? ' · has a species page, under another genus, with no GBIF key; no key filed' : ' · has a species page, with no GBIF key; no key filed';
-    if (s.local) return keyed ? (s.far ? ' · has a species page, under another genus' : ' · has a species page') : compared ? ' · compared species is in the reference; no key filed' : ' · its species is in the reference; no key filed';
+    if (s.local && (s.older || s.hom)) return { ...page, shown: ` · ${s.older ? `older name: ${s.older}` : `older name under another author: ${s.hom!.text}`}${keyed ? '' : '; no key filed'}` };
+    // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that, whenever a
+    // pick files its own name, typed in full or not (round eighty-five; review-s S7: "Echinopsis cuzcoensis · its species
+    // is in the reference" was said of the page that is the species).
+    if (s.local && s.key <= 0 && !compared && filesKey(value, s)) return { ...page, shown: s.far ? ' · under another genus, with no GBIF key; no key filed' : ' · with no GBIF key; no key filed' };
+    if (s.local) return keyed ? { ...page, shown: s.far ? ' · under another genus' : '' } : said(compared ? ' · compared species is in the reference; no key filed' : ' · its species is in the reference; no key filed');
     // GBIF's name service's row of a name whose reference page holds no GBIF key looked the same as that page's row
     // (round eighty, A's need; the desktop review's 4): it says where it is from, and that the page holds no key.
-    if (s.key > 0 && suggestions.some((x) => x.local && x.key <= 0 && sameName(x.name, s.name))) return ` · GBIF's name service, key ${s.key}; the species page of this name holds no GBIF key${keyed ? '' : '; no key filed'}`;
-    return keyed ? '' : ' · no key filed';
+    if (s.key > 0 && suggestions.some((x) => x.local && x.key <= 0 && sameName(x.name, s.name))) return said(` · GBIF's name service, key ${s.key}; the species page of this name holds no GBIF key${keyed ? '' : '; no key filed'}`);
+    return said(keyed ? '' : ' · no key filed');
   }
+  /** The heading over a run of rows from one source: the reference's pages, or GBIF's names (outside review A16g). */
+  const sourceOf = (s: Sugg) => (s.local ? 'page' : 'gbif');
   // The two services' silences, each in its own words: a refusal as "not asked", a failure as "did not answer" (rule 2).
   const namesSaid = $derived(nameServiceDown ? (gbifRefused ? "GBIF refused this site's request for names. " : nameRefusal ? `The name service was not asked: ${nameRefusal}. ` : 'The name service did not answer. ') : '');
   /** Why the reference's own search gave no rows, as a clause with no full stop. */
@@ -425,13 +496,17 @@
   // The page whose older name is the very name typed comes first, under whatever genus (round eighty-four; review-w W6:
   // "Aloe aristata" is an older name of Aristaloe aristata, and the line said only "Did you mean").
   const olderOfTyped = (x: Sugg) => x.local && sameName(x.older ?? x.hom?.name ?? '', parseName(value).scientific);
-  const nearest = $derived(!taxonKey && (resolved === 'no' || resolved === 'unreached') ? (suggestions.find(olderOfTyped) ?? suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
   /**
-   * The reference's page of which the name typed is an older name, said whether or not the name service knows the name
-   * (it keeps "Aloe aristata" as a synonym, with a key of its own): a plant filed under it had no species page and no
-   * word of Aristaloe aristata (round eighty-four; review-w W6). Not once that page is picked.
+   * The reference's page of which the name typed is an older name, or into which the page of that name was merged, said
+   * whether or not the name service knows the name (it keeps "Aloe aristata" as a synonym, with a key of its own): a plant
+   * filed under it had no species page and no word of Aristaloe aristata (round eighty-four; review-w W6). Not once that
+   * page is picked. Never for a name the reference heads, nor for another author's name of the same spelling (round
+   * eighty-five; review-s S1, review-p P2): Aloe vera, Crassula ovata and Echeveria elegans were each called "an older name
+   * of" a page that holds the same spelling by another author, and the first press of Add was taken to say so.
    */
-  const olderRow = $derived(resolved === 'unknown' ? undefined : suggestions.find((x) => olderOfTyped(x) && !sameName(x.name, parseName(value).scientific)));
+  const older = $derived(resolved === 'unknown' ? undefined : olderLine(suggestions, parseName(value).scientific));
+  const olderRow = $derived(older?.row);
+  const nearest = $derived(!taxonKey && (resolved === 'no' || resolved === 'unreached') ? (olderRow ?? suggestions.find(olderOfTyped) ?? suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
   function onBlur(e: FocusEvent) {
     // Focus moving inside the picker (a click on a row) is not a leave.
     if (e.relatedTarget instanceof Node && root?.contains(e.relatedTarget)) return;
@@ -479,12 +554,57 @@
     addEventListener('pointerdown', down, true);
     return () => { removeEventListener('pointerdown', down, true); undo?.(); };
   });
+  /**
+   * The list's height, bounded by what is seen of the window under the field and by any bar pinned over the page's foot
+   * (the add form's Add bar, the tab bar; `data-cover="bottom"`), so no row runs under one (round eighty-five; outside
+   * review A16b: with a phone's keyboard up, five of seven rows were under the pinned Cancel and Add). Measured while the
+   * list is open, again when the window or the visual viewport changes size or scrolls. At least one row; never more than
+   * the list's own 18 rem.
+   */
+  let menuEl = $state<HTMLUListElement | null>(null);
+  let room = $state<number | null>(null);
+  function measureRoom() {
+    const input = root?.querySelector('input');
+    if (!input || !menuEl) return;
+    const r = input.getBoundingClientRect();
+    const vv = window.visualViewport;
+    let bottom = vv ? vv.offsetTop + vv.height : innerHeight;
+    for (const bar of document.querySelectorAll<HTMLElement>('[data-cover="bottom"]')) {
+      if (root?.contains(bar) || bar.contains(root)) continue;
+      const pos = getComputedStyle(bar).position;
+      if (pos !== 'fixed' && pos !== 'sticky') continue;
+      const b = bar.getBoundingClientRect();
+      if (b.height <= 0 || b.top <= r.bottom || b.right <= r.left || b.left >= r.right) continue;
+      bottom = Math.min(bottom, b.top);
+    }
+    const most = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) * 18;
+    const row = 44;
+    room = Math.round(Math.max(row, Math.min(most, bottom - r.bottom - 10)));
+  }
+  $effect(() => {
+    if (!menuOpen) { room = null; return; }
+    void rows.length;
+    measureRoom();
+    let frame = 0;
+    const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measureRoom(); }); };
+    addEventListener('resize', soon);
+    addEventListener('scroll', soon, true);
+    window.visualViewport?.addEventListener('resize', soon);
+    window.visualViewport?.addEventListener('scroll', soon);
+    return () => {
+      removeEventListener('resize', soon);
+      removeEventListener('scroll', soon, true);
+      window.visualViewport?.removeEventListener('resize', soon);
+      window.visualViewport?.removeEventListener('scroll', soon);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  });
   function onKey(e: KeyboardEvent) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!suggestions.length) return;
+      if (!rows.length) return;
       open = true;
-      const n = suggestions.length;
+      const n = rows.length;
       hi = hi < 0 ? (e.key === 'ArrowDown' ? 0 : n - 1) : (hi + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
       document.getElementById(optionId(hi))?.scrollIntoView({ block: 'nearest' });
       return;
@@ -500,16 +620,28 @@
     if (e.key !== 'Enter') return;
     if (menuOpen && hi >= 0) {
       e.preventDefault();
-      pick(suggestions[hi]);
+      pick(rows[hi]);
       return;
     }
     // Enter never submits from this field. The exact spelling of a suggestion is a pick; anything else is asked about.
     e.preventDefault();
     if (taxonKey || keyless || !value.trim()) return;
     const want = parseName(value).scientific;
-    const exact = suggestions.find((s) => !s.similar && sameName(s.name, want));
-    if (exact) {
+    const exactIn = () => suggestions.find((s) => s.local && !s.similar && sameName(s.name, want)) ?? suggestions.find((s) => !s.similar && sameName(s.name, want));
+    const exact = exactIn();
+    if (exact?.local) {
       pick(exact);
+      return;
+    }
+    // Only the name service's row is spelt so: the reference's own search for this text is awaited first, and its row
+    // picked when it holds the name (round eighty-five; review-c C2: GBIF's synonym key was filed for Kew's heading).
+    if (exact) {
+      const typedNow = value;
+      void searchNow().then(() => {
+        if (value !== typedNow || taxonKey || keyless) return;
+        const now = exactIn();
+        if (now) pick(now);
+      });
       return;
     }
     open = false;
@@ -540,10 +672,14 @@
     onfocus={() => { if (value) open = true; }}
     onblur={onBlur}
   />
-  <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
-    {#each suggestions as s, i (s.key > 0 ? s.key : `${s.local ? 'page' : 'row'}:${s.rank ?? ''}:${s.name}`)}
+  <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen} bind:this={menuEl} style:max-height={room != null ? `${room}px` : undefined}>
+    {#each rows as s, i (s.key > 0 ? s.key : `${s.local ? 'page' : 'row'}:${s.rank ?? ''}:${s.name}`)}
+      {@const note = rowNote(s)}
+      <!-- A heading where the rows' source changes, so a row need not say it (round eighty-five; outside review A16g). Hidden
+           from a screen reader, which reads each row's own words, "has a species page" among them. -->
+      {#if i === 0 || sourceOf(rows[i - 1]) !== sourceOf(s)}<li class="grp" role="presentation" aria-hidden="true" onmousedown={(e) => e.preventDefault()}>{s.local ? 'Species pages' : "GBIF's names"}</li>{/if}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : /\s(?:(?:notho)?(?:var|subsp)|f|nothof)\.\s/.test(s.name) ? '' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{rowNote(s)}</span></li>
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : /\s(?:(?:notho)?(?:var|subsp)|f|nothof)\.\s/.test(s.name) ? '' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{#if note.sr}<span class="sr">{note.sr}</span>{/if}{note.shown}</span></li>
     {/each}
   </ul>
   </div>
@@ -551,10 +687,10 @@
        the pill and the line arrived a second after the field was left and moved "Use my own number" and Add by up to
        120 px, so a tap begun before the answer landed on nothing (round sixty-seven; triage-66 P10, S-E2, decision D5). -->
   <div class="status" bind:this={statusEl} class:held={held != null} style:height={held ? `${held.h}px` : undefined} style:margin-top={held ? held.m : undefined}>
-  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if keyless}<span class="pill">no key filed</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone{nearest ? '' : ', kept as typed'}</span>{:else if resolved === 'unreached'}<span class="pill warn">{nameRefusal ? 'name service not asked' : 'name service not reached'}{nearest ? '' : ', kept as typed'}</span>{/if}
+  {#if taxonKey}<span class="pill ok" title="Filed under GBIF's key {taxonKey}, the number GBIF's backbone gives this name">GBIF {taxonKey}</span>{:else if keyless}<span class="pill">no key filed</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone{nearest ? '' : ', kept as typed'}</span>{:else if resolved === 'unreached'}<span class="pill warn">{nameRefusal ? 'name service not asked' : 'name service not reached'}{nearest ? '' : ', kept as typed'}</span>{/if}
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar{notStated ? ', species not stated' : ''}</span>{/if}
   <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
-  {#if olderRow}<p class="hint" id={armed ? `${listId}-hint` : undefined} role="status">An older name of <button type="button" class="linkish" onclick={() => pick(olderRow)}><SpeciesName name={olderRow.name} /></button>, which has a species page: pick it, or {armed ? `press “${addLabel}” to keep` : 'Add keeps'} exactly what you typed.</p>
+  {#if olderRow}<p class="hint" id={armed ? `${listId}-hint` : undefined} role="status">{older?.why === 'merged' ? 'Its page was merged into ' : 'An older name of '}<button type="button" class="linkish" onclick={() => pick(olderRow)}><SpeciesName name={olderRow.name} /></button>, which has a species page: pick it, or {armed ? `press “${addLabel}” to keep` : 'Add keeps'} exactly what you typed.</p>
   {:else if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
   {:else if readAsCultivar && armed}<p class="hint" id="{listId}-hint" role="status">No species of that name was found, so it is read as the genus <i>{readAsCultivar}</i> with a cultivar. Press Add to keep it, or change the name.</p>
   {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press {addLabel === 'Add' ? 'Add' : `“${addLabel}”`} to keep exactly what you typed.</p><!-- the button's own words: it reads "Add as typed" by then (round eighty; the desktop review's 11) -->
@@ -593,4 +729,7 @@
   .menu[hidden] { display: none; }
   .menu li { display: block; width: 100%; text-align: left; padding: 0.45em 0.6em; border-radius: var(--r-sm); cursor: pointer; }
   .menu li:hover, .menu li.hi { background: var(--sunk); }
+  /* The source's heading: small, and never a target. */
+  .menu li.grp { padding: 0.35em 0.6em 0.1em; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); cursor: default; }
+  .menu li.grp:hover { background: none; }
 </style>

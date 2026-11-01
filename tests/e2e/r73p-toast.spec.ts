@@ -48,7 +48,7 @@ test('r73p toast 2: a toast raised well before an unrelated navigation still goe
   await page.getByRole('button', { name: 'Yes, remove 2026-0001' }).click();
   await expect(page).toHaveURL(/\/plants$/);
   await expect(page.locator('.toast')).toContainText('2026-0001 removed.');
-  await page.waitForTimeout(1200); // the toast is older than 600 ms when the next navigation begins
+  await page.waitForTimeout(1200); // the app's own rule: the toast is older than 600 ms when the next navigation begins
   await page.locator('a.accrow', { hasText: '2026-0002' }).click();
   await expect(page).toHaveURL(/2026-0002/);
   await expect(page.locator('.toast .undo')).toHaveCount(0);

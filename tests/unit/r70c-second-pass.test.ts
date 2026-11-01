@@ -114,7 +114,8 @@ describe('C7: GBIF media of a preserved specimen ranks below Commons (R47-10)', 
     expect(heroOf([sheet, commons])?.src).toBe('commons');
     expect(heroOf([{ ...sheet, url: 'https://collections.nmnh.si.edu/media/?i=10348276&h=2000' }, commons])?.src).toBe('commons');
     expect(heroOf([{ ...sheet, url: 'https://example.org/a.jpg', specimen: true }, commons])?.src).toBe('commons');
-    expect(heroOf([{ ...sheet, url: 'https://bs.plantnet.org/image/o/6b88' }, commons])?.src).toBe('gbif'); // guard: an observation's photograph
+    // guard: an observation's photograph, with a stated size (round eighty-five, A9g: one without yields to a Commons file that states one)
+    expect(heroOf([{ ...sheet, url: 'https://bs.plantnet.org/image/o/6b88', width: 1200, height: 900 }, commons])?.src).toBe('gbif');
   });
 });
 

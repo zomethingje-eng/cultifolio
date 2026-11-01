@@ -9,6 +9,7 @@
  *
  * Run against a server already up: PW_REUSE=1 npx playwright test tests/e2e/r63fv-front.spec.ts
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
 import { inject } from './helpers/inject';
 
@@ -39,7 +40,7 @@ test('r63fv front 1: one strip at every width, and the photographs it fetches ar
   }
 });
 
-test('r63fv front 2: a photograph\'s placeholder prints dark on white in the dark theme', { tag: '@chromium' }, async ({ page }) => {
+test('r63fv front 2: a photograph\'s placeholder prints dark on white in the dark theme', chromiumOnly('the photographs are refused by a route with the service worker running, which only Chromium\'s worker network lets a route see; r67h engines 2 is this check in every engine'), async ({ page }) => {
   // Every outside photograph refused, so the strip draws its placeholders.
   await page.route((u) => !/^https?:\/\/(127\.0\.0\.1|localhost)/.test(u.href), (r) => r.abort());
   await page.emulateMedia({ colorScheme: 'dark' });

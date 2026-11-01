@@ -14,10 +14,15 @@ export type Disclosure = { file: string; cls: string; at: string; sel: string; u
 export const DISCLOSURES: Disclosure[] = [
   // /about/how's lists of rules in full (round eighty-four): four of the sources' rules, six of the privacy section's.
   ...[0, 1, 2, 3].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'more', at: 'how', sel: `details.more >> nth=${n}` })),
-  ...[0, 1, 2, 3, 4, 5].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full', at: 'how', sel: `details.full >> nth=${n}` })),
+  ...[0, 1, 2, 3, 4, 5].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full', at: 'how', sel: `details.full:not(.in-full) >> nth=${n}` })),
+  // Each section's rules or format in full, one tap away (round eighty-five, A; S11): 34 on /about/how, 13 on /about/formats.
+  ...Array.from({ length: 34 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
+  ...Array.from({ length: 13 }, (_, n) => ({ file: 'src/routes/about/formats/+page.svelte', cls: 'full in-full', at: 'formats', sel: `details.full.in-full >> nth=${n}` })),
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=0' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why howmade', at: 'species', sel: 'details.why.howmade' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'figures', at: 'species', sel: 'details.figures' },
+  // The phone's one folded line of the other names and the classification (round eighty-five, E; B3, P3): drawn under 641 px.
+  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'pmore', at: 'species-narrow', sel: 'details.pmore' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why', at: 'species', sel: 'details.why:not(.howmade) >> nth=0' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why', at: 'species', sel: 'details.why:not(.howmade) >> nth=1' },
   { file: 'src/lib/ui/Provenance.svelte', cls: 'prov', at: 'species', sel: 'details.prov' },

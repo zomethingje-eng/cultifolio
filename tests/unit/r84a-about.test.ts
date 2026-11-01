@@ -133,8 +133,9 @@ describe('3. every link into the about pages lands on an id', () => {
 });
 
 describe('4. every search example the pages quote is what the search answers (S4)', () => {
-  /** The live index's entries for every example, as read on 2026-10-29 (`/api/index`), the names a typed query reaches. */
-  const IDX = JSON.parse(raw('tests/unit/fixtures/r84a-search-examples.json')) as IndexEntry[];
+  /** The index's entries for every example, the names a typed query reaches: since round eighty-five (S4, A21) the fixture
+   *  `scripts/about-examples.ts` makes again from the index at each `--index`, no longer one frozen on 2026-10-29. */
+  const IDX = (JSON.parse(raw('tests/unit/fixtures/about-search-examples.json')) as { entries: IndexEntry[] }).entries;
   const examples = PAGES.flatMap((p) => [...raw(FILE[p]).matchAll(/<span class="ex" data-q="([^"]+)" data-order="([^"]+)"( data-first)?>([^<]*)<\/span>/g)].map((m) => ({ p, q: m[1], order: m[2].split(' | '), first: !!m[3], said: m[4] })));
   function bucket(m: Map<string, string>) {
     const obj = (k: string) => ({ text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${k}:${m.get(k)!.length}"`, body: m.get(k)! });
@@ -215,11 +216,11 @@ describe('5. the counts: the live reference, or a named day (S4, A18)', () => {
   });
   it('the page says the day of the counts it carries, and the counts it carries are that day\'s index', () => {
     expect(raw(FILE.how)).toContain('<p class="counts" id="counts">');
-    expect(COUNTS_ON.on).toBe('29 October 2026');
-    // The live index of 29 October 2026, as the reviews read it (/tmp/claude-0/rev84r/inputs/index.json): 48,357 pages, 6,529 genera, 37,727 with a climate.
-    expect([COUNTS_ON.species, COUNTS_ON.genera, COUNTS_ON.withClimate]).toEqual([48_357, 6_529, 37_727]);
-    // And the few-records count, which the index does not hold, is said as of that day.
-    expect(aboutText('how')).toContain('On the reference of 29 October 2026, 4,839 of the 37,727 pages with a climate were marked so');
+    // Since round eighty-five the counts are those of the index the examples' fixture was made from, written beside it
+    // (`scripts/about-examples.ts`), and the few-records count, which no index holds, is no longer said as of a day gone.
+    const fx = JSON.parse(raw('tests/unit/fixtures/about-search-examples.json')) as { made: string; counts: { species: number; genera: number; withClimate: number } };
+    expect([COUNTS_ON.species, COUNTS_ON.genera, COUNTS_ON.withClimate]).toEqual([fx.counts.species, fx.counts.genera, fx.counts.withClimate]);
+    expect(aboutText('how')).not.toMatch(/On the reference of \d+ \w+ 2026, [\d,]+ of the [\d,]+ pages with a climate/);
   });
 });
 
@@ -268,12 +269,13 @@ describe('7. the sentences the reviews found stale, and NOTICE (S4, D6, A18, A20
     expect(how).toContain("so this is a check that the weather cell's nights and the habitat's months disagree");
     expect(how).toContain('Neither of these two checks proves that either source is wrong.');
   });
-  it('the 14 pages under GBIF\'s keys are said as of their day (A18: "15 pages")', () => {
-    expect(how).toContain("Pages whose names Kew's checklist does not place keep GBIF's key (14 on 29 October 2026).");
+  it('the pages under GBIF\'s keys are counted from the index, as of its day (A18: "15 pages"; round eighty-five)', () => {
+    expect(raw(FILE.how)).toContain('There were {countText(COUNTS_ON.gPages)} such pages on {COUNTS_ON.on}.');
   });
   it('NOTICE names every source the pages name, with its licence and a link to each licence\'s text (A20)', () => {
     const notice = raw('NOTICE');
-    for (const s of ['GBIF Backbone Taxonomy', 'World Checklist of Vascular Plants', 'CHELSA', 'ETOPO 2022', 'NASA POWER', 'Natural Earth', 'Wikidata', 'iNaturalist', 'Wikimedia Commons', 'Wikipedia', 'OpenAlex', 'TDWG', 'MET Norway', 'National Weather Service']) expect(notice, s).toContain(s);
+    // OpenAlex left the list in round eighty-five: no page lists papers (S4).
+    for (const s of ['GBIF Backbone Taxonomy', 'World Checklist of Vascular Plants', 'CHELSA', 'ETOPO 2022', 'NASA POWER', 'Natural Earth', 'Wikidata', 'iNaturalist', 'Wikimedia Commons', 'Wikipedia', 'TDWG', 'MET Norway', 'National Weather Service']) expect(notice, s).toContain(s);
     for (const l of ['https://creativecommons.org/licenses/by/4.0/', 'https://creativecommons.org/licenses/by-sa/4.0/', 'https://creativecommons.org/publicdomain/zero/1.0/']) expect(notice).toContain(l);
     expect(notice).toMatch(/CC BY-NC records are read for derived\s+figures/);
     // The sources' table on /about/how links each Creative Commons licence it names (CC BY-NC aside: nothing is published under it).

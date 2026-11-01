@@ -377,7 +377,7 @@ export class Counters extends DurableObject {
   private async mirror(key: string, value: unknown, expiration: number): Promise<void> {
     const kv = (this.env as { QUEUE?: KVNamespace } | undefined)?.QUEUE;
     if (!kv?.put) return;
-    await kv.put(key, JSON.stringify(value), { expiration }).catch(() => {});
+    await kv.put(key, JSON.stringify(value), { expiration }).catch(() => { /* a copy for the operator to read; the record itself is the object's own storage */ });
   }
   /**
    * A fault the Worker wants the operator to hear of, counted by kind for the UTC day (`e:<day>` → { kind: count }), kept
@@ -659,7 +659,7 @@ export class Counters extends DurableObject {
         }
       } catch (e) {
         console.error("counters: a vault's meta could not be marked reclaimed; its place is kept until the next sweep", e);
-        await this.fault('reclaim', now).catch(() => {});
+        await this.fault('reclaim', now).catch(() => { /* already said on the line above; a fault not counted only leaves the operator's tally one short */ });
       }
     }
     return out;

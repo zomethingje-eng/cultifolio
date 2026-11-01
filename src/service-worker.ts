@@ -7,19 +7,23 @@
  * network; what a fresh navigation in a greenhouse with no signal needs is
  * the HTML and scripts to read it with. So: the build's assets and the
  * collection pages are cached at install, and served cache-first (they are
- * immutable per build). Species pages and dossiers are network-first with a
- * cache fallback, so a page you have opened stays readable when the signal
- * goes; one you have never opened does not, and the page says so rather
- * than spinning. Sync and photo APIs are never cached.
+ * immutable per build). Species pages are network-first with a cache
+ * fallback, so a page you have opened stays readable when the signal goes;
+ * one you have never opened does not, and the page says so rather than
+ * spinning. An update reads the species pages you had opened again, so they
+ * stay readable after it (`carryOver`). The reference's entries and sheet
+ * buckets are kept by corpus. Sync and photo APIs are never cached, and
+ * neither is a dossier: `/api/dossier/` answers `no-store`, and no page asks
+ * for one (a plant's page reads its species from the sheet buckets).
  */
 import { build, files, version } from '$service-worker';
-import { pruneOnActivate, sweepPrevious, capCache, isSpeciesEntry, SPECIES_KEEP, CORPUS_KEEP } from '$core/sw-keep';
+import { pruneOnActivate, sweepPrevious, capCache, isSpeciesEntry, carryList, saveCarry, carryOver, SPECIES_KEEP, CORPUS_KEEP } from '$core/sw-keep';
 
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE = `cultifolio-${version}`;
 /**
- * The reference's answers (a dossier, an entries bucket, a sheet bucket) are keyed by corpus (`?c=`), not by build: they
+ * The reference's answers (an entries bucket, a sheet bucket) are keyed by corpus (`?c=`), not by build: they
  * live in a cache of their own that a deploy leaves alone, so a device does not download its species again after every
  * deploy; a corpus refresh drops the old corpus's answers when the first new one is kept (round fifty-one, 6).
  */
@@ -52,6 +56,13 @@ const isLazyFont = (p: string) => /\.woff$/.test(p) || (/\.woff2$/.test(p) && !/
  */
 declare const __OFFLINE_BUILD__: string[] | null;
 const OFFLINE_BUILD = typeof __OFFLINE_BUILD__ !== 'undefined' && Array.isArray(__OFFLINE_BUILD__) ? new Set(__OFFLINE_BUILD__) : null;
+/**
+ * The species page's own build files (its scripts and styles, past those cached at install), fetched only when an update
+ * carries species pages over (`carryOver`, round eighty-five; review-c C6): the offline page opens a carried page with
+ * them. Null without the list (a dev server), when none are fetched ahead and the page's first use keeps them.
+ */
+declare const __SPECIES_BUILD__: string[] | null;
+const SPECIES_BUILD: string[] = typeof __SPECIES_BUILD__ !== 'undefined' && Array.isArray(__SPECIES_BUILD__) ? __SPECIES_BUILD__ : [];
 const OFFLINE_FILES = new Set(['/favicon.svg', '/manifest.webmanifest', '/icon-192.png']);
 const PRECACHE = [...build.filter((p) => !isLazyFont(p) && (!OFFLINE_BUILD || OFFLINE_BUILD.has(p))), ...[...FILES].filter((f) => OFFLINE_FILES.has(f)), ...SHELLS, '/'];
 
@@ -89,10 +100,14 @@ self.addEventListener('activate', (e) => {
   // (`sweepPrevious`, from the fetch handler), where before it stayed until the next deploy reached the device (round
   // eighty-two; the independent review's 8: a device held a build from three weeks before).
   e.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
+    // The species pages the builds before held are listed first, before any of them is deleted: they are read again
+    // from the new server once the worker is in charge (round eighty-five; review-c C6).
+    carryList(caches, CACHE, CORPUS_CACHE)
+      .then((pages) => saveCarry(caches, CACHE, pages))
+      .then(() => { carryMaybe = true; }, () => { /* no list kept: the pages read before the update need the network once, as before */ })
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
       .then((open) => pruneOnActivate(caches, CACHE, CORPUS_CACHE, open.map((c) => c.id)))
-      .catch(() => {})
+      .catch(() => { /* pruning is housekeeping: an old cache not deleted now is deleted at the next activation, and the worker still takes over */ })
       .then(() => { heldMaybe = true; })
       .then(() => self.clients.claim())
   );
@@ -114,10 +129,33 @@ function lookAtPrevious(e: FetchEvent) {
         .matchAll({ type: 'window', includeUncontrolled: true })
         .then((open) => sweepPrevious(caches, CACHE, open.map((c) => c.id)))
         .then((left) => { heldMaybe = left; })
-        .catch(() => {})
+        .catch(() => { /* housekeeping: the previous build is looked at again within ten seconds of the next request */ })
     );
   } catch {
     /* a worker that cannot list its tabs keeps the previous build until the next activation */
+  }
+}
+
+/** Whether a list of species pages may wait to be read again: true after an activation, false once a round finds none left. */
+let carryMaybe = true;
+let carrying: Promise<unknown> | null = null;
+let lastCarry = 0;
+/**
+ * At most once a minute, one round at a time, in the background of a request: the species pages read before the update,
+ * read again (`carryOver`). A round that does not reach the server stops, and the next tries again.
+ */
+function carryOnce(e: FetchEvent) {
+  if (!carryMaybe || carrying) return;
+  const now = Date.now();
+  if (now - lastCarry < 60_000) return;
+  lastCarry = now;
+  carrying = carryOver(caches, CACHE, (u) => fetch(u), location.origin, SPECIES_BUILD)
+    .then((r) => { if (!r.left) carryMaybe = false; }, (err) => console.warn('service worker: the species pages read before the update were not read again this time', err))
+    .finally(() => { carrying = null; });
+  try {
+    e.waitUntil(carrying);
+  } catch {
+    /* the event has already answered: the round goes on while the worker is awake, and the next request carries on */
   }
 }
 
@@ -172,9 +210,11 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
   lookAtPrevious(e);
-  // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
-  // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
-  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname === '/api/corpus') return;
+  carryOnce(e);
+  // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page reads its species
+  // from the sheet buckets instead, kept by corpus below, so the greenhouse does not need the index at all.) A dossier is
+  // never kept either: the route answers `no-store` (round sixty; B11), so it goes to the network like these.
+  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname === '/api/corpus' || url.pathname.startsWith('/api/dossier/')) return;
 
   e.respondWith(
     (async () => {
@@ -185,7 +225,7 @@ self.addEventListener('fetch', (e) => {
         if (hit) return hit;
         // A build file not cached at install (a font subset fetched for one name): kept once it has been asked for.
         const r = await fetch(request);
-        if (r.ok && r.type === 'basic') e.waitUntil(cache.put(request, r.clone()).catch(() => {}));
+        if (r.ok && r.type === 'basic') e.waitUntil(cache.put(request, r.clone()).catch(() => { /* the file was answered; one not kept (storage full) is fetched again next time it is asked for */ }));
         return r;
       }
       // A file of another build (its names are hashed, so it is never this build's): a tab still running the previous
@@ -228,12 +268,12 @@ self.addEventListener('fetch', (e) => {
           return (await cache.match(section)) ?? (await cache.match('/offline')) ?? Response.error();
         }
       }
-      // Species pages, dossiers, the climate API: network first, cache fallback, so what you have read stays readable.
+      // Species pages and the about pages: network first, cache fallback, so what you have read stays readable.
       // Settings too: its HTML is rendered in the reader's units, so a cached copy from before a switch would paint the old ones first.
-      // The reference's files are asked for under the corpus id (`?c=`, from /api/corpus, which is never cached): a dossier, an
-      // index bucket or a sheet bucket is asked for once per corpus and then served from here, so a device that has its species
+      // The reference's files are asked for under the corpus id (`?c=`, from /api/corpus, which is never cached): an index
+      // bucket or a sheet bucket is asked for once per corpus and then served from here, so a device that has its species
       // asks the server nothing more about them, online or off, and a corpus refresh (an upload, no deploy) is a new URL (round twelve, 7).
-      if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
+      if (url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
         const corpusCache = await caches.open(CORPUS_CACHE);
         // Kept by corpus, not by build: the page names its build in the URL (`v=`, round sixty-seven; triage-66 S7) for
         // the adapter's cache at the edge, and a deploy must not leave the greenhouse without the buckets this device has.
@@ -246,7 +286,7 @@ self.addEventListener('fetch', (e) => {
           const r = await fetch(request);
           // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
           // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
-          // And only an answer asked for under a corpus id: one without (a dossier fetched by its bare address) was kept
+          // And only an answer asked for under a corpus id: one without (a bucket fetched by its bare address; a dossier too, before round eighty-five left dossiers to the network) was kept
           // under no id, never pruned, and served for good after a refresh (round fifty-eight).
           const c = url.searchParams.get('c') ?? '';
           if (c && r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) {
@@ -255,7 +295,7 @@ self.addEventListener('fetch', (e) => {
               if (c && !prunedTo.has(c)) { prunedTo.add(c); for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k); }
               await corpusCache.put(keyOf, r.clone());
               await capCache(corpusCache, CORPUS_KEEP); // the oldest go past the cap (round eighty-two; the independent review's 8)
-            })().catch(() => {}));
+            })().catch(() => { /* the answer was given; a copy not kept, or a prune not finished, is done again by the next answer under this corpus */ }));
           }
           return r;
         } catch {
@@ -278,7 +318,7 @@ self.addEventListener('fetch', (e) => {
         // was returned could be cut off with the event, and the copy the next visit found was the old one (round thirty-eight, R2-2).
         // And the species pages held are capped, the oldest written first to go (round eighty-two; the independent review's 8).
         const species = isSpeciesEntry(url.href);
-        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).then(() => (species ? capCache(cache, SPECIES_KEEP, isSpeciesEntry) : 0)).catch(() => {}) : Promise.resolve() });
+        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).then(() => (species ? capCache(cache, SPECIES_KEEP, isSpeciesEntry) : 0)).catch(() => { /* the page was answered; a copy not kept (storage full) only means the last copy kept is the one offline */ }) : Promise.resolve() });
         try {
           const live = fetch(request).then(keep);
           if (!kept || queried) {
@@ -296,7 +336,7 @@ self.addEventListener('fetch', (e) => {
             e.waitUntil(got.written);
             return got.r;
           }
-          e.waitUntil(live.then((x) => x.written).catch(() => {}));
+          e.waitUntil(live.then((x) => x.written).catch(() => { /* the held copy has answered; a refresh that fails leaves it as the copy for next time */ }));
           return kept;
         } catch {
           if (kept) return kept;

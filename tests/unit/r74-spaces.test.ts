@@ -50,6 +50,7 @@ const ALLOWED: Array<[string, RegExp]> = [
   // geographic: where a species grows, a weather cell, the forecast's point, a map's subject
   ['geographic', /a (year|month) no place has/],
   ['geographic', /in the same place/],
+  ['geographic', /climate\.place/], // round eighty-five: the dossier's field for the typical cell's province and country
   ['geographic', /the coordinates are not a place on Earth/],
   ['geographic', /No weather alerts are read for this place/],
   ['geographic', /so a place it does not cover/],

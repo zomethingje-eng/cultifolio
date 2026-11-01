@@ -14,7 +14,7 @@
  * 6. W6 (review-w): a name that is an older name of a reference page asks once, naming the page.
  *
  * The routes answer `/api/search` and `/api/names`; the service worker is blocked so they see every request. Waits are
- * on what the page shows, never fixed sleeps.
+ * on what the page shows, never fixed sleeps; test 1 runs the page's clock past the field's 150 ms close.
  *
  * FAILS on r84base: 1 (the list opens over the form when the answers land), 2 (the first press arms "Add as typed"),
  * 3 (Add moves under the press, and the press is lost), 4 ("has a species page, under another genus" and no older
@@ -55,6 +55,8 @@ test('r84k 1: an answer that lands after the field is left never opens the list,
   let searches = 0, names = 0;
   await page.route(/\/api\/search\?/, async (r) => { searches++; await held.shut; await json(r, [CINEREA, HUMILIS]); });
   await page.route(/\/api\/names\?/, async (r) => { names++; await held.shut; await json(r, [ROW_CINEREA, ROW_GENUS]); });
+  // The page's clock is the test's to run (time still flows): the leave's close is run past by the clock, not slept for.
+  await page.clock.install();
   await page.goto('/plants/new');
   await ready(page);
   const input = page.locator('#species-name');
@@ -63,8 +65,9 @@ test('r84k 1: an answer that lands after the field is left never opens the list,
   await leave(page);
   await expect(input).not.toBeFocused();
   // The leave's own close runs on the page's 150 ms timer, which shows nothing to wait for: an answer landing before it
-  // is closed by it, and the case under test is the answer that lands after it (review-c C1 saw 0.6 to 2.1 s live).
-  await page.waitForTimeout(400);
+  // is closed by it, and the case under test is the answer that lands after it (review-c C1 saw 0.6 to 2.1 s live). The
+  // page's clock is run past it (round eighty-five; the 400 ms sleep this was), whatever the machine's pace.
+  await page.clock.runFor(400);
   held.open();
   // The answers are read: the genus's key comes from the leave's check.
   await expect(page.locator('.picker .pill.ok')).toContainText('GBIF 2779581');

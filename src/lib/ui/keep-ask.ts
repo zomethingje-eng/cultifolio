@@ -110,6 +110,6 @@ export function keepOnFirstPlant(c: CommitSource, answerSaid: () => boolean): ()
   return c.onLocalChange((changes) => {
     if (!changes.some((x) => x.kind === 'accession') || c.accessions.length < 1) return;
     if (answerSaid()) return;
-    void askToKeep('first').catch(() => {});
+    void askToKeep('first').catch(() => { /* asking the browser to keep the data is a request it may refuse; the storage notice says where it has not promised */ });
   });
 }

@@ -406,20 +406,34 @@ export interface OccPage {
  * sample is not the one asked for, and a climate read from it would say
  * nothing about what was not fetched.
  */
-export async function occurrences(f: JsonFetcher, key: number, pages = 3): Promise<FetchResult<GbifOccurrence[]>> {
+export async function occurrences(f: JsonFetcher, key: number, pages = 3, regions: ReadonlyArray<{ s: number; w: number; n: number; e: number }> = []): Promise<FetchResult<GbifOccurrence[]>> {
   const out: GbifOccurrence[] = [];
+  const base = `${GBIF}/occurrence/search?taxonKey=${key}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&limit=300`;
+  // Round eighty-five (G; the owner's decision 5, S3): where GBIF holds more records than the pages read, and the native
+  // regions are known, the first page is GBIF's first 300 from anywhere, and each of up to `MAX_REGION_PAGES` native
+  // regions' boxes (the largest first) gives its own first 300, so no region is read only where GBIF's order puts it. GBIF's
+  // search has no spatial order of its own; the download (`OccIndex`) takes every distinct cell first.
+  const boxes = [...regions].filter((b) => b.w <= b.e).sort((a, b) => (b.n - b.s) * (b.e - b.w) - (a.n - a.s) * (a.e - a.w)).slice(0, MAX_REGION_PAGES);
   for (let p = 0; p < pages; p++) {
-    const url =
-      `${GBIF}/occurrence/search?taxonKey=${key}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT` +
-      `&limit=300&offset=${p * 300}`;
-    const r = await f<OccPage>(url);
+    const r = await f<OccPage>(`${base}&offset=${p * 300}`);
     if (r.status === 'refused' || r.status === 'error' || r.status === 'skipped') return { status: r.status, detail: `${r.detail}${out.length ? ` (after ${out.length} records: partial, not used)` : ''}` };
     if (r.status !== 'ok') break;
     out.push(...r.data.results);
     if (r.data.endOfRecords) break;
+    if (p === 0 && boxes.length && r.data.count > pages * 300) {
+      const seen = new Set(out.map((o) => o.key));
+      for (const b of boxes) {
+        const q = await f<OccPage>(`${base}&offset=0&decimalLatitude=${b.s},${b.n}&decimalLongitude=${b.w},${b.e}`);
+        if (q.status === 'refused' || q.status === 'error' || q.status === 'skipped') return { status: q.status, detail: `${q.detail} (after ${out.length} records: partial, not used)` };
+        if (q.status === 'ok') for (const o of q.data.results) if (!seen.has(o.key)) { seen.add(o.key); out.push(o); }
+      }
+      break;
+    }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };
 }
+/** How many native regions' boxes a page read through GBIF's search asks for records of its own (round eighty-five). */
+export const MAX_REGION_PAGES = 5;
 
 export interface OccMedia {
   id: string;

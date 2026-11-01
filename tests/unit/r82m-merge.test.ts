@@ -33,7 +33,8 @@ const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
 
 describe("/about/how says GBIF's FUZZY rule as judgeTaxon keeps it (review 1's 5, the revert)", () => {
   it('names the correction of a misspelling to this very species among the ways a taxon of another name is taken', () => {
-    expect(how).toContain("Or GBIF's backbone holds the name as this species, or corrects it as a misspelling to this very species (GBIF's fuzzy match: Othonna linearifolia, as Kew and iNaturalist spell the page's Othonna lineariifolia), while a correction to another species is never read as this one's.");
+    // Round eighty-five (S4): Kew's Othonna linearifolia heads the page now, so the page no longer quotes it; the code is still driven with it below.
+    expect(how).toContain("Or GBIF's backbone holds the name as this species, or corrects it as a misspelling to this very species (GBIF's fuzzy match), while a correction to another species is never read as this one's.");
   });
   // The code the sentence is checked against (guards: so on r82pc too).
   const reference = referenceOf([{ key: 1, name: 'Othonna lineariifolia', family: 'Asteraceae' }, { key: 2, name: 'Othonna capensis', family: 'Asteraceae' }]);
@@ -70,9 +71,9 @@ describe("the owner's decision of 2026-10-23: Bisnaga hamatacantha into Ferocact
     expect(mergedToPrune([{ key: 7281739, id: 'g7281739' }, { key: null, id: 'k2808164', occurrences: { keys: [{ key: 7281739, slug: 'bisnaga-hamatacantha' }] } }], one)).toEqual({ prune: [7281739], waiting: [] });
   });
   it('/about/how lists the merges as scripts/merged-pages.txt holds them (it still said Echeveria peacockii into Dudleya pulverulenta, and Ceropegia nubica into Ceropegia cereiformis)', () => {
-    expect(how).toContain('Echeveria peacockii into Echeveria desmetiana');
+    expect(how).toContain('and Echeveria peacockii into Echeveria desmetiana');
     expect(how).toContain('Bisnaga hamatacantha into Ferocactus hamatacanthus, one type (Echinocactus hamatacanthus Muehlenpf.)');
-    expect(how).toContain('Ceropegia nubica and Ceropegia cereiformis into Echidnopsis cereiformis');
+    expect(how).toContain('Ceropegia nubica and Ceropegia cereiformis are merged into Echidnopsis cereiformis');
     expect(how).not.toContain('Echeveria peacockii into Dudleya pulverulenta');
     expect(how).not.toContain('Ceropegia nubica into Ceropegia cereiformis');
   });

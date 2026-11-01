@@ -116,13 +116,22 @@ export function olderNameOf(typed: string, hit: Searchable): string | null {
   const qs = rankedWords(typed).filter((w) => !RANK_MARKERS.has(w));
   if (!qs.length) return null;
   const begins = (ws: string[]) => qs.every((q) => ws.some((w) => w.startsWith(q)));
+  const olderNames = [...(hit.syn ?? []), ...(hit.older ?? []), ...(hit.kew ?? [])];
+  // The older name that is the words typed, exactly, before any that only begins with them, and before the hit's own words
+  // (round eighty-five; outside review A12): "Trichocereus macrogonus" was labelled "older name: Trichocereus macrogonus
+  // subsp. sanpedro", which came first in the list, and "Crassula rubens" not at all on Sedum rubens, whose family,
+  // Crassulaceae, begins with "crassula". The add form's line asks for the name itself.
+  // Read word for word, a tautonym's repeated word kept ("Opuntia opuntia"), which the search's reading sets as one.
+  const typedWords = nameWords(typed).filter((w) => !RANK_MARKERS.has(w));
+  const exact = olderNames.find((n) => { const ws = nameWords(n).filter((w) => !RANK_MARKERS.has(w)); return ws.length === typedWords.length && ws.every((w, i) => w === typedWords[i]); });
+  if (exact) return exact;
   const own = [hit.name, hit.family ?? '', ...(hit.origin ?? [])].flatMap(nameWords);
   if (begins(own)) return null;
   // A common name takes the words only by itself (round eighty-four, the merge; review-w W4): read with the hit's own
   // words, Dracaena trifasciata's "Snake Sansevieria" and its own epithet took "Sansevieria trifasciata", which is its
   // older name, so the row said nothing of it.
   for (const c of [hit.common, ...(hit.commons ?? []), ...(hit.spellings ?? [])]) if (c && begins(nameWords(c))) return null;
-  for (const n of [...(hit.syn ?? []), ...(hit.older ?? []), ...(hit.kew ?? [])]) {
+  for (const n of olderNames) {
     const ws = nameWords(n).filter((w) => !RANK_MARKERS.has(w));
     if (!ws.length || !begins(ws)) continue;
     if (qs.length > 1 && !ws[0].startsWith(qs[0])) continue;

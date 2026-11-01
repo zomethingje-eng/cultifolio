@@ -10,7 +10,7 @@
  */
 import { collection } from '$lib/db/collection.svelte';
 import { accNo, type Accession, type Provenance } from '$lib/db/types';
-import { parseName, speciesName, speciesSlug, tidyName } from '$core/names';
+import { parseName, speciesName, speciesSlug, tidyName, QUOTES } from '$core/names';
 import type { NameCheck } from './check';
 import { checkKey } from './check';
 import { resolvePlace, type ImportRow, type NumberPlan } from './plan';
@@ -63,12 +63,15 @@ export function recordOf(row: ImportRow, check: NameCheck | undefined, placeId: 
     sourceForm: row.form,
     price: row.price,
     locationId: placeId,
-    notes: row.notes
+    notes: row.notes,
+    // A name the review said is an older name of a page, kept as the sheet gave it: the page goes with the plant, as the
+    // add form's answer does (round eighty-five; outside review A16a). Not for a species name typed with "cf.".
+    ...(check?.s === 'near' && check.why === 'older name' && !p.qualifier ? { olderOf: check.suggestion } : {})
   };
 }
 
 /** A name as compared: its quotes one way, "cv." and its case and spacing set aside. */
-const nameText = (s: string) => tidyName(s).replace(/[‘’"“”]/g, "'").replace(/\bcv\.?\s+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const nameText = (s: string) => tidyName(s).replace(new RegExp(`[${QUOTES}]`, 'g'), "'").replace(/\bcv\.?\s+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
 /** The sheet's text, when the plant is filed under another name; null when it is filed as the sheet wrote it. */
 function receivedAs(sheet: string, scientific: string, cultivar: string | null, aside: boolean): string | null {
   const t = sheet.trim();

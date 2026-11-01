@@ -3,6 +3,7 @@
  * 16, 18 and 25, review 2's 4). Each test failed on r82base, as its comment says.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { ready, addPlant, localDay } from './helpers/smoke';
 import { writeWait, allowWrites } from './helpers/pace';
@@ -36,11 +37,18 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   let page = tab;
   allowWrites(60_000);
   await context.addInitScript(notPersisted);
+  // Every toast the page shows, recorded as it comes (the merge, round eighty-five): the browser's answer is a toast shown
+  // for ten seconds from the load, which a loaded machine's wait for the nudge outlasted (round 83's merge, once a round).
+  await context.addInitScript(() => {
+    const w = window as unknown as { __toasts: string[] };
+    w.__toasts = [];
+    new MutationObserver(() => { const t = document.querySelector('.toast')?.textContent?.trim(); if (t && !w.__toasts.includes(t)) w.__toasts.push(t); }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
   // Empty: nothing to keep, nothing asked for. r82base: "Kept in this browser only: back up" over an empty list, and the
   // backup page's "Take a backup now" card.
   await page.goto('/plants'); await ready(page);
   await expect(page.locator('.empty, .emptybox, #plants-empty').first()).toBeVisible({ timeout: 15_000 }).catch(() => {});
-  await page.waitForTimeout(300); // a negative: the line would be drawn with the page
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the line would be drawn with the page
   expect(await reminders(page)).toEqual([]);
   await page.goto('/backup'); await ready(page);
   await expect(page.locator('.secrule', { hasText: 'Take a backup' })).toBeVisible();
@@ -51,15 +59,14 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   await page.goto('/plants'); await ready(page);
   // Both at once: the toast is shown for a while from the page's load, and under a loaded machine the nudge's wait outlasted
   // it (round 83's merge, one flake in a whole run).
-  await Promise.all([
-    expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) }),
-    expect(page.locator('.toast')).toContainText('This browser may clear your plants to free space', { timeout: writeWait(15_000, 50) })
-  ]);
+  const toasts = () => page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.join(' | '));
+  await expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) });
+  await expect.poll(toasts, { timeout: writeWait(15_000, 50) }).toContain('This browser may clear your plants to free space');
   expect(await reminders(page)).toEqual(['nudge']);
-  await expect(page.locator('.toast')).not.toContainText('take a backup');
+  expect(await toasts()).not.toContain('take a backup'); // the nudge asks; the toast does not ask again
   // Today says it in its own line, once: the layer's line is not added to it (r82base: both).
   await page.goto('/today'); await ready(page);
-  await page.waitForTimeout(300);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the layer's line would be drawn with the page
   await expect(page.locator('#backup-nudge')).toHaveCount(0);
   // A backup, and a Replace from it on another device: counted as a backup made there, said as a restore.
   await page.goto('/backup'); await ready(page);
@@ -79,7 +86,7 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   await ready(page);
   await expect(page.locator('a.accrow')).toHaveCount(6, { timeout: writeWait(10_000, 100) });
   // r82base: "6 plants and no backup yet" right after restoring from one, with two more beside it.
-  await page.waitForTimeout(500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the line would be drawn with the list
   await expect(page.locator('#backup-nudge')).toHaveCount(0);
   expect((await reminders(page)).length).toBeLessThanOrEqual(1);
   await page.goto('/backup'); await ready(page);
@@ -180,7 +187,7 @@ test('the frost bar: a night within 72 hours or below a space\'s floor, dated, r
   // A cold night above freezing nine days out: no bar on every page (r82base: a red bar, "Cold night ahead").
   await page.goto('/plants'); await ready(page);
   await expect(page.locator('a.accrow')).toHaveCount(1);
-  await page.waitForTimeout(800);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the frost bar would be drawn with the list
   await expect(page.locator('#frostbar')).toHaveCount(0);
   // The front page still says it, amber and dated.
   await page.goto('/'); await ready(page);

@@ -19,6 +19,7 @@
     readerLat = null,
     units,
     few = null,
+    fewHref = null,
     href = '#s-glance'
   }: {
     months: M[];
@@ -28,6 +29,8 @@
     readerLat?: number | null;
     units: Units;
     few?: { records: number; cells: number } | null;
+    /** Where the page says more of the few records (its climate notice); the mark links there (round eighty-five; P4). */
+    fewHref?: string | null;
     /** Where the full cards are. */
     href?: string;
   } = $props();
@@ -38,7 +41,7 @@
 </script>
 
 <section class="hline" aria-labelledby="hline-t">
-  <p class="hhead"><span id="hline-t">Habitat in short</span>{#if few}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}<a href={href}>Figures ›</a></p>
+  <p class="hhead"><span id="hline-t">Habitat in short</span>{#if few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={href}>Figures ›</a></p>
   <dl>
     {#if extremes}
       <div><dt>Cold floor</dt><dd><b>{temp(extremes.minP01, units, 1)}</b> <span>1 night in 100 colder <i>NASA POWER</i></span></dd></div>
@@ -52,17 +55,26 @@
 </section>
 
 <style>
-  /* A phone's alone: from 641 px the glance cards are on the first screen. */
+  /* A phone's alone: from 641 px the glance cards are on the first screen. In the name card, after the one primary action
+     and before the secondary ones, set apart by a rule (round eighty-five; outside review B's 3, P3). */
   .hline { display: none; }
   @media (max-width: 640px) {
-    .hline { display: block; margin: 12px 0 0; padding: 10px 12px 4px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); }
+    .hline { display: block; flex: 1 1 100%; margin: 0; padding: 7px 0 0; border-top: 1px solid var(--rule); }
   }
-  .hhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 6px; font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .hhead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0 0 2px; font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .hhead > * { white-space: nowrap; }
-  .hhead a { margin-left: auto; letter-spacing: 0.02em; text-transform: none; font-weight: 600; font-size: var(--fs-sm); }
+  .hhead a.figs { margin-left: auto; letter-spacing: 0.02em; text-transform: none; font-weight: 600; font-size: var(--fs-sm); }
   .few { padding: 0 7px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.02em; text-transform: none; }
-  dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 12px; margin: 0; }
-  dl > div { min-width: 0; padding: 4px 0 6px; }
+  a.few { text-decoration: none; }
+  /* "Figures ›" and the few-records mark are controls on their own line: each takes a finger's 44 by 44 px, as an invisible
+     margin so the line keeps its height (round eighty-five; P4, outside review B's 4: "Figures ›" was 51 by 19 px). The two
+     sit at either end of the line, so the margins do not meet. */
+  .hhead a { position: relative; }
+  @media (pointer: coarse) {
+    .hhead a::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: var(--tap); transform: translate(-50%, -50%); }
+  }
+  dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; margin: 0; }
+  dl > div { min-width: 0; padding: 2px 0 3px; }
   dt { font-size: var(--fs-xs); color: var(--ink3); letter-spacing: 0.02em; }
   dd { margin: 0; line-height: 1.3; overflow-wrap: anywhere; }
   dd b { display: block; font-family: var(--mono); font-size: var(--fs-md); color: var(--ink); font-weight: 600; }

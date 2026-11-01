@@ -92,7 +92,7 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
     // Asked with the live index's names and the species list's (scripts/species-list.txt), whose genera differ by a few.
     const [, genera, nCounted] = /^index\t\d+ species in (\d+) genera; (\d+) counted/m.exec(text)!;
     const n = (x: string) => Number(x).toLocaleString('en-GB');
-    expect(about).toContain(`The count was made on ${longDay(m.day)}, over the ${n(genera)} genera the reference and its species list then held; ${n(nCounted)} of them were counted. <code>scripts/most-grown-genera.txt</code> holds every count, the query and iNaturalist's terms.`);
+    expect(about).toContain(`The count was made on ${longDay(m.day)}, over the ${n(genera)} genera the reference and its species list then held; ${n(nCounted)} of them were counted. <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/most-grown-genera.txt">The list of counts</a> holds every count, the query and iNaturalist's terms.`); // round eighty-five: a link, not a path
     expect(about).toContain('or one whose count did not answer, is not counted and is not under the chip, and nor is a genus that joins the reference after the count, until it is made again.');
     expect(about).toContain('The rows under "Popular genera" are worked out by the server from the genus rows\' files and the counts\' file, once for each reference.'); // round seventy-six: no longer from the index
     expect(about).not.toMatch(/On a phone the front page's catalogue opens|opens on the most-grown|opens on the genera of that list/);

@@ -13,6 +13,7 @@
  * FAILED (the "‹" went to `/`).
  */
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { goneQuiet, framesSettled } from './helpers/settled';
 import * as devalue from 'devalue';
 import { ready, addPlant } from './helpers/smoke';
 
@@ -81,7 +82,7 @@ async function openThenBack(page: Page) {
   await expect(page.locator(`#g-${id(OPEN)}`)).toBeVisible();
   await expect(tile(page)).toBeAttached();
   // The reader scrolls down into the opened row's tiles, as one does before tapping a species.
-  await page.waitForTimeout(800); // a negative: the rows the page fills above the opened row on its own come in first
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the rows the page fills above the opened row on its own come in first
   await tile(page).scrollIntoViewIfNeeded();
   await page.evaluate(() => { const t = document.querySelector('.hgrid.opened a.tile[href="/species/copiapoa-cinerea"]')!; window.scrollBy(0, t.getBoundingClientRect().top - window.innerHeight / 2); });
   await settle(page);
@@ -94,9 +95,9 @@ async function openThenBack(page: Page) {
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`open=${id(OPEN)}`));
   await expect(tile(page)).toBeAttached();
-  await page.waitForTimeout(1000); // a negative: whether the page runs away after Back can only be read after a while
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): whether the page runs away after Back is read once it has stopped asking
   const one = { box: await tile(page).boundingBox(), y: await page.evaluate(() => scrollY), rows: await page.locator('.rows a.grow').count() };
-  await page.waitForTimeout(2000);
+  await goneQuiet(page, 2_000); // a negative, read once the page has gone quiet (helpers/settled.ts): and read again after two quiet seconds, in which a page that runs away would have moved
   const three = { box: await tile(page).boundingBox(), y: await page.evaluate(() => scrollY), rows: await page.locator('.rows a.grow').count() };
   const report = JSON.stringify({ left, before, one, three, askedAfterBack: asked.slice(at) });
   // The tile is where the reader left it, and stays there.
@@ -153,7 +154,7 @@ test('r80u back 4: a reader who scrolled on past the server\'s window comes back
   await expect.poll(async () => {
     await page.evaluate((f) => { const r = document.getElementById(`g-${f}`)!; window.scrollBy(0, r.getBoundingClientRect().top - 300); }, far);
     await settle(page);
-    await page.waitForTimeout(300);
+    await framesSettled(page); // the scroll drawn
     return page.evaluate((f) => Math.abs(document.getElementById(`g-${f}`)!.getBoundingClientRect().top - 300) <= 1, far);
   }, { timeout: 15_000 }).toBe(true);
   const before = (await page.locator(`#g-${far}`).boundingBox())!.y;
@@ -164,7 +165,7 @@ test('r80u back 4: a reader who scrolled on past the server\'s window comes back
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`open=${id(OPEN)}`));
   await expect(page.locator(`#g-${far}`)).toBeAttached();
-  await page.waitForTimeout(1500); // a negative: the place is read once the page has had time to run away, if it would
+  await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): the place is read once the page has had time to run away, if it would
   const after = (await page.locator(`#g-${far}`).boundingBox())!.y;
   const report = JSON.stringify({ before, after, askedAfterBack: asked.slice(at), rows: await page.locator('.rows a.grow').count() });
   expect(Math.abs(after - before), report).toBeLessThanOrEqual(4);

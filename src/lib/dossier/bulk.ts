@@ -462,7 +462,12 @@ export class WcvpIndex {
     // Monsonia lheritieri took Sarcocaulon spinosum's range (Cape Provinces and Namibia) through Geranium spinosum, while
     // Kew holds its basionym Sarcocaulon lheritieri Sweet apart, unplaced, in the Cape Provinces alone.
     const basionym = hit && own ? this.basionymRecords(older, own) : [];
-    const other = basionym.filter((e) => e.entry.id !== hit!.entry.id);
+    // Round eighty-five (G; outside review A23): the rule refuses only where the two records disagree. Where Kew's record of
+    // the basionym has the same native regions as the entry the older names lead to, either range is the plant's, and the
+    // page keeps it; before, any second record, of whatever range, took the range and the climate away.
+    const nativeOf = (e: WcvpName) => [...new Set((this.rangeOf(e)?.rows ?? []).filter((r) => !r.establishmentMeans || /native/i.test(r.establishmentMeans)).map((r) => r.locationId ?? ''))].sort().join(' ');
+    const mine = hit ? nativeOf(hit.entry) : '';
+    const other = basionym.filter((e) => e.entry.id !== hit!.entry.id && !(mine && nativeOf(e.entry) === mine));
     if (other.length) return { ambiguous: `the older names lead to Kew's entry ${entryLabel(hit!.entry)}, reached by ${hit!.via}, and the page's basionym ${other[0].via} is Kew's ${entryLabel(other[0].entry)}${other[0].entry.status === 'Unplaced' ? ', unplaced' : ''}` };
     if (!hit || !/^species$/i.test(hit.entry.rank)) return null;
     const got = this.rangeOf(hit.entry);
@@ -495,6 +500,13 @@ export class WcvpIndex {
 }
 
 /* ------------------------------------------------------------------ GBIF occurrence download */
+
+/**
+ * The cell of the sample's spatial rule (round eighty-five; decision 5): a twentieth of a degree, the climate grid's own
+ * (about 5.5 km), so the records kept of a species over `cap` hold every cell of the climate grid it is recorded in, up to
+ * `cap` cells, before a second record of any.
+ */
+export const SAMPLE_CELL_DEG = 0.05;
 
 /**
  * The columns of occurrence.txt the reader reads, by their Darwin Core Archive names. GBIF's SQL download (round
@@ -592,11 +604,13 @@ export function idHash(id: number): number {
 /**
  * Occurrences by species key, capped per species. The API path returns at
  * most 900; a download can hold a hundred thousand for one species. Each
- * species keeps the `cap` rows with the smallest id-hash: a uniform sample,
- * decided row by row so memory stays bounded while the file streams, and
- * deterministic so a rebuild finds the same habitat centre. Once a species
- * is full, a row is only admitted if its hash beats the current worst, so
- * the buffer never exceeds cap × 1.25 and admissions become rare quickly.
+ * species keeps `cap` rows, every distinct cell of `SAMPLE_CELL_DEG` first
+ * (round eighty-five, decision 5: before, the `cap` with the smallest id-hash,
+ * a uniform sample, which a dense population fills before a sparse one is
+ * read), each cell's by the smallest id-hash; decided as the file streams,
+ * so memory stays bounded, and deterministic so a rebuild finds the same
+ * habitat centre. Once a species is full, a row is only admitted if its hash
+ * beats the current worst, so the buffer never exceeds cap × 1.25.
  *
  * Memory is the whole game: a download for 9,000 species is 28 M rows, so
  * only species in `wanted` (when given) are kept at all. The full list's is
@@ -757,12 +771,29 @@ export class OccIndex {
   }
   private trim(k: number, rows: Rows, room = rows.room): void {
     const f = rows.f;
-    // By hash, then gbifID; a sort that keeps the order of equal rows, as the array's sort did.
-    const order = Array.from({ length: rows.n }, (_, i) => i).sort((a, b) => f[a * 10] - f[b * 10] || f[a * 10 + 1] - f[b * 10 + 1]);
     // A record two parts of a download both hold (round seventy-nine: one part asked for a synonym's key, another for its
-    // species') is one record: its copies sort together, and only the first is kept.
+    // species') is one record: by gbifID its copies sort together, and only the first is kept.
+    const byId = Array.from({ length: rows.n }, (_, i) => i).sort((a, b) => f[a * 10 + 1] - f[b * 10 + 1] || a - b);
     let w = 0;
-    for (let r = 0; r < order.length; r++) if (!w || f[order[r] * 10 + 1] !== f[order[w - 1] * 10 + 1]) order[w++] = order[r];
+    for (let r = 0; r < byId.length; r++) if (!w || f[byId[r] * 10 + 1] !== f[byId[w - 1] * 10 + 1]) byId[w++] = byId[r];
+    byId.length = w;
+    // Every distinct cell first (round eighty-five; the owner's decision 5, S3, D11): each row's priority is its id-hash, plus
+    // one unless it is the smallest hash of its cell (`SAMPLE_CELL_DEG`), plus two for a row with no coordinates. So the
+    // `cap` kept are one record of every cell before a second of any, each cell's by the same hash; a row is admitted by its
+    // bare hash (`add`), never more than its priority, and every cut is made here, so the sample is the one the whole file
+    // would give.
+    const hashOf = (i: number) => { const p = f[i * 10]; return p - Math.floor(p); };
+    const cellOfRow = (i: number) => {
+      const lat = f[i * 10 + 2], lon = f[i * 10 + 3];
+      return Number.isFinite(lat) && Number.isFinite(lon) ? Math.floor((lat + 90) / SAMPLE_CELL_DEG) * 10_000 + Math.floor((lon + 180) / SAMPLE_CELL_DEG) : -1;
+    };
+    const byCell = [...byId].sort((a, b) => cellOfRow(a) - cellOfRow(b) || hashOf(a) - hashOf(b) || f[a * 10 + 1] - f[b * 10 + 1]);
+    for (let r = 0; r < byCell.length; r++) {
+      const i = byCell[r], c = cellOfRow(i);
+      f[i * 10] = hashOf(i) + (c < 0 ? 2 : r > 0 && cellOfRow(byCell[r - 1]) === c ? 1 : 0);
+    }
+    // By priority, then gbifID.
+    const order = byId.sort((a, b) => f[a * 10] - f[b * 10] || f[a * 10 + 1] - f[b * 10 + 1]);
     let n = w;
     if (n > this.cap) {
       n = this.cap;

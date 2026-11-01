@@ -37,6 +37,9 @@ export const _PLANTAE = 6;
 
 const bad = (why: string) => json({ error: why }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
+/** How long GBIF's name service is waited for (round eighty-five; outside review A13). */
+export const _GBIF_WAIT_MS = 8_000;
+
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   const q = _readName([...(url.searchParams.get('q') ?? '')].slice(0, 200).join(''));
   if (q.length < 3) return json([], { headers: { 'cache-control': forBuild(url, 'public, max-age=86400') } });
@@ -63,9 +66,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (!call.ok) return heldBack(call);
   let res: Response;
   try {
-    res = await fetch(upstream, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
-  } catch {
-    return bad('backbone unreachable');
+    // Eight seconds at most, inside the picker's own ten (round eighty-five; outside review A13): a GBIF that hangs is said
+    // as not answering, by this server, before the device gives up on it.
+    res = await fetch(upstream, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' }, signal: AbortSignal.timeout(_GBIF_WAIT_MS) });
+  } catch (e) {
+    return bad(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError') ? `backbone did not answer within ${_GBIF_WAIT_MS / 1000} seconds` : 'backbone unreachable');
   }
   // GBIF's 429 or 403 refused this site's request, said as that, never as "did not answer" (round sixty-seven; triage-66
   // S8, R45-11): `refused: true`, GBIF's status and its Retry-After when it gave one.
@@ -84,7 +89,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (!Array.isArray(rows)) return bad('backbone answered with something other than a list');
   const out = (rows as Row[]).map((r) => Object.fromEntries(FIELDS.filter((k) => r && typeof r === 'object' && r[k] != null).map((k) => [k, r[k]])));
   const reply = json(out, { headers: { 'cache-control': 'public, max-age=86400' } });
-  if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, reply.clone()).catch(() => {}));
+  if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, reply.clone()).catch(() => { /* the answer is given; a copy not kept at the edge means GBIF is asked again next time */ }));
   // The Worker's own copy is kept a day under its private key; the answer is kept by the adapter only under this build (round sixty-seven; S7).
   reply.headers.set('cache-control', forBuild(url, 'public, max-age=86400'));
   return reply;

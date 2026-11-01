@@ -1,10 +1,15 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
+  import { revealHash, printOpens } from '$lib/ui/about-fold';
   $effect(() => {
     setCrumb([{ label: 'About', href: '/about/how' }, { label: 'Formats' }]);
     return () => setCrumb([]);
   });
+  // Each section reads as its summary, the format in full one tap away (round eighty-five; S11). A link to a part inside
+  // a folded section opens it; print opens every one.
+  onMount(() => { const a = revealHash(), b = printOpens(); return () => { a(); b(); }; });
 </script>
 
 <svelte:head>
@@ -34,6 +39,7 @@
   <section aria-labelledby="log">
   <h2 id="log">The change log</h2>
   <p class="sum">A collection is a list of changes, each setting one field of one record. To read it, apply the changes in order of their stamps, the latest winning each field. The result is the same whatever order they arrived in.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <p>Each change sets one field of one record:</p>
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <pre tabindex="0" role="region" aria-label="An example change"><code>{`{ "t": "1789520000000-0001-a7f3c2c9d1e4x0z9", "kind": "accession", "id": "rmu3e054w01a7f3c2c9d1e4x0z9", "field": "notes", "value": "sulked all summer" }`}</code></pre>
@@ -95,12 +101,14 @@
     <li><b>Joins are by id, never by number.</b> An event's <code>acc</code> and a photo's <code>acc</code> hold the plant's record id (the <code>rmu3e…</code>, not the <code>2026-0001</code>). A sowing's own events (<code>germinate</code>, <code>potup</code>, <code>loss</code>) hold the sowing's record id; a photo of a batch carries it in <code>sowing</code>.</li>
     <li>To list a plant's events, take the plant's <code>id</code> and select the events whose <code>acc</code> equals it.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── The fields ─────────────────────────── -->
   <section aria-labelledby="fields">
   <h2 id="fields">The fields, by kind</h2>
   <p class="sum">Each kind of record has a fixed set of fields. Dates are written YYYY-MM-DD, temperatures in °C and sizes in millimetres, whatever the display. A field a record has never been given is absent.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <h3 id="f-accession">accession (a plant)</h3>
   <ul class="rules">
     <li><code>acc</code>: the plant number. <code>taxonName</code>, and <code>taxonKey</code>, the GBIF key. <code>nameAsReceived</code>: the name as it came, where the name filed differs.</li>
@@ -117,6 +125,7 @@
     <li>The hash is of the line's fields as the import reads them through the column mapping: the name as read, Genus and Species joined; a date as read, or its text when not read; a number with its leading zeros dropped; a column no field takes left out.</li>
     <li>Each run of spaces is made one and the case folded, then "#" and the plant's place among the plants that line and its identical lines make.</li>
     <li><code>importKeyBare</code>: on a plant whose line had columns no field takes, the same key read without them, so a run of the sheet that has lost those columns finds the plant.</li>
+    <li><code>olderOf</code>: the name of the species page the add form or an import found this plant's name to be an older name of, when you kept the name as typed. The plant's page then shows that species. A change of name clears it.</li>
   </ul>
   <h3 id="f-event">event</h3>
   <ul class="rules">
@@ -158,12 +167,14 @@
     <li>One record, id <code>numbering</code>, with <code>scheme</code>: the numbering scheme every device shares.</li>
     <li>And one record for each Replace, its id beginning <code>numbers-kept</code>, with <code>accession</code> and <code>sowing</code>: the plant and batch numbers this device had given that the file did not carry. So a number given once is never given again, and the log alone says so.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Backup ─────────────────────────── -->
   <section aria-labelledby="backup">
   <h2 id="backup">The backup file</h2>
   <p class="sum">A backup is an ordinary zip you can open anywhere. It holds the whole log, your photographs and three spreadsheets. Restoring it merges by the log's rule, so restoring an old file over a newer collection loses nothing.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <p><code>cultifolio-YYYY-MM-DD.cultifolio.zip</code>, an ordinary zip:</p>
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <pre tabindex="0" role="region" aria-label="What the backup file holds"><code>{`manifest.json        { format: "cultifolio-backup", v: 1, exported: <ISO time>, device, app,
@@ -202,12 +213,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>In <code>device.json</code>, a site's name is read as Settings keeps one: control characters and runs of spaces become one space, and a name over 120 characters is cut at a word and marked.</li>
     <li>Only the zip is read.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Sync ─────────────────────────── -->
   <section aria-labelledby="sync">
   <h2 id="sync">Sync on the wire</h2>
   <p class="sum">Sync uploads your log in sealed batches, and your photographs sealed one by one. Only a device with your key can open them. The server sees names, sizes and times, never what is inside.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <h3 id="keys">The key, the token and the vault id</h3>
   <ul class="rules">
     <li>One vault key per person: 30 symbols from an alphabet without I, L, O, U, 0 or 1, in six groups of five.</li>
@@ -221,6 +234,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   </ul>
   <h3 id="sealed">Sealed blobs</h3>
   <ul class="rules">
+    <li>A photograph the server did not hand over in a run (an error answer) is asked for again at the next sync, and the sync page's status says how many were not received, never "everything is here".</li>
     <li>A sealed blob is one version byte (1), a 12-byte IV, then AES-GCM ciphertext with its 128-bit tag appended, as WebCrypto does.</li>
     <li>Its associated data is the UTF-8 bytes of <code>vaultId|kind</code>, where kind is <code>log</code> or <code>photo</code>, so a blob cannot be replayed into another vault or as another kind.</li>
     <li>A photo's data also carries its id (<code>vaultId|photo|photoId</code>), so it cannot be handed out under another photo's id.</li>
@@ -307,12 +321,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>Apply sends one as an edit made now. "Apply all from this device" on the Sync page applies this device's own parked changes at once; a peer's are left for the grower to judge one by one.</li>
     <li>A device whose clock reads earlier than its own latest change says so on its clock line. That acts on nothing, and edits still save and show.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── On the device ─────────────────────────── -->
   <section aria-labelledby="snapshot">
   <h2 id="snapshot">On the device</h2>
   <p class="sum">The device keeps the log, and a snapshot of its last reading so a page opens quickly. The snapshot is only a cache: dropping it never changes what you see. A backup and a sync carry the log, never the snapshot.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>The log is kept as an IndexedDB store of changes keyed by <code>t</code>, with an outbox of the stamps the server has not acknowledged (none in the example) and the order the changes arrived in, a numbered row per change stored.</li>
     <li>A photograph's pixels that nothing names are deleted from the device a few seconds after a page opens the collection, and after a Merge, with sync on or off. Those are the pixels of a photograph whose record is removed, and those with no change under their id two days after the time the id carries.</li>
@@ -329,12 +345,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A backup carries the log, never the snapshot; a sync sends the log, never the snapshot. A device with no snapshot reads the log and is the same collection.</li>
     <li>The database is at version 4. Opening it at a newer version tells a tab still running an older version of the app, which lets go of it once its writes in flight have landed and reloads into the newer one. So a tab left open across an update does not go on writing beside it.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── The example ─────────────────────────── -->
   <section aria-labelledby="sample">
   <h2 id="sample">The example collection</h2>
   <p class="sum">The example collection is a database of its own, kept apart from yours. Nothing of it reaches your log, a backup or sync, and leaving it deletes it. It opens only from its own button, never from a link.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>The example collection (the sample, in the code) is IndexedDB <code>cultifolio-demo</code>, beside the grower's <code>cultifolio</code>. A flag in this tab's session storage (<code>cultifolio.demo</code>) chooses it when a page loads, so entering or leaving it reloads the page.</li>
     <li>Which collection a page shows is decided once, as it loads. Its settings, the "keep data" question, sync and the front page's hint all read that decision, never the flag as it is later.</li>
@@ -383,12 +401,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A tab that was away when another left (another site in it, a page kept in the browser's history, a tab the browser put away) compares it with the one it opened the example under. It opens your own collection on its next load, saying why.</li>
     <li>From that moment such a tab saves nothing more and never opens the example's database again. A page with something typed on it is not sent away: it stays as drawn, with what was typed still there to copy and a sentence saying why nothing more is saved, and its next page is your own collection.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Endpoints ─────────────────────────── -->
   <section aria-labelledby="endpoints">
   <h2 id="endpoints">Endpoints and limits</h2>
   <p class="sum">These are the sync server's addresses, and the limits it keeps so one visitor cannot fill it. Every refusal says why, and the device waits it out without losing a change. Receiving goes on while sending waits.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li><code>POST /api/sync/vault</code> with <code>{`{ id, token, create }`}</code>.</li>
     <li><code>GET /api/sync/log?vault=&amp;since=&lt;ms&gt;</code> returns <code>{`{ batches: [{ key, at }], more, next?: { at, key } }`}</code>. The next page is <code>&amp;after=&lt;at&gt;:&lt;key&gt;</code>.</li>
@@ -495,12 +515,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>Without the counter object bound there is no sweep, and they go at the next touch.</li>
     <li>A removed object's bytes are given back once, under its name and version, however often the removal is asked for.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── What the server sees ─────────────────────────── -->
   <section aria-labelledby="server-sees">
   <h2 id="server-sees">What the server can see</h2>
   <p class="sum">The server holds sealed blobs it cannot open. It can see when and how often each device syncs, and how large things are. It cannot see a plant's name, a note, a space, a date or how many plants you have.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>It holds a vault id, a hash of the token, and sealed blobs, and it cannot open any of them.</li>
     <li>The blob names, sizes and arrival times are in the clear. A log batch is named by the hour and device id of its last change, and a photograph by the time of its creation (before October 2026, its device id too).</li>
@@ -510,12 +532,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>Nothing about the plants themselves (names, notes, spaces, dates, the number of plants) is visible.</li>
     <li>Anyone holding the bearer token (derived from the key, but it could be captured from a device) can add log batches to the vault, which the devices then set aside as unreadable, and can read the ciphertext. The token cannot delete a photograph, since removal needs a proof only a key-holder can make, and cannot read anything.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Reference lookups ─────────────────────────── -->
   <section aria-labelledby="privacy">
   <h2 id="privacy">The reference lookups</h2>
   <p class="sum">Your own pages need the reference's figures for the species you grow. They ask for a group of a few hundred species at a time, never for one by name. So the server cannot tell which of them you grow.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>A plant page, a batch page, Today, the labels, the plants list and the front page's own tiles need the reference's figures for your species. They ask for them by hash group, never by name or key.</li>
     <li>The species' address is hashed (FNV-1a) into one of a number of groups. The count is a power of two from 32, the smallest that keeps a group at 320 species or fewer, chosen by the build for the catalogue it writes and announced by <code>/api/corpus</code> as <code>buckets</code>.</li>
@@ -532,12 +556,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>The service worker keeps those answers under the reference's id (each request carries it, from <code>/api/corpus</code>), so a second visit asks nothing until the reference is refreshed.</li>
     <li>The reference's photographs are not fetched for your own pages unless you switch them on in Settings. Then they come from the image host directly, which sees which species this address asked a picture of.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Search ─────────────────────────── -->
   <section aria-labelledby="search">
   <h2 id="search">Search</h2>
   <p class="sum">The search's order is set out on <a href="/about/how#search">How it is made</a>. Here is how a query is read, and what <code>/api/search</code> answers. Every header it adds says what it did to the words you typed.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>Search puts a name typed as a name first, then an older name typed as one, then a query read whole against each English name (every word in one name, never words of two), then every other match.</li>
     <li>An older name typed whole that a species holds exactly comes before a name whose genus the query only begins: <span class="ex" data-q="Tecoma speciosa" data-order="Handroanthus speciosus | Campsis radicans | Tecomanthe speciosa" data-first>"Tecoma speciosa" is Handroanthus speciosus and Campsis radicans before Tecomanthe speciosa</span>.</li>
@@ -577,12 +603,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>When a pick leaves typed words out (an author, a locality), the text as typed is kept as the plant's name as received.</li>
     <li>A nothogenus keeps its sign (× Gasteraloe), and a field number after the genus (Gymnocalycium LB 123) is kept as written.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Import ─────────────────────────── -->
   <section aria-labelledby="import">
   <h2 id="import">Import, the watering calendar and the label code</h2>
   <p class="sum">An import reads a pasted list or a spreadsheet on the device, and shows you every line before anything is saved. Nothing in the sheet is dropped unseen. Running the same sheet again adds only the plants still missing.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <h3 id="import-read">Reading a sheet</h3>
   <ul class="rules">
     <li><b>Import</b> (My plants, Import) reads a list pasted one plant per line (name; cultivar; number; where it came from; notes, separated by semicolons or tabs). Or it reads a CSV sheet with a comma, semicolon or tab separator, quoted cells and an optional byte order mark.</li>
@@ -693,12 +721,14 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A cross has no species page, so its code names no species, and its name is the cross's parents when they are known (Astrophytum asterias × capricorne), as its label prints it. A hybrid with a name of its own, such as Mentha × piperita, names its species as a species does.</li>
     <li>An "sp." plant's code names no species either. A name that cannot be put in a code leaves that one label without its code, and the others keep theirs.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Dossier ─────────────────────────── -->
   <section aria-labelledby="dossier">
   <h2 id="dossier">A species dossier</h2>
   <p class="sum">Each species page is drawn from one JSON file, its dossier, which anyone can fetch. It holds every figure the page shows, and a record of every source asked. A field a dossier lacks means it was not read, never "none".</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>Each species page is rendered from one JSON document, served at <code>/api/dossier/&lt;id&gt;</code>, the page's id.</li>
     <li>It is answered <code>no-store</code> and kept by no cache, since a dossier's address stays the same when the reference is refreshed.</li>
@@ -708,18 +738,23 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>It holds the climate envelope (the median year, the 10th and 90th percentile years, the cells and records it rests on, the typical cell) with its sources, and the extremes.</li>
     <li>It holds the photographs with author and licence; <code>licence</code> is <code>cc0</code>, <code>pd</code>, <code>by</code> or <code>by-sa</code>. <code>pd</code> is public domain that is not a CC0 waiver; an older dossier tags a Commons file "Public domain" <code>cc0</code>, which the site reads as <code>pd</code>.</li>
     <li>It holds the summary with its licence, at most 1,500 characters, cut where a sentence ends, with <code>cut: true</code> where the article's lead went on, or the text does not end a sentence, when it ends with "…".</li>
-    <li>It holds literature (empty in a page built since the reference stopped asking OpenAlex, whose <code>upstream.openalex</code> is <code>skipped</code>, not checked, never none) and links.</li>
+    <li>The summary carries <code>revision</code>, the article's revision it was quoted from, and <code>read</code>, the day it was read, which the page names.</li>
+    <li>It holds links, and <code>literature</code>, which is empty: the reference does not ask OpenAlex, and <code>upstream.openalex</code> is <code>skipped</code>, with why.</li>
     <li>And an <code>upstream</code> block, recording for every source whether it answered, refused, was not asked (<code>skipped</code>), or was carried from an earlier build. For a source read from a file, <code>asOf</code> is the day of the file it was read from (Kew's files, GBIF's download).</li>
     <li>Its <code>gbif.occurrences</code> row says how its records were tested against the range: by the regions' shapes, by their boxes, or by both, naming the regions tested by box.</li>
-    <li><code>occurrences.rangeRule</code>: the rule of the regions' shapes its records were tested by (<code>r84</code>). Absent on a page tested before that rule, which <code>--check-ranges</code> lists.</li>
+    <li><code>occurrences.rangeRule</code>: the rule of the regions' shapes its records were tested by, named by the round that wrote it. The build's range check lists every page tested by an older rule.</li>
+    <li><code>occurrences.admitted</code> (<code>{`{ strict, buffer, coast, island }`}</code>): every record in the range counted by how it was let in, inside a native region's shape, by the buffer, by the coast reach, or on a small island. <code>occurrences.edge</code> names the open records the last three took.</li>
+    <li><code>climate.admitted</code> counts the climate's cells the same way, and <code>climate.edge</code> gives each cell not strictly inside a native shape, by its middle and why, which the build's range check tests. <code>climate.place</code>: the typical cell's state or province and country.</li>
+    <li>Where GBIF held more records than the build reads, they are a sample chosen by grid cell, every distinct cell first (<a href="/about/how#sample">the rule</a>).</li>
   </ul>
   <h3 id="photo-fields">A photograph's fields</h3>
   <ul class="rules">
-    <li>A Commons photograph carries <code>categories</code>, Commons' categories for the file as the build or <code>--fill commons-kind</code> read them, absent where not yet read. It carries <code>struck</code> where its description strikes out a name. The site reads both to decide whether it is shown.</li>
+    <li>Each photograph carries <code>read</code>, the day its credit and licence were read from its source, which the page says with the credits.</li>
+    <li>A Commons photograph carries <code>categories</code>, Commons' categories for the file as the build or the fill of Commons' categories read them, absent where not yet read. It carries <code>struck</code> where its description strikes out a name. The site reads both to decide whether it is shown.</li>
     <li>A Commons photograph may carry <code>slips</code> (the uploader's slips in its name that Kew and GBIF were asked of and hold as no species).</li>
     <li>It may carry <code>inat</code> (the iNaturalist photograph its source names), <code>kind</code> (what its source or description says it is, when not a living plant), <code>sourceRead</code> (set once the fill has read them) and <code>kindRule</code>. A file left out by its description is asked again only when the description rules (<code>kindRule</code>) are newer.</li>
-    <li>Any photograph may carry <code>shared</code>: the ids of the other species' pages that hold it, Kew's ids before GBIF's, each by number, written by <code>--index</code>. It is then not shown.</li>
-    <li>A Commons photograph carries <code>judged</code> (<code>{`{ not, rank }`}</code>), written by <code>--index</code> with every name the reference holds. <code>not</code> is why the file is not a photograph of the species, absent when it is one.</li>
+    <li>Any photograph may carry <code>shared</code>: the ids of the other species' pages that hold it, Kew's ids before GBIF's, each by number, written when the index is made. It is then not shown.</li>
+    <li>A Commons photograph carries <code>judged</code> (<code>{`{ not, rank }`}</code>), written when the index is made, with every name the reference holds. <code>not</code> is why the file is not a photograph of the species, absent when it is one.</li>
     <li><code>rank</code> is 0 when its title holds the species' own epithet, 1 an older name's, 2 neither. The site shows the file, and orders the Commons files, by it; a file without one by the same rules with no names but the species' own.</li>
     <li>A GBIF photograph whose record is not an observation of the living plant carries <code>specimen</code>, and is not shown.</li>
   </ul>
@@ -733,8 +768,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>Its name block (with <code>name.kew</code>), range and IPNI and POWO numbers are read from Kew's file (<code>upstream['kew.names']</code>, <code>asOf</code> the file's day). Its Wikidata item is the one that carries that IPNI or POWO number.</li>
     <li>GBIF is not asked by its name: its <code>gbif.species</code>, <code>gbif.synonyms</code>, <code>gbif.vernacular</code> and <code>gbif.media</code> rows are <code>skipped</code>, with the reason.</li>
     <li>Its English names are its item's, in <code>name.vernacular</code> with <code>source</code> "Wikidata". <code>upstream['wikidata.names']</code> says what was read: <code>ok</code> or <code>none</code> where Wikidata answered; <code>skipped</code>, <code>refused</code> or <code>error</code>, with why, where it was not checked.</li>
-    <li>A dossier built before that row existed has none, and its names are not checked.</li>
-    <li>Where Kew's synonymy gives it GBIF keys of its own (<code>scripts/extra-keys-kew.txt</code>), its <code>occurrences</code>, <code>centroid</code> and <code>climate</code> are read from their records as any page's, and <code>occurrences.keys</code> names each key.</li>
+    <li>Where Kew's synonymy gives it GBIF keys of its own (<a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/extra-keys-kew.txt">the list of keys from Kew</a>), its <code>occurrences</code>, <code>centroid</code> and <code>climate</code> are read from their records as any page's, and <code>occurrences.keys</code> names each key.</li>
     <li>Otherwise its <code>gbif.occurrences</code> and <code>climate</code> rows are <code>skipped</code> with the reason, its <code>occurrences</code> are empty with <code>rangeTested</code> false, and it has no <code>centroid</code>. Its <code>climate</code> is <code>pending</code> with the reason, and the site says each as not checked, never none.</li>
     <li>That reason is the page's own, in <code>occurrences.unread</code> (<code>{`{ kind, why, under }`}</code>). It says what GBIF's backbone holds of Kew's names for it: <code>lumped</code>, <code>none</code>, <code>other-type</code>, <code>pro-parte</code>, <code>other-author</code> or <code>other</code>.</li>
     <li>It carries the words the page says and, where GBIF files those names under other pages here, each of them by its GBIF key, its name and its id (<code>page</code>). A dossier without it says the general reason.</li>
@@ -745,14 +779,15 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li><code>name.cited</code> (<code>{`{ gbif, kew }`}</code>), present when the page cites Kew's author for the number it links: the backbone's citation, and Kew's row cited (its plant_name_id).</li>
     <li><code>name.kew</code> (<code>{`{ entry, synonyms, acceptedElsewhere, file, heldBy? }`}</code>): Kew's accepted entry for the page's plant, Kew's synonym binomials of it, the stored older names Kew accepts as species of their own, and the day of Kew's file.</li>
     <li>The entry is '' when the names do not lead to one, or lead to an entry another page holds, whose id <code>heldBy</code> names; there are then no synonyms. One Kew entry is one page's.</li>
-    <li><code>name.kew.accepted</code> (<code>{`{ name, authors, rank, other? }`}</code>): Kew's row for the entry, which heads the page while its id is <code>k</code> and the entry's number. <code>name.gbif</code>: GBIF's name for the page's key, where Kew's heads the page; <code>added</code> names the older name the heading put among the synonyms.</li>
-    <li><code>name.shared</code>: the one-word English names the page does not head with or show, since another species of its genus is given them more often, or as often. <code>name.infra</code>: the names GBIF files under the species' own varieties and subspecies, read by <code>--fill gbif-infra</code>, which the search reads as a name typed.</li>
+    <li><code>name.kew.accepted</code> (<code>{`{ name, authors, rank, other?, family? }`}</code>): Kew's row for the entry, with Kew's family, which heads the page while its id is <code>k</code> and the entry's number. <code>name.gbif</code>: GBIF's name for the page's key, where Kew's heads the page, with GBIF's <code>family</code>; <code>added</code> names the older name the heading put among the synonyms.</li>
+    <li><code>name.shared</code>: the one-word English names the page does not head with or show, since another species of its genus is given them more often, or as often. <code>name.infra</code>: the names GBIF files under the species' own varieties and subspecies, read by the fill of GBIF's infraspecific names, which the search reads as a name typed.</li>
+    <li><code>name.formerly</code>: the names that headed the page before its heading now, each still an address of the page. <code>name.kew.elsewhere</code>: GBIF's names on the page that Kew's file files only under another plant, which are not the page's names, so neither searched, shown nor an address.</li>
     <li><code>distribution.via</code>, where the range comes from: its <code>kind</code> (<code>own</code>, <code>older-name</code>, <code>synonym-of</code>, <code>kew-entry</code> or <code>spelling</code>), and the <code>entry</code> whose range is shown.</li>
     <li>It also carries <code>page</code>, that page's id when the entry is another page here; <code>unplaced</code>, when Kew holds the name as unplaced; and <code>file</code>, the day of Kew's file.</li>
     <li><code>distribution.doubtful</code>: the regions where WCVP records the plant as doubtfully present, listed apart, never a range box.</li>
     <li><code>occurrences.keys</code> (<code>{`{ key, name, kew, n, from, slug }`}</code>), present when the records also come from other GBIF keys than the page's own, or, on a page without a GBIF key, from the keys Kew's synonymy gives it.</li>
     <li>For each key: GBIF's name for it, how Kew's file holds it as this page's name or type, the records it added, <code>download</code> or <code>api</code>, and, for a page merged into this one, the old address.</li>
-    <li>The species page reads these fields. For a dossier built before them it reads the sentences the builder wrote then.</li>
+    <li>The species page reads these fields.</li>
     <li>GBIF's English names are one row per exact spelling and language. Each has the first source that gives it (<code>source</code>), the other named sources of that spelling (<code>alsoFrom</code>), how many sources give it when more than one (<code>sources</code>), and GBIF's <code>preferred</code> flag.</li>
     <li>A row whose name holds commas is read by the common-name rule as a list of names, each given by that row's sources. A list longer than four pages of a thousand rows is kept as far as it was read, and its upstream record says "truncated".</li>
     <li>A row whose <code>source</code> is "Wikidata" is an English name from the page's Wikidata item, its taxon common name (P1843), for a page without a GBIF key.</li>
@@ -773,29 +808,34 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li><code>kew</code>: Kew's older names for the plant that <code>syn</code> and <code>older</code> do not hold, and the names GBIF files under the species' own varieties and subspecies, which the search reads only as a name typed and nothing shows. Absent where there are none, or Kew's file has not been read for the page.</li>
     <li><code>hom</code>: the record's older names spelt as another page's accepted name, by another author than that page's, searched only as a name typed and said as another author's name. <code>homBy</code>: for each of them, the authors the record writes after it, as written.</li>
     <li><code>merged</code>: the names of the pages merged into this one, each also among its older names. The search lists this page first for them, and its row says the name is merged into it.</li>
-    <li>Each of these, where absent, means none was written, never that the species has none: an index built before a field has none of it.</li>
+    <li><code>grown</code>: how many of iNaturalist's observations are marked captive or cultivated for the species, as the species list counts them. The search breaks a tie by it, before the photographs.</li>
+    <li>Each of these, where absent, means none was written, never that the species has none.</li>
   </ul>
   <h3 id="export">The dataset export</h3>
   <ul class="rules">
-    <li>The reference is built from public data under CC0, public domain, CC BY and CC BY-SA. The repository's <code>npm run export</code> packages a built reference as a dataset bundle: the species JSON, <code>species.csv</code>, <code>climate.csv</code>, and the licence terms per source.</li>
+    <li>The reference is built from public data under CC0, public domain, CC BY and CC BY-SA. The source code's export script packages a built reference as a dataset bundle: the species JSON, <code>species.csv</code>, <code>climate.csv</code>, and the licence terms per source.</li>
     <li>That is how the reference data leaves the site as data rather than pages.</li>
     <li><code>species.csv</code> ends with <code>annual_precip_cells_p10_mm</code>, <code>annual_precip_cells_median_mm</code> and <code>annual_precip_cells_p90_mm</code>: the 10th percentile, median and 90th percentile, across the cells, of each cell's own yearly total. <code>annual_precip_mm</code> stays the median year's total.</li>
   </ul>
+  </details>
   </section>
 
   <!-- ─────────────────────────── Reference files ─────────────────────────── -->
   <section aria-labelledby="corpus-files">
   <h2 id="corpus-files">The reference's files</h2>
   <p class="sum">Beside the dossiers, the build writes small files the server reads instead of the whole index. Each is named by the hash of its content, and a manifest names them all. The file counts grow with the reference by a fixed rule.</p>
+  <details class="full in-full"><summary>The format in full</summary>
   <ul class="rules">
     <li>The files are stored under the hash of their content (<code>s/v3/p/&lt;md5&gt;.json</code>; the dossiers are <code>s/v3/&lt;id&gt;.json</code>). <code>s/v3/manifest.json</code> names them: <code>{`{ v, id, built, species, buckets, postings, files: { <name>: <md5> } }`}</code>, where <code>id</code> is a hash of every file's hash.</li>
     <li><code>index.json</code>: every species' index entry. <code>/api/index</code> passes it on as it is stored.</li>
     <li><code>entries/&lt;group&gt;.json</code> and <code>sheets/&lt;group&gt;.json</code>: a hash group's entries and figure sheets (<code>/api/entries</code>, <code>/api/sheets</code>).</li>
+    <li>A sheet filed under another name than its page's carries <code>via</code> and <code>page</code>, the page's own address. <code>via: 'merged'</code>: the name of a page merged into it. <code>via: 'gbif'</code>: GBIF's name for the page's own key, where Kew's name heads the page; the app takes such a copy only for a plant of that GBIF key. An app of an earlier round reads either as the page's sheet.</li>
     <li><code>postings/&lt;n&gt;.json</code>: which entries, by position in the index, each short key of a name can match. <code>short.json</code>: the best hundred for each key of one or two letters.</li>
     <li><code>catalogue/&lt;grouping&gt;-&lt;chip&gt;.json</code>: the catalogue's rows (<code>{`{ rows, letters, letterAt, total, withClimate }`}</code>).</li>
     <li><code>rows/&lt;grouping&gt;/&lt;n&gt;.json</code>: each catalogue row's species under "all", by row id (<code>{`{ at, items }`}</code>), sorted by name, with each one's position in the index.</li>
     <li>The row files of a grouping are the power of two at or above the species count divided by 150 for genera, and by 600 for families and regions, and at least 16. At 48,357 species: 512 for genera, 128 for the others.</li>
     <li><code>genera.json</code>: every genus with its count of species, <code>[[genus, count], …]</code>.</li>
+    <li><code>older-genera.json</code>: every genus no page is headed in that is the first word of the older names of at least three species, with that count, <code>[[genus, count], …]</code>. The search reads a misspelt genus against both files.</li>
     <li><code>featured.json</code>: the species the front page's strip rotates through (<code>{`{ slug, name, thumb, credit, common, family }`}</code>).</li>
     <li><code>sitemap/&lt;n&gt;.json</code>: forty thousand of the sitemap's addresses a file, with each one's day (<code>{`{ urls, days }`}</code>).</li>
   </ul>
@@ -822,12 +862,13 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A key's file, <code>s/v3/p/&lt;md5&gt;.json</code>, is <code>[[position, doc], …]</code>: every species with a word so begun, in the index's order, with its position in the index and what the order reads of it.</li>
     <li>The doc is <code>[name, family, origin, common, commons, spellings, syn, older, kew, hom, merged]</code>. The family and the regions of origin are numbers into <code>search/tables.json</code> (<code>{`{ families, regions }`}</code>), with -1 for no family and '' for no headline; empty fields at the end are left off.</li>
     <li><code>kew</code> is filled only in a file of Kew's older names (an <code>@</code> key), with the names of that key's genus.</li>
-    <li><code>search/blocks.json</code> is <code>{`{ photos, show }`}</code>: the md5s of the photograph counts by position, 4,096 to a file (<code>[count, …]</code>), and of the index entries by position, 16 to a file (<code>[entry, …]</code>). A search reads them for its matches only.</li>
+    <li><code>search/blocks.json</code> is <code>{`{ photos, show }`}</code>: the md5s of the photograph counts by position, 4,096 to a file (<code>[count, …]</code>), and of the index entries by position, 16 to a file (<code>[entry, …]</code>). A search reads them for its matches only. Where the index carries <code>grown</code>, it also holds <code>grown</code>, the md5s of the growers' counts by position, as the photographs'; a server of an earlier round reads neither.</li>
     <li>Answers are <code>{`{ a, b?, t?, x?, n? }`}</code>, by position in the index: the whole index's best hundred to the word alone as typed (<code>a</code>); in a form no English name is written as, when that differs (<code>b</code>); and in each form an English name is written as (<code>t</code>, by the form).</li>
-    <li><code>x: 1</code> when they came from the word as typed rather than a similar spelling. <code>n</code> is how many species the whole index answers, of which these are the first; absent in a file built before it, when the count is not known.</li>
+    <li><code>x: 1</code> when they came from the word as typed rather than a similar spelling. <code>n</code> is how many species the whole index answers, of which these are the first.</li>
     <li><code>search/genera.json</code> is every genus of the reference as the search reads a word.</li>
     <li>The key files and answers are named by the directories, and the count and entry files by <code>blocks.json</code>, not by the manifest. A server that reads them reads neither the index nor the postings. The postings and <code>short.json</code> are still written, for a server deployed before them.</li>
   </ul>
+  </details>
   </section>
 </article>
 
@@ -848,6 +889,9 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   .sum { font-size: var(--fs-lg); line-height: 1.55; margin: 0 0 12px; }
   .rules { padding-left: 1.1rem; margin: 0 0 12px; }
   .rules li { margin: 6px 0; }
+  /* The format in full, one tap under each summary: a 44 px target (round eighty-five). */
+  .full { margin: 4px 0 14px; }
+  .full > summary { cursor: pointer; font-weight: 600; min-height: var(--tap); display: flex; align-items: center; }
   /* An anchor lands under the top bar, not beneath it. */
   .prose [id] { scroll-margin-top: calc(44px + 16px); }
   .prose code { overflow-wrap: anywhere; }

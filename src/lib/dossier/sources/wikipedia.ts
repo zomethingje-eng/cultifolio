@@ -23,8 +23,8 @@ export { redirected };
  * redirects X to Y"; a source that did not answer while the proof was read leaves it not checked, said so (rule 2).
  * `--fill summaries` reads the same rule on the same answers (S-A5).
  */
-export async function summary(f: JsonFetcher, title: string, accept?: readonly string[], who?: Who, pre?: Facts): Promise<SourceResult<{ text: string; url: string; title: string; proof?: Proof; cut?: true }>> {
-  const r = await f<{ extract?: string; content_urls?: { desktop?: { page?: string } }; title?: string; type?: string }>(
+export async function summary(f: JsonFetcher, title: string, accept?: readonly string[], who?: Who, pre?: Facts): Promise<SourceResult<{ text: string; url: string; title: string; proof?: Proof; cut?: true; revision?: number }>> {
+  const r = await f<{ extract?: string; content_urls?: { desktop?: { page?: string } }; title?: string; type?: string; revision?: string | number }>(
     `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
   );
   if (r.status !== 'ok') return r;
@@ -50,7 +50,9 @@ export async function summary(f: JsonFetcher, title: string, accept?: readonly s
   }
   // A lead that does not end a sentence is cut where Wikipedia's extract stopped, and marked so (`sentenceCut`; round eighty-four, A4).
   const kept = sentenceCut(upToSentence(r.data.extract, SUMMARY_MAX));
-  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: kept.text, ...(r.data.extract.trim().length > SUMMARY_MAX || kept.cut ? { cut: true as const } : {}), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}) } };
+  // The article's revision the lead was read from (round eighty-five, the owner's decision 8): the page links the quoted text's own revision.
+  const revision = Number(r.data.revision);
+  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: kept.text, ...(r.data.extract.trim().length > SUMMARY_MAX || kept.cut ? { cut: true as const } : {}), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got, ...(proof ? { proof } : {}), ...(Number.isSafeInteger(revision) && revision > 0 ? { revision } : {}) } };
 }
 
 /**

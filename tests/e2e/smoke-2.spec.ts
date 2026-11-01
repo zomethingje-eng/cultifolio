@@ -1,5 +1,6 @@
 // smoke.spec.ts, the second part: honesty and accessibility, from the QA pass (round seventy-two: split into four files that run in parallel, each in order).
 import { test, expect } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { smokeSetup, ready, addPlant, more, WEBKIT_OFFLINE } from './helpers/smoke';
 
 smokeSetup();
@@ -39,9 +40,9 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('.idcard .pill', { hasText: 'Climate known' })).toHaveCount(0); // what is known is shown, not announced
   // climate refused: its own line, with the detail as a sentence
   // "not checked" once, by the mark under the name; here what that means (round eighty-four; A10)
-  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Climate not read. The occurrence source refused the request when this page was built. This is not a statement that no climate exists.');
+  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('No habitat climate shown. The occurrence source refused the request when this page was built. This is not a statement that no climate exists.'); // one word for one state, the mark's (round eighty-five; A16g)
   // the cultivation section does not say "no habitat climate"
-  await expect(page.locator('.note-slot')).toContainText('No sheet: the habitat climate was not read (see Climate).');
+  await expect(page.locator('.note-slot')).toContainText('No sheet: there is no habitat climate to read one from (see Climate).');
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
   // the map caption does not promise a marker there is none of
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
@@ -90,8 +91,8 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.goto('/species/copiapoa-cinerea');
   await ready(page); // a disclosure opened before hydration is closed again by it (WebKit, round seventy-one, the owner's run)
   // every table cell is "median / p10–p90" where the span differs
-  await expect(page.locator('table.wx tbody tr').first().locator('td').nth(1)).toHaveText('22 / 20–24');
-  await expect(page.locator('table.wx tbody tr').nth(2).locator('td').nth(1)).toHaveText('4'); // rain: no spread in the fixture, so the median alone
+  await expect(page.locator('table.wx tbody tr').first().locator('td').nth(1)).toHaveText('22 / 20–24'); // January's day
+  await expect(page.locator('table.wx tbody tr').first().locator('td').nth(3)).toHaveText('4'); // rain: no spread in the fixture, so the median alone (months as rows since round eighty-five, W5)
   await page.locator('#s-climate ~ details.why').first().locator('summary').click(); // the provenance is one tap from the chart
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
   await expect(page.getByText(/Extremes and elevation were read at a typical spot in the range, cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
@@ -593,7 +594,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('reference photograph off'); // the own tile, without its photograph
-  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 500); // a negative, read once the page has asked for nothing for 500 ms (helpers/settled.ts): no request may follow
   expect(outside.filter((u) => !u.startsWith('/ ->'))).toEqual([]); // the plant page and the list asked no outside host for anything
   expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
   // after a search (answered by the server, the index never fetched whole) the own tile still shows no photograph
@@ -630,13 +631,13 @@ test('hovering a species link on a page about your own plants sends nothing; the
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('link', { name: 'Species page' }).hover();
-  await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 700); // a negative, read once the page has asked for nothing for 700 ms (helpers/settled.ts): no request may follow
   expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
   await page.goto('/');
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('a.tile', { hasText: 'Copiapoa' }).first()).toBeVisible();
   await page.locator('a.tile', { hasText: 'Copiapoa' }).first().hover(); // an own tile
-  await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  await goneQuiet(page, 700); // a negative, read once the page has asked for nothing for 700 ms (helpers/settled.ts): no request may follow
   expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
   // the public catalogue still preloads on hover: a visitor's browsing is not the collection
   await page.getByRole('button', { name: /^All / }).click(); // the catalogue
@@ -737,7 +738,8 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('button', { name: 'Water', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
-  await expect(page.locator('.crumb a')).toBeVisible();
+  // Round eighty-five (U; W14, P7): at 480 px and under a detail page's crumb is its name alone, Back leading up.
+  await expect(page.locator('nav[aria-label="Breadcrumb"]')).toBeVisible();
   expect(await sample()).toEqual([]);
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('nav.tabs a').first()).toBeVisible();

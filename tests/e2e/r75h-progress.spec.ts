@@ -9,6 +9,7 @@
  * fails after one window, with the check's own message, rather than waiting out the test.
  */
 import { zipSync, strToU8 } from 'fflate';
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
 import { watchStorage, whileStoring, storageAnswers } from './helpers/progress';
 
@@ -39,7 +40,7 @@ async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ st
 // merge's longer tasks until the merge is done: that restore counts as one window however long it lasted, so a single
 // restore's count was flaky, on r77base too (1 restore in 4 of a 6 to 7 s merge, alone; the whole strict run, once). Each
 // restore must still be waited for to its end; only the count is taken from the best of them.
-test('r75h progress 1: a slow restore is waited for while the database answers, past any one window', { tag: '@chromium' }, async ({ browser, baseURL }) => {
+test('r75h progress 1: a slow restore is waited for while the database answers, past any one window', chromiumOnly('a CDP CPU throttle, twenty times over, is what makes the restore outlast one window'), async ({ browser, baseURL }) => {
   test.setTimeout(240_000);
   const seen: string[] = [];
   let most = 0;
@@ -72,7 +73,7 @@ test('r75h progress 2: a page whose database has gone quiet fails after one wind
   await page.goto('/backup');
   await ready(page);
   // Let the page's own opening reads finish, then read that nothing more is being answered.
-  await expect.poll(async () => { const a = await storageAnswers(page); await page.waitForTimeout(1_000); return (await storageAnswers(page)) - a; }, { timeout: 20_000 }).toBe(0);
+  await expect.poll(async () => { const a = await storageAnswers(page); await page.waitForTimeout(1_000); /* a negative: a rate is read over a second */ return (await storageAnswers(page)) - a; }, { timeout: 20_000 }).toBe(0);
   expect(await storageAnswers(page)).toBeGreaterThan(0); // the counter is in the page and counted the opening
   const t0 = Date.now();
   const failed = await whileStoring(page, (timeout) => expect(page.locator('#bk-done')).toContainText('400 plants', { timeout }), 2_000).then(() => null, (e: Error) => e);

@@ -18,6 +18,7 @@
  * 4 FAILED (focus on the page's body); 5 FAILED (200 of 300 px, and 200 of 150 px on a phone).
  */
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { ready, addPlant } from './helpers/smoke';
 
 test.use({ serviceWorkers: 'block' });
@@ -72,11 +73,11 @@ test('r81u a11y 4: on a desktop the add form puts focus in the species field', a
   await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
-  await page.waitForTimeout(800); // a negative: nothing may take focus back
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing may take focus back once the check has answered
   await expect(page.locator('#species-name')).not.toBeFocused();
   // With the name given by the link, focus is left alone.
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
-  await page.waitForTimeout(500); // a negative: nothing may take focus after the collection opens
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing may take focus after the collection opens
   await expect(page.locator('#species-name')).not.toBeFocused();
 });
 

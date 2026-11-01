@@ -16,15 +16,17 @@ const tomato = { status: 'ok', months: months([16.2, 17, 16.8, 15.9, 15.2, 14.9,
 describe('the daily extremes beyond a lapse correction', () => {
   it("the tomato's correction of -1,129 m is refused, and said", () => {
     expect(MAX_LAPSE_M).toBe(1000);
-    expect(lapseSetAside(tomato)).toMatch(/-1129 m, is beyond the 1,000 m/);
+    expect(lapseSetAside(tomato)).toMatch(/ground is 1,129 m higher than the typical spot's, more than the 1,000 m over which/); // round eighty-five (P8): one figure, once
     const c = setAsideExtremes(tomato as never) as unknown as { extremes?: unknown; extremesLapse?: unknown; extremesStatus?: string };
     expect(c.extremes).toBeUndefined();
     expect(c.extremesLapse).toEqual(tomato.extremes);
     expect(c.extremesStatus).toBe('lapse');
   });
   it('a record low warmer than the coldest mean night is refused even within the bound (Ruellia simplex, -768 m)', () => {
-    const r = { months: months([18, 17.5, 16.6, 17]), extremes: { minAbs: 17.8, lapseAppliedM: -768 } };
-    expect(lapseSetAside(r)).toMatch(/record low, 17.8 °C, is warmer than the coldest month's mean nightly low across the range, 16.6 °C/);
+    // Round eighty-five (decision 4): by more than 1.5 °C. Ruellia simplex's own gap, 1.2 °C, now stands.
+    expect(lapseSetAside({ months: months([18, 17.5, 16.6, 17]), extremes: { minAbs: 17.8, lapseAppliedM: -768 } })).toBeNull();
+    const r = { months: months([18, 17.5, 16.6, 17]), extremes: { minAbs: 18.2, lapseAppliedM: -768 } };
+    expect(lapseSetAside(r)).toMatch(/record low, 18.2 °C, is warmer than the coldest month's mean nightly low across the range, 16.6 °C, by more than the 1.5 °C/);
   });
   it('an ordinary correction stands, and a sea cell is still the sea rule', () => {
     expect(lapseSetAside({ months: months([2, 1]), extremes: { minAbs: -6, lapseAppliedM: 420 } })).toBeNull();

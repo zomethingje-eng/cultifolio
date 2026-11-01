@@ -8,6 +8,7 @@
  * fetches as well as the page's in every engine, on an origin of its own (its own worker and caches).
  */
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { cuttableNetwork, type Cut } from './helpers/cut';
 
 let net: Cut;
@@ -30,7 +31,7 @@ test('r73p 1: a reader of one species page is sent no service worker and no prec
   await reader.page.goto('/species/copiapoa-cinerea');
   await reader.page.locator('html[data-collection="open"]').waitFor({ state: 'attached' });
   await reader.page.waitForLoadState('networkidle');
-  await reader.page.waitForTimeout(1500); // a negative: nothing may follow the page's own requests, and only a pause can show that none did
+  await goneQuiet(reader.page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing may follow the page's own requests
   // r73base: the worker is registered on this first page and its install asks for the shells, the offline page and `/`.
   expect(precache(net.seen), 'what the install would have fetched').toEqual([]);
   expect(await registered(reader.page)).toBe(false);

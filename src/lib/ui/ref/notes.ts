@@ -11,7 +11,7 @@ import { canonicalSynonym } from '$core/names';
 /** `name.cited`: the page cites Kew's author rather than the backbone's. */
 export type Cited = { gbif: string; kew: string };
 /** `distribution.via`: which Kew entry's range the page shows, and how it was reached. */
-export type Via = { kind: 'own' | 'older-name' | 'synonym-of' | 'kew-entry' | 'spelling'; entry: string; page?: string; unplaced?: boolean };
+export type Via = { kind: 'own' | 'older-name' | 'synonym-of' | 'kew-entry' | 'spelling'; entry: string; page?: string; unplaced?: boolean; row?: string; name?: string };
 /** `name.kew`: Kew's reading of the page's entry, from Kew's files. */
 export type KewNames = { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string };
 
@@ -36,6 +36,15 @@ export function citedNote(name: NameLike, upstream: Record<string, { detail?: st
 export type RangeNote = { text: string; clause: string | null; page: string | null };
 
 const OLD_REACHED = /under the name |, reached by /;
+/** Whether Kew's entry ("Hoodia alstonii (N.E.Br.) Plowes") is of the heading's very words: the words, then an author or nothing. */
+function sameWords(entry: string, heading: string): boolean {
+  const e = entry.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim(), h = heading.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim();
+  if (e === h) return true;
+  if (!e.startsWith(`${h} `)) return false;
+  // The next word is an author's ("(N.E.Br.)", "L.", "Franch."), never a rank's or an epithet's.
+  const next = e.slice(h.length + 1).split(' ')[0];
+  return !/^(subsp|var|f|fo|nothosubsp|nothovar)\.?$/.test(next) && !/^[a-z]/.test(next);
+}
 const OLD_SYNONYM = /\bKew holds .+ as a synonym of /;
 
 /**
@@ -43,19 +52,27 @@ const OLD_SYNONYM = /\bKew holds .+ as a synonym of /;
  * as before (round sixty-eight: an entry reached by an older name; round seventy-one: an entry Kew holds the name as a
  * synonym of, until now shown only in the record of sources, triage B3). Nothing when the range is the page's own entry.
  */
-export function rangeNote(dist: DistLike, name: { scientific: string }): RangeNote | null {
+export function rangeNote(dist: DistLike, name: { scientific: string; authorship?: string | null; gbif?: { scientific?: string } | null }): RangeNote | null {
   if (!dist.native.length) return null;
   const v = dist.via;
   if (v && typeof v.kind === 'string') {
     const page = v.page ? String(v.page) : null;
+    // The range was reached by the name the derivation read, GBIF's (round eighty-five; D2, A2): since round eighty-four
+    // Kew's accepted name heads a page whose Kew entry is the range's, and "Kew holds Hoodia alstonii as a synonym of
+    // Hoodia alstonii (N.E.Br.) Plowes" said of the heading what Kew says of GBIF's name. Where the entry is the heading's
+    // own (its words, and for an entry of these words by another author, its author too), the range is the page's own
+    // entry and there is no note; otherwise the clause names the name the range was reached by.
+    const own = sameWords(v.entry, name.scientific) && (v.kind !== 'kew-entry' || (!!name.authorship && v.entry.trim().endsWith(` ${name.authorship.trim()}`)));
+    if (v.kind !== 'own' && own) return null;
+    const reached = (v as { row?: string }).row ?? name.gbif?.scientific ?? name.scientific;
     switch (v.kind) {
       case 'own':
         // An Unplaced name's own range (B8, Aphelandra squarrosa): said beside the map, not only in the record.
         return v.unplaced ? { text: `Kew's entry ${v.entry}`, clause: 'Kew holds this name as unplaced, not placed under an accepted species; the range is the one Kew gives the name', page } : null;
       case 'older-name':
-        return { text: `Kew's entry ${v.entry}`, clause: `Kew holds no entry of ${name.scientific} by its author; the range is that of the one Kew entry this species' older names lead to`, page };
+        return { text: `Kew's entry ${v.entry}`, clause: `Kew holds no entry of ${reached} by its author; the range is that of the one Kew entry this species' older names lead to`, page };
       case 'synonym-of':
-        return { text: `Kew's entry ${v.entry}`, clause: `Kew holds ${name.scientific} as a synonym of ${v.entry}; the range is that entry's`, page };
+        return { text: `Kew's entry ${v.entry}`, clause: `Kew holds ${reached} as a synonym of ${v.entry}; the range is that entry's`, page };
       case 'kew-entry':
         return { text: `Kew's entry ${v.entry}`, clause: `the range is that of Kew's entry of these words by another author than the one this page cites`, page };
       case 'spelling':

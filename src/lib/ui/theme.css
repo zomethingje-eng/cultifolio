@@ -88,6 +88,9 @@
   --r: 10px;
   --sh: 0 1px 2px rgba(16, 33, 29, 0.055), 0 3px 10px rgba(16, 33, 29, 0.04);
   --sh2: 0 3px 7px rgba(16, 33, 29, 0.08), 0 12px 24px rgba(16, 33, 29, 0.07);
+  /* The UI face's metric-matched stand-ins alone, without the web font: for a line drawn above content after the first
+     paint, which the web font's arrival would otherwise reflow (round eighty-five; outside review A16f). */
+  --ui-local: 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', 'Newsreader Fallback Liberation', 'Newsreader Fallback DejaVu', Georgia, 'Times New Roman', serif;
   --mono: 'DM Mono', 'DM Mono Fallback Consolas', 'DM Mono Fallback Menlo', 'DM Mono Fallback Liberation', 'DM Mono Fallback DejaVu', ui-monospace, Menlo, Consolas, monospace;
@@ -215,7 +218,18 @@ i, em { font-style: italic; }
 .map { width: 100%; height: auto; aspect-ratio: 3 / 2; display: block; border-radius: var(--r); background: var(--map-sea); }
 .map .sea { fill: var(--map-sea); }
 .map .land { fill: var(--map-land); stroke: var(--map-coast); vector-effect: non-scaling-stroke; } /* the colours are the theme's, not the file's, so dark mode draws dark land (round fifty-eight) */
-.map .range { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-opacity: 0.6; stroke-width: 1px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+/* The native range (round eighty-five; review W3: the fill was 1.16:1 against land, 1.23:1 in dark). The world map's fill
+   is 3.2:1 against land and 3.0:1 against sea (3.4:1 and 4.5:1 in dark); its edge, and the close-up's, is the accent, 4.2:1
+   against land (5.2:1 in dark). The close-up keeps a light fill under a solid edge, so its record dots read over it. */
+.map { --map-range: #4a8a6c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .map { --map-range: #449473; } }
+:root[data-theme='dark'] .map { --map-range: #449473; }
+@media print { :root .map, :root:not([data-theme='light']) .map { --map-range: #4a8a6c; } }
+.map .range { fill: var(--map-range); stroke: var(--accent); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.map-region .range { fill-opacity: 0.28; stroke-width: 1.5px; }
+/* A record off the coast the map draws (the coast reach or an island took it): a ring, said in the map's key. */
+.map .occ-sea { fill: none; stroke: var(--accent); stroke-opacity: 0.8; }
+.mwords .mkey { right: 2%; bottom: 3%; font-size: var(--fs-xs); }
 /* Each record a dot (round eighty-three; $lib/map/still `dots`): a path of no length in the group, whose round cap is a disc
    as wide as the group's stroke. The opacity is each path's own, so overlapping records darken as the circles did. */
 .map .occ { fill: none; stroke: var(--accent); stroke-opacity: 0.5; stroke-linecap: round; }
@@ -532,6 +546,10 @@ input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; accent-
   a.accno { position: relative; } /* the credit is placed already, absolute or relative, which holds its margin too */
   a.accno::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: var(--tap); transform: translateY(-50%); }
   .hero .cred::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; min-height: 100%; height: var(--tap); transform: translateY(-50%); }
+  /* The species page's help links ("How", "which records count", "What each licence allows") take a finger's 44 by 44 px
+     as an invisible margin, centred on the word, so the line keeps its height (round eighty-five; outside review B's 4). */
+  a.help { position: relative; }
+  a.help::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: var(--tap); transform: translate(-50%, -50%); }
 }
 .seg > a, .seg > button { min-height: var(--tap); display: inline-flex; align-items: center; }
 /* Disclosures: one summary, whatever the card around it. */

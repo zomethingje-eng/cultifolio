@@ -58,7 +58,9 @@ test('r70p P1: a price edited on a plant with no key is saved by a Save pressed 
   await page.fill('#ed-price', '12'); // and this leaves it: the check asks the name service
   await expect.poll(hold.asked).toBeGreaterThan(0);
   const status = page.locator('.editform .picker .status');
-  await pressAcrossTheAnswer(page, hold, () => expect(status).toContainText('kept as typed'));
+  // The check's answer: the name kept as typed, or (round eighty-five, K's C2) the reference's own key for a name it
+  // heads, whichever the check reaches first; either is the answer the Save is pressed across.
+  await pressAcrossTheAnswer(page, hold, () => expect(status).toContainText(/kept as typed|GBIF 5411106/));
   await expect(page.locator('.editform')).toHaveCount(0);
   await expect(page.getByText('2025-03-01 · 12')).toBeVisible(); // the card's source line carries the price
 });

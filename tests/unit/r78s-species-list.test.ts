@@ -76,7 +76,10 @@ describe('scripts/species-list.txt as written', () => {
       const counts = /^inat (\d+) \+ gbif (\d+)/.exec(e.reason);
       if (counts) expect(Number(counts[1]) + Number(counts[2])).toBeGreaterThanOrEqual(MIN_RECORDS);
       if (/collector genus/.test(e.reason)) expect(genera.has(e.name.split(' ')[0])).toBe(true);
-      expect(counts || /^(collector genus|already in the reference)(; already in the reference)?$/.test(e.reason)).toBeTruthy();
+      // Round eighty-five (N): a species of decision 6's rule says so, with its growers' count ("folded by GBIF into …; inat N (…)").
+      const folded = /^folded by GBIF into .+; inat (\d+) \(iNaturalist's .+\)$/.exec(e.reason);
+      if (folded) expect(Number(folded[1])).toBeGreaterThanOrEqual(MIN_RECORDS);
+      expect(counts || folded || /^(collector genus|already in the reference)(; already in the reference)?$/.test(e.reason)).toBeTruthy();
       if (e.kewId === null) expect(e.reason).toBe(REASON_REFERENCE);
     }
   });

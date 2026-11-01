@@ -2,11 +2,12 @@ import { json } from '@sveltejs/kit';
 import { forBuild } from '$lib/server/build';
 import { workerKey } from '$lib/server/worker-cache';
 import type { RequestHandler } from './$types';
-import { searchAnswer, corpusNow, searchRegions, warmSearch } from '$lib/server/dossiers';
+import { searchAnswer, corpusNow, searchRegions, warmSearch, product } from '$lib/server/dossiers';
 import { regionsTyped, broadRegion } from '$core/regions';
 import { slugify } from '$core/names';
 import { limited } from '$lib/server/sync';
-import { droppedLabel, nearAnswer, genusReading, genusOfReading, leftOut, shorterReadings } from '$core/search';
+import { droppedLabel, nearAnswer, genusReading, genusOfReading, leftOut, shorterReadings, nearestGenus, rankedWords } from '$core/search';
+import { lookupOf } from '$lib/server/lookup';
 import { genusOf } from '$core/names';
 
 /**
@@ -116,11 +117,29 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // "lithops lesleyi" and "sansiveria", two letters off, found nothing), the first reading that answers kept and named, as
   // a retry is ("Showing results for “lithops lesl”"). At most four more searches, only for a query nothing answered; a
   // reading too common to list is passed over.
+  // A first word two letters from one genus of the reference and no other (`nearestGenus`; round eighty-five, review-s
+  // S6: "mamilaria" answered Cocos nucifera, "euforbia obesa" nothing) is read as that genus, and the answer says so.
+  // Before a similar spelling of another word too ("sansevera" answered two Dracaenas by a word of their older names).
+  if ((!a.hits.length || nearAnswer(q, a.hits)) && !a.narrow && !at && !a.relaxed) {
+    const ws = q.trim().split(/\s+/);
+    // The reference's genera and its older names' (`older-genera.json`, absent in a corpus built before).
+    const older = ws.length <= 3 && rankedWords(q).length === ws.length ? await product<Array<[string, number]>>(c, platform, fetch, 'older-genera.json').catch(() => null) : null;
+    const g = ws.length <= 3 && rankedWords(q).length === ws.length ? nearestGenus(ws[0], [...(await lookupOf(c, platform, fetch).genera()).keys(), ...(Array.isArray(older) ? older.map(([x]) => x) : [])]) : null;
+    if (g) {
+      const read = [g, ...ws.slice(1)].join(' ');
+      const s = await searchAnswer(platform, fetch, read, n, miss, c, at);
+      if ('stop' in s) return s.stop;
+      if (!s.narrow && s.hits.length) a = { ...s, relaxed: { query: s.relaxed?.query ?? read } };
+    }
+  }
+  // A reading of fewer letters answers only as written, never by a similar spelling of it (round eighty-five, review-s
+  // S6: "sansiveria" took "sansiveri", one letter from two obscure Dracaenas' older names, and stopped there, where
+  // "sans" is every Dracaena once a Sansevieria).
   if (!a.hits.length && !a.narrow && !at && !a.total && !genusReading(q)) {
     for (const shorter of shorterReadings(q)) {
       const s = await searchAnswer(platform, fetch, shorter, n, miss, c, at);
       if ('stop' in s) return s.stop;
-      if (!s.narrow && s.hits.length && !s.relaxed) { a = { ...s, relaxed: { query: shorter } }; break; }
+      if (!s.narrow && s.hits.length && !s.relaxed && !nearAnswer(shorter, s.hits)) { a = { ...s, relaxed: { query: shorter } }; break; }
     }
   }
   const genus = !a.hits.length && !a.narrow ? genusReading(q) : null;
@@ -146,7 +165,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const k: Counted = { ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}), ...(regions.length ? { regions } : {}) };
   // Kept only under the corpus the answer is from (the key names the corpus loaded above, which is the one searched).
   if (edge && corpus === c.corpus) {
-    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...k }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => {});
+    const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...k }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => { /* the answer is given; a copy not kept at the edge is searched again next time */ });
     if (platform?.context?.waitUntil) platform.context.waitUntil(put);
     else await put;
   }

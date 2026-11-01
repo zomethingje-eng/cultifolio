@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 /**
@@ -110,7 +111,7 @@ test('r64w 3: a first visit is not reloaded when the first service worker takes 
   // The worker installs and claims the page (within the four seconds in which a take-over reloads at once, here); a reload
   // asked for at that moment has begun a second later.
   await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30_000 });
-  await page.waitForTimeout(1000);
+  await goneQuiet(page); // what the worker asked for at that moment has begun and ended
   await page.waitForLoadState('load');
   // Base: loaded twice, and the name typed was gone.
   expect(await page.evaluate(() => sessionStorage.getItem('__loads'))).toBe('1');

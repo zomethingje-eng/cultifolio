@@ -8,7 +8,7 @@
  * server, never from the browser, and only for an address the reference does
  * not hold; the answer is kept in the Worker's cache (the Cache API) for a day.
  */
-import { corpusNow, type Platform, type Fetch, type Loaded } from './dossiers';
+import { corpusNow, getDossier, type Platform, type Fetch, type Loaded } from './dossiers';
 import { lookupOf } from './lookup';
 import { upstreamCall } from './sync';
 import { workerKey } from './worker-cache';
@@ -97,11 +97,16 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
       if (r.status === 429 || r.status === 403) return 'refused';
       if (!r.ok) return 'unchecked';
       body = (await r.json()) as Record<string, unknown>;
-      if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400' } })).catch(() => {}));
+      if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400' } })).catch(() => { /* the answer is given; a copy not kept at the edge means GBIF is asked again next time */ }));
     } catch {
       return 'unchecked';
     }
   }
+  // A name GBIF accepts, matched exactly, whose key is a page's own GBIF key where Kew's name heads the page (round
+  // eighty-five; review-d D5, outside review A15, review-s S10: /species/conophytum-calculus-vanzylii, the page's heading
+  // until 31 October, answered 404): the page's own address before, moved there. Not where Kew's file holds the name for
+  // another plant (the page's record says so, `name.kew.accepted.other`): that plant's page takes it at the index.
+  if (body && body.status === 'ACCEPTED' && body.matchType === 'EXACT' && typeof body.usageKey === 'number') return gbifNamedPage(platform, fetch, name, body.usageKey, held);
   // The match service says `status: "SYNONYM"`; older replies said `synonym: true`. Either is the answer (found on the first deploy: the live check's Haworthia attenuata came back a plain 404).
   if (!body || !(body.synonym === true || body.status === 'SYNONYM') || typeof body.acceptedUsageKey !== 'number') return null;
   // An exact match, or a fuzzy one the service is sure of and in the same genus: a typo, or a name the backbone lacks,
@@ -123,6 +128,20 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
 }
 
 /**
+ * The page whose own GBIF key a name GBIF accepts is, where the page shows another name (Kew's): its former heading, so
+ * the address moves there and the page says so (`?was=`). Null where no page has the key, the page shows the name
+ * already (its own address would have answered), or its record says Kew's file holds the name for another plant.
+ */
+async function gbifNamedPage(platform: Platform, fetch: Fetch, name: string, key: number, held: Loaded | undefined): Promise<SynonymAnswer | null> {
+  const c = held ?? (await corpusNow(platform, fetch));
+  const page = await lookupOf(c, platform, fetch).gbif(key);
+  if (!page || page.name.replace(/×\s*/g, '').toLowerCase() === name.toLowerCase()) return null;
+  const d = (await getDossier(platform, fetch, page.key, c).catch(() => null)) as { name?: { kew?: { accepted?: { other?: string } } | null } } | null;
+  if (!d || d.name?.kew?.accepted?.other) return null;
+  return { matched: name, acceptedKey: page.key, acceptedName: page.name, slug: page.slug };
+}
+
+/**
  * The backbone's cached answer for a name, read from the Worker's cache only, never asked (round seventy-one; S-F8): the
  * redirect from `/species/echinopsis-pachanoi` put GBIF's answer there a moment before, so the page it lands on can say
  * why it was sent, without trusting `?was=` (anyone can write it) and without a request of its own. Null on any miss.
@@ -130,7 +149,7 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
 export async function cachedMatch(platform: Platform, name: string): Promise<{ status?: string; matchType?: string; acceptedUsageKey?: number; speciesKey?: number } | null> {
   const cache = platform?.caches?.default;
   if (!cache || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
-  const hit = await cache.match(workerKey('match', { name: name.toLowerCase() })).catch(() => undefined);
+  const hit = await cache.match(workerKey('match', { name: name.toLowerCase() })).catch(() => undefined /* an edge cache that cannot be read is a miss: the name is then asked of GBIF */);
   if (!hit) return null;
   const body = (await hit.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body !== 'object') return null;

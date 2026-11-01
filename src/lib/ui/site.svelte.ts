@@ -57,6 +57,10 @@ class SiteStore {
     }
   }
   set(s: Site | null) {
+    // Bounded on the way in as on the way back (round eighty-five; outside review A19): Settings' own field, or any other
+    // caller, stored a name of any length, which every page that names the site drew whole. A name that is only spaces
+    // or control characters is no name.
+    if (s) { const name = siteName(s.name); s = { lat: s.lat, lon: s.lon, ...(name ? { name } : {}) }; }
     this.current = s;
     writeSetting(KEY, 'collection', s ? JSON.stringify(s) : null); // a private window keeps it for the page
     // The hemisphere alone goes in a cookie, so the server renders a southern grower's months southern from the first

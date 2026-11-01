@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { run, EXIT } from '../../scripts/corpus-step.mjs';
+import { RANGE_RULE } from '../../src/lib/dossier/tdwg-shapes';
 
 const ROOT = resolve('.');
 // Each test runs the builder in a folder of its own: seconds each, more on a busy machine.
@@ -38,20 +39,31 @@ function folder(pages: Record<string, unknown>, shapes = true): string {
   return dir;
 }
 /** A page as the check reads it: its native regions, its typical cell and its records' rule. */
-const page = (key: string, name: string, codes: string[], at: [number, number] | null, rule: string | null, built = '2026-10-21T10:00:00.000Z') => ({
-  key, name: { scientific: name }, built,
-  distribution: { native: codes.map((code) => ({ code })) },
-  occurrences: { open: at ? [[at[0], at[1], 2020, null, 'HUMAN_OBSERVATION', 'by']] : [], nOpenInRange: at ? 1 : 0, nRestrictedInRange: 0, nOutsideRange: 0, rangeTested: true, ...(rule ? { rangeRule: rule } : {}) },
-  climate: at ? { status: 'ok', at: { lat: at[0], lon: at[1] } } : { status: 'none' },
-  upstream: { 'gbif.occurrences': { status: 'ok' } }
-});
-/** The five cases as the walk should leave them: each typical cell inside its native regions, each page by rule r84. */
+// Round eighty-five (G): a page of this round's rule counts its records and its climate cells by reason, and names the
+// cells off the shapes; one record, one cell, taken by `how`.
+const page = (key: string, name: string, codes: string[], at: [number, number] | null, rule: string | null, built = '2026-10-21T10:00:00.000Z', how: 'strict' | 'buffer' | 'coast' | 'island' = 'strict', country: string | null = null) => {
+  const counts = { strict: 0, buffer: 0, coast: 0, island: 0, ...(at ? { [how]: 1 } : {}) };
+  const current = rule === RANGE_RULE;
+  return {
+    key, name: { scientific: name }, built,
+    distribution: { native: codes.map((code) => ({ code })) },
+    occurrences: { open: at ? [[at[0], at[1], 2020, country, 'HUMAN_OBSERVATION', 'by']] : [], nOpenInRange: at ? 1 : 0, nRestrictedInRange: 0, nOutsideRange: 0, rangeTested: true, ...(rule ? { rangeRule: rule } : {}), ...(current ? { admitted: counts, ...(at && how !== 'strict' ? { edge: { [how]: [0] } } : {}) } : {}) },
+    climate: at ? { status: 'ok', at: { lat: at[0], lon: at[1] }, cells: 1, ...(current ? { admitted: counts, ...(how !== 'strict' ? { edge: [[at[0], at[1], how]] } : {}) } : {}) } : { status: 'none' },
+    upstream: { 'gbif.occurrences': { status: 'ok' } }
+  };
+};
+/** The named cases as the walk should leave them: each typical cell inside its native regions, each page by this round's rule. */
 const fixed = {
-  'k298116.json': page('k298116', 'Aloe vera', ['OMA'], [23.075, 57.625], 'r84'),
-  'k2810307.json': page('k2810307', 'Ficus elastica', ['ASS', 'BAN', 'EHM', 'MYA'], [24.875, 91.875], 'r84'),
-  'k307568.json': page('k307568', 'Galanthus nivalis', ['AUT', 'FRA', 'GER', 'SWI'], [48.125, 7.325], 'r84'),
-  'k124103.json': page('k124103', 'Melissa officinalis', ['COR', 'FRA', 'SPA'], [42.175, 9.125], 'r84'),
-  'k2864797.json': page('k2864797', 'Indigofera taiwaniana', ['TAI'], [21.925, 120.725], 'r84')
+  'k298116.json': page('k298116', 'Aloe vera', ['OMA'], [23.075, 57.625], RANGE_RULE),
+  'k2810307.json': page('k2810307', 'Ficus elastica', ['ASS', 'BAN', 'EHM', 'MYA'], [24.875, 91.875], RANGE_RULE),
+  'k307568.json': page('k307568', 'Galanthus nivalis', ['AUT', 'FRA', 'GER', 'SWI'], [48.125, 7.325], RANGE_RULE),
+  'k124103.json': page('k124103', 'Melissa officinalis', ['COR', 'FRA', 'SPA'], [42.175, 9.125], RANGE_RULE),
+  'k2864797.json': page('k2864797', 'Indigofera taiwaniana', ['TAI'], [21.925, 120.725], RANGE_RULE, undefined, 'buffer', 'TW'),
+  // Round eighty-five's four (decisions 1 and 2).
+  'k525228.json': page('k525228', 'Dracaena trifasciata', ['ZAI', 'NGA'], [-4.325, 15.325], RANGE_RULE),
+  'k303171.json': page('k303171', 'Cordyline fruticosa', ['QLD'], [-17.275, 145.475], RANGE_RULE),
+  'k291500.json': page('k291500', 'Xeronema callistemon', ['NZN'], [-35.475, 174.725], RANGE_RULE, undefined, 'island', 'NZ'),
+  'k2453705.json': page('k2453705', 'Veronica bollonsii', ['NZN'], [-34.175, 172.125], RANGE_RULE, undefined, 'buffer', 'NZ')
 };
 
 describe('--check-ranges, after the walk and before the upload', () => {
@@ -60,8 +72,8 @@ describe('--check-ranges, after the walk and before the upload', () => {
     const r = builder(dir, '--check-ranges');
     expect(r.status, r.stderr).toBe(2);
     const list = readFileSync(join(dir, 'check-ranges.txt'), 'utf8');
-    expect(list).toMatch(/^k298116 Aloe vera\ttypical cell 25\.425 N, 56\.175 E outside every native region; records not tested by shapes rule r84/m);
-    expect(list).toMatch(/^k307568 Galanthus nivalis\ttypical cell 50\.875 N, 5\.475 E outside every native region; records not tested by shapes rule r84/m);
+    expect(list).toMatch(new RegExp(`^k298116 Aloe vera\ttypical cell 25\\.425 N, 56\\.175 E outside every native region; records not tested by shapes rule ${RANGE_RULE}`, 'm'));
+    expect(list).toMatch(new RegExp(`^k307568 Galanthus nivalis\ttypical cell 50\\.875 N, 5\\.475 E outside every native region; records not tested by shapes rule ${RANGE_RULE}`, 'm'));
     expect(r.stdout).toContain('NOT FIXED: Aloe vera (k298116): typical cell 25.425 N, 56.175 E, OUTSIDE its native regions');
     expect(r.stdout).toContain('fixed: Indigofera taiwaniana (k2864797): typical cell 21.925 N, 120.725 E, inside its native regions');
     expect(r.stdout).toContain('Not ready to upload.');
@@ -70,8 +82,8 @@ describe('--check-ranges, after the walk and before the upload', () => {
     const dir = folder(fixed);
     const r = builder(dir, '--check-ranges');
     expect(r.status, r.stdout + r.stderr).toBe(0);
-    for (const n of ['Aloe vera', 'Ficus elastica', 'Galanthus nivalis', 'Melissa officinalis', 'Indigofera taiwaniana']) expect(r.stdout).toMatch(new RegExp(`fixed: ${n} \\(k\\d+\\)`));
-    expect(r.stdout).toContain('0 with a typical cell outside every native region, 0 whose records were not tested by rule r84');
+    for (const n of ['Aloe vera', 'Ficus elastica', 'Galanthus nivalis', 'Melissa officinalis', 'Indigofera taiwaniana', 'Dracaena trifasciata', 'Cordyline fruticosa', 'Xeronema callistemon', 'Veronica bollonsii']) expect(r.stdout).toMatch(new RegExp(`fixed: ${n} \\(k\\d+\\)`));
+    expect(r.stdout).toContain(`0 with a typical cell outside every native region, 0 whose records were not tested by rule ${RANGE_RULE}`);
     expect(r.stdout).toContain('ready to upload');
     expect(existsSync(join(dir, 'check-ranges.txt'))).toBe(false);
   });
@@ -79,7 +91,7 @@ describe('--check-ranges, after the walk and before the upload', () => {
     const dir = folder({ ...fixed, 'k1.json': page('k1', 'Aus bus', ['OMA'], [23.075, 57.625], null) });
     const r = builder(dir, '--check-ranges');
     expect(r.status).toBe(2);
-    expect(readFileSync(join(dir, 'check-ranges.txt'), 'utf8')).toBe('k1 Aus bus\trecords not tested by shapes rule r84\n');
+    expect(readFileSync(join(dir, 'check-ranges.txt'), 'utf8')).toBe(`k1 Aus bus\trecords not tested by shapes rule ${RANGE_RULE}\n`);
     // The merge: the pages listed are derived again online, since a page whose range was carried was one an offline build
     // could not read again (Monsonia lheritieri's, through GBIF's older names, on the live sample's walk).
     expect(r.stdout).toContain('derive them again with --keys check-ranges.txt --grid climate --bulk bulk --skip inat (not offline');
@@ -107,7 +119,7 @@ describe('--list-walk: every page, then what is left', () => {
 describe('--walk: the same command resumes, and stops when nothing is left', () => {
   it('with every page derived since the walk began, it builds nothing and says the walk is done', () => {
     const dir = folder({ 'k1.json': page('k1', 'Aus bus', ['OMA'], null, 'r84', '2099-01-01T00:00:00.000Z') });
-    writeFileSync(join(dir, 'walk.json'), JSON.stringify({ since: '2026-11-01T00:00:00.000Z', rule: 'r84' }));
+    writeFileSync(join(dir, 'walk.json'), JSON.stringify({ since: '2026-11-01T00:00:00.000Z', rule: RANGE_RULE }));
     const r = builder(dir, '--walk', '--offline');
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain('1 page derived since, 0 to derive → rebuild-walk.txt; the walk is done: run --index, then --check-ranges');

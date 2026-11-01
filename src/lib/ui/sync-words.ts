@@ -64,3 +64,21 @@ export function checkAgainWords(retryAt: number | null | undefined, now = Date.n
   const mins = retryAt == null ? 1 : Math.max(1, Math.round((retryAt - now) / 60_000));
   return mins <= 1 ? 'again in a minute' : `again in about ${mins} minutes`;
 }
+
+/**
+ * The status card's words for a run that ended well while photographs the records name did not arrive (round eighty-five;
+ * reviews A17 and C7): the server failed to hand them over (a 5xx, or a 503 while another device stores or removes one),
+ * and the run went on. They were counted and told only to the console, while the card said "everything on the server is
+ * here". Null when every photograph asked for came.
+ */
+export function photosLaterWords(n: number): string | null {
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return `${n.toLocaleString('en-US')} photograph${n === 1 ? ' was' : 's were'} not received this run; asked for again at the next sync`;
+}
+
+/** The card's line under "Synced": what the run brought, and the photographs it could not, when there are any. */
+export function syncedWords(lastSync: string | null, ago: (iso: string) => string, photosLater = 0): string {
+  if (!lastSync) return 'not yet';
+  const later = photosLaterWords(photosLater);
+  return later ? `the records on the server ${ago(lastSync)} are here; ${later}` : `everything on the server ${ago(lastSync)} is here`;
+}

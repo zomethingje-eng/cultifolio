@@ -14,7 +14,7 @@ const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
 
 describe('the real list, read as the build and the bulk fetch read it', () => {
   it('names every species by a page id of the form --index gives', () => {
-    expect(list.length).toBe(48357); // round eighty (X): 11 held by a reference page through its range left out
+    expect(list.length).toBe(48375); // round eighty (X): 11 held by a reference page through its range left out; round eighty-five (N): 18 species of decision 6 added
     expect(list.every((e) => isPageId(e.pageId) && (e.kewId ? e.pageId === `k${e.kewId}` : e.pageId === `g${e.gbifKey}`))).toBe(true);
   });
   it('gives the download each GBIF key once, matches no name, and names the species with none', () => {
@@ -22,7 +22,7 @@ describe('the real list, read as the build and the bulk fetch read it', () => {
     expect(keys.length).toBe(new Set(list.flatMap((e) => (e.gbifKey ? [e.gbifKey] : []))).size);
     // Round eighty (X): 20 keys Kew's file reads as another species' name, by GBIF's author, not taken (19 lines read none).
     expect(list.filter((e) => e.gbifKey != null).length).toBe(46021); // round eighty (A): Xanthoceras sorbifolium's key refused (familyRefuses)
-    expect(none.length).toBe(48357 - 46021);
+    expect(none.length).toBe(48375 - 46021);
     expect(Object.values(byName).every((k) => keys.includes(k))).toBe(true);
   });
   it('builds no species by its name: a job has the GBIF key or none', () => {

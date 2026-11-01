@@ -17,6 +17,7 @@
  * fetched by the install, 170 files); 3 passed (it guards that the smaller install leaves nothing out).
  */
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { goneQuiet } from './helpers/settled';
 import { cuttableNetwork, type Cut } from './helpers/cut';
 import { controlledBy } from './helpers/controlled';
 
@@ -57,7 +58,7 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   const before = net.seen.length;
   await installed(page);
   // Settled: what the install asked for has arrived (the poll above waits for its last file, the offline page, to be kept).
-  await page.waitForTimeout(500); // a negative: nothing more may follow
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): nothing more may follow
   const asked = net.seen.slice(before).map((u) => u.split('?')[0]);
   // Counted as distinct files: WebKit on the owner's PC asked 33 of its 147 twice (180 requests), where Chromium asks each once.
   const all = asked.filter((u) => u !== '/service-worker.js');

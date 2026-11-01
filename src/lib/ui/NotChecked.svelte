@@ -4,11 +4,13 @@
    * A refusal is not an absence, and the site says so once, here, instead of in a sentence beside every figure it touches
    * (improvements, 5). `what` names the thing (Climate, Photographs, Alerts); `why` is the reason as a sentence.
    */
-  let { what = '', why, inline = false }: { what?: string; why: string; inline?: boolean } = $props();
+  // `word`: the glossary's word for the state, "not checked" (refused or failed) or "not asked" (skipped), so the mark and
+  // the section it stands for say one word for one state (round eighty-five; outside review A's 16g).
+  let { what = '', why, inline = false, word = 'not checked' }: { what?: string; why: string; inline?: boolean; word?: string } = $props();
 </script>
 
 <details class="nc" class:inline>
-  <summary><span class="tok">{what ? `${what} ` : ''}not checked</span></summary>
+  <summary><span class="tok">{what ? `${what} ` : ''}{word}</span></summary>
   <span class="why">{why} Not asked, or not answered, is not "none": nothing here claims there is none. <a href="/about/how#refusal">Why the site says it this way</a>.</span>
 </details>
 

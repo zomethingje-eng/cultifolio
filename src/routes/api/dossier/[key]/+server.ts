@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ params, platform, fetch, getClientAd
   // Asked of the name files by key, or of the index's map for a corpus built before them (round seventy-six).
   const listed = !!(await look.species(id!));
   if (!listed) error(404, 'no species page for that key');
-  const d = await getDossier(platform, fetch, id!, c).catch(() => undefined);
+  const d = await getDossier(platform, fetch, id!, c).catch(() => undefined /* a dossier that cannot be read is answered just below as a 503 that says so */);
   if (!d) {
     if (d === undefined || listed) return json({ message: 'This species page could not be read just now' }, { status: 503, headers: { 'cache-control': 'no-store', 'retry-after': '60' } });
     error(404, 'no species page for that key');

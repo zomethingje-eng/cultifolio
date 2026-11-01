@@ -128,6 +128,8 @@ test('r84e 7: on a page of refusals each source says "not checked" once', async 
   // The climate's refusal: the mark under the name; the sheet and the climate section say what follows, not the word again.
   expect(text.match(/Climate not checked/g)?.length).toBe(1);
   expect(text.match(/not checked/gi)?.length).toBeLessThanOrEqual(4); // climate, photographs, the genus's summary, the records; r84base: 6
-  await expect(page.locator('#climate-refused')).toContainText('Climate not read.');
-  await expect(page.locator('#s-cultivation ~ .note-slot')).toContainText('No sheet: the habitat climate was not read');
+  // Round eighty-five (A16g): one word for one state, the mark's; the sections say what follows.
+  await expect(page.locator('#climate-refused')).toContainText('No habitat climate shown.');
+  await expect(page.locator('#s-cultivation ~ .note-slot')).toContainText('No sheet: there is no habitat climate to read one from');
+  expect(text).not.toMatch(/not read\b/);
 });

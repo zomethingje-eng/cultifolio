@@ -90,14 +90,23 @@ export async function injectTail(page: Page, rows: Row[], wall: number, writer =
 
 /** Wait until the collection `db` holds a fold snapshot (a load saves one when there is none). */
 export async function snapshotSaved(page: Page, db = 'cultifolio', timeout = 30_000): Promise<void> {
-  await page.waitForFunction(async (name) => {
+  // Polled from here (the merge, round eighty-five): `waitForFunction` reads an async predicate's promise as truthy and
+  // returned at once, before the snapshot was written. A poll of the page's answer waits for the very record.
+  const t0 = Date.now();
+  for (;;) {
+    if (await snapshotThere(page, db)) return;
+    if (Date.now() - t0 > timeout) throw new Error(`no fold snapshot in ${db} after ${timeout} ms`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+const snapshotThere = (page: Page, db: string): Promise<boolean> =>
+  page.evaluate(async (name) => {
     const d = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
     try {
       if (!d.objectStoreNames.contains('meta')) return false;
       return await new Promise<boolean>((res) => { const r = d.transaction('meta').objectStore('meta').get('fold'); r.onsuccess = () => res(r.result != null); r.onerror = () => res(false); });
     } finally { d.close(); }
-  }, db, { timeout, polling: 250 });
-}
+  }, db);
 
 /**
  * Wipe the log as `replaceFromStaging`'s wipe does (src/lib/db/vault.ts), in ONE transaction: the changes, the photographs,

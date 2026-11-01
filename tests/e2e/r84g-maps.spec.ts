@@ -18,23 +18,23 @@ test('the maps draw the regions by their shapes, from files kept a day @phone', 
   const world = page.locator('.mapbox svg.map-world');
   await expect(world.locator('use.range')).toHaveCount(2);
   await expect(world.locator('rect.range')).toHaveCount(0);
-  expect(await world.locator('use.range').evaluateAll((xs) => xs.map((x) => x.getAttribute('href')))).toEqual(['/maps/regions110.svg#NAM', '/maps/regions110.svg#ANG']);
+  expect(await world.locator('use.range').evaluateAll((xs) => xs.map((x) => x.getAttribute('href')))).toEqual(['/maps/w/w-NAM.svg#r', '/maps/w/w-ANG.svg#r']);
   // Drawn: the shape has the size of Namibia (about 9° by 12°), not nothing (a file not found) and not its box's corners.
   await expect.poll(() => world.locator('use.range').first().evaluate((e) => Math.round((e as SVGGraphicsElement).getBBox().height))).toBeGreaterThan(8);
   const region = page.locator('.mapbox svg.map-region');
-  await expect(region.locator('use.range[href="/maps/regions50.svg#NAM"]')).toHaveCount(1);
+  await expect(region.locator('use.range[href="/maps/r/r-NAM.svg#r"]')).toHaveCount(1);
   await expect(region.locator('rect.range')).toHaveCount(0);
 
-  for (const f of ['regions110', 'regions50']) {
+  // Round eighty-five: one file a region and a scale.
+  for (const f of ['w/w-NAM', 'w/w-ANG', 'r/r-NAM', 'r/r-CLN']) {
     const r = await request.get(`/maps/${f}.svg`);
     expect(r.status(), f).toBe(200);
     expect(r.headers()['content-type'], f).toContain('image/svg+xml');
     expect(r.headers()['cache-control'], f).toContain('max-age=86400');
-    const body = await r.text();
-    for (const id of ['NAM', 'ANG', 'CLN']) expect(body, `${f} ${id}`).toContain(`<path id="${id}" `);
+    expect(await r.text(), f).toContain('<path id="r" ');
   }
 
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
-  await expect(page.locator('.mapbox svg.map-region use.range[href="/maps/regions50.svg#CLN"]')).toHaveCount(1);
+  await expect(page.locator('.mapbox svg.map-region use.range[href="/maps/r/r-CLN.svg#r"]')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

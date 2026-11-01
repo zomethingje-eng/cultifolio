@@ -211,7 +211,7 @@ async function takeOff(r2: R2Bucket, id: string, meta: VaultMeta, key: string, e
   if (!kv) {
     await r2.delete(key);
     meta.bytes = Math.max(0, meta.bytes - size);
-    await writeMeta(r2, id, meta).catch(() => {});
+    await writeMeta(r2, id, meta).catch(() => { /* the object is deleted either way; a total not written stays too high by its bytes until the next recount, which only refuses sooner, never stores past the allowance */ });
     return;
   }
   const now = quota.now ?? Date.now();
@@ -231,7 +231,7 @@ async function takeOff(r2: R2Bucket, id: string, meta: VaultMeta, key: string, e
       // A listing crossed twice leaves the total unwritten: the next request lists, and the removal stands (round sixty-one).
       meta.bytes = await vaultBytes(r2, kv, id, meta, now, false, quota).catch((e) => { if (e instanceof RecountCrossed) return meta.bytes; throw e; });
     } else meta.bytes = await objs.vault.give('vault', size, day(now), token);
-    await writeMeta(r2, id, meta).catch(() => {});
+    await writeMeta(r2, id, meta).catch(() => { /* the object is deleted and the counter object holds the total; the meta's copy not written is a snapshot put right by the next recount */ });
     return;
   }
   // The total before the delete: on a day with no total yet it is put right from a listing, and a listing made after the
@@ -240,9 +240,9 @@ async function takeOff(r2: R2Bucket, id: string, meta: VaultMeta, key: string, e
   const before = await vaultBytes(r2, kv, id, meta, now);
   await r2.delete(key);
   const after = Math.max(0, before - size);
-  await kv.put(`bytes:${id}`, JSON.stringify({ bytes: after, day: day(now) } satisfies BytesRow)).catch(() => {});
+  await kv.put(`bytes:${id}`, JSON.stringify({ bytes: after, day: day(now) } satisfies BytesRow)).catch(() => { /* the object is deleted; a running total not written is too high until the next recount (RECOUNT_MS), which only refuses sooner */ });
   meta.bytes = after;
-  await writeMeta(r2, id, meta).catch(() => {});
+  await writeMeta(r2, id, meta).catch(() => { /* the KV row holds the running total; the meta's snapshot not written is put right by the next recount */ });
 }
 
 // The pointer, the generations' names and their reading are in photogen.ts since round sixty-three, so the vault's
@@ -750,7 +750,7 @@ export async function vaultBytes(r2: R2Bucket, kv: KVNamespace, id: string, meta
   const fresh = row && row.day === today && typeof row.bytes === 'number';
   if (fresh && (!open || (typeof row.at === 'number' && now - row.at < RECOUNT_MS))) return row.bytes;
   const bytes = await recount(r2, id, meta);
-  await kv.put(`bytes:${id}`, JSON.stringify({ bytes, day: today, at: now } satisfies BytesRow)).catch(() => {});
+  await kv.put(`bytes:${id}`, JSON.stringify({ bytes, day: today, at: now } satisfies BytesRow)).catch(() => { /* the count is returned whatever; a row not written means the vault is listed again on its next request */ });
   return bytes;
 }
 /** How recent a listing an open accepts (round sixty). */
@@ -848,7 +848,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
     } finally {
       if (!stored) {
         meta.bytes -= body.length;
-        await writeMeta(r2, id, meta).catch(() => {});
+        await writeMeta(r2, id, meta).catch(() => { /* the upload failed and is said so; a total not taken back stays too high until the next recount, which only refuses sooner */ });
       }
     }
     return stored;
@@ -932,12 +932,12 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
   if (before + body.length > MAX_BYTES) throw new VaultFull(before, MAX_BYTES);
   const after = before + body.length;
   const bytesKey = `bytes:${id}`;
-  await kv.put(bytesKey, JSON.stringify({ bytes: after, day: today } satisfies BytesRow)).catch(() => {});
+  await kv.put(bytesKey, JSON.stringify({ bytes: after, day: today } satisfies BytesRow)).catch(() => { /* a total not raised before the write is caught by the next recount; the write itself still decides the answer */ });
   let stored = false;
   try {
     stored = await put();
   } finally {
-    if (!stored) await kv.put(bytesKey, JSON.stringify({ bytes: before, day: today } satisfies BytesRow)).catch(() => {});
+    if (!stored) await kv.put(bytesKey, JSON.stringify({ bytes: before, day: today } satisfies BytesRow)).catch(() => { /* the upload failed and is said so; a total not taken back stays too high until the next recount, which only refuses sooner */ });
   }
   if (!stored) return false;
   // A fixed expiry at the end of the day after this one, not a TTL that every write renews: a key written at 00:01 and
@@ -952,7 +952,7 @@ async function flushMeta(r2: R2Bucket, id: string, meta: VaultMeta, before: numb
   meta.bytes = after;
   if (Math.floor(before / META_FLUSH_BYTES) !== Math.floor(after / META_FLUSH_BYTES) || now - flushed >= META_FLUSH_MS) {
     lastMetaFlush.set(id, now);
-    await writeMeta(r2, id, meta).catch(() => {});
+    await writeMeta(r2, id, meta).catch(() => { /* the running total is in KV or the counter object; the meta's snapshot not flushed now is flushed at the next threshold */ });
   }
 }
 
@@ -1138,11 +1138,11 @@ export async function readBody(request: Request, max: number, what: string): Pro
       const { done, value } = await reader.read();
       if (done) break;
       if (total + value.length > max) {
-        await reader.cancel().catch(() => {});
+        await reader.cancel().catch(() => { /* the body is refused as too large whatever the cancel answers */ });
         tooBig();
       }
       if (sized && total + value.length > declared) {
-        await reader.cancel().catch(() => {});
+        await reader.cancel().catch(() => { /* the body is refused as longer than declared whatever the cancel answers */ });
         error(400, `${what} is longer than its declared length`);
       }
       if (total + value.length > buf.length) {
@@ -1409,7 +1409,7 @@ export async function admitVault(r2: R2Bucket, id: string, meta: VaultMeta, quot
         // The vault's own key first: a second first upload that reads it is not counted again (round sixty-one).
         await kv.put(kPlace, day(now));
         await kv.put('vaults:all', String(Number(n ?? 0) + 1));
-        await kv.put(kDay, String(Number(nDay ?? 0) + 1), { expiration: endOfNextDay(day(now)) }).catch(() => {});
+        await kv.put(kDay, String(Number(nDay ?? 0) + 1), { expiration: endOfNextDay(day(now)) }).catch(() => { /* the day's count of new vaults is advisory: the place and the total above are written, and are what the ceiling reads */ });
         took = true;
       }
     } // no counters at all (a test, a bare dev server): nothing to count against

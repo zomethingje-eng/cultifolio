@@ -7,7 +7,12 @@
  * an unhandled AbortError; the import's rows got no place; the death Undo was two commits.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { countRequests, idbQuiet } from './helpers/idb-count';
+import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
+
+// The database's transactions counted from each page's start, so a negative can wait for it to go quiet (round eighty-five).
+test.beforeEach(async ({ context }) => { await countRequests(context); });
 
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
@@ -72,7 +77,7 @@ test('R11: Move pressed twice while the new place is written moves once (E place
   await move.click();
   await move.click({ timeout: 2000 }).catch(() => {});
   await expect.poll(async () => (await inVault(page)).moveEvents, { timeout: 15_000 }).toBe(1);
-  await page.waitForTimeout(2500); // a second move would land within two slow commits
+  await idbQuiet(page); // a negative, read once the database has gone quiet (helpers/idb-count.ts): a second move would be written before
   const v = await inVault(page);
   expect([v.named, v.moveEvents, v.locWrites]).toEqual([1, 1, 1]);
 });
@@ -91,7 +96,7 @@ test('R11: the Edit form\'s Save pressed twice while its new place is written sa
   await save.click();
   await save.click({ timeout: 2000 }).catch(() => {});
   await expect.poll(async () => (await inVault(page)).moveEvents, { timeout: 15_000 }).toBe(1);
-  await page.waitForTimeout(2500);
+  await idbQuiet(page); // a negative, as above
   const v = await inVault(page);
   expect([v.named, v.moveEvents, v.locWrites]).toEqual([1, 1, 1]);
 });
@@ -108,7 +113,7 @@ test('R11: Move pressed twice to a place that is here writes one move (E places 
   await move.click();
   await move.click({ timeout: 2000 }).catch(() => {});
   await expect.poll(async () => (await inVault(page)).moveEvents, { timeout: 15_000 }).toBe(1);
-  await page.waitForTimeout(2500);
+  await idbQuiet(page); // a negative, as above
   expect((await inVault(page)).moveEvents).toBe(1);
 });
 
@@ -150,7 +155,7 @@ test('R12: a place that cannot be made says why in the picker, with no unhandled
   await page.locator('.actions button.pri:has-text("Move")').click();
   await expect(page.locator('#mv-loc-err')).toContainText('The space was not made.');
   await expect(page.locator('#mv-loc-new-name')).toBeVisible();
-  await page.waitForTimeout(500);
+  await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): no error may follow the refusal
   expect(errs).toEqual([]);
   await page.locator('.actions button.pri:has-text("Move")').click();
   await expect.poll(async () => (await inVault(page)).moveEvents, { timeout: 15_000 }).toBe(1);
@@ -171,7 +176,7 @@ test('R11: the batch page\'s Save pressed twice saves once', async ({ page }) =>
   await save.click();
   await save.click({ timeout: 2000 }).catch(() => {});
   await expect.poll(async () => (await inVault(page)).named, { timeout: 15_000 }).toBe(1);
-  await page.waitForTimeout(2500);
+  await idbQuiet(page); // a negative, as above
   const n = await page.evaluate(() => new Promise<number>((res) => {
     const r = indexedDB.open('cultifolio');
     r.onsuccess = () => { const g = r.result.transaction('changes').objectStore('changes').getAll(); g.onsuccess = () => res((g.result as Array<{ kind: string; field: string }>).filter((c) => c.kind === 'sowing' && c.field === 'locationId').length); };

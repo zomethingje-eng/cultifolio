@@ -11,12 +11,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { OccIndex, idHash } from '$lib/dossier/bulk';
+import { OccIndex, idHash, SAMPLE_CELL_DEG } from '$lib/dossier/bulk';
 import type { GbifOccurrence } from '$lib/dossier/sources/gbif';
 
 type In = GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number };
 
-/** Round seventy-nine's sample of the records, as it was (`OccIndex`'s record half, unchanged), for the comparison. */
+/** Round seventy-nine's sample of the records (`OccIndex`'s record half), with round eighty-five's rule, for the comparison. */
 class OldSample {
   private by = new Map<number, Array<[number, number, number, number, number, string, string, string, string, string, number, number, number, number, number]>>();
   private worst = new Map<number, number>();
@@ -37,10 +37,17 @@ class OldSample {
     }
   }
   private trim(k: number, arr: Array<[number, number, ...unknown[]]>) {
-    arr.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    // Round eighty-five (G; decision 5): every distinct cell first. One copy of a record, then each row's priority: its
+    // id-hash, plus one unless it is its cell's smallest, plus two with no coordinates (`OccIndex.trim`'s rule, written plainly).
+    arr.sort((a, b) => a[1] - b[1]);
     let w = 0;
     for (let r = 0; r < arr.length; r++) if (!w || arr[r][1] !== arr[w - 1][1]) arr[w++] = arr[r];
     arr.length = w;
+    const cell = (r: [number, number, ...unknown[]]) => (Number.isFinite(r[2]) && Number.isFinite(r[3]) ? `${Math.floor(((r[2] as number) + 90) / SAMPLE_CELL_DEG)},${Math.floor(((r[3] as number) + 180) / SAMPLE_CELL_DEG)}` : null);
+    const best = new Map<string, number>();
+    for (const r of arr) { const c = cell(r), h = idHash(r[1]); if (c && h < (best.get(c) ?? Infinity)) best.set(c, h); }
+    for (const r of arr) { const c = cell(r), h = idHash(r[1]); r[0] = h + (!c ? 2 : best.get(c) === h ? 0 : 1); }
+    arr.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     if (arr.length > this.cap) { arr.length = this.cap; this.worst.set(k, arr[this.cap - 1][0]); }
   }
   seal() { for (const [k, arr] of this.by) { this.trim(k, arr as never); arr.sort((a, b) => a[1] - b[1]); } }

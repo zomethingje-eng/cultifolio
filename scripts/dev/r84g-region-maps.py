@@ -129,9 +129,33 @@ def inner(rings):
     return rects
 
 os.makedirs(f'{ROOT}/static/app/maps', exist_ok=True)
-for name, tol, places, least in ((('regions110', 0.3, 1, 0.5), ('regions50', 0.08, 2, 0.06))):
-    open(f'{ROOT}/static/app/maps/{name}.svg', 'w').write(svg(tol, places, least))
-    print(name, os.path.getsize(f'{ROOT}/static/app/maps/{name}.svg'), 'bytes')
+# Round eighty-five (G; outside review A's performance measures, W4, D9): one small file a region and a scale, so a page
+# fetches only its own regions' shapes (every species page fetched both whole files, 554 kB, the close-up's the largest
+# request on a phone); and the close-up of a small region drawn finely, every island kept, so an archipelago is not a few
+# straight lines off the coast (Isabela, Fernandina): its tolerance is a 800th of the region's extent, between 0.005
+# degrees (about 500 m) and 0.08, and only a ring smaller than that is left out.
+def region_extent(c):
+    xs = [x for ring in OUT[c] for x, y in ring]; ys = [y for ring in OUT[c] for x, y in ring]
+    return max(max(xs) - min(xs), max(ys) - min(ys)) / 1000
+# The close-up's whole file is gone; the world's stays, for a page of more than WORLD_FILE_AT regions (`still.ts`), which
+# would otherwise ask for dozens of files (Taraxacum's range, 150 regions), and it is 118 kB, 32 kB compressed.
+if os.path.exists(f'{ROOT}/static/app/maps/regions50.svg'): os.remove(f'{ROOT}/static/app/maps/regions50.svg')
+open(f'{ROOT}/static/app/maps/regions110.svg', 'w').write(svg(0.3, 1, 0.5))
+sizes = {'w': [], 'r': []}
+for scale in ('w', 'r'):
+    os.makedirs(f'{ROOT}/static/app/maps/{scale}', exist_ok=True)
+    for c in sorted(SH):
+        if scale == 'w': tol, places, least = 0.3, 1, 0.5
+        else:
+            ext = region_extent(c)
+            tol = min(0.08, max(0.005, ext / 800)); places = 3 if tol < 0.01 else 2; least = tol
+        body = f'<svg xmlns="http://www.w3.org/2000/svg"><path id="r" fill-rule="evenodd" vector-effect="non-scaling-stroke" d="{path(OUT[c], tol, places, least)}"/></svg>\n'
+        # The file's name begins with its folder's letter: Windows cannot hold a file named CON (Congo) under any extension.
+        open(f'{ROOT}/static/app/maps/{scale}/{scale}-{c}.svg', 'w').write(body)
+        sizes[scale].append((len(body), c))
+for scale, v in sizes.items():
+    v.sort()
+    print(f'maps/{scale}/: {len(v)} files, {sum(n for n, c in v)} bytes, the largest {v[-1][1]} {v[-1][0]} bytes, the median {v[len(v) // 2][0]}')
 keys = {}
 for c, b in BOX.items():
     if c in SH: keys[f'{b[0]},{b[1]}'] = c
@@ -143,8 +167,12 @@ ts = ['/**',
       ' * `REGION_AT` names the region a box is, by its south-west corner as tdwg3.json and every dossier give it; `INSIDE`',
       ' * gives, for each region large enough, up to three rectangles [s, w, n, e] wholly inside its shape.',
       ' */',
-      f"export const REGIONS_WORLD = '/maps/regions110.svg';",
-      f"export const REGIONS_CLOSE = '/maps/regions50.svg';",
+      "/** The regions' files, one a region (`maps/w/w-CPP.svg#r`, `maps/r/r-CPP.svg#r`; round eighty-five): each name begins with",
+      " *  its folder's letter, since Windows cannot hold a file named CON (Congo's code) under any extension. */",
+      f"export const REGIONS_WORLD = '/maps/w/w-';",
+      f"export const REGIONS_CLOSE = '/maps/r/r-';",
+      "/** The world map's regions in one file, each by its code, for a page of many regions (round eighty-five). */",
+      f"export const REGIONS_WORLD_ALL = '/maps/regions110.svg';",
       'export const REGION_AT: Readonly<Record<string, string>> = ' + json.dumps(keys, separators=(',', ':')) + ';',
       'export const INSIDE: Readonly<Record<string, ReadonlyArray<readonly [number, number, number, number]>>> = ' + json.dumps(ins, separators=(',', ':')) + ';',
       '']

@@ -45,7 +45,7 @@ import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, type OwnNames } from './own-names';
 import { canonicalOfKew } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, admissionRecord, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
@@ -231,7 +231,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (unread) occurrences.unread = unread;
   if (!keyList.length) upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else {
-    const extra = await extraOccurrences(f, { status: 'none' }, keyList);
+    const extra = await extraOccurrences(f, { status: 'none' }, keyList, boxes);
     const occ = extra.occ;
     mark('gbif.occurrences', occ);
     if (occ.status === 'ok' || occ.status === 'none') {
@@ -243,7 +243,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     }
     // By the regions' shapes where the build has them (round eighty, A).
     const inside = rangeTest(native, o.regions);
-    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places, inside?.test, o.defaults);
+    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places, inside?.admit, o.defaults);
     if (occ.status === 'ok' && r.nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(r.nDefault)].filter(Boolean).join('; ');
     if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
     if (occ.status === 'ok') {
@@ -258,6 +258,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       nVague: r.nVague,
       rangeTested: boxes.length > 0,
       ...(inside?.rule && boxes.length ? { rangeRule: inside.rule } : {}),
+      ...(inside?.rule ? admissionRecord(r, boxes.length > 0) : {}),
       restrictedShiftKm: r.restrictedShiftKm,
       thin: r.allPts.length < 12,
       datasets: [...r.datasets.entries()].map(([key, d]) => ({ key, ...(d.title ? { title: d.title } : {}), licence: d.licence, n: d.n })),
@@ -268,7 +269,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `the occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built` };
     else if (occ.status === 'skipped') climate = { status: 'pending', detail: 'the occurrence source was not asked when this page was built' };
     else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
-    else if (r.forClimate.length) climate = await (o.climate ?? noClimate).envelope(r.forClimate);
+    else if (r.forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(r.forClimate), o.regions);
     else if (r.allPts.length) climate = { status: 'none', detail: noPlacedWords(r.nInRangeRecords, r.allPts.length) };
     else climate = { status: 'none', detail: 'no georeferenced record inside the range' };
     // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
@@ -276,7 +277,8 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     climate = setAsideExtremes(climate);
     if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
     else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
-    if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' || climate.extremesStatus === 'lapse' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: `${climate.src.extremes}${lapseWhy ? `; not used: ${lapseWhy}` : ''}` } : {}) };
+    const exUp = extremesUpstream(climate, lapseWhy, now());
+    if (exUp) upstream['climate.extremes'] = exUp;
   }
 
   /* ---- 5. Identifiers and the summary ---- */
@@ -311,7 +313,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}) };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}) };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }

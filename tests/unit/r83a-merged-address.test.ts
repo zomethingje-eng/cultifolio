@@ -95,12 +95,8 @@ describe('3. the kept page, reached by the old address, says so under its name',
     expect(data.wasMerged).toBe(true); // r83b: undefined
     expect(data.wasShared).toEqual([{ slug: 'dudleya-pulverulenta', name: 'Dudleya pulverulenta', authors: ['Croucher ex T.Moore & Mast.'] }]);
   });
-  it('the line, as the page writes it', () => {
-    const page = readFileSync('src/routes/species/[slug]/+page.svelte', 'utf8');
-    expect(page).toContain('{:else if data.was && data.wasMerged && data.wasShared?.length}');
-    expect(page).toContain('is the name of a page merged into this one. It is also an older name of');
-    expect(page).toContain(', by another author (${o.authors.map((a) => `${data.was} ${a}`).join(\' and \')})');
-  });
+  // The line, as the page writes it: tests/unit/r85q-species-page.test.ts mounts the page with this data and reads it
+  // (round eighty-five; this read the page's source, outside review A23).
   it('/about/how says a merged page\'s old address goes to its kept page, shared name or not', () => {
     expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain('But the old address of a page merged into one of them goes to that one (/species/echeveria-peacockii is Echeveria desmetiana');
   });

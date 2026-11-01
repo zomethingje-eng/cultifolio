@@ -66,14 +66,23 @@ export const NameBlock = v.object({
    * older names Kew accepts as species of their own, and the day of Kew's file. Absent: not read, never "none".
    * `accepted` (round eighty-four): Kew's row for the entry, its name with Kew's sign, its authors and its rank, which
    * heads the page while its id is `k<entry>` (`kew-heading.ts`).
+   * `elsewhere` (round eighty-five, the owner's decision 6): GBIF's names on the page (`synonyms`, `infra`) that Kew's file
+   * places only in another plant (`kewPlace`): not the page's names, so not searched, shown or an address. `accepted.family`:
+   * Kew's family, which heads a `k` page (A9a).
    */
-  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()), accepted: v.optional(v.object({ name: v.string(), authors: v.string(), rank: v.string(), other: v.optional(v.string()) })) })),
+  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()), accepted: v.optional(v.object({ name: v.string(), authors: v.string(), rank: v.string(), other: v.optional(v.string()), family: v.optional(v.string()) })), elsewhere: v.optional(v.array(v.string())) })),
   /**
    * GBIF's name for the page's key, where Kew's accepted name heads the page (round eighty-four, the owner's decision 1;
    * `kew-heading.ts`): what the derivation reads, and what the page gives back if it loses its `k` id. `added`: the older
    * name the heading put in `synonyms`. Absent on a page headed by GBIF's own name, and in a dossier written before.
    */
-  gbif: v.optional(v.object({ scientific: v.string(), authorship: v.optional(v.string()), rank: v.optional(v.string()), genus: v.optional(v.string()), slug: v.optional(v.string()), added: v.optional(v.string()) })),
+  gbif: v.optional(v.object({ scientific: v.string(), authorship: v.optional(v.string()), rank: v.optional(v.string()), genus: v.optional(v.string()), family: v.optional(v.string()), slug: v.optional(v.string()), added: v.optional(v.string()) })),
+  /**
+   * The names that headed the page before the heading it has now (round eighty-five; review-d D5, outside review A15): a
+   * page whose Kew entry became its species' (`speciesEntry`) keeps its former heading here, and the index makes it an
+   * address of the page. Absent: none.
+   */
+  formerly: v.optional(v.array(v.string())),
   /**
    * The one-word English names the page does not head with or show (`nameKey`s; round eighty-four, review-d D9): another
    * species of its genus is given them more often, or as often (`sharedHeadlines`), written by `--index`. Absent: none.
@@ -106,7 +115,13 @@ export const Summary = v.object({
   licence: v.literal('CC BY-SA 4.0'),
   title: v.string(),
   /** The article's lead went on past the text kept (`upToSentence`, round eighty-two): the page links "More on Wikipedia". */
-  cut: v.optional(v.literal(true))
+  cut: v.optional(v.literal(true)),
+  /**
+   * The article's revision the text was read from (round eighty-five, the owner's decision 8): Wikipedia's revision id,
+   * and the day it was read (YYYY-MM-DD). Absent in a summary read before; `--fill summary-revisions` records them.
+   */
+  revision: v.optional(v.number()),
+  read: v.optional(v.string())
 });
 
 /** A genus's own page: its Wikipedia lead, quoted like a species' summary, written by `--fill genus` to s/v<N>/g/<slug>.json. */
@@ -164,6 +179,13 @@ export const Occurrences = v.object({
    * record, open or restricted, tested by the shape or the buffered box). Absent: tested before it, or not by the shapes.
    */
   rangeRule: v.optional(v.string()),
+  /**
+   * Round eighty-five (G; outside review B's simplification 1, A23): every in-range record, open or restricted, counted by
+   * why it is in range (`Admission` in `tdwg-shapes.ts`): inside a native shape, in the margin, off a coast, on an island.
+   */
+  admitted: v.optional(v.object({ strict: v.number(), buffer: v.number(), coast: v.number(), island: v.number() })),
+  /** The open records the margin, the coast reach or an island took, by their place in `open` (the map marks those at sea). */
+  edge: v.optional(v.object({ buffer: v.optional(v.array(v.number())), coast: v.optional(v.array(v.number())), island: v.optional(v.array(v.number())) })),
   /** How far the centre would have moved had restricted records been used. */
   restrictedShiftKm: v.nullable(v.number()),
   thin: v.boolean(),
@@ -265,6 +287,17 @@ export const Climate = v.variant('status', [
     landFraction: v.optional(v.number()),
     /** In-range cells left out because the elevation layer holds no land in them: a record placed at sea (round thirty-one, corpus). */
     seaCells: v.optional(v.number()),
+    /**
+     * Round eighty-five (G; A23): the cells the envelope reads, counted by why their best record is in range, and each cell
+     * not strictly inside a native shape by its middle and why, so `--check-ranges` tests every contributing cell.
+     */
+    admitted: v.optional(v.object({ strict: v.number(), buffer: v.number(), coast: v.number(), island: v.number() })),
+    edge: v.optional(v.array(v.tuple([Lat, Lon, v.picklist(['buffer', 'coast', 'island'])]))),
+    /**
+     * Round eighty-five (G; outside review A5): the typical cell's place, Natural Earth's state or province and its country
+     * ("São Paulo, Brazil"), so a page whose climate rests on few records can say where its figures were read.
+     */
+    place: v.optional(v.string()),
     src: v.object({ normals: v.string(), envelope: v.string(), extremes: v.optional(v.string()), elevation: v.optional(v.string()) })
   }),
   v.object({ status: v.picklist(['pending', 'none', 'refused']), detail: v.optional(v.string()) })
@@ -284,6 +317,8 @@ export const Photo = v.object({
   captive: v.optional(v.boolean()),
   observedOn: v.optional(v.string()),
   place: v.optional(v.string()),
+  /** The day (YYYY-MM-DD) the photograph's credit and licence were read from its source (round eighty-five, the owner's decision 7). Absent on a photograph stored before. */
+  read: v.optional(v.string()),
   /**
    * A Commons file's categories as Commons gave them, kept since round seventy (REVIEW-TRIAGE-69 C2) by the build and by
    * `--fill commons-kind`, so the read applies the category rules (`commonsKind`) to a stored file as to a new answer.
@@ -407,9 +442,14 @@ export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
   // from the range's coldest mean night, and the page says what the sea cell gave. So are extremes whose lapse correction
   // is beyond what a lapse rate can bridge, or whose nights the habitat's months disagree with (round eighty, A: `setAsideExtremes`; the words, `lapseCause`).
   const climate = setAsideExtremes(d.climate);
+  // Extremes restored by the margin (round eighty-five): their record reads as read and used, as a build now writes it.
+  const restored = d.climate.status === 'ok' && d.climate.extremesStatus === 'lapse' && climate.status === 'ok' && climate.extremesStatus === 'ok';
+  const exUp = d.upstream['climate.extremes'];
+  const up: Dossier['upstream'] = restored && exUp ? { ...d.upstream, 'climate.extremes': { ...exUp, status: 'ok' as const, ...(exUp.detail ? { detail: exUp.detail.replace(/; not used: [\s\S]*$/, '') } : {}) } } : d.upstream;
   return {
     ...d,
     climate,
+
     // A summary stored before round eighty-four that does not end a sentence is shown cut, and marked (`sentenceCut`; A4).
     summary: d.summary ? { ...d.summary, ...cutSummary(d.summary), url: webUrl(d.summary.url) ?? '' } : d.summary,
     // A Commons file that is not a photograph of the species, or whose licence or author the rules do not read, is left
@@ -418,7 +458,7 @@ export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),
-    upstream: Object.fromEntries(Object.entries(d.upstream).map(([k, u]) => [k, u.detail?.startsWith('carried from build of') ? { ...u, detail: unchain(u.detail) } : u]))
+    upstream: Object.fromEntries(Object.entries(up).map(([k, u]) => [k, u.detail?.startsWith('carried from build of') ? { ...u, detail: unchain(u.detail) } : u]))
   };
 }
 
@@ -430,7 +470,14 @@ function cutSummary(s: { text: string; cut?: true }): { text: string; cut?: true
 
 /** The climate with its extremes set aside where they are the sea's (round thirty-five) or beyond a lapse correction (round eighty). */
 export function setAsideExtremes<C extends Dossier['climate']>(c: C): C {
-  if (c.status !== 'ok' || !c.extremes) return c;
+  if (c.status !== 'ok') return c;
+  // Round eighty-five (G; the owner's decision 4, A7): extremes a build set aside on a gap within `DISAGREE_MARGIN_C` stand
+  // again, at every read, so today's corpus shows them before the walk derives each page again.
+  if (!c.extremes && c.extremesStatus === 'lapse' && c.extremesLapse && !lapseSetAside({ months: c.months, extremes: c.extremesLapse })) {
+    const { extremesLapse, ...rest } = c;
+    return { ...rest, extremes: extremesLapse, extremesStatus: 'ok' as const } as C;
+  }
+  if (!c.extremes) return c;
   if (c.landFraction != null && c.landFraction < 0.5) return { ...c, extremes: undefined, extremesSea: c.extremes, extremesStatus: 'sea' as const };
   return lapseSetAside(c) ? { ...c, extremes: undefined, extremesLapse: c.extremes, extremesStatus: 'lapse' as const } : c;
 }

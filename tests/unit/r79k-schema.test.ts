@@ -51,10 +51,10 @@ describe('a dossier without a GBIF key', () => {
   it('says the habitat climate was not checked, with why, on the sheet, the care line, the note and the head', () => {
     const sheet = cultivationSheet({ scientific: 'Hesperocyparis lusitanica', family: 'Cupressaceae', climateStatus: 'unchecked', months: null });
     expect(JSON.stringify(sheet)).not.toMatch(/pending/);
-    expect(careLine({ scientific: 'Hesperocyparis lusitanica', climateStatus: 'unchecked', months: null })).toBe('climate not checked');
+    expect(careLine({ scientific: 'Hesperocyparis lusitanica', climateStatus: 'unchecked', months: null })).toBe('climate not asked'); // round eighty-five (S9): the glossary's word for a source not asked
     const note = generatedNote({ scientific: 'Echeveria x', family: 'Crassulaceae', climateStatus: 'unchecked', months: null });
     if (note) expect(note.text).toContain("GBIF's records were not asked");
-    expect(speciesDescription({ name: { scientific: 'Hesperocyparis lusitanica', family: 'Cupressaceae' }, common: null, climate: { status: 'unchecked' }, native: 11, photos: 0, summary: false } as never)).toContain('habitat climate not checked');
+    expect(speciesDescription({ name: { scientific: 'Hesperocyparis lusitanica', family: 'Cupressaceae' }, common: null, climate: { status: 'unchecked' }, native: 11, photos: 0, summary: false } as never)).toContain('habitat climate not asked');
   });
   it('counts such a page as not checked in its catalogue row, never as pending', () => {
     const items = index.map((e) => ({ ...e, slug: e.name.toLowerCase().replace(/ /g, '-'), photos: 0, open: 0 })) as never[];

@@ -55,7 +55,7 @@ function fail(what, r) {
 }
 // The held pair (round seventy-eight) is scripts/live-check-pair.mjs, tested without the network (round seventy-nine).
 import { heldPair as askHeld, centres } from './live-check-pair.mjs';
-import { indexCacheFault } from './live-check-cache.mjs';
+import { edgeHitGet, edgeVerdict, EDGE_ROUTES } from './live-check-cache.mjs';
 const heldPair = (path, init) => askHeld(get, path, init);
 function ok(what) {
   n++;
@@ -271,14 +271,18 @@ if (!skip.has('forecast')) {
 // The photographs behind the front page's tiles: one thumbnail served through GBIF's image cache, and one from
 // iNaturalist's bucket, must answer as images. GBIF's cache refused the bare address form from 2026-09 and 1,351 tiles
 // said "photograph did not load" for a fortnight before anyone looked (round thirty-two, 1). The fixture corpus has none.
-// The index's lifetime first, read from the GET a browser makes (round eighty-four; outside review B9: the route says five
-// minutes, the edge answered four hours). One GET serves both checks; `LIVE_CHECK_SKIP=index` leaves it out.
-const index = skip.has('index') ? null : await get('/api/index');
-if (index) {
-  if (index.status !== 200) fail('/api/index', index);
-  const fault = indexCacheFault(index.h('cache-control'));
-  if (fault) fail(`/api/index's cache lifetime: ${fault}`, index);
-  ok(`index: cached as the route says (${index.h('cache-control')}${index.h('cf-cache-status') ? `, ${index.h('cf-cache-status')}` : ''})`);
+// The index's and the counts' lifetime first, each read from an answer of the edge's cache, as a browser is sent it (round
+// eighty-four; outside review B9: the routes say five minutes, the edge answered four hours; round eighty-five, decision 9
+// and reviews A18, B5, C5: round eighty-four's single GET was a miss right after the upload, and passed). Each route is
+// asked until the edge answers it from its cache, five GETs a second apart at most. The index's hit serves the thumbnail
+// check below; `LIVE_CHECK_SKIP=index` leaves both routes out.
+let index = null;
+if (!skip.has('index')) for (const path of EDGE_ROUTES) {
+  const got = await edgeHitGet(get, path);
+  const v = edgeVerdict(path, got);
+  if (v.fail) fail(v.fail, got.r);
+  ok(v.ok);
+  if (path === '/api/index') index = got.r;
 }
 if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   const r = index ?? (await get('/api/index'));

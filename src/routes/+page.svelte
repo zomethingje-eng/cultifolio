@@ -56,6 +56,14 @@
   });
   /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
   async function openTop(e: KeyboardEvent) {
+    // Down from the box goes to the first match, as a search box's list is expected to (round eighty-five; outside
+    // review A16h: the box had no arrow keys). The matches are links: Up and Down move between them, Up from the first
+    // and Escape come back to the box (`resultKeys`).
+    if (e.key === 'ArrowDown') {
+      const first = resultLinks()[0];
+      if (first) { e.preventDefault(); searchBox = e.currentTarget as HTMLInputElement; first.focus(); }
+      return;
+    }
     if (e.key !== 'Enter') return;
     if (plantHits.length) {
       e.preventDefault();
@@ -77,6 +85,24 @@
     if (gen !== searchGen) return; // the text changed while waiting: nothing opens
     const top = shownFound[0];
     if (top) goto(`/species/${top.slug}`);
+  }
+  /** The search's matches as the page lists them, in order: the grower's plants, then their species or the catalogue's. */
+  const RESULTS = '.plantsfound a.accrow, .rows.hits a.hitrow';
+  const resultLinks = () => (typeof document === 'undefined' ? [] : [...document.querySelectorAll<HTMLElement>(RESULTS)]);
+  /** The box the arrow keys left, to come back to. */
+  let searchBox: HTMLInputElement | null = null;
+  /** Up and Down between the matches, Up from the first and Escape back to the box; any other key is the link's own. */
+  function resultKeys(e: KeyboardEvent) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Escape') return;
+    const at = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>(RESULTS) : null;
+    if (!at) return;
+    const all = resultLinks();
+    const i = all.indexOf(at);
+    if (i < 0) return;
+    e.preventDefault();
+    const box = searchBox && searchBox.isConnected ? searchBox : document.querySelector<HTMLInputElement>('input.searchbar');
+    if (e.key === 'Escape' || (e.key === 'ArrowUp' && i === 0)) box?.focus();
+    else (all[e.key === 'ArrowDown' ? Math.min(i + 1, all.length - 1) : i - 1] ?? at).focus();
   }
   /** The one search box also finds the grower's own plants by number, field number or name: a returning grower types "2026-0007" here first. */
   const plantHits = $derived.by(() => {
@@ -248,7 +274,15 @@
     if (first == null) return;
     if (first < start || first >= end) {
       const gen = rowsGen;
-      const got = await catalogueRows(data.by, data.chip, first, CHUNK);
+      // The letter pressed shows it is fetching, and the index says it is busy, for as long as its rows take (round
+      // eighty-five; outside review A16h: up to three seconds of nothing on a phone).
+      jumping = l;
+      let got: Awaited<ReturnType<typeof catalogueRows>>;
+      try {
+        got = await catalogueRows(data.by, data.chip, first, CHUNK);
+      } finally {
+        if (jumping === l) jumping = null;
+      }
       if (gen !== rowsGen) return; // the page moved on meanwhile
       if (!got || got.count !== data.rowCount) { location.href = `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&from=${l}#l-${l}`; return; }
       start = first;
@@ -276,6 +310,8 @@
     }
     history.replaceState(history.state, '', `#l-${l}`);
   }
+  /** The letter whose rows are being fetched, while they are. */
+  let jumping = $state<string | null>(null);
   /** Padding under the rows after a jump to a letter the page is too short to place; see `jumpToLetter`. Dropped once a chunk has filled in above (the page is tall enough then, and taking it away moves nothing on screen) or the server's window replaces the rows. */
   let tailPad = $state(0);
   let lettersEl = $state<HTMLElement | null>(null);
@@ -627,6 +663,14 @@
   const chipSpecies = $derived(chip === 'climate' ? data.withClimate : chip === 'noclimate' ? data.total - data.withClimate : chip === 'grown' ? (data.grown?.species ?? 0) : data.total);
   /** A row's species whose climate is pending, apart from those whose source did not answer (round sixty; words 10). */
   const pendingOf = (r: object) => (r as { pending?: number }).pending ?? 0;
+  /**
+   * The species not checked, in words (the merge, round eighty-five; review-s S9 and A's need): those whose GBIF records
+   * were not asked, having no GBIF key, are "not asked", and those a source refused "not checked", as the glossary says,
+   * where the build counted them apart (`notAsked`); a reference built before did not, so the two are said together.
+   */
+  const ncParts = (notChecked: number, notAsked: number | null | undefined): string[] =>
+    notAsked == null ? (notChecked ? [`${fmtN(notChecked)} not checked or not asked`] : []) : [...(notAsked ? [`${fmtN(notAsked)} not asked`] : []), ...(notChecked - notAsked > 0 ? [`${fmtN(notChecked - notAsked)} not checked`] : [])];
+  const chipNc = $derived(ncParts(data.notChecked ?? 0, data.notAsked).join(', '));
   /** A tile's second line: the English name, unless it is only the genus again (Welwitschia's is "Welwitschia"), when the family says more (round fifty-nine; self review). */
   const commonOr = (c: { name: string; common?: string; family?: string }) => (c.common && c.common.toLowerCase() !== c.name.split(' ')[0].toLowerCase() ? c.common : c.family);
   const fmtN = (n: number) => n.toLocaleString('en-US');
@@ -679,8 +723,11 @@
   /** The climate state in words: a refusal is never shown as an absence. */
   /** A page without a GBIF key (round seventy-nine; `$core/no-gbif`): a page (it has an id) whose entry carries no GBIF key. Its climate is not checked. */
   const keyless = (c: { key?: string; gbif?: number }) => !!c.key && c.gbif == null;
-  const climateWord = (c: string, noKey = false) => (c === 'ok' ? 'habitat climate known' : c === 'pending' && noKey ? "habitat climate not checked: GBIF's records were not asked, the page having no GBIF key" : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
+  const climateWord = (c: string, noKey = false) => (c === 'ok' ? 'habitat climate known' : c === 'pending' && noKey ? "habitat climate not asked: GBIF's records were not asked, the page having no GBIF key" : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
 </script>
+
+<!-- The arrow keys between a search's matches (round eighty-five; A16h): one listener, for whichever list is drawn. -->
+<svelte:document onkeydown={resultKeys} />
 
 <svelte:head>
   {#if openRow}
@@ -770,14 +817,16 @@
 {#snippet tile(c: Tile)}
   {@const own = owned.get(c.slug) ?? (c.gbif != null ? owned.get(`key:${c.gbif}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
-    {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
+    {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `${own.length} plants`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="no page under this name" /></div>{:else if c.genus}<div class="im"><Placeholder name={c.name} caption="genus" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
+    <!-- A genus's tile has no photograph to wait for: it is its row of the catalogue, said so, never "loading…" for good (round eighty-five; review-w W8). -->
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
-      <div class="fam">{commonOr(c) ?? ''}</div>
+      <!-- An English name is set as a name, the family in small capitals: one style for two kinds of words read as one (the merge, round eighty-five; review-w W11). -->
+      <div class="fam" class:common={!!commonOr(c) && commonOr(c) !== c.family}>{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing ? 'not in the reference' : ''}</div>
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing ? 'not in the reference' : ''}</div>
     </div>
   </a>
 {/snippet}
@@ -801,7 +850,7 @@
     <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[merged ? mergedSentence(merged) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not checked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[merged ? mergedSentence(merged) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig" aria-hidden="true">›</span>
   </a>
@@ -955,7 +1004,7 @@
                filter like the others, off by default and the same on every device; the about page says how they are chosen. -->
           {#if data.grown}<a class="chipbtn" class:on={chip === 'grown'} aria-current={chip === 'grown' ? 'page' : undefined} href="?by={data.by}&chip=grown" title="The species of the {data.grown.genera === 1 ? 'genus' : `${fmtN(data.grown.genera)} genera`} most observed in cultivation on iNaturalist" data-sveltekit-noscroll aria-label="Popular genera: {fmtN(data.grown.species)} species">Popular genera<span class="sep0">{', '}</span><span class="n">{fmtN(data.grown.species)}</span></a>{/if}
           <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll aria-label="Climate known: {fmtN(data.withClimate)} species">Climate known<span class="sep0">{', '}</span><span class="n">{fmtN(data.withClimate)}</span></a>
-          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll aria-label="No climate: {fmtN(noneN)} species{data.notChecked ? `, ${fmtN(data.notChecked)} of them not checked` : ''}" title="{fmtN(noneN)} with no habitat climate derived{data.notChecked ? `, ${fmtN(data.notChecked)} not checked (GBIF's records not asked, or a source did not answer)` : ''}{data.pending ? `, ${fmtN(data.pending)} pending` : ''}">No climate<span class="sep0">{', '}</span><span class="n">{fmtN(noneN)}</span>{#if data.notChecked}<span class="nc"><span class="sep0">{', '}</span>{fmtN(data.notChecked)} not checked</span>{/if}</a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll aria-label="No climate: {fmtN(noneN)} species{chipNc ? `; besides them, ${chipNc}` : ''}" title="{fmtN(noneN)} with no habitat climate derived{chipNc ? `; besides them, ${chipNc} (not asked: the page has no GBIF key, so its records were not asked; not checked: a source did not answer)` : ''}{data.pending ? `, ${fmtN(data.pending)} pending` : ''}">No climate<span class="sep0">{', '}</span><span class="n">{fmtN(noneN)}</span>{#if chipNc}<span class="nc"><span class="sep0">{', '}</span>{chipNc}</span>{/if}</a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
         <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
@@ -968,8 +1017,9 @@
 
   {#if !searchMode && data.letters.length > 1}
   <div class="filters" bind:this={filtersEl}>
-    <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
-      {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+    <nav class="letters" aria-label="Jump to a letter" aria-busy={jumping ? 'true' : undefined} bind:this={lettersEl}>
+      {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" class:busy={jumping === l} onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+      <span class="sr" role="status">{jumping ? `Fetching the rows from ${jumping}…` : ''}</span>
     </nav>
   </div>
   {/if}
@@ -1006,11 +1056,11 @@
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => im.remove()} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.remove(); if (box) { box.classList.add('mono'); box.setAttribute('aria-hidden', 'true'); box.textContent = r.label[0] ?? ''; } }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}
-            <span class="st">{fmtN(r.count)} species · {fmtN(r.withClimate)} with climate{#if pendingOf(r)}{' · '}{fmtN(pendingOf(r))} pending{/if}{#if r.notChecked}{' · '}{fmtN(r.notChecked)} not checked{/if}</span>
+            <span class="st">{fmtN(r.count)} species · {fmtN(r.withClimate)} with climate{#if pendingOf(r)}{' · '}{fmtN(pendingOf(r))} pending{/if}{#each ncParts(r.notChecked ?? 0, (r as { notAsked?: number }).notAsked) as part (part)}{' · '}{part}{/each}</span>
           </div>
           <span class="chev" aria-hidden="true">{r.id === data.open ? '–' : '+'}</span>
         </a>
@@ -1030,7 +1080,7 @@
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ` without habitat climate: ${fmtN(noneN)} with none derived${data.notChecked ? `, ${fmtN(data.notChecked)} not checked` : ''}${data.pending ? `, ${fmtN(data.pending)} pending` : ''}` : ''}{#if chip === 'grown' && data.grown}{' '}in the popular genera, the genera most observed in cultivation on iNaturalist (<a href="/about/how#list">how they are chosen</a>){/if}</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ` without habitat climate: ${fmtN(noneN)} with none derived${chipNc ? `, ${chipNc}` : ''}${data.pending ? `, ${fmtN(data.pending)} pending` : ''}` : ''}{#if chip === 'grown' && data.grown}{' '}in the popular genera, the genera most observed in cultivation on iNaturalist (<a href="/about/how#list">how they are chosen</a>){/if}</p>
   {/if}
 {/if}
 
@@ -1098,6 +1148,7 @@
      review's 11): beside it, the chip pushed the toolbar to a second line at 1024 px and the first row off the screen. */
   .chipbtn:has(.nc) { display: inline-flex; flex-wrap: wrap; align-items: baseline; max-width: 13em; padding-top: 3px; padding-bottom: 3px; line-height: 1.25; }
   .chipbtn .nc { flex-basis: 100%; font-size: var(--fs-xs); font-weight: 500; }
+  .tile .fam.common { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: var(--fs-sm); color: var(--ink2); }
   /* So the toolbar stays one line at 1024 px with the chip's second count: a little less padding and gap, and a search box
      that may narrow to 170 px, as it already narrows to fit (r62bw's first screen; round eighty-two). */
   @media (min-width: 901px) { .tools .chiprow .chipbtn { padding-left: 11px; padding-right: 11px; } .tools { gap: 6px; } .tools .chiprow { gap: 5px; } .toolrow .searchbar { min-width: 170px; } }
@@ -1168,6 +1219,11 @@
   .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 16px; font-size: var(--fs-md); color: var(--ink2); }
   .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: var(--tap); min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
+  /* The letter whose rows are on their way (round eighty-five; A16h): marked at once, and pulsing while they come. */
+  .letters a.busy { background: var(--accent-soft, var(--sunk)); color: var(--accent); animation: letterbusy 0.9s ease-in-out infinite alternate; }
+  @keyframes letterbusy { from { opacity: 1; } to { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) { .letters a.busy { animation: none; } }
+  .letters .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .letter { font-family: var(--mono); font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */
   .rows { display: flex; flex-direction: column; gap: 6px; }

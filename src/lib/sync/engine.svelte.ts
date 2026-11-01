@@ -226,12 +226,15 @@ function parkedVerdicts(v: unknown): Set<string> {
   return new Set((v as string[]).filter((t) => !isPastStamp(t)));
 }
 
+/** The layout's line when the refold after a change of the clock fails (round eighty-five; A19). */
+export const CLOCK_FOLD_FAILED = "This device's clock changed, and this tab could not read your collection again by it. Reload the page to see it as the clock now has it.";
+
 class Sync {
   configured = $state(false);
   private gen = 0;
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
-  /** Photographs the last run asked for and the server failed to hand over (a 5xx): asked again next run (round eighty-four; A16). */
+  /** Photographs the last run asked for and the server failed to hand over (a 5xx, or a 503 while another device stores or removes one): asked again next run (round eighty-four; A16), and said on the sync page's status card (round eighty-five; A17, C7). */
   photosLater = $state(0);
   lastError = $state<string | null>(null);
   /**
@@ -338,7 +341,14 @@ class Sync {
    */
   private clockChanged(): void {
     this.clockFolds++;
-    this.clockFold = collection.rebuild().then(() => this.scanClock()).catch(() => {});
+    // A refold that fails is said, not swallowed (round eighty-five; outside review A19): the tab would go on showing
+    // holds and parks judged by the clock before. The layout's line offers the reload, the next pull folds again, and a
+    // later reading that works puts the line away.
+    this.clockFold = collection.rebuild().then(() => this.scanClock()).then(() => { if (collection.readBehind === CLOCK_FOLD_FAILED) collection.readBehind = null; }, (e: unknown) => {
+      console.warn('the refold after a change of the clock failed', e);
+      this.foldStale = true;
+      collection.readBehind = CLOCK_FOLD_FAILED;
+    });
   }
   /** The refold the clock listener started, and how many it has started: a pull whose reading changed the clock waits for that one rather than folding again (round sixty-two; the clock review's 5, A17: three refolds per reading). */
   private clockFold: Promise<void> | null = null;
@@ -384,7 +394,7 @@ class Sync {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (this.busy) this.schedule(ms);
-      else this.run().catch(() => {});
+      else this.run().catch(() => { /* run() records its own failure (lastError, offline) for the status card before it throws */ });
     }, ms);
   }
 
@@ -797,7 +807,7 @@ class Sync {
     if (secs >= 60 && !this.dayStands(m, secs)) {
       // The vault's hour of photographs spent holds photographs alone; its records still go (round seventy; triage-69 W6, R47-18).
       this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000, ...(photos ? { photos: true as const } : {}) };
-      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => { /* the refusal is held in this tab and said now; a record not kept only means a reload asks the server once more */ }); }
     } else if (secs >= 60) await this.holdSmall(m, text || 'The sync server is not taking uploads from this vault just now.', secs);
     const e = new Error(text || `the sync server asked this device to wait ${secs} s`);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
@@ -822,7 +832,7 @@ class Sync {
     const text = `The server refused uploads from this device for now${why ? `: ${why}` : ''}.`;
     if (day || !this.dayStands(m, secs)) {
       this.refusal = { text, until: Date.now() + secs * 1000, ...(day ? { day: true as const } : {}) };
-      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => { /* the refusal is held in this tab and said now; a record not kept only means a reload asks the server once more */ }); }
     } else await this.holdSmall(m, text, secs);
     const e = new Error(text);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
@@ -864,7 +874,7 @@ class Sync {
     const day = m.refusal?.day ? m.refusal : this.refusal?.day ? this.refusal : null;
     if (!day) return;
     this.refusal = { ...day, day: true, small: { text, until: Math.min(day.until, Date.now() + secs * 1000) } };
-    if (this.meta === m) { m.refusal = { ...this.refusal, small: { ...this.refusal.small! } }; await this.save(m).catch(() => {}); }
+    if (this.meta === m) { m.refusal = { ...this.refusal, small: { ...this.refusal.small! } }; await this.save(m).catch(() => { /* the refusal is held in this tab and said now; a record not kept only means a reload asks the server once more */ }); }
   }
   /** The refusal is over: an upload was taken. */
   private clearRefusal(m: SyncMeta): void {
@@ -912,7 +922,7 @@ class Sync {
     const ms = (e as { listing?: true; retryAfterMs?: number })?.listing ? (e as { retryAfterMs: number }).retryAfterMs : 0;
     if (ms < 60_000 || this.meta !== m) return;
     m.listingWait = { text: (e as Error).message, until: Date.now() + Math.min(ms, REFUSAL_MS) };
-    await this.save(m).catch(() => {});
+    await this.save(m).catch(() => { /* the wait is a courtesy to the server; a record not kept only means a reload lists once more */ });
   }
   /** The kept listing wait as the run's error, while it stands (never more than an hour ahead of this clock); null, and forgotten, once it has ended. */
   private listingHeld(m: SyncMeta): (Error & { retryAfterMs: number }) | null {
@@ -1393,7 +1403,7 @@ class Sync {
       this.quarantined = [...(m.quarantined ?? [])];
       await this.save(m);
     }
-    if (this.foldStale) { this.foldStale = false; await collection.rebuild(); await this.scanClock(); }
+    if (this.foldStale) { this.foldStale = false; await collection.rebuild(); await this.scanClock(); if (collection.readBehind === CLOCK_FOLD_FAILED) collection.readBehind = null; }
     // Two records a pull leaves under one number are not repaired here: a pull writes what arrived and nothing more (rule
     // 5). The record's page says the number is shared and offers "Renumber now" (round fifty-nine; two reviews agreed).
     // Photos that records mention and we lack.
@@ -1411,7 +1421,7 @@ class Sync {
       if (r.status === 429) await this.limited(r);
       // Being stored or removed by another device this moment, or its record on the server could not be read: asked again
       // next run, and the vault's other photographs still come (round sixty-seven; triage-66 S1).
-      if (r.status === 503) continue;
+      if (r.status === 503) { photosLater++; continue; }
       // Any other answer of the server's own failing (500, 502, 520 and the rest) is the same: this photograph waits for
       // the next run, and the run goes on to the others and to the removals (round eighty-four; outside review A16: the
       // first photograph answered 500 ended the run, and every photograph after it and `dropRemoved` waited behind it).
@@ -1436,6 +1446,7 @@ class Sync {
     }
     await this.dropRemoved(m, have);
     // Said, not thrown: the run's records arrived, and the photographs the server could not hand over are asked for again.
+    // The sync page's status card says how many (round eighty-five; reviews A17 and C7: told only to the console before).
     this.photosLater = photosLater;
     if (photosLater) console.warn(`${photosLater} photograph${photosLater === 1 ? '' : 's'} not received this run (the server failed to answer); asked again next run`);
     return got;
@@ -1501,7 +1512,7 @@ class Sync {
     const removedNow = new Set(removed.map((r) => r.id));
     if (!sameList(m.photosRemoved ?? [], [...removedNow])) { m.photosRemoved = [...removedNow]; changed = true; }
     for (const { id, at } of removed) {
-      if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
+      if (have.has(id)) { await deletePhotoBlobs(id).catch(() => { /* the photograph is removed from every record already; pixels not deleted now are deleted at the next run, which finds them again */ }); collection.forgetPhotoUrls(id); }
       if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
       const asked = m.asked409?.[id];
       if (asked !== undefined && Date.now() - asked < ASK_409_MS && asked <= Date.now()) continue; // answered "kept" within the hour (by any tab, before any reload): not asked again yet

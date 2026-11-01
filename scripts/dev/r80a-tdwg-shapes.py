@@ -44,7 +44,22 @@ written in thousandths of a degree.
 
 `--draw` also writes each shaped region's outline for the maps (scripts/dev/r84g-region-maps.py reads it): its states and
 provinces dissolved into one, by taking out every edge two of them share (Natural Earth's neighbouring provinces share
-their border's points exactly), so a map draws the region's edge and none of the borders inside it.
+their border's points exactly), so a map draws the region's edge and none of the borders inside it; with its minor islands.
+
+Round eighty-five (G; the owner's decisions 1 to 3, outside review A3, A4): the file's rule is r85.
+  - `SPLIT_L3` parts Morocco's southern provinces at the Western Sahara line (Tarfaya to Morocco, the rest to Western
+    Sahara) and gives Darjeeling to the East Himalaya, as TDWG's unit EHM-DJ;
+  - `POLY_L3` places the Aru Is. (New Guinea), Costa Rica's Cocos I. (the Colombian Pacific Is.) and the Venezuelan
+    Antilles as TDWG's gazetteer files them;
+  - a polygon in no region's box goes to its own province's region where that shape is within two degrees, else to the
+    nearest shape of its country (`place_orphans`: Minami-Iwo-jima, Mopelia, Banaba, the South Sandwich Is.);
+  - `--islands ne_10m_minor_islands.geojson` (Natural Earth 5.1.1, public domain) adds `islands`: each minor island in no
+    shape, in the region of the nearest shape (or of the box of a shapeless region that holds it);
+  - `countries`: each region's countries (ISO 3166-1, as GBIF states a record's), for the border rule.
+  The Snares stay New Zealand South's: TDWG's gazetteer files "Snares I." under NZS-OO (outside review A4 read them as the
+  Antipodean Is.'). `--r84` writes round eighty-four's file byte for byte.
+
+  python3 scripts/dev/r80a-tdwg-shapes.py <tblLevel3.txt> <tblLevel4.txt> <ne_10m_admin_1_states_provinces.geojson> scripts/tdwg3-shapes.json <tblGazetteer.txt> --islands <ne_10m_minor_islands.geojson> --report <report.json> --draw <draw.json>
   python3 scripts/dev/r80a-tdwg-shapes.py <tblLevel3.txt> <tblLevel4.txt> <ne_10m_admin_1_states_provinces.geojson> <out.json> --r83
 """
 import json, sys, unicodedata, re, collections
@@ -52,6 +67,13 @@ import json, sys, unicodedata, re, collections
 args = sys.argv[1:]
 R83 = '--r83' in args
 if R83: args.remove('--r83')
+# `--r84` writes round eighty-four's file byte for byte (no splits, no islands, no countries).
+R84 = R83 or '--r84' in args
+if '--r84' in args: args.remove('--r84')
+R85 = not R84
+ISLANDS = None
+if '--islands' in args:
+    i = args.index('--islands'); ISLANDS = args[i + 1]; del args[i:i + 2]
 REPORT = None
 if '--report' in args:
     i = args.index('--report'); REPORT = args[i + 1]; del args[i:i + 2]
@@ -151,6 +173,32 @@ NE_REGION_L3 = {} if R83 else {('NZ', 'South Island'): 'NZS', ('NZ', 'North Isla
 # and Imbros, on the European side of the Dardanelles, are Turkey-in-Europe; its Asian shore and Tenedos are Turkey's.
 # Every polygon of Çanakkale lies in both regions' boxes. (Istanbul's two shores are parted by their share of the boxes.)
 POLY_L3 = [] if R83 else [('TR', 'Çanakkale', lambda lat, lon: lat > 40.1, 'TUE')]
+if R85:
+    # Round eighty-five (G; the owner's decision 3, outside review A4): islands TDWG's gazetteer files under another region
+    # than the box rule gives them, placed where the gazetteer says, whatever box holds their middle:
+    POLY_L3 += [
+        # "Aru Is." NWG-IJ (gazetteer 429): the Aru Islands are New Guinea's; the box rule gave them the Lesser Sundas', whose
+        # box reaches 134.9° E.
+        ('ID', 'Maluku', lambda lat, lon: lon > 133.9 and lat < -5.2, 'NWG'),
+        # "Cocos I." CPI-CO (677): Costa Rica's Cocos Island is TDWG's Colombian Pacific Is.; no box of Costa Rica's holds it.
+        ('CR', 'Puntarenas', lambda lat, lon: lat < 7, 'CPI'),
+        # "Los Roques Is.", "Orchila I.", "Tortuga, La", "Blanquilla Is.", "Los Hermanos Is.", "Los Testigos Is." VNA-OO: the
+        # Federal Dependencies east of 68° W are the Venezuelan Antilles, though TDWG's own box (west edge 66.667° W) leaves
+        # most of Los Roques out. Los Monjes, off the Guajira and named nowhere in the gazetteer, stay Venezuela's.
+        ('VE', 'Dependencias Federales', lambda lat, lon: lon > -68, 'VNA')]
+# Round eighty-five (G; decision 3): a state or province TDWG parts between two regions along a line, each part to its own
+# region; the boxes of each entry part the plane (south, west, north, east).
+#   - Morocco's southern provinces at the Western Sahara line, 27°40' N (27.667°, the north edge of TDWG's own box for
+#     Western Sahara): Tarfaya, north of it, is Morocco's; Laayoune, Smara, Boujdour, Dakhla and Aousserd are Western
+#     Sahara's. Round eighty-four cut them to Morocco's box and gave the rest to no region.
+#   - West Bengal's Darjeeling district, TDWG's unit EHM-DJ "Darjiling" (gazetteer 743, 744), to the East Himalaya: the
+#     part north of 26.45° N and west of the Teesta (88.45° E), the hills and the Siliguri plain, with the part north of
+#     26.92° N between the Teesta and the Jaldhaka (88.93° E), Kalimpong. Natural Earth draws no districts, so the district's
+#     edge with Jalpaiguri is these two lines, within about 10 km. Round eighty-three held Darjeeling as India's.
+SPLIT_L3 = [] if not R85 else [
+    ('MA', None, [((27.667, -180, 90, 180), 'MOR'), ((-90, -180, 27.667, 180), 'WSA')]),
+    ('IN', 'West Bengal', [((-90, -180, 26.45, 180), 'IND'), ((26.45, 88.93, 90, 180), 'IND'), ((26.45, -180, 90, 88.45), 'EHM'),
+                           ((26.92, 88.45, 90, 88.93), 'EHM'), ((26.45, 88.45, 26.92, 88.93), 'IND')])]
 iso2l3 = collections.defaultdict(set)
 names = collections.defaultdict(dict)  # iso -> norm name -> l3
 unit_iso = {}  # L4 code -> its country code, as read above
@@ -190,12 +238,19 @@ def gazof(p, lat, lon, boxed=True):
 
 a1 = json.load(open(a1f, encoding='utf-8'))
 polys = collections.defaultdict(list)
+# Round eighty-five: each polygon's state or province and its country, "name|ISO" (the typical cell's place, A5).
+polynames = collections.defaultdict(list)
 unplaced = collections.defaultdict(list)
 # The states and provinces placed in each region, by country code (round eighty-three, C).
 placedin = collections.Counter()
 how = collections.Counter()  # how each state or province was placed (the report)
 byshare = []  # those placed by their area in the boxes (the report names each)
 moved, cut, dropped, kept = [], [], [], []  # each polygon not simply left where its province was placed (the report)
+orphans = []  # round eighty-five: polygons in no box, placed after the shapes (`place_orphans`)
+splitto = []  # round eighty-five: each part a line gave another region (SPLIT_L3)
+# Round eighty-five: the countries of each region, as GBIF states a record's (ISO 3166-1): its units' codes in TDWG's tables
+# (read as above) and the code of every state or province placed in it (Jersey's JE, Aland's AX, Sint Maarten's SX).
+feature_iso = collections.defaultdict(set)
 
 def clip(ring, b, m):
     # Sutherland-Hodgman against the box and a margin; a ring is closed (its last point its first).
@@ -253,7 +308,13 @@ def place_poly(code, poly, iso, label, named):
     if (named or len(iso2l3.get(iso, ())) == 1) and not any(inbox(c, lat, lon, 0.1) for c in BOX if c != code):
         kept.append((code, label, round(lat, 2), round(lon, 2)))
         return [(code, poly)]
-    dropped.append((code, label, round(lat, 2), round(lon, 2), f"its middle is in no box of a region of {iso}" if not any(inbox(c, lat, lon, 0.1) for c in BOX if c != code) else 'its middle is in the box of a region of another country'))
+    nobox = not any(inbox(c, lat, lon, 0.1) for c in BOX if c != code)
+    # Round eighty-five (G; decision 2): an island in no box at all is placed after the shapes are made, in the region of its
+    # own country whose shape is nearest (the Volcano Islands' Minami-Iwo-jima, Mopelia in the Society Is., Banaba).
+    if R85 and nobox:
+        orphans.append((code, iso, label, poly))
+        return []
+    dropped.append((code, label, round(lat, 2), round(lon, 2), f"its middle is in no box of a region of {iso}" if nobox else 'its middle is in the box of a region of another country'))
     return []
 
 for f in a1['features']:
@@ -261,6 +322,7 @@ for f in a1['features']:
     iso = p.get('iso_a2') or ''
     if iso in ('-1', '-99', ''): iso = (p.get('iso_3166_2') or '')[:2]
     iso = NE_ISO.get(p.get('name') or '', iso)
+    raw_iso = iso
     # A feature Natural Earth leaves unnamed is a scrap of islets (one off Yucatan, one off Colombia): not read.
     if not p.get('name'): continue
     g = f['geometry']
@@ -304,11 +366,28 @@ for f in a1['features']:
     placedin[(code, iso)] += 1
     for i, poly in enumerate(g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']]):
         at = split[i] if split else code
+        # Round eighty-five: a polygon the gazetteer places (POLY_L3) is that region's, whatever box holds it; a polygon a
+        # line parts (SPLIT_L3) is cut, each part to its region.
+        final = False
         for piso, pname, test, region in POLY_L3:
-            if iso == piso and p.get('name') == pname and test(*ringcentre(poly[0])): at = region
-        for c, q in place_poly(at, poly, iso, label, named):
-            polys[c].append(q)
-            if c != code: placedin[(c, iso)] += 1
+            if iso == piso and p.get('name') == pname and test(*ringcentre(poly[0])): at = region; final = R85
+        pieces = [(at, poly, final)]
+        for siso, sname, parts in SPLIT_L3:
+            if iso == siso and (sname is None or p.get('name') == sname):
+                pieces = []
+                for b, region in parts:
+                    rings = [clip(r, b, 0) for r in poly]
+                    if rings[0] and area(rings[0]) > 0:
+                        pieces.append((region, [r for r in rings if r], region != code))
+                        if region != code: splitto.append((code, region, label, round(sum(area(r) for r in rings[:1]), 4)))
+        for at, q0, final in pieces:
+            if final:
+                polys[at].append(q0); polynames[at].append(f"{p.get('name')}|{raw_iso}"); feature_iso[at].add(raw_iso)
+                if at != code: placedin[(at, iso)] += 1
+                continue
+            for c, q in place_poly(at, q0, iso, label, named):
+                polys[c].append(q); polynames[c].append(f"{p.get('name')}|{raw_iso}"); feature_iso[c].add(raw_iso)
+                if c != code: placedin[(c, iso)] += 1
 
 def dp(pts, tol):
     if len(pts) < 4: return pts
@@ -326,7 +405,56 @@ def dp(pts, tol):
         if best > tol: keep[at] = True; stack += [(a, at), (at, b)]
     return [p for p, k in zip(pts, keep) if k]
 
-shapes, partial = {}, {}
+def place_islands(mi, shapes, partial, rep):
+    """Round eighty-five (G; decision 2): Natural Earth's minor islands, each in the region of the nearest shape (by its
+    edges, longitude scaled by the latitude's cosine), or, where the box of a region with no shape holds it, that region.
+    An island already inside a shape, or more than five degrees from any, is left out and counted."""
+    import math
+    prep = []
+    for code, polys_ in shapes.items():
+        for poly in polys_:
+            rings = [[(x / 1000, y / 1000) for x, y in ring] for ring in poly]
+            xs = [x for x, y in rings[0]]; ys = [y for x, y in rings[0]]
+            prep.append((code, min(xs), min(ys), max(xs), max(ys), rings))
+    def inside(x, y, rings):
+        c = False
+        for r in rings:
+            for (xi, yi), (xj, yj) in zip(r, r[-1:] + r[:-1]):
+                if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi: c = not c
+        return c
+    def dist(x, y, rings):
+        k = math.cos(math.radians(y)); best = float('inf')
+        for r in rings:
+            for (ax, ay), (bx, by) in zip(r, r[1:] + r[:1]):
+                ax, bx = (ax - x) * k, (bx - x) * k; ay, by = ay - y, by - y
+                dx, dy = bx - ax, by - ay; L = dx * dx + dy * dy
+                t = max(0, min(1, -(ax * dx + ay * dy) / L)) if L else 0
+                best = min(best, (ax + t * dx) ** 2 + (ay + t * dy) ** 2)
+        return math.sqrt(best)
+    out = collections.defaultdict(list)
+    for f in mi['features']:
+        g = f['geometry']
+        for poly in (g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']]):
+            ring = poly[0]
+            y, x = ringcentre(ring)
+            if any(b[1] <= x <= b[3] and b[2] <= y <= b[4] and inside(x, y, b[5]) for b in prep): rep['already inside a shape'] += 1; continue
+            boxed = [c for c in partial if inbox(c, y, x)]
+            if len(boxed) == 1: code = boxed[0]
+            else:
+                best, code = 5.0, None
+                for b in prep:
+                    if b[1] - 5 <= x <= b[3] + 5 and b[2] - 5 <= y <= b[4] + 5:
+                        d = dist(x, y, b[5])
+                        if d < best: best, code = d, b[0]
+                if not code: rep['no shape within five degrees'] += 1; continue
+            q = [[round(px * 1000), round(py * 1000)] for px, py in ring]
+            q = [q[0]] + [b for a, b in zip(q, q[1:]) if b != a]
+            if len(q) < 4: rep['under a thousandth of a degree'] += 1; continue
+            if q[0] != q[-1]: q.append(q[0])
+            out[code].append([q]); rep['placed'] += 1
+    return dict(out)
+
+shapes, partial, places = {}, {}, {}
 for code in sorted(L3):
     isos = {(r.get('L4 ISOcode') or '').strip() for r in L4 if r['L3 code'] == code and r['L4 code'] not in EXCUSED}
     if not isos or '' in isos or any(unplaced.get(i) for i in isos) or not polys.get(code):
@@ -339,7 +467,8 @@ for code in sorted(L3):
         partial[code] = [f"no state or province of {', '.join(missing)} placed"]
         continue
     rings = []
-    for poly in polys[code]:
+    names_ = []
+    for pi, poly in enumerate(polys[code]):
         rr = []
         for ring in poly:
             s = dp(ring, 0.02)
@@ -348,7 +477,7 @@ for code in sorted(L3):
             # them Santa Fe in the Galapagos and most of the Maldives); one outside it is left out, as before.
             if len(s) < 4 and all(nearbox(code, y, x) for x, y in ring): s = ring
             if len(s) >= 4: rr.append([[round(x * 1000), round(y * 1000)] for x, y in s])
-        if rr: rings.append(rr)
+        if rr: rings.append(rr); names_.append(polynames[code][pi] if pi < len(polynames[code]) else '')
     b = BOX.get(code)
     xs = [x / 1000 for poly in rings for ring in poly for x, y in ring]; ys = [y / 1000 for poly in rings for ring in poly for x, y in ring]
     if not xs:
@@ -360,17 +489,58 @@ for code in sorted(L3):
         partial[code] = [f'shape outside its box ({min(ys):.1f},{min(xs):.1f} to {max(ys):.1f},{max(xs):.1f})']
         continue
     shapes[code] = rings
+    places[code] = names_
+def place_orphans():
+    """Round eighty-five: each polygon in no region's box, in the region of its own country whose shape is nearest (by its
+    points, longitude scaled by the latitude's cosine), or its own province's region where that is within two degrees,
+    simplified as the shapes are; the report names each."""
+    import math
+    for code, iso, label, poly in orphans:
+        lat, lon = ringcentre(poly[0]); k = math.cos(math.radians(lat))
+        near = {}
+        for c in iso2l3.get(iso, ()) | {code}:
+            for q in shapes.get(c, ()):
+                for x, y in q[0]:
+                    d = ((x / 1000 - lon) * k) ** 2 + (y / 1000 - lat) ** 2
+                    if d < near.get(c, float('inf')): near[c] = d
+        # Its own province's region where that shape is within two degrees (Okinawa's Iotorishima is Nansei-shoto's, though
+        # a Kagoshima islet of Japan's is nearer); else the nearest (Tokyo's Minami-Iwo-jima is the Volcano Is.').
+        to = code if near.get(code, float('inf')) <= 4 else min(near, key=near.get, default=None)
+        best = near.get(to, float('inf'))
+        if not to: dropped.append((code, label, round(lat, 2), round(lon, 2), f'in no box, and no shape of {iso} to place it by')); continue
+        rr = []
+        for ring in poly:
+            q = dp(ring, 0.02)
+            if len(q) < 4: q = ring
+            if len(q) >= 4: rr.append([[round(x * 1000), round(y * 1000)] for x, y in q])
+        if rr: shapes[to].append(rr); polys[to].append(poly); places.setdefault(to, []).append(f"{label.rsplit(' (', 1)[0]}|{iso}"); kept.append((to, label, round(lat, 2), round(lon, 2), f'in no box: the nearest shape of {iso}, {round(math.sqrt(best), 2)} degrees'))
+if R85: place_orphans()
 meta = {'source': "Natural Earth 1:10m admin 1 states and provinces (public domain, naturalearthdata.com), assigned to TDWG's level-3 regions by TDWG's tblLevel3.txt and tblLevel4.txt (WGSRPD second edition); Douglas-Peucker 0.02 degrees; coordinates in thousandths of a degree, [lon, lat]", 'regions': len(shapes), 'boxOnly': len(partial)}
 if not R83:
     meta['source'] = meta['source'].replace('tblLevel3.txt and tblLevel4.txt', 'tblLevel3.txt, tblLevel4.txt and tblGazetteer.txt')
     # The rule the file was made by: a dossier's record of its sources names it, and `--check-ranges` lists a page derived before it.
     meta['rule'] = 'r84'
-json.dump({'meta': meta, 'shapes': shapes}, open(out, 'w'), separators=(',', ':'))
+islands, island_report = {}, collections.Counter()
+countries = {}
+if R85:
+    meta['rule'] = 'r85'
+    # Round eighty-five (G; the owner's decision 1): each region's countries as GBIF states a record's, for the border rule.
+    for code in shapes:
+        isos = {(r.get('L4 ISOcode') or '').strip() for r in L4 if r['L3 code'] == code} | feature_iso.get(code, set())
+        countries[code] = sorted(i for i in isos if re.fullmatch(r'[A-Z]{2}', i))
+    for code in partial:
+        countries[code] = sorted({(r.get('L4 ISOcode') or '').strip() for r in L4 if r['L3 code'] == code} - {''})
+    if ISLANDS:
+        islands = place_islands(json.load(open(ISLANDS, encoding='utf-8')), shapes, partial, island_report)
+        meta['islands'] = "Natural Earth 1:10m minor islands (public domain, version 5.1.1), each placed in the region of the nearest shape, or of the box of a region with none that holds it"
+    meta['source'] = "Natural Earth 1:10m states and provinces (public domain), placed in TDWG's level-3 regions (WGSRPD second edition) by TDWG's tables and gazetteer"
+    meta['simplified'] = 'Douglas-Peucker 0.02 degrees; thousandths of a degree, [lon, lat]'
+json.dump({'meta': meta, 'shapes': shapes, **({'islands': islands, 'countries': countries, 'places': places} if R85 else {})}, open(out, 'w'), separators=(',', ':'))
 print(f"{len(shapes)} regions with shapes, {len(partial)} by their box only")
 print('box only:', ' '.join(f"{c}({'; '.join(v)})" for c, v in sorted(partial.items())))
 if REPORT:
     json.dump({'regions': len(shapes), 'boxOnly': {c: {'name': L3[c]['L3 area'], 'why': v} for c, v in sorted(partial.items())}, 'placedBy': dict(how), 'byShare': byshare,
-               'moved': moved, 'cut': cut, 'dropped': dropped, 'kept': kept, 'excused': sorted(EXCUSED)}, open(REPORT, 'w'), indent=1, ensure_ascii=False)
+               'moved': moved, 'cut': cut, 'dropped': dropped, 'kept': kept, 'excused': sorted(EXCUSED), **({'split': splitto, 'islands': dict(island_report), 'islandsBy': {c: len(v) for c, v in sorted(islands.items())}, 'countries': countries} if R85 else {})}, open(REPORT, 'w'), indent=1, ensure_ascii=False)
 
 if DRAW:
     def outline(polys_):
@@ -399,9 +569,11 @@ if DRAW:
             if len(ring) >= 3: rings.append(ring)
         out_ = []
         for ring in rings:
-            q = dp(ring + [ring[0]], 0.02)
+            # Round eighty-five: drawn to 0.005 degrees (about 500 m), so the close-up of a small region is fine (W4); the map
+            # script simplifies each region's file to its own extent.
+            q = dp(ring + [ring[0]], 0.005 if R85 else 0.02)
             if len(q) < 4: q = ring + [ring[0]]
             if len(q) >= 4: out_.append([[round(x * 1000), round(y * 1000)] for x, y in q])
         return out_
-    json.dump({'meta': {'source': meta['source'] + '; states and provinces dissolved into their region, for the maps'}, 'outlines': {c: outline(polys[c]) for c in shapes}}, open(DRAW, 'w'), separators=(',', ':'))
+    json.dump({'meta': {'source': meta['source'] + '; states and provinces dissolved into their region, for the maps'}, 'outlines': {c: outline(polys[c]) + [ring for poly in islands.get(c, []) for ring in poly] for c in shapes}}, open(DRAW, 'w'), separators=(',', ':'))
     print(f"outlines of {len(shapes)} regions → {DRAW}")

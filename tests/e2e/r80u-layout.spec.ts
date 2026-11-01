@@ -44,6 +44,8 @@ test('r80u layout 1: the toast after Water does not cover the plant\'s number an
 
 test('r80u layout 2: the month table\'s row names stay put when the table is swiped sideways @phone-only', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  // Round eighty-five (W5): months are rows now and the table fits a phone at the default text size; at 200% it is swiped.
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
   await page.locator('details.figures > summary').click();
   const scroller = page.locator('.scroll-x[aria-label="Habitat climate by month"]');
   await expect(scroller).toBeVisible();
@@ -153,7 +155,7 @@ test('r80u layout 13: a page of the collection, drawn on the device, raises no w
   const warned: string[] = [];
   page.on('console', (m) => { if (/preloaded using link preload/.test(m.text())) warned.push(m.text()); });
   await page.goto('/plants/new'); await ready(page);
-  await page.waitForTimeout(5000); // a negative: the browser warns a few seconds after the load, or not at all
+  await page.waitForTimeout(5000); // a negative, by the browser's own timer: it warns a few seconds after the load, or not at all, and the page shows nothing of it
   expect(warned).toEqual([]);
   const html = await (await request.get('/species/copiapoa-cinerea')).text();
   expect(html.match(/<link rel="preload" as="font"/g)?.length).toBe(2);

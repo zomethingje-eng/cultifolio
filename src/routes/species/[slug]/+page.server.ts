@@ -1,3 +1,4 @@
+import { ownSynonyms } from '$core/shown-names';
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer } from '$lib/server/dossiers';
 import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch, type SynonymAnswer } from '$lib/server/synonyms';
@@ -13,7 +14,7 @@ import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf, mergedNamesOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
 import { authorKey, plainlyAnother } from '$dossier/authors';
-import { regionSvg } from '$lib/map/still';
+import { regionSvg, mapPoints } from '$lib/map/still';
 import { unitName } from '$core/regions';
 import { drawOnce } from '$lib/server/drawn';
 import { describedBy } from '$lib/ui/ref/words';
@@ -150,7 +151,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // they came from only as a count (round seventy-seven): each record's year, country, kind and licence, and each
   // dataset's key, title, licence and count, are read by nothing the page shows, and were a fifth of what it carried to
   // the browser (the type below lets no part of the page read them).
-  const points = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
+  // Round eighty-five (G): a record off the drawn coast is marked, so the close-up draws it as a ring (`mapPoints`).
+  const points = mapPoints(d.occurrences);
   const { open: _open, datasets: _datasets, ...occurrences } = d.occurrences;
   // A hybrid of the list is shown with Kew's sign, and linked by Kew's own numbers where its record links neither (round
   // eighty-one, H; review-w 3, review-d 3; `$core/hybrids`): its address, and every name this load compares (they read `d`), are without it.
@@ -220,7 +222,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     : sharedRefs.map(([, slug, name]) => ({ slug, name }));
   // The record's older names that are another species' accepted name here: shown with the record's author, and said not
   // to be that species (round seventy-one; S-F3: 169 pages, "Also known as … Annona muricata" on Annona montana).
-  const olderOwn = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))];
+  const olderOwn = [...new Set(ownSynonyms(d.name).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))];
   const elsewhere = await look.elsewhere(key, olderOwn.map(plain));
   // A name the record cites by that page's own author is that page's very name, which GBIF files under both, not another
   // author's (round eighty-two, the merge, on S's need: 10 of 283 such names on round seventy-seven's corpus): it is an

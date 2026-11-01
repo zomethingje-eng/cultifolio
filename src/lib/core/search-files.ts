@@ -106,7 +106,7 @@ export interface Answers { a: number[]; b?: number[]; t?: Record<string, number[
 /** `search/tables.json`: the families and regions of origin a `Doc` numbers. */
 export interface Tables { families: string[]; regions: string[] }
 /** `search/blocks.json`: the photograph-count blocks and the show blocks, by hash, in position order. */
-export interface Blocks { photos: string[]; show: string[] }
+export interface Blocks { photos: string[]; show: string[]; /** Growers' counts (`grown`) of positions b × `PHOTO_BLOCK` on (round eighty-five); absent in files built before, or when no entry has one. */ grown?: string[] }
 
 /** How many directory files a corpus of `n` species has beside `top.json`: sixty-four up to about ten thousand, doubling past that. */
 export const searchDirsFor = (n: number) => { let f = 64; while (f < 4096 && n > f * 160) f *= 2; return f; };
@@ -278,6 +278,11 @@ export function buildSearchFiles<T extends Searchable & Wordy>(index: readonly T
   const blocks: Blocks = { photos: [], show: [] };
   for (let b = 0; b * PHOTO_BLOCK < index.length; b++) blocks.photos.push(store(JSON.stringify(index.slice(b * PHOTO_BLOCK, (b + 1) * PHOTO_BLOCK).map((e) => (typeof e.photos === 'number' ? e.photos : 0)))));
   for (let b = 0; b * SHOW_BLOCK < index.length; b++) blocks.show.push(store(`[${json.slice(b * SHOW_BLOCK, (b + 1) * SHOW_BLOCK).join(',')}]`));
+  // Growers' counts beside the photographs' (round eighty-five), where the index carries them: a Worker built before reads none.
+  if (index.some((e) => typeof (e as { grown?: unknown }).grown === 'number')) {
+    blocks.grown = [];
+    for (let b = 0; b * PHOTO_BLOCK < index.length; b++) blocks.grown.push(store(JSON.stringify(index.slice(b * PHOTO_BLOCK, (b + 1) * PHOTO_BLOCK).map((e) => { const g = (e as { grown?: unknown }).grown; return typeof g === 'number' ? g : 0; }))));
+  }
   named.set('search/blocks.json', JSON.stringify(blocks));
   return { named, stored, hashes, counts };
 }
@@ -329,6 +334,8 @@ export interface SearchReader<T> {
   tables(): Promise<Tables>;
   /** The photograph counts of positions b × `PHOTO_BLOCK` on. */
   photos(b: number): Promise<number[]>;
+  /** Growers' counts of positions b × `PHOTO_BLOCK` on (round eighty-five), or null where the files carry none. Optional. */
+  grown?(b: number): Promise<number[] | null>;
   /** The index entries of positions b × `SHOW_BLOCK` on, as the index holds them. */
   show(b: number): Promise<T[]>;
   /**
@@ -482,9 +489,11 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
     const blocks = [...new Set(ats.map((i) => Math.floor(i / PHOTO_BLOCK)))];
     reads += blocks.length;
     const counts = new Map(await Promise.all(blocks.map(async (k) => [k, await r.photos(k)] as const)));
+    const grownBy = r.grown ? new Map(await Promise.all(blocks.map(async (k) => [k, await r.grown!(k)] as const))) : null;
     return ats.map((i) => {
       const [name, family = -1, origin = [], common = '', commons = [], spellings = [], syn = [], older = [], kew = [], hom = [], merged = []] = byAt.get(i)!;
-      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, kew, hom, merged, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK] };
+      const grown = grownBy?.get(Math.floor(i / PHOTO_BLOCK))?.[i % PHOTO_BLOCK];
+      return { at: i, name, family: family >= 0 ? t.families[family] : undefined, origin: origin.map((o) => t.regions[o]), common: common || undefined, commons, spellings, syn, older, kew, hom, merged, photos: counts.get(Math.floor(i / PHOTO_BLOCK))![i % PHOTO_BLOCK], ...(grown ? { grown } : {}) };
     });
   };
   /** The entries of the hits, in their order: from the show blocks, read only for them. */
@@ -503,7 +512,7 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
   if (!qs.length) return done({ hits: [], total: 0 });
   // Everything the exact pass reads before its key files, asked at once (round eighty).
   r.warm?.();
-  for (const d of searchDirsOfQuery(q, r.dirs)) void dirOf(d).catch(() => {});
+  for (const d of searchDirsOfQuery(q, r.dirs)) void dirOf(d).catch(() => { /* a warming read: the pass that needs the directory reads it again and says its own failure */ });
   // The words every hit holds: all of them but a trailing rank marker, which the search may drop ("aloe var").
   const trailing = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
   const held = trailing ? qs.slice(0, -1) : qs;

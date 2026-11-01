@@ -22,10 +22,10 @@ import { LITERATURE_OFF } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
-import { gbifView, headWithKew } from './kew-heading';
+import { gbifView, headWithKew, kewAskedWords } from './kew-heading';
 import { hybridLinks } from '$core/hybrids';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
-import { grownBox, SHAPE_BUFFER_DEG, type RegionTester } from './tdwg-shapes';
+import { grownBox, SHAPE_BUFFER_DEG, type RegionTester, type Admission } from './tdwg-shapes';
 import { ownNames, isOwnName, canonicalOf } from './own-names';
 import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
@@ -38,7 +38,7 @@ import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean
 
 export interface ClimateProvider {
   /** The envelope across every in-range record's grid cell: what a species page carries. */
-  envelope(points: Array<[number, number]>): Promise<Climate>;
+  envelope(points: ReadonlyArray<readonly [number, number, Admission?]>): Promise<Climate>;
   /** One point's cell (a bench, a garden): median and percentiles coincide. */
   at(lat: number, lon: number): Promise<Climate>;
 }
@@ -48,6 +48,14 @@ export const noClimate: ClimateProvider = { envelope: pending, at: pending };
 
 export interface BuildOptions {
   fetcher: JsonFetcher;
+  /**
+   * Kew's accepted name, where it heads the page and GBIF names the key otherwise (round eighty-five, the owner's decision
+   * 6; review-d D3: 75% of the renamed stapeliads had no photograph, since iNaturalist, Wikipedia and Commons were asked
+   * only by GBIF's Ceropegia names). The sources that file plants by name are asked by it first, then by GBIF's: Wikidata
+   * by its IPNI and POWO numbers, Wikipedia by its title, iNaturalist by its taxon, Commons by its category. Given by the
+   * builder from the page on disk (`kewHeadingOf`).
+   */
+  kewHeading?: { scientific: string; authorship?: string; family?: string };
   climate?: ClimateProvider;
   builtBy: 'node' | 'worker';
   now?: () => Date;
@@ -134,7 +142,7 @@ export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at 
  * the record of the occurrences says of it: how many of the native regions were tested by their shapes and how many by
  * their boxes. Undefined without the shapes (a test, the Worker): the boxes, as before.
  */
-export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number) => boolean; words: string; rule?: string } | undefined {
+export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number, country?: string | null) => boolean; admit: (lat: number, lon: number, country?: string | null) => Admission | null; words: string; rule?: string } | undefined {
   if (!regions) return undefined;
   const coded = native.filter((r) => r.code || r.box);
   const shaped = coded.filter((r) => r.code && regions.hasShape(r.code)).length;
@@ -143,7 +151,18 @@ export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, r
   const all = 'openly licensed and restricted alike';
   const rule = regions.rule ? `; shapes rule ${regions.rule}` : '';
   const words = shaped === coded.length ? `records tested against the native regions' shapes, ${all} (${regions.source}${rule})` : shaped ? `records tested against ${shaped} of the ${coded.length} native regions' shapes (${regions.source}${rule}) and the other ${coded.length - shaped} regions' bounding boxes, each with a margin of ${SHAPE_BUFFER_DEG}°, ${all}` : `records tested against the native regions' bounding boxes with a margin of ${SHAPE_BUFFER_DEG}°, ${all} (no region of this range has a shape here${rule})`;
-  return { test: (lat, lon) => coded.some((r) => (r.code ? regions.inRegion(lat, lon, r.code) : !!r.box && inBox(lat, lon, grownBox(r.box, SHAPE_BUFFER_DEG)))), words, ...(regions.rule ? { rule: regions.rule } : {}) };
+  // Round eighty-five (the owner's decision 1): the border rule, by the record's stated country, and why each record is in.
+  const codes = coded.flatMap((r) => (r.code ? [r.code] : []));
+  const bare = coded.flatMap((r) => (!r.code && r.box ? [r.box] : []));
+  const admit = (lat: number, lon: number, country?: string | null): Admission | null => {
+    const got = codes.length ? regions.admit(lat, lon, codes, country) : null;
+    if (got) return got.how;
+    // A region the range names by its box alone (no code): the box, then its margin, on no region's land.
+    if (!bare.length || regions.landOf(lat, lon).length) return bare.some((b) => inBox(lat, lon, b)) ? 'strict' : null;
+    return bare.some((b) => inBox(lat, lon, b)) ? 'strict' : bare.some((b) => inBox(lat, lon, grownBox(b, SHAPE_BUFFER_DEG))) ? 'buffer' : null;
+  };
+  const border = regions.rule && regions.rule >= 'r85' ? '; a record within the margin or off a coast counted only on no other region\'s land and in the region\'s own country' : '';
+  return { test: (lat, lon, country) => admit(lat, lon, country) !== null, admit, words: words + border, ...(regions.rule ? { rule: regions.rule } : {}) };
 }
 /**
  * The climate's reason when in-range records exist and none is placed well enough to read it (round eighty-four, A6f): the
@@ -417,10 +436,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate) ? dist.data.kew : undefined;
 
   /* ---- 3. Occurrences, licence-filtered, corroborated against the range ---- */
-  const own = await gbif.occurrences(f, key);
+  // Region by region where GBIF holds more than the pages read (round eighty-five; decision 5).
+  const own = await gbif.occurrences(f, key, 3, boxes);
   // The other keys' records with the page key's (round seventy-three), one record once; any key not answering is the
   // occurrence source not answering, and the build before's records stand (`gbif.occurrences` refused).
-  const extra = await extraOccurrences(f, own, extraList);
+  const extra = await extraOccurrences(f, own, extraList, boxes);
   const occ = extra.occ;
   mark('gbif.occurrences', occ);
   // Records from a GBIF download are cited by its DOI; records from the search API by the API.
@@ -435,7 +455,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
   const inside = rangeTest(native, o.regions);
-  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.test, o.defaults);
+  const recs = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.admit, o.defaults);
+  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = recs;
   if (occ.status === 'ok' && nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(nDefault)].filter(Boolean).join('; ');
   if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
   if (occ.status === 'ok') {
@@ -458,7 +479,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (dist.status === 'ambiguous') climate = { status: 'none', detail: `native range not verified: ${dist.detail}` };
   else if (dist.status === 'ok' && dist.data.held) climate = { status: 'none', detail: 'native range not verified: Kew holds this name with no native range, so records cannot be told from cultivation and no habitat climate is derived' };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
-  else if (forClimate.length) climate = await (o.climate ?? noClimate).envelope(forClimate);
+  else if (forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(forClimate), o.regions);
   else if (allPts.length) climate = { status: 'none', detail: noPlacedWords(nInRangeRecords, allPts.length) };
   // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
   // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
@@ -471,7 +492,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // A failure is recorded as `error`, not `refused` (round sixty-nine; triage-68 W6, S-E7): the climate keeps one status for
   // both, which the page says as "not checked", and the provider's words say which it was ("did not answer" for a timeout
   // or a 5xx, "refused the request" for a refusal), so the record is read from them.
-  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' || climate.extremesStatus === 'lapse' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: `${climate.src.extremes}${lapseWhy ? `; not used: ${lapseWhy}` : ''}` } : {}) };
+  // Read and set aside is `ok`, its detail saying why (round eighty-five; A8, S8: it was "nothing to report").
+  const exUp = extremesUpstream(climate, lapseWhy, now());
+  if (exUp) upstream['climate.extremes'] = exUp;
 
   /* ---- 5. Identifiers, summary ---- */
   const ids: Dossier['ids'] = { gbif: key };
@@ -483,6 +506,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // Wikidata's lag is waited out in rounds by a corpus run, as the fills wait it (round seventy, the owner's run).
   // A page with a Kew id is matched on Wikidata by its GBIF key and Kew's identifiers alone, never by its label (round eighty, A),
   // wherever Kew gives its name and author an identifier; with none, its label is read and the item proved (round eighty-two).
+  // Kew's name, where it heads the page and is other words than GBIF's (round eighty-five, decision 6; D3): asked first.
+  const kewAsked = o.kewHeading && o.kewHeading.scientific.replace(/×\s*/g, '').toLowerCase() !== scientific.replace(/×\s*/g, '').toLowerCase() ? o.kewHeading.scientific.replace(/×\s*/g, '') : undefined;
+  if (kewAsked && !skip('wikidata')) {
+    // Wikidata by Kew's numbers for its own name (Hoodia alstonii's IPNI), not those of GBIF's (Ceropegia alstonii's).
+    const k = await gbif.kewIpni(f, kewAsked, o.kewHeading!.authorship, o.kewHeading!.family ?? u(s.family));
+    if (k.status === 'ok' && k.data.ids.length) kewAsk.r = k;
+  }
   const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk, kewPage: pageId.startsWith('k') || !!o.kewEntryOf?.(key) });
   const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
@@ -492,10 +522,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // A "none" always says why (round eighty-two, F; review 1's 7: eight pages built on 2026-10-21 and 22 said none with no
   // reason): the older names not asked, or no item found by any route (`NO_ITEM`, the words `--fill wikidata` writes).
   else mark('wikidata', wikidataSaid(x, olderNotAsked));
-  let enTitle = scientific;
+  let enTitle = kewAsked ?? scientific;
   // The titles that are this species' article: the item's sitelink (or, when Wikidata did not answer, the title the
-  // previous build kept, itself checked), the name and the older names (round sixty-nine; triage-68 M3).
-  const titles = [scientific, ...(synRows ?? []).filter((r) => (r.rank ?? 'SPECIES').toUpperCase() === 'SPECIES').map((r) => r.name)];
+  // previous build kept, itself checked), Kew's name where it heads the page, the name and the older names (round sixty-nine; triage-68 M3).
+  const titles = [...(kewAsked ? [kewAsked] : []), scientific, ...(synRows ?? []).filter((r) => (r.rank ?? 'SPECIES').toUpperCase() === 'SPECIES').map((r) => r.name)];
   if ((x.status === 'error' || x.status === 'refused') && o.prevIds) keepPrevIds(o.prevIds);
   if (x.status === 'ok') {
     // IPNI and POWO by Kew's number for the name and author (S-B5): never an item's number Kew holds for another author.
@@ -569,11 +599,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   let summary: Dossier['summary'];
   // The proofs read the species' Wikidata item and its older names as stored, as `--fill summaries` reads them (round seventy, A1; S-A5),
   // and its IPNI identifier and cited author, for the IPNI proof (round seventy-one, A8: the fill's `whoOf` reads the same).
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: syn.status === 'ok' ? syn.data : [], item: ids.wikidata, ipni: ids.ipni, authorship });
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], item: ids.wikidata, ipni: ids.ipni, authorship });
   if (w.status === 'skipped') skipped('wikipedia');
-  else mark('wikipedia', w);
+  else {
+    mark('wikipedia', w);
+    // Said, so `--list-renamed` reads the page as asked by Kew's name (round eighty-five, D3).
+    if (kewAsked) upstream.wikipedia = { ...upstream.wikipedia, detail: [upstream.wikipedia.detail, kewAskedWords(kewAsked, scientific)].filter(Boolean).join('; ') };
+  }
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}) };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}) };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }
@@ -588,12 +622,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const refused = new Set<number>();
   // This species' own names (`ownNames`; round seventy, second pass, triage-69 B7): the accepted name, the same-type
   // names, and the other synonyms GBIF holds under it that no species of this reference holds.
-  const owned = ownNames({ scientific, sameType: sameType.map((r) => r.name), synonyms: synRows ?? [], heldElsewhere: o.heldElsewhere });
+  const owned = ownNames({ scientific, sameType: [...(kewAsked ? [kewAsked] : []), ...sameType.map((r) => r.name)], synonyms: synRows ?? [], heldElsewhere: o.heldElsewhere });
   // A taxon of another name is judged at GBIF (`judgeIdTaxon`; round seventy, the owner's run, R47's rule).
   const judgeFor: inat.JudgeFor = { key, scientific, authorship, family: u(s.family), own: owned, heldElsewhere: o.heldElsewhere, reference: o.reference };
   if (inatId && !skip('inat')) inatId = await checkedInatId(inatId);
   if (!inatId && !skip('inat')) {
-    let t: SourceResult<inat.InatTaxon> = await inat.taxonFor(f, { scientific, key, family: u(s.family), own: owned, sameType: sameType.map((r) => r.name), heldElsewhere: o.heldElsewhere, reference: o.reference, refused });
+    // By Kew's name first where it heads the page (round eighty-five, D3), then GBIF's and the same-type names.
+    let t: SourceResult<inat.InatTaxon> = await inat.taxonFor(f, { scientific: kewAsked ?? scientific, key, family: u(s.family), own: owned, sameType: [...(kewAsked ? [scientific] : []), ...sameType.map((r) => r.name)], heldElsewhere: o.heldElsewhere, reference: o.reference, refused });
     if (t.status === 'none' && olderNotAsked && !t.detail) t = { status: 'none', detail: olderNotAsked };
     mark('inat.taxon', mergeNotes(upstream['inat.taxon'], t));
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
@@ -687,9 +722,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   if (skip('commons')) skipped('commons');
   else if (!o.quick && photos.length < 12) {
-    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
-    // The species' own and older names, by which a file named as another species is left out (triage-68 K1).
-    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key: pageId, gbif: key, held: o.held, authorship });
+    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : kewAsked ?? scientific;
+    // The species' own and older names, by which a file named as another species is left out (triage-68 K1); Kew's name with them.
+    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship });
     mark('commons', c);
     if (c.status === 'ok') photos.push(...c.data);
   }
@@ -744,6 +779,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       rangeTested: boxes.length > 0,
       // The shapes' rule the records were tested by (round eighty-four; `--check-ranges` lists a page derived before it).
       ...(inside?.rule && boxes.length ? { rangeRule: inside.rule } : {}),
+      // Why each record is in range (round eighty-five): counted, and the open ones off the shapes listed.
+      ...(inside?.rule ? admissionRecord(recs, boxes.length > 0) : {}),
       restrictedShiftKm,
       thin: allPts.length < 12,
       datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n })),
@@ -786,11 +823,15 @@ export function placedForClimate(r: Pick<gbif.GbifOccurrence, 'decimalLatitude' 
  * out, one record a three-decimal coordinate, each tested against the range's boxes, the open ones kept for the map, the
  * precise ones for the climate; then the map marker. Pure: the climate is read by the caller from `forClimate`.
  */
-export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex, inside?: (lat: number, lon: number) => boolean, defaults?: ReadonlySet<string>) {
+export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex, inside?: (lat: number, lon: number, country?: string | null) => Admission | boolean | null, defaults?: ReadonlySet<string>) {
   const open: OccPoint[] = [];
+  /** Why each open record is in range (round eighty-five; `Admission`), by its place in `open`. */
+  const openHow: Admission[] = [];
   const restrictedInRange: Array<[number, number]> = [];
-  /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated). */
-  const forClimate: Array<[number, number]> = [];
+  /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated), each with why it is in range. */
+  const forClimate: Array<[number, number, Admission]> = [];
+  /** The in-range records, each counted, by why each is in range (round eighty-five; outside review B's simplification 1). */
+  const admitted: Record<Admission, number> = { strict: 0, buffer: 0, coast: 0, island: 0 };
   let nOutside = 0,
     nVague = 0;
   const datasets = new Map<string, { title?: string; licence: string; n: number }>();
@@ -848,13 +889,17 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // No boxes (the range source refused, or a country-level range): nothing is tested and every record is kept; the
       // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
       // By the regions' shapes where the build has them (round eighty, A; `tdwg-shapes.ts`), else their boxes.
-      const inRange = boxes.length ? (inside ? inside(lat, lon) : boxes.some((b) => inBox(lat, lon, b))) : true;
-      if (!inRange) {
+      // Round eighty-five (the owner's decision 1): the border rule reads the record's stated country, and says why it is in.
+      const got = boxes.length ? (inside ? inside(lat, lon, r.countryCode ?? null) : boxes.some((b) => inBox(lat, lon, b))) : true;
+      if (!got) {
         nOutside++;
         continue;
       }
-      nInRangeRecords += nAt.get(`${lat},${lon}`) ?? 1;
-      if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
+      const how: Admission = got === true ? 'strict' : got;
+      const nHere = nAt.get(`${lat},${lon}`) ?? 1;
+      nInRangeRecords += nHere;
+      admitted[how] += nHere;
+      if (isOpen(tag)) { open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]); openHow.push(how); }
       else restrictedInRange.push([lat, lon]);
       // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
       // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
@@ -864,7 +909,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // three) and the parser carries the count; a JSON number from the API has lost it, so the count from the number
       // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
       // coordinatePrecision of 0.001° or finer counts the same as three decimals.
-      if (placedForClimate(r)) forClimate.push([lat, lon]);
+      if (placedForClimate(r)) forClimate.push([lat, lon, how]);
       else nVague++;
     }
   }
@@ -892,7 +937,45 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
-  return { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords };
+  return { open, openHow, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords, admitted };
+}
+
+/**
+ * The records' admission as the dossier keeps it (round eighty-five; outside review B's simplification 1, A23): every
+ * in-range record counted by why it is in range, and the open records the buffer, the coast reach or an island took, by
+ * their place in `occurrences.open` (the map draws a record off the drawn coast as one). Nothing where no range was tested.
+ */
+export function admissionRecord(r: { admitted: Record<Admission, number>; openHow: readonly Admission[] }, tested: boolean): Pick<Dossier['occurrences'], 'admitted' | 'edge'> {
+  if (!tested) return {};
+  const edge: Partial<Record<Exclude<Admission, 'strict'>, number[]>> = {};
+  r.openHow.forEach((h, i) => { if (h !== 'strict') (edge[h] ??= []).push(i); });
+  return { admitted: { ...r.admitted }, ...(Object.keys(edge).length ? { edge } : {}) };
+}
+
+/**
+ * The typical cell's place (round eighty-five; outside review A5): the state or province Natural Earth draws there, and its
+ * country, so a page whose climate rests on few records can say where the figures were read (Schlumbergera truncata's
+ * typical cell is at Cosmópolis, São Paulo, though the plant is of Rio de Janeiro's mountains).
+ */
+export function withPlace(c: Climate, regions?: RegionTester): Climate {
+  if (c.status !== 'ok' || !regions?.placeOf) return c;
+  const p = regions.placeOf(c.at.lat, c.at.lon);
+  if (!p) return c;
+  const [name, iso] = p.split('|');
+  const country = countryName(iso);
+  return { ...c, place: country && country !== name ? `${name}, ${country}` : name };
+}
+
+/**
+ * The record of the daily extremes (round eighty-five; outside review A8, S8): read and set aside is a reading, `ok`, its
+ * detail saying why it was set aside, never "nothing to report". A sea cell's, too.
+ */
+export function extremesUpstream(climate: Climate, lapseWhy: string | null, at: string): Upstream | undefined {
+  if (climate.status !== 'ok' || !climate.extremesStatus) return undefined;
+  const st = climate.extremesStatus;
+  const status: Upstream['status'] = st === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : st === 'skipped' ? 'skipped' : st === 'none' ? 'none' : 'ok';
+  const why = st === 'lapse' && lapseWhy ? `; read, and set aside: ${lapseWhy}` : st === 'sea' ? '; read, and set aside: the weather cell is mostly sea' : '';
+  return { status, at, ...(climate.src.extremes ? { detail: `${climate.src.extremes}${why}` } : {}) };
 }
 
 /** The words a record of a species on a homonym key carries (`kewName`), by which a re-derivation keeps them. */
@@ -988,13 +1071,14 @@ export const extraKeyWords = (k: ExtraKeyRead) => `${k.n} record${k.n === 1 ? ''
  * under another the page reads gives some records twice). Any key that did not answer makes the whole answer that
  * key's refusal, failure or skip: the sample is not the one asked for.
  */
-export async function extraOccurrences(f: JsonFetcher, own: FetchResult<gbif.GbifOccurrence[]>, list: readonly ExtraKey[]): Promise<{ occ: FetchResult<gbif.GbifOccurrence[]>; keys: ExtraKeyRead[] }> {
+export async function extraOccurrences(f: JsonFetcher, own: FetchResult<gbif.GbifOccurrence[]>, list: readonly ExtraKey[], boxes: ReadonlyArray<{ s: number; w: number; n: number; e: number }> = []): Promise<{ occ: FetchResult<gbif.GbifOccurrence[]>; keys: ExtraKeyRead[] }> {
   if (!list.length || (own.status !== 'ok' && own.status !== 'none')) return { occ: own, keys: [] };
   const rows = own.status === 'ok' ? [...own.data] : [];
   const seen = new Set(rows.map((r) => r.key));
   const keys: ExtraKeyRead[] = [];
   for (const x of list) {
-    const r = await gbif.occurrences(f, x.key);
+    // Sampled as the page's own key is (the merge, round eighty-five; decision 5): region by region where GBIF's search holds more.
+    const r = await gbif.occurrences(f, x.key, 3, boxes);
     if (r.status !== 'ok' && r.status !== 'none') return { occ: { status: r.status, detail: `GBIF's key ${x.key} (${x.label}), whose records this page reads too: ${r.detail}` }, keys: [] };
     const got = r.status === 'ok' ? r.data.filter((g) => !seen.has(g.key) && read(x, g.taxonKey)) : [];
     for (const g of got) { seen.add(g.key); rows.push(g); }

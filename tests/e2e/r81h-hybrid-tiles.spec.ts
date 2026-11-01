@@ -40,9 +40,9 @@ test('r81h tiles 1: the real round-eighty backup restores, and its hybrid and ge
   await expect(grow.locator('a.tile')).toHaveCount(43, { timeout: 30_000 });
   const aloe = grow.locator('a.tile[href="/species/aloe-nobilis"]');
   await expect(aloe.locator('.nm')).toHaveText('Aloe × nobilis');
-  await expect(aloe).toContainText('not in the reference', { timeout: 30_000 });
+  await expect(aloe).toContainText('no page under this name', { timeout: 30_000 });
   const genus = grow.locator('a.tile[href="/species/echeveria"]');
   await expect(genus.locator('.nm')).toHaveText('Echeveria');
   await expect(genus).toContainText('genus: its row of the catalogue');
-  await expect(genus).not.toContainText('not in the reference');
+  await expect(genus).not.toContainText('no page under this name');
 });

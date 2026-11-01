@@ -17,7 +17,9 @@
     {#each compare.picks as p (p.slug)}
       <span class="pick"><i>{p.name}</i><button type="button" aria-label="Remove {p.name} from compare" onclick={() => compare.remove(p.slug)}>×</button></span>
     {/each}
-    {#if compare.picks.length >= 2}<a class="btn pri" href={compare.href}>Compare {compare.picks.length}</a>{:else}<span class="hint">pick one more</span>{/if}
+    <!-- With one pick the way on is the compare page, whose own field picks the second, as the phone's pill has it (round
+         eighty-five; review-w W7: "pick one more" was plain text, and the desktop had no way there but the footer). -->
+    {#if compare.picks.length >= 2}<a class="btn pri" href={compare.href}>Compare {compare.picks.length}</a>{:else}<a class="hint" href="/compare">pick one more <span aria-hidden="true">›</span></a>{/if}
     <button class="clear" type="button" onclick={() => compare.clear()} aria-label="Clear the compare tray">clear</button>
   </div>
   <!-- On a phone: a pill at the bottom right, above the tab bar, to the compare page; the × clears. The tray took a third
@@ -34,7 +36,7 @@
   .pick { display: inline-flex; align-items: center; gap: 2px; background: var(--sunk); border-radius: 999px; padding: 2px 4px 2px 10px; font-family: var(--serif); font-size: var(--fs-md); }
   .pick button { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-base); min-width: var(--tap); min-height: var(--tap); cursor: pointer; border-radius: 999px; }
   .pick button:hover { color: var(--bad); background: var(--card); }
-  .hint { color: var(--ink3); font-size: var(--fs-sm); }
+  .hint { color: var(--accent); font-size: var(--fs-sm); font-weight: 600; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 6px; }
   .clear { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; min-height: var(--tap); min-width: var(--tap); padding: 0 6px; }
   .cmppill { display: none; }
   @media (max-width: 700px) {

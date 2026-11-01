@@ -15,7 +15,6 @@ import { kewKeysWords, KEW_KEYS_WORDS } from '$dossier/build-kew';
 import { COAST_DEG, SHAPE_BUFFER_DEG } from '$dossier/tdwg-shapes';
 
 const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
-const plant = readFileSync('src/routes/plants/[acc]/+page.svelte', 'utf8');
 
 describe('a page without a GBIF key says whose keys its records were read under', () => {
   it('only merged pages\' keys: says so, and not that Kew\'s file holds them as this plant', () => {
@@ -35,23 +34,22 @@ describe('a page without a GBIF key says whose keys its records were read under'
 
 describe('/about/how says the merged code', () => {
   it('the coast rule\'s reach is the code\'s', () => {
-    const km = Math.round(COAST_DEG * 111.2); // a degree of latitude; the code scales longitude by the latitude's cosine
-    expect(how).toContain(`counts for the region whose drawn coast is nearest, within about ${km} km (${COAST_DEG}°)`);
+    const km = (COAST_DEG * 111.195).toFixed(1); // a degree of latitude; the code scales longitude by the latitude's cosine (round eighty-five: said to a tenth, A22)
+    expect(how).toContain(`The coast reach is ${COAST_DEG}° (about ${km} km).`);
     expect(how).toMatch(/A record on another region's land never does/);
   });
   it('the box margin is the shape\'s buffer', () => {
     expect(SHAPE_BUFFER_DEG).toBe(0.05);
-    expect(how).toContain('tested with the same 5 km margin as a shape');
+    expect(how).toContain('tested with the same buffer as a shape'); // round eighty-five: the glossary's word
   });
   it('the regions with a shape are the shapes file\'s', () => {
     const meta = JSON.parse(readFileSync('scripts/tdwg3-shapes.json', 'utf8')).meta as { regions: number; boxOnly: number };
     expect(how).toContain(`${meta.regions} of the ${meta.regions + meta.boxOnly} regions have a shape`);
   });
-  it('the plant page\'s "Is it an older name?" is in the privacy list, and is a press, not a load', () => {
+  it('the plant page\'s "Is it an older name?" is in the privacy list', () => {
     expect(how).toContain('A plant page\'s "Is it an older name?" sends that plant\'s species name to the catalogue\'s search, as the search box does, only when you press it.');
-    expect(plant).toMatch(/<button[^>]*id="look-older" onclick=\{lookOlder\}/);
-    // Nothing calls it but the button and its "Try again".
-    expect([...plant.matchAll(/lookOlder\b/g)].length).toBe(3);
+    // That it is a press, not a load, is behaviour: tests/unit/r85q-behaviour.test.ts 2 opens a plant page and counts the
+    // searches it sends (round eighty-five; this counted the handler's name in the source, outside review A23).
   });
   it('the frost line and the tray say what the frame does now (U)', () => {
     expect(how).toContain('when a frost is within the next 72 hours');

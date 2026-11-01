@@ -12,30 +12,31 @@ import { worldSvg, regionSvg, regionOfBox, frameInside } from '../../src/lib/map
 import { REGION_AT, INSIDE } from '../../src/lib/map/regions-drawn';
 import { TDWG3 } from '../../src/lib/dossier/tdwg';
 
-const world = readFileSync('static/app/maps/regions110.svg', 'utf8');
-const close = readFileSync('static/app/maps/regions50.svg', 'utf8');
+// Round eighty-five: one file a region and a scale (`maps/w/w-<code>.svg`, `maps/r/r-<code>.svg`; the prefix because Windows refuses a file named CON), so a page fetches its own.
+const world = (c: string) => readFileSync(`static/app/maps/w/w-${c}.svg`, 'utf8');
+const close = (c: string) => readFileSync(`static/app/maps/r/r-${c}.svg`, 'utf8');
 
 describe('the maps draw the shapes', () => {
   it('every region with a shape is a path in both files, and a box names it', () => {
     const codes = Object.values(REGION_AT);
     expect(codes.length).toBe(366);
     for (const c of codes) {
-      expect(world, c).toContain(`<path id="${c}" `);
-      expect(close, c).toContain(`<path id="${c}" `);
+      expect(world(c), c).toContain('<path id="r" ');
+      expect(close(c), c).toContain('<path id="r" ');
       expect(regionOfBox(TDWG3[c])).toBe(c);
+      // Small: the largest region's world file under 10 kB, its close-up's under 40 kB.
+      expect(world(c).length, c).toBeLessThan(10_000);
+      expect(close(c).length, c).toBeLessThan(40_000);
     }
-    // Small enough to fetch once a day, as the coastline is: under 130 kB and 450 kB.
-    expect(world.length).toBeLessThan(130_000);
-    expect(close.length).toBeLessThan(450_000);
   });
   it('the world map: the Cape Provinces as their shape, once; Christmas Island, with none, as its box', () => {
     const svg = worldSvg([TDWG3.CPP, TDWG3.CPP, TDWG3.XMS], undefined, 'Native range');
-    expect(svg.match(/<use class="range" href="\/maps\/regions110\.svg#CPP"\/>/g)?.length).toBe(1);
+    expect(svg.match(/<use class="range" href="\/maps\/w\/w-CPP\.svg#r"\/>/g)?.length).toBe(1);
     expect(svg.match(/<rect class="range"/g)?.length).toBe(1);
   });
   it('the close-up: the shapes of its own file', () => {
     const svg = regionSvg([TDWG3.CPP], [[-33.9, 18.4], [-33.95, 18.5], [-34.0, 18.45]], undefined, 'Records');
-    expect(svg).toContain('<use class="range" href="/maps/regions50.svg#CPP"/>');
+    expect(svg).toContain('<use class="range" href="/maps/r/r-CPP.svg#r"/>');
     expect(svg).not.toContain('<rect class="range"');
   });
   it('a box the reference does not know is drawn as before', () => {

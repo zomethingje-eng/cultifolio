@@ -158,7 +158,7 @@ async function claimed(seed: (me: string) => Promise<boolean>): Promise<boolean>
   try {
     return await seed(me);
   } finally {
-    await updateMeta<string | null>(CLAIM, (had) => (had === me ? null : (had ?? null))).catch(() => {});
+    await updateMeta<string | null>(CLAIM, (had) => (had === me ? null : (had ?? null))).catch(() => { /* the claim is released by its owner; one not released lapses, and the next tab claims it after the wait */ });
   }
 }
 async function seedOnce(claim?: { key: string; value: string }, held?: () => void): Promise<boolean> {

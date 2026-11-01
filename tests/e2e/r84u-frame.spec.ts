@@ -13,7 +13,9 @@
  * - P8: a link-like button in a sentence made its line 44 px tall under a finger.
  * - A13: the catalogue's "No climate" chip read in pieces.
  */
+import { chromiumOnly } from './helpers/engines';
 import { test, expect, type Page } from '@playwright/test';
+import { goneQuiet, framesSettled } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { ready } from './helpers/smoke';
 import { writeWait, allowWrites, inWebKit } from './helpers/pace';
@@ -102,7 +104,7 @@ test('P2, A12, B4: My plants opens without moving: the footer waits for the list
   await page.goto('/plants'); await ready(page);
   await expect(page.locator('a.accrow').first()).toBeVisible({ timeout: writeWait(15_000, n * 5) });
   await expect(page.locator('#backup-nudge')).toContainText(`${n} plants and no backup yet`);
-  await page.waitForTimeout(800); // a negative: a late notice would move what is drawn
+  await goneQuiet(page, 800); // a negative, read once the page has gone quiet (helpers/settled.ts): a late notice would move what is drawn
   const { moves, frames } = await positionMoves(page);
   expect(frames).toBeGreaterThan(5);
   // r84base: header.phead moved 93 px down as the backup line arrived above it; the footer, drawn in view under
@@ -113,7 +115,7 @@ test('P2, A12, B4: My plants opens without moving: the footer waits for the list
   expect(line!.y).toBeGreaterThan(title!.y + title!.height);
 });
 
-test('P2: a cold load of 400 plants on a throttled phone shifts nothing (layout-shift reading) @phone-only', { tag: '@chromium' }, async ({ context, page }) => {
+test('P2: a cold load of 400 plants on a throttled phone shifts nothing (layout-shift reading) @phone-only', chromiumOnly('a CDP CPU throttle and a layout-shift reading; "P2, A12, B4" above reads the same page\'s positions every frame in every engine, the iPhone\'s WebKit included'), async ({ context, page }) => {
   test.setTimeout(120_000);
   await context.addInitScript(notPersisted);
   await opened(page, '/plants');
@@ -128,7 +130,7 @@ test('P2: a cold load of 400 plants on a throttled phone shifts nothing (layout-
   try {
     await page.goto('/plants'); await ready(page);
     await expect(page.locator('a.accrow').first()).toBeVisible({ timeout: 60_000 });
-    await page.waitForTimeout(1500);
+    await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): every shift of the load is made
   } finally {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   }
@@ -158,7 +160,7 @@ for (const [width, height] of [[640, 400], [568, 320]] as const) test.describe(`
 
 test.describe('P3: the top bar clear of the notch in landscape', () => {
   test.use({ viewport: { width: 750, height: 342 }, isMobile: true, hasTouch: true });
-  test('on a species page, with Back, every control ends inside the right inset', { tag: '@chromium' }, async ({ page }) => {
+  test('on a species page, with Back, every control ends inside the right inset', chromiumOnly('the notch\'s safe areas are emulated through Chromium\'s protocol alone; no other engine Playwright drives can set them'), async ({ page }) => {
     const cdp = await page.context().newCDPSession(page);
     // The iPhone 13's landscape insets, 47 px each side, as the phone review emulated them.
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { left: 47, right: 47, top: 0, bottom: 21 } });
@@ -184,7 +186,7 @@ test('P4: the compare pill on species pages only, not over a grower\'s pages @ph
   await expect(pill).toHaveCount(1);
   for (const path of ['/plants', '/today', '/places', '/']) {
     await page.goto(path); await ready(page);
-    await page.waitForTimeout(200); // a negative: the pill is drawn on mount
+    await framesSettled(page); // a negative: the pill is drawn on mount, so by the page's first frames
     await expect(pill, path).toHaveCount(0); // r84base: on every page
   }
 });
@@ -212,7 +214,7 @@ test('A13: the catalogue\'s chips are each named in one phrase', async ({ page }
   await page.goto('/'); await ready(page);
   const chips = page.getByRole('navigation', { name: 'Filter the catalogue' });
   // r84base: "No climate , 2" from its parts, and "No climate , 9,711 , 919 not checked" on the live corpus.
-  await expect(chips.getByRole('link', { name: /^No climate: [\d,]+ species(, [\d,]+ of them not checked)?$/ })).toHaveCount(1);
+  await expect(chips.getByRole('link', { name: /^No climate: [\d,]+ species(; besides them, [\d,]+ not (?:asked|checked|checked or not asked)(, [\d,]+ not checked)?)?$/ })).toHaveCount(1);
   await expect(chips.getByRole('link', { name: /^All: [\d,]+ species$/ })).toHaveCount(1);
   await expect(chips.getByRole('link', { name: /^Climate known: [\d,]+ species$/ })).toHaveCount(1);
 });
