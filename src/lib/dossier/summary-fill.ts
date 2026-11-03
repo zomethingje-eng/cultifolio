@@ -6,7 +6,7 @@ import type { JsonFetcher } from './fetch';
 import type { Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
 import { summary as wikiSummary, summaryTitleFits } from './sources/wikipedia';
-import { mwWait } from './sources/wikimedia';
+import { mwWait, sameTypeOfRecord } from './sources/wikimedia';
 import { redirected, proofByName, speciesItems, titleKey, binomialNotOurs, notChecked, type Proof, type Who, type SpeciesItem, type Unanswered } from './summary-proof';
 
 /**
@@ -43,7 +43,10 @@ export type SummaryCounts = {
 
 /** The species as the proofs read it: the stored name, its author and older names, and its Wikidata item and IPNI identifier. */
 export function whoOf(d: SumDossier): Who {
-  return { name: d.name.scientific, synonyms: d.name.synonyms ?? [], item: d.ids?.wikidata, ipni: d.ids?.ipni, authorship: d.name.authorship };
+  // The same-type identifiers the build proved the item or the article by, as its record says them (round eighty-five, H):
+  // the fill has no Kew file, and reads the build's record of it.
+  const sameType = sameTypeOfRecord(d.upstream?.wikidata?.detail, d.upstream?.wikipedia?.detail);
+  return { name: d.name.scientific, synonyms: d.name.synonyms ?? [], item: d.ids?.wikidata, ipni: d.ids?.ipni, authorship: d.name.authorship, ...(sameType.length ? { sameType } : {}) };
 }
 
 /** A recorded redirect: the title asked, the title given, and the proof the record names (round sixty-nine: "whose lead is this species'"). */
@@ -110,7 +113,9 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
     if (n) { proved(file, d, n.proof, n.words); continue; }
     if (!opts.again && recordedProof(rec)) { c.settled++; continue; }
     if (!f) { c.unchecked++; c.uncheckedLines.push(`${d.name.scientific}: not asked (offline)`); continue; }
-    ask.push({ file, asked: redirect?.[1] });
+    // The title the build asked, as its record names it: a redirect's, or the article's own (round eighty-five, H: an
+    // article proved by the item of a name Kew holds with the species' type is under neither its name nor its item's).
+    ask.push({ file, asked: redirect?.[1] ?? ARTICLE.exec(rec?.detail ?? '')?.[1] });
   }
   if (!f || !ask.length) return c;
   // What a source did not answer is asked again after a wait, three times, before it is counted not checked.

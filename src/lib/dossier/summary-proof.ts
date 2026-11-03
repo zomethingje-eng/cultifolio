@@ -61,12 +61,17 @@ export interface Who {
   /** The species' IPNI identifier (`ids.ipni`, Kew's for the name), and the backbone's author: the IPNI proof's (round seventy-one). */
   ipni?: string;
   authorship?: string;
+  /**
+   * Kew's IPNI or POWO identifiers for the names Kew's file holds with the same type as the page's entry (round
+   * eighty-five, H), each with its name and authors: a title whose item carries one is this species' article.
+   */
+  sameType?: ReadonlyArray<{ id: string; label: string }>;
 }
 
 /** What Wikidata says of the species' item: its English sitelink, parent taxa (P171), basionyms (P566), what it is a source of (P1672). */
 export interface SpeciesItem { id: string; sitelink?: string; parents: string[]; basionyms: string[]; sourceOf: string[] }
 /** What Wikidata says of the item an English title belongs to: products of (P1582), taxon names (P225), ranks (P105), basionyms (P566). */
-export interface TitleItem { id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[]; ipnis?: string[] }
+export interface TitleItem { id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[]; ipnis?: string[]; powos?: string[] }
 /** Kew's WCVP on a genus: how many accepted species it holds (0 when Kew holds no one accepted genus of the name), and the one, when one. */
 export interface GenusCount { name: string; accepted: number; only?: string }
 
@@ -202,6 +207,8 @@ export function proofByItem(title: string, who: Who, facts: Facts): { proof: Pro
   }
   const ip = foreign ? null : ipniProof(ti, who, facts.ipni);
   if (ip) return ip;
+  const st = foreign ? null : sameTypeProof(ti, who);
+  if (st) return st;
   // The species' own item is the item proof, refused above when its sitelink is another species' name: its own basionym
   // statements are no second proof (round seventy-one).
   if (sp && ti.id !== sp.id && ti.ranks.includes(SPECIES_RANK)) {
@@ -238,6 +245,20 @@ function ipniProof(ti: TitleItem, who: Who, records: IpniRecord[] | null | undef
   const r = (records ?? []).find((x) => ids.includes(x.id) && words(x.name) === words(who.name) && authorKey(x.authors) && !plainlyAnother(who.authorship, x.authors));
   return r ? { proof: 'ipni', words: `whose Wikidata item (${ti.id}) carries IPNI ${r.id}, IPNI's record of ${r.name} ${r.authors}, this species' name` } : null;
 }
+
+/**
+ * The same type by Kew's file (round eighty-five, H): the title's item carries Kew's IPNI or POWO identifier for a name
+ * Kew's file holds with the same type as this species (its basionym, a name moved from it, a synonym Kew marks homotypic,
+ * or the name a replacement name replaced): Wikipedia's "Pseudofumaria lutea" is Q159014, which carries Kew's 672345-1
+ * for Corydalis lutea (L.) DC., homotypic with Kew's Pseudo-fumaria lutea.
+ */
+function sameTypeProof(ti: TitleItem, who: Who): { proof: Proof; words: string } | null {
+  const ids = new Set([...(ti.ipnis ?? []), ...(ti.powos ?? [])].map(ipniNumber));
+  const hit = (who.sameType ?? []).find((n) => ids.has(ipniNumber(n.id)));
+  return hit ? { proof: 'older-name', words: sameTypeArticleWords(ti.id, hit.id, hit.label) } : null;
+}
+/** The proof's words, which `sameTypeOfRecord` reads back and `recordedProof` knows ("a name of this species with the same type"). */
+export const sameTypeArticleWords = (item: string, id: string, label: string) => `whose Wikidata item (${item}) carries Kew's identifier ${id} for ${label}, a name of this species with the same type by Kew's file`;
 
 /** The author of a combination's basionym: the bracketed author at the head of its authorship, "(L.) Herb." → "L.". */
 const basionymAuthor = (authorship: string | undefined) => /^\(([^)]+)\)/.exec((authorship ?? '').trim())?.[1]?.replace(/\s+/g, '');
@@ -314,7 +335,7 @@ export async function titleItems(f: JsonFetcher, titles: readonly string[]): Pro
     for (const [id, e] of Object.entries(r.data.entities ?? {})) {
       const t = e.sitelinks?.enwiki?.title;
       if (!t || 'missing' in e || !/^Q\d+$/.test(id)) continue;
-      byTitle.set(titleKey(t), { id, productOf: itemIds(e, 'P1582'), taxonNames: strs(e, 'P225'), ranks: itemIds(e, 'P105'), basionyms: itemIds(e, 'P566'), ipnis: strs(e, 'P961') });
+      byTitle.set(titleKey(t), { id, productOf: itemIds(e, 'P1582'), taxonNames: strs(e, 'P225'), ranks: itemIds(e, 'P105'), basionyms: itemIds(e, 'P566'), ipnis: strs(e, 'P961'), powos: strs(e, 'P5037') });
     }
     for (const t of part) out.set(t, byTitle.get(titleKey(t)) ?? null);
   }

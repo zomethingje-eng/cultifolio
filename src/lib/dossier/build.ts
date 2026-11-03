@@ -23,6 +23,8 @@ import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
 import { gbifView, headWithKew, kewAskedWords } from './kew-heading';
+import { sameTypeLabel, sameTypeWhy, type SameTypeName } from './kew-rows';
+import { titleKey, sameTypeArticleWords } from './summary-proof';
 import { hybridLinks } from '$core/hybrids';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
 import { grownBox, SHAPE_BUFFER_DEG, type RegionTester, type Admission } from './tdwg-shapes';
@@ -134,6 +136,12 @@ export interface BuildOptions {
   defaults?: ReadonlySet<string>;
   /** The page's own Kew entry for a GBIF key (the list's plant_name_id; round eighty, A): such a page is matched on Wikidata by its identifiers alone. */
   kewEntryOf?: (gbifKey: number) => string | undefined;
+  /**
+   * The names Kew's file holds with the same type as a page's Kew entry (round eighty-five, H; `KewRows.sameTypeOf`): with no
+   * item by the GBIF key or Kew's identifiers for the entry's own name, the item of one of them is the page's, and an
+   * article or an iNaturalist taxon its item gives is this plant's. Given by `--bulk`; undefined where it was not read.
+   */
+  kewSameType?: (entry: string) => SameTypeName[] | undefined;
 }
 /** The record's words for the records left out at default points (round eighty, A). */
 export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at a dataset's default point left out (a coordinate where the records of 20 species or more of this reference lie, nearly all of them with no year, as the reference lists them; a record there its dataset states to within 10 km is kept)`;
@@ -513,7 +521,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     const k = await gbif.kewIpni(f, kewAsked, o.kewHeading!.authorship, o.kewHeading!.family ?? u(s.family));
     if (k.status === 'ok' && k.data.ids.length) kewAsk.r = k;
   }
-  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk, kewPage: pageId.startsWith('k') || !!o.kewEntryOf?.(key) });
+  // The names Kew's file holds with the same type as the page's entry (round eighty-five, H), where Kew's file was read.
+  const kewEntry = pageId.startsWith('k') ? pageId.slice(1) : o.kewEntryOf?.(key);
+  const stNames = kewEntry ? o.kewSameType?.(kewEntry) : undefined;
+  const kewSame: wm.KewSameType | undefined = stNames ? { names: stNames } : undefined;
+  /** The items of those names, read once (by `crossIds`, or here), for the article and the iNaturalist taxon an item gives. */
+  const sameTypeRead = async (): Promise<wm.SameTypeItem[] | undefined> => {
+    if (!kewSame?.names.length || skip('wikidata')) return undefined;
+    if (kewSame.read?.status !== 'ok') kewSame.read = await wm.sameTypeItems(f, kewSame.names);
+    return kewSame.read.status === 'ok' ? kewSame.read.data : undefined;
+  };
+  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk, kewPage: pageId.startsWith('k') || !!o.kewEntryOf?.(key), ...(kewSame ? { kewSameType: kewSame } : {}) });
   const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
   // GBIF not answering while it checks the item Wikidata gave is recorded as GBIF's, after Wikidata's answer (round
@@ -531,7 +549,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // IPNI and POWO by Kew's number for the name and author (S-B5): never an item's number Kew holds for another author.
     if (!kewAsk.r && (x.data.ipni || x.data.powo)) kewAsk.r = await gbif.kewIpni(f, scientific, authorship, u(s.family));
     if (kewAsk.r?.status === 'ok') {
-      const k = gbif.kewLinks(x.data, kewAsk.r.data);
+      const k = gbif.kewLinks(x.data, kewAsk.r.data, { entry: pageId.startsWith('k') });
       if (k.changed) upstream.wikidata = { ...upstream.wikidata, detail: [upstream.wikidata.detail, gbif.kewLinksNote(kewAsk.r.data, k, `IPNI ${x.data.ipni ?? 'none'}, POWO ${x.data.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'}`)].filter(Boolean).join('; ') };
       x.data.ipni = k.ipni;
       x.data.powo = k.powo;
@@ -598,8 +616,36 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   let summary: Dossier['summary'];
   // The proofs read the species' Wikidata item and its older names as stored, as `--fill summaries` reads them (round seventy, A1; S-A5),
-  // and its IPNI identifier and cited author, for the IPNI proof (round seventy-one, A8: the fill's `whoOf` reads the same).
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], item: ids.wikidata, ipni: ids.ipni, authorship });
+  // and its IPNI identifier and cited author, for the IPNI proof (round seventy-one, A8: the fill's `whoOf` reads the same),
+  // and Kew's identifiers for the names Kew holds with its type (round eighty-five, H).
+  const who = { name: scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], item: ids.wikidata, ipni: ids.ipni, authorship, ...(kewSame?.names.length ? { sameType: kewSame.names.flatMap((n) => [...new Set([n.ipni, n.powo].filter((i): i is string => !!i))].map((id) => ({ id, label: sameTypeLabel(n) }))) } : {}) };
+  // The titles asked, in order (round eighty-five, H): the species' item's English article; with none, the article of the
+  // item of a name Kew holds with its type (one item, or the basionym's), which its identifiers prove; then, where Kew's
+  // name heads the page, Kew's name and then GBIF's, as the record says (D3 asked Kew's alone).
+  const itemTitle = x.status === 'ok' && !!x.data.enTitle;
+  let stTitle: { title: string; item: wm.SameTypeItem } | undefined;
+  if (!skip('wikipedia') && x.status === 'ok' && !itemTitle) {
+    const p = wm.pickSameType((await sameTypeRead() ?? []).filter((i) => i.e.sitelinks?.enwiki?.title));
+    if (p.one) stTitle = { title: p.one.e.sitelinks!.enwiki!.title, item: p.one };
+  }
+  const asks = [...new Set([...(stTitle ? [stTitle.title] : []), enTitle, ...(kewAsked && !itemTitle && titleKey(enTitle) === titleKey(kewAsked) ? [scientific] : [])])];
+  let w: Awaited<ReturnType<typeof wm.summary>> | { status: 'skipped' } = { status: 'skipped' };
+  const noneWhy: string[] = [];
+  let askedTitle = enTitle;
+  if (!skip('wikipedia')) {
+    for (const t of asks) {
+      askedTitle = t;
+      w = await wm.summary(f, t, [t, ...titles], who);
+      if (w.status !== 'none') break;
+      if (w.detail) noneWhy.push(w.detail);
+    }
+    if (w.status === 'none' && noneWhy.length) w = { status: 'none', detail: noneWhy.join('; ') };
+    // Which article it is, where the title asked is an item's own (round eighty-five, H): the record says which item.
+    if (w.status === 'ok' && !w.detail && titleKey(w.data.title) === titleKey(askedTitle)) {
+      if (stTitle && askedTitle === stTitle.title) w = { ...w, detail: `Wikipedia's article ${w.data.title}, ${sameTypeArticleWords(stTitle.item.id, stTitle.item.via, sameTypeLabel(stTitle.item.by))}` };
+      else if (kewAsked && itemTitle && askedTitle === enTitle && ids.wikidata) w = { ...w, detail: `Wikipedia's article ${w.data.title}, the English article of this species' Wikidata item (${ids.wikidata})` };
+    }
+  }
   if (w.status === 'skipped') skipped('wikipedia');
   else {
     mark('wikipedia', w);
@@ -614,9 +660,23 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 
   /* ---- 6. Photographs: iNat (open licences only), then GBIF media, then Commons ---- */
   const photos: Photo[] = [];
+  // The species' item gives no iNaturalist taxon: the one the item of a name Kew holds with its type gives (round
+  // eighty-five, H: Artemisia chinensis's item Q21871160 gives none, and iNaturalist's name search answers three taxa to
+  // the name; Q15231395, the item of Crossostephium chinense (L.) Makino, Kew's homotypic synonym, gives 355020). Found by
+  // identifiers alone, one taxon or the basionym's item's; two are none, and the name is searched as before.
+  let inatBy: string | undefined;
+  let inatTwo: string | undefined;
+  if (x.status === 'ok' && !ids.inat && kewSame?.names.length) {
+    const withInat = (await sameTypeRead() ?? []).filter((i) => wm.crossOf(i.id, i.e).inat);
+    const p = wm.pickSameType(withInat);
+    if (p.one) {
+      ids.inat = wm.crossOf(p.one.id, p.one.e).inat;
+      inatBy = `as Wikidata gives it on ${p.one.id}, the item of ${sameTypeLabel(p.one.by)}, which Kew holds as ${sameTypeWhy(p.one.by)} (same type)`;
+    } else if (p.two) inatTwo = `no iNaturalist taxon taken from Wikidata: the items of names Kew holds with this species' type give ${p.two.length} taxa (${p.two.map((i) => `${i.id}, ${sameTypeLabel(i.by)}: ${wm.crossOf(i.id, i.e).inat}`).join('; ')}), and not one alone the basionym's; asked by name`;
+  }
   let inatId = ids.inat;
   // Where the id came from, for the record: Wikidata's item, or the identifiers of an earlier build kept.
-  const inatFrom = x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : o.prevIdsOn && !o.prevIdsDayUnknown ? `kept from the build of ${o.prevIdsOn}` : 'kept from an earlier build';
+  const inatFrom = inatBy ?? (x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : o.prevIdsOn && !o.prevIdsDayUnknown ? `kept from the build of ${o.prevIdsOn}` : 'kept from an earlier build');
   // The taxon an inactive id named and the rule refused: never taken by the name search either, which finds it by
   // iNaturalist's own synonymy (Mammillaria karwinskiana's search answers Mammillaria geminata; round seventy, triage-69 B1).
   const refused = new Set<number>();
@@ -630,6 +690,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // By Kew's name first where it heads the page (round eighty-five, D3), then GBIF's and the same-type names.
     let t: SourceResult<inat.InatTaxon> = await inat.taxonFor(f, { scientific: kewAsked ?? scientific, key, family: u(s.family), own: owned, sameType: [...(kewAsked ? [scientific] : []), ...sameType.map((r) => r.name)], heldElsewhere: o.heldElsewhere, reference: o.reference, refused });
     if (t.status === 'none' && olderNotAsked && !t.detail) t = { status: 'none', detail: olderNotAsked };
+    if (inatTwo) t = { ...t, detail: [inatTwo, t.detail].filter(Boolean).join('; ') } as typeof t;
     mark('inat.taxon', mergeNotes(upstream['inat.taxon'], t));
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
   }
@@ -671,7 +732,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       ids.inat = g.data.to;
       return g.data.to;
     }
-    const was = `iNaturalist's taxon ${id}${got?.name ? ` (${got.name})` : ''} is inactive`;
+    // Where an id from a same-type name's item came from, said with it (round eighty-five, H).
+    const was = `iNaturalist's taxon ${id}${got?.name ? ` (${got.name})` : ''}${inatBy ? `, ${inatBy},` : ''} is inactive`;
     if (got?.current) {
       const n = await inat.checkIds(f, [got.current]);
       if (n.status !== 'ok') return notChecked(n, `${was}; its current taxon ${got.current}`);

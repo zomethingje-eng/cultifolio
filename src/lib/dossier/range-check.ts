@@ -16,7 +16,7 @@
  *
  * Pure: the script reads the files and says the lines.
  */
-import { regionTester, SHAPE_BUFFER_DEG, COAST_DEG, ISLAND_DEG, ADMISSIONS, type Admission, type RegionTester, type ShapesFile } from './tdwg-shapes';
+import { regionTester, grownBox, SHAPE_BUFFER_DEG, COAST_DEG, ISLAND_DEG, ADMISSIONS, type Admission, type RegionTester, type ShapesFile } from './tdwg-shapes';
 import { TDWG3 } from './tdwg';
 import { inBox } from '$core/geo';
 
@@ -43,9 +43,15 @@ export function cellTester(file: ShapesFile): RegionTester {
  */
 export const REACH_DEG: Readonly<Record<Admission, number>> = { strict: CELL_SLACK_DEG, buffer: SHAPE_BUFFER_DEG + CELL_SLACK_DEG, coast: COAST_DEG + CELL_SLACK_DEG, island: ISLAND_DEG + CELL_SLACK_DEG };
 
-/** Whether a cell's middle lies within its reason's reach of one of `codes` (an island's: or inside the region's box). */
+/**
+ * Whether a cell's middle lies within its reason's reach of one of `codes` (an island's: or inside the region's box, grown
+ * by half the cell's diagonal as every other reach is). The owner's check of 3 November 2026 named Peperomia leptostachya
+ * and Pandanus tectorius for one cell each at 22.625 S, 152.825 W: records on Rimatara, which TDWG's Tubuai Is. holds but
+ * Natural Earth does not draw, taken by the island rule inside Tubuai's box (west edge 152.823 W), with the cell's middle
+ * 0.002 degrees past that edge.
+ */
 export function cellReached(t: RegionTester, lat: number, lon: number, codes: readonly string[], how: Admission): boolean {
-  return codes.some((c) => Number.isFinite(t.reach(lat, lon, c, REACH_DEG[how])) || (how === 'island' && !!TDWG3[c] && inBox(lat, lon, TDWG3[c])));
+  return codes.some((c) => Number.isFinite(t.reach(lat, lon, c, REACH_DEG[how])) || (how === 'island' && !!TDWG3[c] && inBox(lat, lon, grownBox(TDWG3[c], CELL_SLACK_DEG))));
 }
 
 export interface CheckPage {

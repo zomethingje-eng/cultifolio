@@ -1,0 +1,1193 @@
+{
+ "source": "Wikidata (CC0) and en.wikipedia pageprops, read 2026-11-02 for round 85 H; trimmed to the fields the build reads",
+ "items": {
+  "Q104247825": {
+   "label": "Berberis japonica",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Berberis japonica"
+   ],
+   "gbif": [
+    "9571344"
+   ],
+   "ipni": [
+    "106792-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:106792-1"
+   ],
+   "inat": [],
+   "wfo": [],
+   "enwiki": "Berberis japonica"
+  },
+  "Q10768351": {
+   "label": "Hoodia triebneri",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Hoodia triebneri"
+   ],
+   "gbif": [
+    "5525354"
+   ],
+   "ipni": [
+    "972990-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:972990-1"
+   ],
+   "inat": [
+    "193399"
+   ],
+   "wfo": [
+    "wfo-0001259418"
+   ],
+   "enwiki": "Hoodia triebneri"
+  },
+  "Q109403799": {
+   "label": "Cereus rosei",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Cereus rosei"
+   ],
+   "gbif": [
+    "5621851"
+   ],
+   "ipni": [
+    "292702-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:292702-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000597620"
+   ],
+   "enwiki": null
+  },
+  "Q109405258": {
+   "label": "Echinopsis puquiensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Echinopsis puquiensis"
+   ],
+   "gbif": [
+    "5622185"
+   ],
+   "ipni": [
+    "88470-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:88470-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000662282"
+   ],
+   "enwiki": null
+  },
+  "Q109631926": {
+   "label": "Chrysanthemum artemisioides",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Chrysanthemum artemisioides"
+   ],
+   "gbif": [
+    "3091588"
+   ],
+   "ipni": [
+    "193306-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:193306-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000035844"
+   ],
+   "enwiki": null
+  },
+  "Q109725308": {
+   "label": "Absinthium chinense",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Absinthium chinense"
+   ],
+   "gbif": [
+    "4218164"
+   ],
+   "ipni": [
+    "173658-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:173658-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000124356"
+   ],
+   "enwiki": null
+  },
+  "Q111397153": {
+   "label": "Mahonia tikushiensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Mahonia tikushiensis"
+   ],
+   "gbif": [
+    "3980879"
+   ],
+   "ipni": [
+    "107526-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:107526-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001146556"
+   ],
+   "enwiki": null
+  },
+  "Q1280657": {
+   "label": "Echinopsis trichosa",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Echinopsis trichosa"
+   ],
+   "gbif": [
+    "5621758"
+   ],
+   "ipni": [
+    "88527-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:88527-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000662387"
+   ],
+   "enwiki": null
+  },
+  "Q13452764": {
+   "label": "Cereus macrogonus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Cereus macrogonus"
+   ],
+   "gbif": [
+    "5622969"
+   ],
+   "ipni": [
+    "130401-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:130401-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000597323"
+   ],
+   "enwiki": null
+  },
+  "Q14943223": {
+   "label": "Trichocereus peruvianus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus peruvianus"
+   ],
+   "gbif": [
+    "3951978"
+   ],
+   "ipni": [
+    "257118-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:257118-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001287463"
+   ],
+   "enwiki": null
+  },
+  "Q150468": {
+   "label": "Echinopsis macrogona",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Echinopsis macrogona"
+   ],
+   "gbif": [
+    "5622536"
+   ],
+   "ipni": [
+    "132717-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:132717-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000662184"
+   ],
+   "enwiki": "Echinopsis macrogona"
+  },
+  "Q15231395": {
+   "label": "Crossostephium chinense",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Crossostephium chinense"
+   ],
+   "gbif": [
+    "3091586"
+   ],
+   "ipni": [
+    "200598-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:200598-1"
+   ],
+   "inat": [
+    "355020"
+   ],
+   "wfo": [
+    "wfo-0000085439"
+   ],
+   "enwiki": null
+  },
+  "Q15327963": {
+   "label": "Trichocereus tacnaensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus tacnaensis"
+   ],
+   "gbif": [
+    "3951549"
+   ],
+   "ipni": [
+    "315043-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:315043-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001287786"
+   ],
+   "enwiki": null
+  },
+  "Q15334159": {
+   "label": "Pseudofumaria lutea",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Pseudofumaria lutea"
+   ],
+   "gbif": [
+    "2888513"
+   ],
+   "ipni": [
+    "673928-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:673928-1"
+   ],
+   "inat": [
+    "130800"
+   ],
+   "wfo": [
+    "wfo-0000480831"
+   ],
+   "enwiki": null
+  },
+  "Q15517695": {
+   "label": "Albuca toxicaria",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Albuca toxicaria"
+   ],
+   "gbif": [
+    "3647934"
+   ],
+   "ipni": [
+    "77097723-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77097723-1"
+   ],
+   "inat": [
+    "579494"
+   ],
+   "wfo": [
+    "wfo-0000911311"
+   ],
+   "enwiki": null
+  },
+  "Q15570763": {
+   "label": "Crossostephium artemisioides",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Crossostephium artemisioides"
+   ],
+   "gbif": [
+    "3091584"
+   ],
+   "ipni": [
+    "200596-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:200596-1"
+   ],
+   "inat": [
+    "355021"
+   ],
+   "wfo": [
+    "wfo-0000139014"
+   ],
+   "enwiki": null
+  },
+  "Q159014": {
+   "label": "Corydalis lutea",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Corydalis lutea"
+   ],
+   "gbif": [
+    "5334195"
+   ],
+   "ipni": [
+    "672345-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:672345-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000622561"
+   ],
+   "enwiki": "Pseudofumaria lutea"
+  },
+  "Q159322": {
+   "label": "Mahonia japonica",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Mahonia japonica"
+   ],
+   "gbif": [
+    "3981826"
+   ],
+   "ipni": [
+    "107453-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:107453-1"
+   ],
+   "inat": [
+    "342886"
+   ],
+   "wfo": [
+    "wfo-0001224177"
+   ],
+   "enwiki": "Mahonia japonica"
+  },
+  "Q21871160": {
+   "label": "Artemisia chinensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Artemisia chinensis"
+   ],
+   "gbif": [
+    "3091587"
+   ],
+   "ipni": [
+    "179341-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:179341-1"
+   ],
+   "inat": [],
+   "wfo": [],
+   "enwiki": null
+  },
+  "Q290382": {
+   "label": "Echinopsis peruviana",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Echinopsis peruviana"
+   ],
+   "gbif": [
+    "7281309"
+   ],
+   "ipni": [
+    "88459-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:88459-2"
+   ],
+   "inat": [
+    "438593"
+   ],
+   "wfo": [
+    "wfo-0000662263"
+   ],
+   "enwiki": "Echinopsis peruviana"
+  },
+  "Q38444017": {
+   "label": "Brachystelma thunbergii",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Brachystelma thunbergii"
+   ],
+   "gbif": [
+    "3579583"
+   ],
+   "ipni": [
+    "95138-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:95138-1"
+   ],
+   "inat": [
+    "581359"
+   ],
+   "wfo": [
+    "wfo-0000570644"
+   ],
+   "enwiki": null
+  },
+  "Q38603695": {
+   "label": "Trichocereus trichosus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus trichosus"
+   ],
+   "gbif": [
+    "3951290"
+   ],
+   "ipni": [
+    "257158-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:257158-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001434485"
+   ],
+   "enwiki": null
+  },
+  "Q41793333": {
+   "label": "Trichocereus macrogonus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus macrogonus"
+   ],
+   "gbif": [
+    "3952140"
+   ],
+   "ipni": [
+    "257107-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:257107-2"
+   ],
+   "inat": [
+    "829210"
+   ],
+   "wfo": [
+    "wfo-0001289169"
+   ],
+   "enwiki": "Trichocereus macrogonus"
+  },
+  "Q42560587": {
+   "label": "Ceropegia triebneri",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Ceropegia triebneri"
+   ],
+   "gbif": [],
+   "ipni": [
+    "77166284-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77166284-1"
+   ],
+   "inat": [],
+   "wfo": [],
+   "enwiki": null
+  },
+  "Q42561204": {
+   "label": "Ornithogalum toxicarium",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Ornithogalum toxicarium"
+   ],
+   "gbif": [
+    "2773581"
+   ],
+   "ipni": [
+    "1013409-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:1013409-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000710506"
+   ],
+   "enwiki": null
+  },
+  "Q50831851": {
+   "label": "Capnoides lutea",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Capnoides lutea"
+   ],
+   "gbif": [],
+   "ipni": [
+    "671934-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:671934-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000584333"
+   ],
+   "enwiki": null
+  },
+  "Q50842668": {
+   "label": "Hibiscus eetveldeanus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Hibiscus eetveldeanus"
+   ],
+   "gbif": [
+    "3152552"
+   ],
+   "ipni": [
+    "560199-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:560199-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000722513"
+   ],
+   "enwiki": null
+  },
+  "Q50842909": {
+   "label": "Hoodia foetida",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Hoodia foetida"
+   ],
+   "gbif": [
+    "5525643"
+   ],
+   "ipni": [
+    "961806-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:961806-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000724446"
+   ],
+   "enwiki": null
+  },
+  "Q50875766": {
+   "label": "Trichocaulon triebneri",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocaulon triebneri"
+   ],
+   "gbif": [
+    "3581414"
+   ],
+   "ipni": [
+    "102305-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:102305-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001103645"
+   ],
+   "enwiki": null
+  },
+  "Q5750828": {
+   "label": "Hibiscus acetosella",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Hibiscus acetosella"
+   ],
+   "gbif": [
+    "3152551"
+   ],
+   "ipni": [
+    "559896-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:559896-1"
+   ],
+   "inat": [
+    "163756"
+   ],
+   "wfo": [
+    "wfo-0000722244"
+   ],
+   "enwiki": "Hibiscus acetosella"
+  },
+  "Q57893270": {
+   "label": "Ceropegia thunbergii",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Ceropegia thunbergii"
+   ],
+   "gbif": [
+    "9260865"
+   ],
+   "ipni": [
+    "77167244-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77167244-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001424376"
+   ],
+   "enwiki": null
+  },
+  "Q60515593": {
+   "label": "Brachystelma praelongum subsp. thunbergii",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Brachystelma praelongum subsp. thunbergii"
+   ],
+   "gbif": [
+    "3579822"
+   ],
+   "ipni": [
+    "955385-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:955385-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000570607"
+   ],
+   "enwiki": null
+  },
+  "Q65933395": {
+   "label": "Capnoides albida",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Capnoides albida"
+   ],
+   "gbif": [],
+   "ipni": [
+    "671917-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:671917-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0000584260"
+   ],
+   "enwiki": null
+  },
+  "Q87617492": {
+   "label": "Fumaria lutea",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Fumaria lutea"
+   ],
+   "gbif": [],
+   "ipni": [
+    "673000-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:673000-1"
+   ],
+   "inat": [],
+   "wfo": [],
+   "enwiki": null
+  },
+  "Q88970625": {
+   "label": "Brachystelma tanzaniensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Brachystelma tanzaniensis"
+   ],
+   "gbif": [
+    "10811994"
+   ],
+   "ipni": [
+    "77196898-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77196898-1"
+   ],
+   "inat": [],
+   "wfo": [],
+   "enwiki": null
+  },
+  "Q91489254": {
+   "label": "Trichocereus peruvianus subsp. puquiensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus peruvianus subsp. puquiensis"
+   ],
+   "gbif": [
+    "10966816"
+   ],
+   "ipni": [
+    "60468588-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:60468588-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001434473"
+   ],
+   "enwiki": null
+  },
+  "Q92450378": {
+   "label": "Trichocereus macrogonus var. peruvianus",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus macrogonus var. peruvianus"
+   ],
+   "gbif": [
+    "11068942"
+   ],
+   "ipni": [
+    "60463766-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:60463766-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001434470"
+   ],
+   "enwiki": null
+  },
+  "Q93957093": {
+   "label": "Iosanthus toxicarius",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Iosanthus toxicarius"
+   ],
+   "gbif": [
+    "11018938"
+   ],
+   "ipni": [
+    "77201404-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77201404-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001441750"
+   ],
+   "enwiki": null
+  },
+  "Q94355838": {
+   "label": "Echinopsis peruviana subsp. puquiensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Echinopsis peruviana subsp. puquiensis"
+   ],
+   "gbif": [
+    "5622265"
+   ],
+   "ipni": [
+    "1005786-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:1005786-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001430842"
+   ],
+   "enwiki": null
+  },
+  "Q95984205": {
+   "label": "Austronea densiflora",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Austronea densiflora"
+   ],
+   "gbif": [
+    "10859638"
+   ],
+   "ipni": [
+    "77188032-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77188032-1"
+   ],
+   "inat": [
+    "1028740"
+   ],
+   "wfo": [
+    "wfo-0001440326"
+   ],
+   "enwiki": null
+  },
+  "Q95984264": {
+   "label": "Austronea hispidoplicata",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Austronea hispidoplicata"
+   ],
+   "gbif": [
+    "10792726"
+   ],
+   "ipni": [
+    "77188034-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77188034-1"
+   ],
+   "inat": [
+    "1028742"
+   ],
+   "wfo": [
+    "wfo-0001440329"
+   ],
+   "enwiki": null
+  },
+  "Q95984370": {
+   "label": "Austronea pinguis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Austronea pinguis"
+   ],
+   "gbif": [
+    "10885186"
+   ],
+   "ipni": [
+    "77188038-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77188038-1"
+   ],
+   "inat": [
+    "1028746"
+   ],
+   "wfo": [
+    "wfo-0001440334"
+   ],
+   "enwiki": null
+  },
+  "Q95989334": {
+   "label": "Vera-duthiea zebrina",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Vera-duthiea zebrina"
+   ],
+   "gbif": [
+    "10741820"
+   ],
+   "ipni": [
+    "77191985-1"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:77191985-1"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001443234"
+   ],
+   "enwiki": null
+  },
+  "Q96051077": {
+   "label": "Trichocereus puquiensis",
+   "P31": [
+    "Q16521"
+   ],
+   "P225": [
+    "Trichocereus puquiensis"
+   ],
+   "gbif": [
+    "3951907"
+   ],
+   "ipni": [
+    "257122-2"
+   ],
+   "powo": [
+    "urn:lsid:ipni.org:names:257122-2"
+   ],
+   "inat": [],
+   "wfo": [
+    "wfo-0001287608"
+   ],
+   "enwiki": null
+  }
+ },
+ "byIpni": {
+  "1005786-1": [
+   "Q94355838"
+  ],
+  "1013409-1": [
+   "Q42561204"
+  ],
+  "102305-1": [
+   "Q50875766"
+  ],
+  "106792-1": [
+   "Q104247825"
+  ],
+  "1071618-2": [],
+  "107453-1": [
+   "Q159322"
+  ],
+  "107526-1": [
+   "Q111397153"
+  ],
+  "130401-1": [
+   "Q13452764"
+  ],
+  "132717-1": [
+   "Q150468"
+  ],
+  "173658-1": [
+   "Q109725308"
+  ],
+  "179341-1": [
+   "Q21871160"
+  ],
+  "193306-1": [
+   "Q109631926"
+  ],
+  "200596-1": [
+   "Q15570763"
+  ],
+  "200598-1": [
+   "Q15231395"
+  ],
+  "252272-1": [],
+  "257107-2": [
+   "Q41793333"
+  ],
+  "257118-2": [
+   "Q14943223"
+  ],
+  "257122-2": [
+   "Q96051077"
+  ],
+  "257158-2": [
+   "Q38603695"
+  ],
+  "292702-2": [
+   "Q109403799"
+  ],
+  "315043-2": [
+   "Q15327963"
+  ],
+  "5000144-1": [],
+  "559896-1": [
+   "Q5750828"
+  ],
+  "560199-1": [
+   "Q50842668"
+  ],
+  "60463766-2": [
+   "Q92450378"
+  ],
+  "60468588-2": [
+   "Q91489254"
+  ],
+  "671773-1": [],
+  "671808-1": [],
+  "671917-1": [
+   "Q65933395"
+  ],
+  "671934-1": [
+   "Q50831851"
+  ],
+  "672345-1": [
+   "Q159014"
+  ],
+  "673000-1": [
+   "Q87617492"
+  ],
+  "673132-1": [],
+  "673369-1": [],
+  "673926-1": [],
+  "673928-1": [
+   "Q15334159"
+  ],
+  "77097723-1": [
+   "Q15517695"
+  ],
+  "77166284-1": [
+   "Q42560587"
+  ],
+  "77167244-1": [
+   "Q57893270"
+  ],
+  "77188032-1": [
+   "Q95984205"
+  ],
+  "77188034-1": [
+   "Q95984264"
+  ],
+  "77188038-1": [
+   "Q95984370"
+  ],
+  "77191985-1": [
+   "Q95989334"
+  ],
+  "77196898-1": [
+   "Q88970625"
+  ],
+  "77201404-1": [
+   "Q93957093"
+  ],
+  "77224675-1": [],
+  "77334149-1": [],
+  "77350759-1": [],
+  "77361045-1": [],
+  "82990-1": [],
+  "870141-1": [],
+  "88459-2": [
+   "Q290382"
+  ],
+  "88470-2": [
+   "Q109405258"
+  ],
+  "88527-2": [
+   "Q1280657"
+  ],
+  "927289-1": [],
+  "95138-1": [
+   "Q38444017"
+  ],
+  "955385-1": [
+   "Q60515593"
+  ],
+  "96130-1": [],
+  "961806-1": [
+   "Q50842909"
+  ],
+  "972990-1": [
+   "Q10768351"
+  ],
+  "98354-1": []
+ },
+ "enwiki": {
+  "titles": {
+   "Pseudo-fumaria lutea": null,
+   "Sabdariffa acetosella": null,
+   "Ceropegia triebneri": null,
+   "Hibiscus acetosella": "Q5750828",
+   "Hoodia triebneri": "Q10768351",
+   "Pseudofumaria lutea": "Q159014",
+   "Artemisia stelleriana": "Q2862331",
+   "Crossostephium": "Q5188751"
+  },
+  "redirects": {
+   "Corydalis lutea": "Pseudofumaria lutea",
+   "Artemisia chinensis": "Artemisia stelleriana",
+   "Crossostephium chinense": "Crossostephium"
+  }
+ }
+}

@@ -9,10 +9,11 @@ import { wcvpRow } from '../src/lib/dossier/bulk';
 import { KewRows } from '../src/lib/dossier/kew-rows';
 import { wcvpFileDay } from './bulk-load';
 
-export async function loadKewRows(dir: string, genera: Iterable<string>): Promise<KewRows | null> {
+/** `entries`: the accepted entries whose same-type names are read too (`KewRows.sameTypeOf`; round eighty-five, H). */
+export async function loadKewRows(dir: string, genera: Iterable<string>, entries?: Iterable<string>): Promise<KewRows | null> {
   const path = `${dir}/wcvp_names.csv`;
   if (!existsSync(path)) return null;
-  const kew = new KewRows(genera);
+  const kew = new KewRows(genera, entries);
   kew.fileDay = wcvpFileDay(dir);
   let h: string[] = [];
   let i = 0;
@@ -23,7 +24,7 @@ export async function loadKewRows(dir: string, genera: Iterable<string>): Promis
     if (i++ === 0) { h = line.replace(/^﻿/, '').split('|'); continue; }
     if (!line) continue;
     const r = wcvpRow(h, line);
-    kew.add({ id: r.plant_name_id, name: r.taxon_name, authors: r.taxon_authors ?? '', status: r.taxon_status, rank: r.taxon_rank, family: r.family ?? '', acceptedId: r.accepted_plant_name_id ?? '', parentId: r.parent_plant_name_id ?? '', powoId: r.powo_id ?? '' });
+    kew.add({ id: r.plant_name_id, name: r.taxon_name, authors: r.taxon_authors ?? '', status: r.taxon_status, rank: r.taxon_rank, family: r.family ?? '', acceptedId: r.accepted_plant_name_id ?? '', parentId: r.parent_plant_name_id ?? '', powoId: r.powo_id ?? '', ipniId: r.ipni_id || undefined, basionymId: r.basionym_plant_name_id || undefined, replacedAuthor: r.replaced_synonym_author || undefined, homotypic: !!r.homotypic_synonym });
   }
   return kew;
 }

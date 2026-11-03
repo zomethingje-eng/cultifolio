@@ -4,6 +4,7 @@ import { spellingKey } from '../epithet';
 import { genitivesAgree } from '../own-names';
 import { slip } from '../photo-kind';
 import { plainlyAnother, authorKey } from '../authors';
+import { sameTypeLabel, sameTypeWhy, type SameTypeName } from '../kew-rows';
 
 /* ---------- Wikidata (CC0): cross-identifiers ---------- */
 
@@ -256,7 +257,71 @@ export const NO_ITEM = "no taxon item carries its GBIF key or Kew's IPNI identif
 /** The same for a page matched by its identifiers alone (round eighty, A): its label is not read. */
 export const NO_ITEM_BY_IDS = "no taxon item carries its GBIF key or Kew's IPNI or POWO identifier for it (a page with a GBIF key that Kew holds by its name and author is matched by those identifiers alone, never by its label)";
 
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string; kew?: { r?: FetchResult<gbif.KewIds> }; /** The page has a Kew id (`k<plant_name_id>`, round eighty): matched by its GBIF key and Kew's identifiers alone. */ kewPage?: boolean } = {}): Promise<CrossResult> {
+/**
+ * An item carrying Kew's identifier for a name Kew's file holds with the same type as the page's entry (round
+ * eighty-five, H): the item, the name, and the identifier it carries.
+ */
+export type SameTypeItem = { id: string; e: Entity; by: SameTypeName; via: string };
+/** The same-type names of a page's Kew entry, as the build passes them (`KewRows.sameTypeOf`), and the items read for them, shared with the caller. */
+export type KewSameType = { names: readonly SameTypeName[]; read?: FetchResult<SameTypeItem[]> };
+
+/** The identifiers an item is searched by for a same-type name: its IPNI record (P961) and its POWO page (P5037). */
+const sameTypeTerms = (n: SameTypeName) => [...(n.ipni ? [`P961=${n.ipni}`] : []), ...(n.powo ? [`P5037=urn:lsid:ipni.org:names:${n.powo}`] : [])];
+/** The first of the names (the basionym first) whose IPNI or POWO identifier the item carries. */
+function sameTypeOf(e: Entity, names: readonly SameTypeName[]): { by: SameTypeName; via: string } | undefined {
+  const ipnis = ipnisOf(e);
+  const powos = strings(e, P.powo).map((x) => x.replace(/^urn:lsid:ipni\.org:names:/, ''));
+  for (const n of names) {
+    if (n.ipni && ipnis.includes(n.ipni)) return { by: n, via: n.ipni };
+    if (n.powo && powos.includes(n.powo)) return { by: n, via: n.powo };
+  }
+  return undefined;
+}
+
+/**
+ * The taxon items that carry Kew's IPNI or POWO identifier for a name Kew's file holds with the same type as the page's
+ * entry (round eighty-five, H), in one search of at most twenty names, each item read and kept only when it is a taxon
+ * and carries one of those identifiers. Found by identifiers alone: an item's label is never read.
+ */
+export async function sameTypeItems(f: JsonFetcher, names: readonly SameTypeName[]): Promise<FetchResult<SameTypeItem[]>> {
+  const asked = names.filter((n) => sameTypeTerms(n).length).slice(0, 20);
+  const terms = asked.flatMap(sameTypeTerms);
+  if (!terms.length) return { status: 'ok', data: [] };
+  const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f, `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${Math.min(50, terms.length + 1)}&srsearch=${encodeURIComponent(`haswbstatement:${terms.join('|')}`)}`);
+  if (q.status !== 'ok') return q;
+  const err = mwError(q.data);
+  if (err) return { status: 'error', detail: `wikidata ${err}` };
+  const out: SameTypeItem[] = [];
+  for (const id of [...new Set((q.data.query?.search ?? []).map((h) => h.title))]) {
+    const e = await entityOf(f, id);
+    if (e.status !== 'ok') return e;
+    const hit = e.data && isTaxonItem(e.data) ? sameTypeOf(e.data, asked) : undefined;
+    if (e.data && hit) out.push({ id, e: e.data, ...hit });
+  }
+  return { status: 'ok', data: out };
+}
+
+/**
+ * Of the items of same-type names, the one: one item, else the one carrying the basionym's (or the replaced name's)
+ * identifier when exactly one does; otherwise none is taken (`two`).
+ */
+export function pickSameType(items: readonly SameTypeItem[]): { one?: SameTypeItem; two?: SameTypeItem[] } {
+  const byId = [...new Map(items.map((x) => [x.id, x])).values()];
+  if (byId.length <= 1) return byId.length ? { one: byId[0] } : {};
+  const first = byId.filter((x) => x.by.why !== 'homotypic');
+  return first.length === 1 ? { one: first[0] } : { two: byId };
+}
+
+/** The record's words for an item found by a same-type name (round eighty-five, H): which name, which identifier, and why Kew holds it so. */
+export const sameTypeFound = (x: Pick<SameTypeItem, 'by' | 'via'>) => `found by Kew's identifier ${x.via} for ${sameTypeLabel(x.by)}, which Kew holds as ${sameTypeWhy(x.by)} (same type)`;
+/** The same-type identifiers a record says an item or an article was proved by: `sameTypeFound`'s and `sameTypeArticle`'s words, read back by the fills. */
+export function sameTypeOfRecord(...details: Array<string | undefined>): Array<{ id: string; label: string }> {
+  const out: Array<{ id: string; label: string }> = [];
+  for (const d of details) for (const m of (d ?? '').matchAll(/Kew's identifier (\S+) for (.+?), (?:which Kew holds as|a name of this species with the same type)/g)) if (!out.some((x) => x.id === m[1])) out.push({ id: m[1], label: m[2] });
+  return out;
+}
+
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string; kew?: { r?: FetchResult<gbif.KewIds> }; /** The page has a Kew id (`k<plant_name_id>`, round eighty): matched by its GBIF key and Kew's identifiers alone. */ kewPage?: boolean; /** The names Kew's file holds with the same type as the page's entry (round eighty-five, H), when Kew's file was read. */ kewSameType?: KewSameType } = {}): Promise<CrossResult> {
   const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
   const olderKeys = older.map((o) => o.key);
   const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
@@ -298,6 +363,34 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     }
     return { status: 'none', detail: `${NO_ITEM_BY_IDS}${keyed.length ? ` (${keyed.length} items carry its GBIF key, none of them Kew's identifier for ${k.label ?? scientificName})` : ''}` };
   };
+  /**
+   * With no item by the GBIF key or Kew's identifiers for the entry's own name (round eighty-five, H): the item that
+   * carries Kew's IPNI or POWO identifier for a name Kew's file holds with the same type (`SameTypeName`): of the items
+   * carrying the GBIF key, else of a search. Of two, the basionym's; otherwise none, and the record says so. An item
+   * found by the entry's own identifiers has already been taken above, so it always wins over one found so.
+   */
+  const bySameType = async (keyed: string[], st: KewSameType, none: CrossResult): Promise<CrossResult> => {
+    const said = (more: string): CrossResult => ({ status: 'none', detail: `${none.detail ?? NO_ITEM_BY_IDS}; ${more}` });
+    if (!st.names.length) return said("Kew's file holds no other name with its type");
+    const found: SameTypeItem[] = [];
+    for (const id of keyed) {
+      const e = await entityOf(f, id);
+      if (e.status !== 'ok') return e;
+      const hit = e.data && isTaxonItem(e.data) ? sameTypeOf(e.data, st.names) : undefined;
+      if (e.data && hit) found.push({ id, e: e.data, ...hit });
+    }
+    let p = pickSameType(found);
+    if (!p.one && !p.two) {
+      // Read again after a failure: a lagged answer asked again in rounds (`patiently`) is not kept as the answer.
+      if (st.read?.status !== 'ok') st.read = await sameTypeItems(f, st.names);
+      if (st.read.status !== 'ok') return st.read;
+      p = pickSameType(st.read.data);
+    }
+    const of = keyed.length && found.length ? `, of ${keyed.length} items that carry its GBIF key` : '';
+    if (p.one) return { status: 'ok', detail: `${sameTypeFound(p.one)}${of}`, data: crossOf(p.one.id, p.one.e) };
+    if (p.two) return { status: 'ambiguous', detail: `not taken: ${p.two.length} items carry Kew's identifiers for names Kew holds with this species' type, and not one alone the basionym's (${p.two.map((x) => `${x.id}, ${sameTypeLabel(x.by)}`).join('; ')})` };
+    return said(`nor Kew's for the ${st.names.length === 1 ? 'name' : `${st.names.length} names`} Kew holds with its type (${st.names.map(sameTypeLabel).join('; ')})`);
+  };
   if (gbifKey) {
     const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}`);
     if (q.status !== 'ok') return q;
@@ -318,7 +411,10 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     if (opts.kewPage) {
       const k = await kewOf();
       if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
-      if (k.status === 'ok' && k.data.ids.length) return byKewIds(hits.map((h) => h.title), k.data);
+      if (k.status === 'ok' && k.data.ids.length) {
+        const r = await byKewIds(hits.map((h) => h.title), k.data);
+        return r.status === 'none' && opts.kewSameType ? bySameType(hits.map((h) => h.title), opts.kewSameType, r) : r;
+      }
     }
   }
   const notes: string[] = [];

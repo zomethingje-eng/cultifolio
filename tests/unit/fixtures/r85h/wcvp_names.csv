@@ -1,0 +1,72 @@
+plant_name_id|ipni_id|taxon_rank|taxon_status|family|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id
+2679776|671773-1|Species|Synonym|Papaveraceae|Borckhausenia lutea|(L.) G.Gaertn., B.Mey. & Scherb.|2561323|2815420||T||671773-1
+2696826|671934-1|Species|Synonym|Papaveraceae|Capnoides lutea|(L.) Gaertn.|2561323|2815420||T||671934-1
+2927645||Variety|Synonym|Papaveraceae|Corydalis capnoides var. lutea|(L.) DC.|2561323|2815420||T||2927645-4
+2382026|673369-1|Species|Invalid|Papaveraceae|Neckeria lutea|(L.) Neck.|2561323|2815420||T||673369-1
+2696760|671917-1|Species|Synonym|Papaveraceae|Capnoides albida|Bernh. ex Steud.|2561323|||||671917-1
+2561321|673926-1|Species|Synonym|Papaveraceae|Pseudo-fumaria capnoides|Borkh.|2561323|||||673926-1
+2561323|673928-1|Species|Accepted|Papaveraceae|Pseudo-fumaria lutea|(L.) Borkh.|2561323|2815420|||2561316|673928-1
+501992|955385-1|Subspecies|Synonym|Apocynaceae|Brachystelma praelongum subsp. thunbergii|(N.E.Br.) Boele|3331722|502032||T||955385-1
+502032|95138-1|Species|Synonym|Apocynaceae|Brachystelma thunbergii|N.E.Br.|3331722|503543|Thunb.|T||95138-1
+503543|96130-1|Species|Synonym|Apocynaceae|Cynanchum crispum|Thunb.|3331722|||T||96130-1
+531891|77191985-1|Species|Synonym|Asparagaceae|Vera-duthiea zebrina|Mart.-Azorín, N.R.Crouch & M.B.Crespo|3311206|||T||77191985-1
+533108|77196898-1|Species|Synonym|Apocynaceae|Brachystelma tanzaniensis|Peckover|3313620|||T||77196898-1
+2359307|107526-1|Species|Synonym|Berberidaceae|Mahonia tikushiensis|Hayata|2673980|||||107526-1
+3109315|173658-1|Species|Synonym|Asteraceae|Absinthium chinense|(L.) DC.|3109316|3109316||T||173658-1
+3109316|179341-1|Species|Accepted|Asteraceae|Artemisia chinensis|L.|3109316||||3133635|179341-1
+3109318|252272-1|Species|Synonym|Asteraceae|Tanacetum chinense|(L.) A.Gray ex Maxim.|3109316|3109316||T||252272-1
+3109319|200596-1|Species|Synonym|Asteraceae|Crossostephium artemisioides|Less.|3109316|||||200596-1
+3109320|193306-1|Species|Synonym|Asteraceae|Chrysanthemum artemisioides|(Less.) Kitam.|3109316|3109319||||193306-1
+3109321|200598-1|Species|Synonym|Asteraceae|Crossostephium chinense|(L.) Makino|3109316|3109316||T||200598-1
+2432510|1071618-2|Form|Synonym|Cactaceae|Trichocereus pachanoi f. peruvianus|(Britton & Rose) F.Ritter|2783497|2432521||||1071618-2
+2432538|257158-2|Species|Synonym|Cactaceae|Trichocereus trichosus|Cárdenas|2783497|||||257158-2
+528327|77188032-1|Species|Synonym|Asparagaceae|Austronea densiflora|Mart.-Azorín, M.B.Crespo & A.P.Dold|3311202|||T||77188032-1
+3311202||Species|Accepted|Asparagaceae|Drimia densiflora|(Mart.-Azorín, M.B.Crespo & A.P.Dold) J.C.Manning & Goldblatt|3311202|528327|||304938|3311202-4
+528388|77188034-1|Species|Synonym|Asparagaceae|Austronea hispidoplicata|Mart.-Azorín, M.B.Crespo, M.Pinter & M.Á.Alonso|3311203|||T||77188034-1
+528394|77188038-1|Species|Synonym|Asparagaceae|Austronea pinguis|Mart.-Azorín, M.B.Crespo, M.Pinter & M.Á.Alonso|3311204|||T||77188038-1
+456191|77097723-1|Species|Synonym|Asparagaceae|Albuca toxicaria|(C.Archer & R.H.Archer) J.C.Manning & Goldblatt|3311205|283363||T||77097723-1
+534534|77201404-1|Species|Synonym|Asparagaceae|Iosanthus toxicarius|(C.Archer & R.H.Archer) Mart.-Azorín, M.B.Crespo, M.Pinter, Slade & Wetschnig|3311205|283363||T||77201404-1
+283363|1013409-1|Species|Synonym|Asparagaceae|Ornithogalum toxicarium|C.Archer & R.H.Archer|3311205|||T||1013409-1
+3311205||Species|Accepted|Asparagaceae|Drimia toxicaria|(C.Archer & R.H.Archer) J.C.Manning & Goldblatt|3311205|283363|||304938|3311205-4
+3311206||Species|Accepted|Asparagaceae|Drimia zebrina|(Mart.-Azorín, N.R.Crouch & M.B.Crespo) J.C.Manning & Goldblatt|3311206|531891|||304938|3311206-4
+2696743|671808-1|Species|Synonym|Papaveraceae|Capnites ochroleucus|Rupr.|2561323|||||671808-1
+2712058|130401-1|Species|Synonym|Cactaceae|Cereus macrogonus|Salm-Dyck|2783497|||T||130401-1
+2712327|292702-2|Species|Synonym|Cactaceae|Cereus rosei|Werderm.|2783497|2432521|Britton & Rose|||292702-2
+2723134|870141-1|Species|Synonym|Vitaceae|Cissus wilmsii|Gilg & M.Brandt|2752948|||T||870141-1
+2738954|672345-1|Species|Synonym|Papaveraceae|Corydalis lutea|(L.) DC.|2561323|2815420||T||672345-1
+3330712|77361045-1|Species|Accepted|Malvaceae|Sabdariffa acetosella|(Welw. ex Hiern) M.M.Hanes & R.L.Barrett|3330712|2849457|||2596449|77361045-1
+3331722||Species|Accepted|Apocynaceae|Ceropegia crispa|(Thunb.) ined.|3331722|503543|||502468|3331722-4
+524841|77167244-1|Species|Synonym|Apocynaceae|Ceropegia thunbergii|(N.E.Br.) Bruyns|3331722|502032||T||77167244-1
+2815420|673000-1|Species|Synonym|Papaveraceae|Fumaria lutea|L.|2561323|||T||673000-1
+2815612|673132-1|Species|Synonym|Papaveraceae|Fumaria tetragona|Stokes|2561323|||||673132-1
+2849811|560199-1|Species|Synonym|Malvaceae|Hibiscus eetveldeanus|De Wild. & T.Durand|3330712|||||560199-1
+2849457|559896-1|Species|Synonym|Malvaceae|Hibiscus acetosella|Welw. ex Hiern|3330712|||T||559896-1
+3004149|60468588-2|Subspecies|Synonym|Cactaceae|Trichocereus peruvianus subsp. puquiensis|(Rauh & Backeb.) Ostolaza|2783497|2432515||||60468588-2
+3311203||Species|Accepted|Asparagaceae|Drimia hispidoplicata|(Mart.-Azorín, M.B.Crespo, M.Pinter & M.Á.Alonso) J.C.Manning & Goldblatt|3311203|528388|||304938|3311203-4
+3311204||Species|Accepted|Asparagaceae|Drimia pinguis|(Mart.-Azorín, M.B.Crespo, M.Pinter & M.Á.Alonso) J.C.Manning & Goldblatt|3311204|528394|||304938|3311204-4
+3319734|77350759-1|Subspecies|Synonym|Cactaceae|Trichocereus macrogonus subsp. peruvianus|(Britton & Rose) Lodé|2783497|2432521||||77350759-1
+3313620|77334149-1|Species|Accepted|Apocynaceae|Ceropegia dodomaensis|Heiduk & D.Styles|3313620|533108|Peckover||502468|77334149-1
+524414|77166284-1|Species|Synonym|Apocynaceae|Ceropegia triebneri|(Nel) Bruyns|506553|512920||||77166284-1
+506553|98354-1|Species|Accepted|Apocynaceae|Hoodia triebneri|Schuldt|506553||||506500|98354-1
+506554|972990-1|Species|Illegitimate|Apocynaceae|Hoodia triebneri|(Nel) Bruyns|506553|512920||||972990-1
+506519|961806-1|Species|Synonym|Apocynaceae|Hoodia foetida|Plowes|506553|512920|Nel|||961806-1
+512920|102305-1|Species|Synonym|Apocynaceae|Trichocaulon triebneri|Nel|506553|||||102305-1
+2860895|927289-1|Species|Synonym|Aquifoliaceae|Ilex japonica|Thunb.|2673980|||T||927289-1
+2875668||Variety|Synonym|Berberidaceae|Berberis japonica var. gracillima|(Fedde) Rehder|2673980|2875701||||2875668-4
+2875701||Variety|Synonym|Berberidaceae|Mahonia japonica var. gracillima|Fedde|2673980|||||2875701-4
+2673980|106792-1|Species|Accepted|Berberidaceae|Berberis japonica|(Thunb.) Spreng.|2673980|2860895|||2673360|106792-1
+2644522|82990-1|Species|Synonym|Aquifoliaceae|Aquifolium japonicum|(Thunb.) Raf.|2673980|2860895||T||82990-1
+2358497|107453-1|Species|Synonym|Berberidaceae|Mahonia japonica|(Thunb.) DC.|2673980|2860895||T||107453-1
+2674528|5000144-1|Species|Synonym|Berberidaceae|Berberis tikushiensis|(Hayata) Laferr.|2673980|2359307||||5000144-1
+2752948||Species|Accepted|Vitaceae|Cyphostemma wilmsii|(Gilg & M.Brandt) Desc.|2752948|2723134|||2752642|2752948-4
+2431183|315043-2|Species|Synonym|Cactaceae|Trichocereus tacnaensis|F.Ritter|2783497|||||315043-2
+2783497|132717-1|Species|Accepted|Cactaceae|Echinopsis macrogona|(Salm-Dyck) H.Friedrich & G.D.Rowley|2783497|2712058|||2783248|132717-1
+3258479|77224675-1|Variety|Synonym|Cactaceae|Echinopsis macrogona var. macrogona||2783497|||||77224675-1
+2783588|88470-2|Species|Synonym|Cactaceae|Echinopsis puquiensis|(Rauh & Backeb.) H.Friedrich & G.D.Rowley|2783497|2432515||||88470-2
+2432521|257118-2|Species|Synonym|Cactaceae|Trichocereus peruvianus|Britton & Rose|2783497|||||257118-2
+2783569|88459-2|Species|Synonym|Cactaceae|Echinopsis peruviana|(Britton & Rose) H.Friedrich & G.D.Rowley|2783497|2432521||||88459-2
+2432515|257122-2|Species|Synonym|Cactaceae|Trichocereus puquiensis|Rauh & Backeb.|2783497|||||257122-2
+2783570|1005786-1|Subspecies|Synonym|Cactaceae|Echinopsis peruviana subsp. puquiensis|(Rauh & Backeb.) Ostolaza|2783497|2432515||||1005786-1
+2783686|88527-2|Species|Synonym|Cactaceae|Echinopsis trichosa|(Cárdenas) H.Friedrich & G.D.Rowley|2783497|2432538||||88527-2
+2432533|257107-2|Species|Synonym|Cactaceae|Trichocereus macrogonus|(Salm-Dyck) Riccob.|2783497|2712058||T||257107-2
+3001184|60463766-2|Variety|Synonym|Cactaceae|Trichocereus macrogonus var. peruvianus|(Britton & Rose) Lodé|2783497|2432521||||60463766-2

@@ -43,7 +43,7 @@ import { kewPage } from '$core/page-id';
 import { NO_GBIF_WHY, NO_GBIF_CLIMATE, noKeyWhy, uncheckedClimate, type Unread } from '$core/no-gbif';
 import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, type OwnNames } from './own-names';
-import { canonicalOfKew } from './kew-rows';
+import { canonicalOfKew, sameTypeLabel, type SameTypeName } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
 import { regionsOf, readRecords, rangeTest, admissionRecord, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
@@ -108,6 +108,11 @@ export interface KewBuildOptions {
   regions?: import('./tdwg-shapes').RegionTester;
   /** The reference's genera, in lower case (`generaOf`): a Wikidata name that is one of them alone is refused (round eighty). */
   genera?: ReadonlySet<string>;
+  /**
+   * The names Kew's file holds with the same type as this entry (round eighty-five, H; `KewRows.sameTypeOf`): with no item
+   * carrying Kew's identifier for the entry's own name, the item of one of them, as for a page with a GBIF key.
+   */
+  kewSameType?: readonly SameTypeName[];
 }
 
 /** What a page without a GBIF key says of GBIF's records it read under the keys Kew's synonymy gives it. */
@@ -167,6 +172,22 @@ export async function kewItem(f: JsonFetcher, k: Pick<KewSpecies, 'ipni' | 'powo
   delete x.gbif;
   // Its English common names (round eighty): the item's P1843 statements, with their ranks and references, from this read.
   return { status: 'ok', data: { ...x, names: statementsOfEntity(ent as { claims?: Record<string, unknown> }) }, detail: `found by ${by}` };
+}
+
+/**
+ * The item of a name Kew's file holds with the entry's type (round eighty-five, H), for a page without a GBIF key whose
+ * entry's own identifiers no item carries: one item, or the basionym's of two; otherwise none, and the record says so.
+ */
+async function sameTypeItem(f: JsonFetcher, names: readonly SameTypeName[], none?: string): Promise<SourceResult<wm.CrossIds & { names?: WdNameStatement[] }>> {
+  if (!names.length) return { status: 'none', detail: `${none ?? 'no item'}; Kew's file holds no other name with its type` };
+  const r = await wm.sameTypeItems(f, names);
+  if (r.status !== 'ok') return r.status === 'none' ? { status: 'none', detail: none } : r;
+  const p = wm.pickSameType(r.data);
+  if (p.two) return { status: 'ambiguous', detail: `not taken: ${p.two.length} items carry Kew's identifiers for names Kew holds with this species' type, and not one alone the basionym's (${p.two.map((x) => `${x.id}, ${sameTypeLabel(x.by)}`).join('; ')})` };
+  if (!p.one) return { status: 'none', detail: `${none ?? 'no item'}; nor Kew's for the ${names.length === 1 ? 'name' : `${names.length} names`} Kew holds with its type (${names.map(sameTypeLabel).join('; ')})` };
+  const x = wm.crossOf(p.one.id, p.one.e);
+  delete x.gbif;
+  return { status: 'ok', data: { ...x, names: statementsOfEntity(p.one.e as { claims?: Record<string, unknown> }) }, detail: wm.sameTypeFound(p.one) };
 }
 
 /**
@@ -290,6 +311,9 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (skip('wikidata')) skipped('wikidata');
   else {
     x = await kewItem(f, k);
+    // No item by Kew's identifiers for the entry's own name: the item of a name Kew holds with its type (round eighty-five,
+    // H), one item or the basionym's, found by identifiers alone.
+    if (x.status === 'none' && o.kewSameType) x = await sameTypeItem(f, o.kewSameType, x.detail);
     mark('wikidata', x);
   }
   // Its English common names from the item (round eighty; `wikidata-names.ts`): none asked of GBIF, which holds no key for it.
@@ -309,7 +333,9 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   }
   let summary: Dossier['summary'];
   const titles = [scientific, ...synonyms.map((s) => s.split(' ').slice(0, 2).join(' '))];
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms, item: ids.wikidata, ipni: ids.ipni, authorship: k.authors || undefined });
+  // Kew's identifiers for the names it holds with the entry's type: a title whose item carries one is this plant's article (round eighty-five, H).
+  const sameType = (o.kewSameType ?? []).flatMap((n) => [...new Set([n.ipni, n.powo].filter((i): i is string => !!i))].map((id) => ({ id, label: sameTypeLabel(n) })));
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms, item: ids.wikidata, ipni: ids.ipni, authorship: k.authors || undefined, ...(sameType.length ? { sameType } : {}) });
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {

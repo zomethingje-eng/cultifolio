@@ -56,6 +56,54 @@ export interface KewRow {
   acceptedId: string;
   parentId: string;
   powoId: string;
+  /** Kew's `ipni_id` (empty where IPNI holds no record of the name: its `powo_id` then ends "-4"). */
+  ipniId?: string;
+  /** Kew's `basionym_plant_name_id`: for a replacement name, the name it replaced (`replacedAuthor` set). */
+  basionymId?: string;
+  /** Kew's `replaced_synonym_author`, set on a replacement name. */
+  replacedAuthor?: string;
+  /** Kew's `homotypic_synonym`: Kew holds the row as a synonym with the accepted name's type. */
+  homotypic?: boolean;
+}
+
+/**
+ * A name Kew's file holds with the same type as an accepted entry (round eighty-five, H; the owner's run of decision 6,
+ * D3: about 508 pages headed by Kew's name lost the Wikidata item, the summary or the iNaturalist taxon they had held under
+ * GBIF's name, since Wikidata's item is filed under an older combination). By Kew's file alone, never by the words:
+ *   - the entry's basionym (`basionym_plant_name_id`), or, for a replacement name (`replaced_synonym_author` set), the name
+ *     it replaced, which WCVP gives in the same column;
+ *   - every name filed under the entry whose basionym is that same basionym, or the entry itself (a name moved from it);
+ *   - every name filed under the entry that Kew marks homotypic (`homotypic_synonym`, "T" in the file).
+ * Each must be filed under the entry (`accepted_plant_name_id`); a misapplied name is never one. A synonym Kew does not
+ * mark so, on another type (Hibiscus eetveldeanus under Sabdariffa acetosella), is a lump, and never one.
+ */
+export interface SameTypeName {
+  /** Kew's `plant_name_id`. */
+  id: string;
+  name: string;
+  authors: string;
+  ipni?: string;
+  powo?: string;
+  /** Why Kew holds it so: the entry's basionym, the name a replacement name replaced, or a homotypic synonym. */
+  why: 'basionym' | 'replaced' | 'homotypic';
+}
+/** The name with its authors, as a record cites it. */
+export const sameTypeLabel = (n: Pick<SameTypeName, 'name' | 'authors'>) => `${n.name}${n.authors ? ` ${n.authors}` : ''}`;
+/** What Kew holds the name as, in the record's words. */
+export const sameTypeWhy = (n: Pick<SameTypeName, 'why'>) => (n.why === 'basionym' ? "this species' basionym" : n.why === 'replaced' ? "the name this species' name replaced" : 'a homotypic synonym of this species');
+
+/** The names of `under` (rows Kew files under `entry`) that Kew holds with the entry's type, the basionym (or replaced name) first. Pure. */
+export function sameTypeOfRows(entry: KewRow, under: readonly KewRow[]): SameTypeName[] {
+  const b = entry.basionymId || '';
+  const out: SameTypeName[] = [];
+  for (const r of under) {
+    if (r.id === entry.id || r.acceptedId !== entry.id || r.status === 'Misapplied') continue;
+    const isBasionym = !!b && r.id === b;
+    const moved = !!r.basionymId && ((!!b && r.basionymId === b) || r.basionymId === entry.id);
+    if (!isBasionym && !moved && !r.homotypic) continue;
+    out.push({ id: r.id, name: r.name, authors: r.authors, ...(r.ipniId ? { ipni: r.ipniId } : {}), ...(r.powoId ? { powo: r.powoId } : {}), why: isBasionym ? (entry.replacedAuthor ? 'replaced' : 'basionym') : 'homotypic' });
+  }
+  return out.sort((x, y) => (x.why === 'homotypic' ? 1 : 0) - (y.why === 'homotypic' ? 1 : 0) || Number(x.id) - Number(y.id));
 }
 
 /** A name as GBIF's copy writes its canonical form: the hybrid sign set aside ("Lonicera minutiflora"). */
@@ -65,8 +113,11 @@ const sciOf = (r: KewRow) => `${r.name.replace(/×\s+/g, '×')}${r.authors ? ` $
 
 /** A row kept as one string, its fields in `KewRow`'s order: a million rows held as objects took 1.3 GB at 54,000 species. */
 const SEP = '\t';
-const encode = (r: KewRow) => [r.id, r.name, r.authors, r.status, r.rank, r.family, r.acceptedId, r.parentId, r.powoId].join(SEP);
-const decode = (s: string): KewRow => { const [id, name, authors, status, rank, family, acceptedId, parentId, powoId] = s.split(SEP); return { id, name, authors, status, rank, family, acceptedId, parentId, powoId }; };
+const encode = (r: KewRow) => [r.id, r.name, r.authors, r.status, r.rank, r.family, r.acceptedId, r.parentId, r.powoId, r.ipniId ?? '', r.basionymId ?? '', r.replacedAuthor ?? '', r.homotypic ? 'T' : ''].join(SEP);
+const decode = (s: string): KewRow => {
+  const [id, name, authors, status, rank, family, acceptedId, parentId, powoId, ipniId, basionymId, replacedAuthor, homotypic] = s.split(SEP);
+  return { id, name, authors, status, rank, family, acceptedId, parentId, powoId, ...(ipniId ? { ipniId } : {}), ...(basionymId ? { basionymId } : {}), ...(replacedAuthor ? { replacedAuthor } : {}), ...(homotypic ? { homotypic: true } : {}) };
+};
 
 export class KewRows {
   /** Lower-case canonical name of one or two words → its rows, of the genera loaded. */
@@ -77,9 +128,16 @@ export class KewRows {
   private children: Map<string, string[]> | null = null;
   /** The day of Kew's file. */
   fileDay?: string;
+  /**
+   * The entries whose same-type names are read (round eighty-five, H): every row filed under one of them is kept, of any
+   * genus, so `sameTypeOf` can read Kew's basionym and homotypic columns for it. Null: none is read.
+   */
+  private wantedEntries: Set<string> | null = null;
+  private under = new Map<string, string[]>();
   /** Rows are kept for the genera given (lower case), and every accepted entry, so a synonym's accepted name reads. */
-  constructor(genera: Iterable<string>) {
+  constructor(genera: Iterable<string>, entries?: Iterable<string>) {
     for (const g of genera) this.genera.add(g.toLowerCase());
+    if (entries) this.wantedEntries = new Set([...entries].map(String));
   }
   /**
    * Whether the file's answer for a name is the whole answer: a genus or a binomial (the questions the build asks of
@@ -91,6 +149,11 @@ export class KewRows {
   }
   /** One row of the file: kept when it is a genus or binomial of a genus loaded, or an entry rows may be filed under. */
   add(r: KewRow): void {
+    if (this.wantedEntries?.has(r.acceptedId) && r.acceptedId !== r.id) {
+      const a = this.under.get(r.acceptedId);
+      if (a) a.push(encode(r));
+      else this.under.set(r.acceptedId, [encode(r)]);
+    }
     const canon = canonicalOfKew(r.name);
     const w = canon.split(' ');
     const named = w.length <= 2 && this.genera.has(w[0].toLowerCase());
@@ -106,6 +169,16 @@ export class KewRows {
       else this.byName.set(k, [enc]);
     }
     this.byId.set(Number(r.id), enc);
+  }
+  /**
+   * The names Kew's file holds with the same type as an entry (`sameTypeOfRows`), with their IPNI and POWO numbers; undefined
+   * where the entry was not asked for when the file was read, or is no accepted entry of it: not read, never "none".
+   */
+  sameTypeOf(entry: string): SameTypeName[] | undefined {
+    if (!this.wantedEntries?.has(String(entry))) return undefined;
+    const e = this.get(String(entry));
+    if (!e || e.acceptedId !== e.id) return undefined;
+    return sameTypeOfRows(e, (this.under.get(e.id) ?? []).map(decode));
   }
   get size(): number {
     return this.byId.size;

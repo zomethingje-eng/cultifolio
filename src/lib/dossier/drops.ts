@@ -48,12 +48,18 @@ function photoDrops(had: number, has: number): string[] {
 export function ipniPowoDisagree(ids?: Record<string, unknown>): string | null {
   const ipni = typeof ids?.ipni === 'string' ? ids.ipni : undefined;
   const powo = typeof ids?.powo === 'string' ? /names:([\w-]+)$/.exec(ids.powo)?.[1] : undefined;
-  return ipni && powo && ipni !== powo ? `IPNI ${ipni} is not POWO's ${powo}` : null;
+  if (!ipni || !powo || ipni === powo) return null;
+  // A POWO number of Kew's own ("-4") is a name IPNI holds no record of (round eighty-five, H): any IPNI beside it is
+  // another name's record, never this one's (Drimia densiflora's 77188032-1 is its basionym Austronea densiflora's).
+  return /-4$/.test(powo) ? `IPNI ${ipni} is not POWO's ${powo}, Kew's own number for a name IPNI does not hold: another name's record` : `IPNI ${ipni} is not POWO's ${powo}`;
 }
 
 function lostParts(prev: Dossierish, next: Dossierish): string[] {
   const out: string[] = [];
-  for (const k of IDS) if (prev.ids?.[k] != null && next.ids?.[k] == null) out.push(`identifier ${k} lost (${String(prev.ids[k])} before)`);
+  // An IPNI that was another name's record, beside Kew's own POWO number, is not lost when it goes (round eighty-five, H):
+  // the page links Kew's IPNI record of its name or none, and its record says which number the item gave.
+  const corrected = (k: string) => k === 'ipni' && /-4$/.test(String(prev.ids?.powo ?? '')) && prev.ids?.powo === next.ids?.powo && !!ipniPowoDisagree(prev.ids);
+  for (const k of IDS) if (prev.ids?.[k] != null && next.ids?.[k] == null && !corrected(k)) out.push(`identifier ${k} lost (${String(prev.ids[k])} before)`);
   // A changed item is a changed set of identifiers, which the drops audit never read (R47-5: Prunus persica's item was
   // Amygdalus persica's, Oenothera fruticosa's Kneiffia fruticosa's).
   if (prev.ids?.wikidata != null && next.ids?.wikidata != null && prev.ids.wikidata !== next.ids.wikidata) out.push(`identifier wikidata changed (${String(prev.ids.wikidata)} before, ${String(next.ids.wikidata)} now)`);

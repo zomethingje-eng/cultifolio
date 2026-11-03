@@ -15,7 +15,8 @@ import type { JsonFetcher, SourceResult } from './fetch';
 import type { Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
 import type { WcvpIndex } from './bulk';
-import { crossIds, mwGet, mwError, patiently, isLagged, NO_ITEM } from './sources/wikimedia';
+import { crossIds, mwGet, mwError, patiently, isLagged, NO_ITEM, sameTypeOfRecord, ipniId } from './sources/wikimedia';
+import type { SameTypeName } from './kew-rows';
 import * as gbif from './sources/gbif';
 import { licenceTag, isOpen } from '$core/licence';
 import { checkIds, taxonFor, judgeIdTaxon, type InatTaxon } from './sources/inat';
@@ -162,7 +163,7 @@ export async function fillKewLinks(store: DossierStore, f: JsonFetcher, now = ()
     // What was read is kept every fifty dossiers, so a run cut off by Ctrl-C or a crash resumes near where it was (round
     // seventy-two: the progress was saved only when GBIF refused, and an interrupted run asked all 8,795 again).
     if (c.read % 50 === 0) progress?.save([...done]);
-    const l = gbif.kewLinks({ ipni: d.ids.ipni ?? undefined, powo: d.ids.powo ?? undefined }, k.data);
+    const l = gbif.kewLinks({ ipni: d.ids.ipni ?? undefined, powo: d.ids.powo ?? undefined }, k.data, { entry: String(d.key).startsWith('k') });
     if (!l.changed) continue;
     const was = `IPNI ${d.ids.ipni ?? 'none'}, POWO ${d.ids.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'}`;
     d.ids.ipni = l.ipni; d.ids.powo = l.powo;
@@ -387,6 +388,11 @@ export type WikidataCounts = {
   read: number;
   /** Of those, items that carry it: found by the key, and left as they are. */
   byKey: number;
+  /**
+   * Of those, items that carry Kew's identifier for a name Kew holds with the page's type, as the build's record says it
+   * found them (round eighty-five, H): proved again by that identifier, which the item still carries, and left as they are.
+   */
+  sameType?: number;
   /** Items proved again by the round-seventy rule, the record now saying how. */
   stands: number;
   /** Species whose item the rule now refuses, replaces or finds: left as they are, and listed for a rebuild. */
@@ -422,7 +428,7 @@ const REFUSED_BY_LABEL = /not taken: (the item labelled|two items answered to th
  * for `--keys`. A refusal or failure of Wikidata or GBIF stops the fill; what was written stands, and a rerun passes by
  * the dossiers already re-proved.
  */
-export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString(), progress?: WikidataProgress): Promise<WikidataCounts> {
+export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString(), progress?: WikidataProgress, opts: { /** The names Kew's file holds with a page entry's type (`KewRows.sameTypeOf`), where `--bulk` read it (round eighty-five, H). */ sameTypeOf?: (entry: string) => SameTypeName[] | undefined } = {}): Promise<WikidataCounts> {
   const c: WikidataCounts = { read: 0, byKey: 0, stands: 0, changed: 0, before: 0, lines: [], rebuild: [], disagree: [] };
   const done = new Set(progress?.read ?? []);
   const held = new Map(Object.entries(progress?.changed ?? {}));
@@ -430,7 +436,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
   // Every item with an answered row is placed in the batches of fifty, asked or not, so a batch is the same request on
   // every run of a day and the day's answers serve it (round seventy-two): only the batches holding an item to ask are sent.
   // `key` is the page's GBIF key (round seventy-eight), which an item's GBIF claim (P846) is compared with.
-  const withItem: Array<{ file: string; q: string; key: number; ask: boolean }> = [];
+  const withItem: Array<{ file: string; q: string; key: number; ask: boolean; same?: string[] }> = [];
   const reprove: string[] = [];
   for (const file of store.files()) {
     let d: WdDossier;
@@ -441,7 +447,9 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     // A page without a GBIF key (round seventy-nine) found its item by Kew's identifiers (`kewItem`), which this fill's
     // proof by GBIF key cannot read: passed by, and counted.
     if (d.ids?.gbif == null) { c.noGbif = (c.noGbif ?? 0) + 1; continue; }
-    const placed = d.ids?.wikidata && row?.status === 'ok' ? { file, q: d.ids.wikidata, key: d.ids.gbif, ask: false } : null;
+    // An item the build found by a name Kew holds with the page's type says so, with the identifier (round eighty-five, H).
+    const same = sameTypeOfRecord(row?.detail).map((x) => x.id);
+    const placed = d.ids?.wikidata && row?.status === 'ok' ? { file, q: d.ids.wikidata, key: d.ids.gbif, ask: false, ...(same.length ? { same } : {}) } : null;
     if (placed) withItem.push(placed);
     if ((row?.detail ?? '').includes(REPROVED)) { c.before++; continue; }
     // A run stopped by Wikidata's lag resumes (round seventy, the owner's run): what it read stands, and what it found
@@ -468,8 +476,12 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     for (const p of part) {
       if (!p.ask) continue;
       c.read++;
-      const keys = (r.data.entities?.[p.q]?.claims?.P846 ?? []).map((x) => Number(x.mainsnak?.datavalue?.value));
+      const claims = r.data.entities?.[p.q]?.claims;
+      const keys = (claims?.P846 ?? []).map((x) => Number(x.mainsnak?.datavalue?.value));
+      // The identifier the build's record names, still on the item: the same plant by Kew's file, as when it was found.
+      const carried = [...(claims?.P961 ?? []), ...(claims?.P5037 ?? [])].map((x) => ipniId(String(x.mainsnak?.datavalue?.value ?? '')));
       if (keys.includes(p.key)) { c.byKey++; done.add(`${p.key}:${p.q}`); }
+      else if (p.same?.some((i) => carried.includes(i))) { c.sameType = (c.sameType ?? 0) + 1; done.add(`${p.key}:${p.q}`); }
       else reprove.push(p.file);
     }
   }
@@ -480,7 +492,9 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     if ('failed' in st) return stopped({ ...c, failed: st.failed });
     // Kew's numbers for the name and author, shared with the proof, as a build shares them (round seventy-two).
     const kewAsk: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {};
-    const x = await patiently(() => crossIds(f, d.name.scientific, d.ids.gbif, st.rows, { authorship: d.name.authorship, family: d.name.family, kew: kewAsk, kewPage: String(d.key).startsWith('k') }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
+    const names = String(d.key).startsWith('k') ? opts.sameTypeOf?.(String(d.key).slice(1)) : undefined;
+    const kewSameType = names ? { names } : undefined;
+    const x = await patiently(() => crossIds(f, d.name.scientific, d.ids.gbif, st.rows, { authorship: d.name.authorship, family: d.name.family, kew: kewAsk, kewPage: String(d.key).startsWith('k'), ...(kewSameType ? { kewSameType } : {}) }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
     if (x.status === 'refused' || x.status === 'error' || x.status === 'skipped') return stopped({ ...c, failed: `${x.by === 'gbif' ? 'GBIF, checking an item' : 'Wikidata'}: ${x.detail}` });
     const was = d.ids.wikidata;
     const got = x.status === 'ok' ? x.data.wikidata : undefined;
@@ -490,7 +504,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
       // penduliflora's 77357237-1 became the item's 77211853-1, and its record lost the line saying so).
       if (!kewAsk.r && (x.data.ipni || x.data.powo)) kewAsk.r = await gbif.kewIpni(f, d.name.scientific, d.name.authorship ?? undefined, d.name.family ?? undefined);
       if (kewAsk.r && kewAsk.r.status !== 'ok' && kewAsk.r.status !== 'none') return stopped({ ...c, failed: `GBIF, reading Kew's numbers: ${kewAsk.r.detail}` });
-      const kl = kewAsk.r?.status === 'ok' ? gbif.kewLinks(x.data, kewAsk.r.data) : null;
+      const kl = kewAsk.r?.status === 'ok' ? gbif.kewLinks(x.data, kewAsk.r.data, { entry: String(d.key).startsWith('k') }) : null;
       const kewNote = kl?.changed && kewAsk.r?.status === 'ok' ? `; IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''}${kl.ipni ? '' : ', none'} (the item's: IPNI ${x.data.ipni ?? 'none'}, POWO ${x.data.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'})` : '';
       if (kl) { x.data.ipni = kl.ipni; x.data.powo = kl.powo; }
       d.ids.powo = x.data.powo; d.ids.ipni = x.data.ipni; d.ids.wfo = x.data.wfo;

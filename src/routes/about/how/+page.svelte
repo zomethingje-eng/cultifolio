@@ -325,6 +325,8 @@
     <li>Or when another item has the same type as the species' item by Wikidata's basionym statements.</li>
     <li>Or when GBIF holds the title as a synonym of this species, or Kew holds the species' name under the title, both combinations of one basionym.</li>
     <li>Or when the title's item carries the species' IPNI identifier, or one whose IPNI record is the species' name by its author ("Rosa lucieae" for Rosa luciae).</li>
+    <li>Or when the title's item carries Kew's IPNI or POWO identifier for a name Kew's file holds with the same type as the species, as the Wikidata item's rule below reads it ("Pseudofumaria lutea", whose item is Corydalis lutea's).</li>
+    <li>A page Kew's name heads asks for its item's article first; with none, for the article of the one item of such a name, then by Kew's name, then by GBIF's.</li>
     <li>Or when the title's item names this species as the plant it is a product of, and no other plant but its genus ("Apple").</li>
     <li>Or when the title is a genus in which Kew's checklist, as Kew publishes it through GBIF, holds one accepted species, and that species is this one ("Welwitschia").</li>
     <li>What the article's opening says is never taken as proof.</li>
@@ -340,6 +342,7 @@
     <li>The species' identifiers in POWO, IPNI, World Flora Online and iNaturalist, and the title of its English Wikipedia article, come from <b>Wikidata</b>, from the item that carries the species' GBIF key.</li>
     <li>The IPNI and POWO links are Kew's number for the name and author wherever Kew holds one, read from the same file as the range, whether or not the Wikidata item gives a number, and whatever Wikidata answered. An item's number Kew holds for another author's name is never linked.</li>
     <li>A number Kew gives a name IPNI does not hold (one ending "-4") links POWO only. Where Kew holds the name only under another author, the page says so and links no POWO page.</li>
+    <li>A page that is Kew's entry links IPNI's record of Kew's name for it, or none. It never links another name's record in its place, not even its basionym's.</li>
     <li>When Wikidata does not answer, the identifiers of the build that last read them are kept for at most 90 days. The page names that build and says beside its register links that they were not checked.</li>
     <li>Where that build's day is not known, they are kept for at most 90 days from the build that first kept them, and the page says so.</li>
     <li>Wikidata's items are read without waiting on its query service's lag, which no read of an item depends on, and a refusal or a busy answer is asked again after the wait it names, up to five times.</li>
@@ -347,7 +350,10 @@
   </details>
   <details class="more"><summary>How the Wikidata item is chosen</summary>
   <ul class="rules">
-    <li>A page with a Kew id is matched by those identifiers wherever Kew's file gives its name and author one. Of two items that carry its GBIF key, the one that carries Kew's IPNI or POWO identifier for it is taken; with none, the one item that carries either; otherwise no item, which the page says.</li>
+    <li>A page with a Kew id is matched by those identifiers wherever Kew's file gives its name and author one. Of two items that carry its GBIF key, the one that carries Kew's IPNI or POWO identifier for it is taken; with none, the one item that carries either.</li>
+    <li>Failing those, the item that carries Kew's IPNI or POWO identifier for a name Kew's file holds with the same type as the page's. That is its basionym, or the name a replacement name replaced, a name moved from either, or a synonym Kew marks homotypic.</li>
+    <li>Of two such items, the basionym's is taken; otherwise no item, which the page says. A synonym Kew holds on another type is never read, and no name is matched by its words.</li>
+    <li>The record names the name and why ("found by Kew's identifier 559896-1 for Hibiscus acetosella Welw. ex Hiern, which Kew holds as this species' basionym (same type)").</li>
     <li>Its label is read only where Kew gives its name and author no identifier (Mentha × piperita, whose name GBIF's copy of Kew's file writes with the sign), or on a page whose Wikidata record was made before this rule and is carried.</li>
     <li>Such an item is taken only once proved as below, by its IPNI or POWO number on nearly every such page. The record says so ("found by its label; its IPNI identifier 86934-2 is Kew's for Echeveria elegans Rose").</li>
     <li>When Wikidata finds no item that carries the key, the items in its first five answers to the name are read. An item counts when its label is the name exactly, or it gives the name as an alias (Fragaria virginiana's item is labelled "Virginia strawberry").</li>
@@ -377,6 +383,7 @@
     <li>Until the fill reaches it, a page may show the wild photographs the open data holds under an id not yet checked, or say it holds none.</li>
     <li>A build that leaves iNaturalist to the fill keeps the id the page had, and each of its iNaturalist rows says it was left to the fill.</li>
     <li>From iNaturalist, asked under older names, a taxon is taken only when its own name is one of the species' own names and never one this reference holds as another species. A variety it files an older name under, whose species is one of them, is read as that species. Its name search is limited to plants.</li>
+    <li>Where the species' item gives no taxon, the taxon given by the item of a name Kew's file holds with the same type is taken, when there is one, or the basionym's item's. It is checked as any other.</li>
     <li>An id iNaturalist has made inactive is followed to the one current taxon it names. An id from Wikidata or an earlier build is kept only when that taxon is this species, in one of the ways below.</li>
     <li>Its name is one of the species' own: its name, an older name with the same type, or another name GBIF holds as its synonym that no species of this reference holds as its own, in any spelling of the epithet.</li>
     <li>Or GBIF's backbone holds the name as this species, or corrects it as a misspelling to this very species (GBIF's fuzzy match), while a correction to another species is never read as this one's.</li>

@@ -313,7 +313,7 @@ export type KewIds = { ids: string[]; label?: string; labels?: Record<string, st
  * linked an IPNI duplicate; Colchicum neapolitanum, Lachenalia pusilla, Ceropegia spiralis, Talinum lineare and
  * Mammillaria schiedeana linked another author's invalid or illegitimate name, and Mammillaria magnifica's POWO Sencke's.
  */
-export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds): { ipni?: string; powo?: string; changed: boolean } {
+export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds, opts: { /** The page is a Kew entry (`k<plant_name_id>`, round eighty-five, H). */ entry?: boolean } = {}): { ipni?: string; powo?: string; changed: boolean } {
   const powoNum = item.powo?.replace(/^urn:lsid:ipni\.org:names:/, '');
   // A number Kew files under another species, where it accepts the name by this author, is never the pick (round eighty).
   const away = new Set(k.elsewhere ?? []);
@@ -321,7 +321,10 @@ export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds): { i
   const other = new Set((k.others ?? []).map((o) => o.id));
   // A number ending "-4" is Kew's own, for a name IPNI does not hold: a POWO address, never an IPNI one (round
   // seventy-two, A: Echinocereus marksianus linked https://www.ipni.org/n/2782687-4 in place of its item's 87937-2).
-  const kept = item.ipni && !other.has(item.ipni) ? item.ipni : undefined;
+  // A page that is Kew's entry, whose name and author Kew numbers, links Kew's IPNI record of that name or none (round
+  // eighty-five, H): Kew's Drimia densiflora is "3311202-4", which IPNI does not hold, and the item's 77188032-1 is IPNI's
+  // record of its basionym Austronea densiflora, another name, never this one's.
+  const kept = item.ipni && !other.has(item.ipni) && !(opts.entry && pick) ? item.ipni : undefined;
   const ipni = pick && !WCVP_ONLY.test(pick) ? pick : kept && !WCVP_ONLY.test(kept) ? kept : undefined;
   const powo = pick ? `urn:lsid:ipni.org:names:${pick}` : powoNum && !other.has(powoNum) ? item.powo : undefined;
   return { ipni, powo, changed: ipni !== item.ipni || powo !== item.powo };

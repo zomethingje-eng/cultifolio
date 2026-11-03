@@ -198,7 +198,7 @@ import type { Climate, Dossier } from '../src/lib/dossier/schema';
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import { bulkFetcher } from '../src/lib/dossier/bulk';
 import { batchSources, BATCH_CHUNK } from '../src/lib/dossier/batch';
-import { kewRowsFetcher } from '../src/lib/dossier/kew-rows';
+import { kewRowsFetcher, type SameTypeName } from '../src/lib/dossier/kew-rows';
 import { loadKewRows } from './kew-rows-load';
 import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated } from './bulk-load';
@@ -763,6 +763,8 @@ const DEFAULT_POINTS = 'scripts/default-points.txt';
 const defaults: Set<string> | undefined = !fixtures && existsSync(DEFAULT_POINTS) ? parseDefaultPoints(readFileSync(DEFAULT_POINTS, 'utf8')) : undefined;
 /** The page's own Kew entry for a GBIF key, once the list or the disk says it (round eighty, A): `bulkFetcher`'s and `crossIds`' reading. */
 let entryOfKey: ((key: number) => string | undefined) | undefined;
+/** The names Kew's file holds with the same type as a page's Kew entry (round eighty-five, H), read with Kew's rows by `--bulk`. */
+let kewSameTypeOf: ((entry: string) => SameTypeName[] | undefined) | undefined;
 const regions: RegionTester | undefined = !fixtures && existsSync(SHAPES_FILE) ? regionTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile) : undefined;
 /** The list's lines and a line for every merge the list does not give one (round eighty, A; `mergeKeys`). */
 function withMergeKeys(keys: ExtraKey[]): ExtraKey[] {
@@ -1783,14 +1785,21 @@ async function fillWikidataStep(): Promise<void> {
   let had: { read?: string[]; changed?: Record<string, { line: string; rebuild: string }> } = {};
   try { if (existsSync(PROGRESS)) had = JSON.parse(readFileSync(PROGRESS, 'utf8')); } catch { had = {}; }
   if (had.read?.length || Object.keys(had.changed ?? {}).length) console.log(`  resuming: ${had.read?.length ?? 0} items read by the run that stopped are passed by`);
+  // With --bulk, the names Kew's file holds with each k page's entry's type (round eighty-five, H), for an item proved again.
+  let sameTypeOf: ((entry: string) => SameTypeName[] | undefined) | undefined;
+  if (bulkDir) {
+    const entries = [...diskIds().values()].flatMap((id) => (String(id).startsWith('k') ? [String(id).slice(1)] : []));
+    const kr = await loadKewRows(bulkDir, [], entries);
+    if (kr) { sameTypeOf = (e) => kr.sameTypeOf(e); console.log(`  the names Kew's file of ${kr.fileDay ?? 'a day not known'} holds with the type of ${entries.length} pages' Kew entries read`); }
+  }
   const c = await fillWikidata(diskStore(), upstream(), undefined, {
     ...had,
     save: (p) => writeFileSync(PROGRESS, JSON.stringify(p)),
     clear: () => { if (existsSync(PROGRESS)) unlinkSync(PROGRESS); }
-  });
+  }, { sameTypeOf });
   // Round seventy-nine: a page without a GBIF key found its item by Kew's identifiers, which this proof by GBIF key cannot read.
   if (c.noGbif) console.log(`  ${c.noGbif} pages without a GBIF key passed by: their item is the one carrying Kew's IPNI or POWO identifier`);
-  console.log(`  ${c.read} items read: ${c.byKey} carry their species' GBIF key; ${c.stands} proved again by the rule; ${c.changed} changed by it, left as they are and listed${c.before ? `; ${c.before} proved again by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  console.log(`  ${c.read} items read: ${c.byKey} carry their species' GBIF key;${c.sameType ? ` ${c.sameType} carry Kew's identifier for a name Kew holds with the page's type, as the build found them;` : ''} ${c.stands} proved again by the rule; ${c.changed} changed by it, left as they are and listed${c.before ? `; ${c.before} proved again by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
   // An IPNI identifier that is not POWO's number: one of the two is another name's (triage-69 B6, R47-5), to be read by hand.
   if (c.disagree.length) {
     writeFileSync('ipni-powo.txt', c.disagree.join('\n') + '\n');
@@ -2703,9 +2712,15 @@ async function main() {
       }
       // Kew's names from Kew's file in place of GBIF's copy of them (round seventy-eight; `kew-rows.ts`), for the same
       // genera: the IPNI and POWO links, the name cited, and every Kew reading of a proof. `--kew-api` asks GBIF's copy.
+      // The page's own Kew entry for a key (round eighty, A): the list's plant_name_id, else the page on disk under k<id>.
+      const listKew = new Map((listed ?? []).flatMap((j) => (j.gbifKey != null && j.kewId ? [[j.gbifKey, j.kewId] as const] : [])));
+      const entryOf = (key: number) => listKew.get(key) ?? (() => { const id = idOfGbif(key); return id?.startsWith('k') ? id.slice(1) : undefined; })();
       if (!args.includes('--kew-api')) {
-        const kr = await loadKewRows(bulkDir, [...names, ...olderGenera].map((n) => n.split(' ')[0]));
-        if (kr) { kewRowsStats = { answered: 0, through: 0 }; f = kewRowsFetcher(f, kr, kewRowsStats); console.log(`  Kew's names for the links and proofs: ${kr.size} rows of Kew's file of ${kr.fileDay ?? 'a day not known'}, in place of GBIF's copy`); }
+        // And the names Kew holds with the same type as each page's entry (round eighty-five, H), by which Wikidata, Wikipedia
+        // and iNaturalist file the plant when they file it under an older combination.
+        const entries = [...unique.flatMap((p) => { const e = p.key ? entryOf(p.key) : undefined; return e ? [e] : []; }), ...kewWanted.keys()];
+        const kr = await loadKewRows(bulkDir, [...names, ...olderGenera].map((n) => n.split(' ')[0]), entries);
+        if (kr) { kewRowsStats = { answered: 0, through: 0 }; f = kewRowsFetcher(f, kr, kewRowsStats); kewSameTypeOf = (e) => kr.sameTypeOf(e); console.log(`  Kew's names for the links and proofs: ${kr.size} rows of Kew's file of ${kr.fileDay ?? 'a day not known'}, in place of GBIF's copy; the same-type names of ${entries.length} pages' Kew entries`); }
       }
       if (!wcvp) console.log('  no WCVP files: distributions will come from the API');
       if (!loaded && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
@@ -2714,9 +2729,6 @@ async function main() {
       // download's sample: they are marked not asked, and `--fill gbif --bulk bulk` takes them once media.zip is there.
       if (loaded?.format === 'sql' && !loaded.media && !skip.includes('gbif.media')) { skip.push('gbif.media'); console.log(`  the SQL download carries no photographs and ${bulkDir}/media.zip is not there: GBIF's photographs are not asked (npm run bulk -- gbif-media fetches them; then --fill gbif --bulk ${bulkDir})`); }
       const apiPath = readApiPath(bulkDir);
-      // The page's own Kew entry for a key (round eighty, A): the list's plant_name_id, else the page on disk under k<id>.
-      const listKew = new Map((listed ?? []).flatMap((j) => (j.gbifKey != null && j.kewId ? [[j.gbifKey, j.kewId] as const] : [])));
-      const entryOf = (key: number) => listKew.get(key) ?? (() => { const id = idOfGbif(key); return id?.startsWith('k') ? id.slice(1) : undefined; })();
       entryOfKey = entryOf;
       const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath, covered, entryOf });
       mediaFromFiles = !!loaded?.media;
@@ -2795,7 +2807,7 @@ async function main() {
       if (j.kew) {
         // Round seventy-nine: from Kew's file, by its plant_name_id (`build-kew.ts`); GBIF's records are not asked.
         // Round seventy-nine (the owner's decision on K's offer): the records under the keys Kew's synonymy gives it.
-        r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined, climate, places, regions, defaults, genera: kewGenera });
+        r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined, climate, places, regions, defaults, genera: kewGenera, kewSameType: kewSameTypeOf?.(j.kew) });
       } else if (offline && !prevTaxon) {
         say(`✗ ${j.name}: no previous dossier to carry the name from; build it online first`);
         continue;
@@ -2826,7 +2838,9 @@ async function main() {
         regions,
         defaults,
         // A page of the list with a Kew id is matched on Wikidata by its identifiers alone (round eighty, A).
-        kewEntryOf: entryOfKey
+        kewEntryOf: entryOfKey,
+        // And, failing those, by Kew's identifiers for the names Kew holds with its entry's type (round eighty-five, H).
+        kewSameType: kewSameTypeOf
       });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
