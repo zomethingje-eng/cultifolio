@@ -170,7 +170,7 @@ import { gbifView, kewHeadingOf, renamedLines, formerHeadings } from '../src/lib
 import { stampRead, stampNew, applyCredits, readObservations, readFiles, observationOf, type CreditCounts, type CreditObs, type CreditFile } from '../src/lib/dossier/photo-read';
 import { readRevision, revisionWanted, type RevisionCounts, type RevisionPage } from '../src/lib/dossier/revision-fill';
 import type { GrownRule } from '../src/lib/dossier/catalogue';
-import { makeFetcher, fixtureFetcher, isThrottle } from '../src/lib/dossier/fetch';
+import { makeFetcher, fixtureFetcher, isThrottle, type JsonFetcher } from '../src/lib/dossier/fetch';
 import { dayCached, type DayStore } from '../src/lib/dossier/day-cache';
 import { dayBudget, INAT_DAY_BUDGET } from '../src/lib/dossier/day-budget';
 import { writeAtomic } from './write-atomic';
@@ -1578,7 +1578,13 @@ async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void>
  */
 async function fillCreditsStep(): Promise<void> {
   const store = diskStore();
-  const f = upstreamApi();
+  // The last refusal, so a run that meets iNaturalist's day's allowance stops and says so (the owner's run of 3 November
+  // 2026: 4,000 requests made by 20:42 UTC, then 4,106 refused by the allowance and said "not answered", "in an hour").
+  const api = upstreamApi();
+  let lastFail = '';
+  const f: JsonFetcher = async (url, opts) => { const r = await api(url, opts); if (r.status === 'refused' || r.status === 'error') lastFail = r.detail ?? ''; return r as never; };
+  const SPENT = /today's allowance of \d+ requests is spent/;
+  let spent = '';
   const again = args.includes('--again');
   const day = today();
   type P = { key?: unknown; name?: { scientific?: string }; photos: Array<{ src: string; id: string; page?: string; attribution: string; licence: string; read?: string }> };
@@ -1601,7 +1607,7 @@ async function fillCreditsStep(): Promise<void> {
     const obs = new Map<string, CreditObs>();
     // By number and by uuid apart: iNaturalist reads one kind a request.
     for (const idList of [[...ids].filter((x) => /^\d+$/.test(x)), [...ids].filter((x) => !/^\d+$/.test(x))]) {
-      for (let k = 0; k < idList.length; k += 200) { const r = await readObservations(f, idList.slice(k, k + 200)); if (!r) { failed++; continue; } for (const [x, o] of r) obs.set(x, o); }
+      for (let k = 0; k < idList.length && !spent; k += 200) { const r = await readObservations(f, idList.slice(k, k + 200)); if (!r) { failed++; if (SPENT.test(lastFail)) spent = lastFail; continue; } for (const [x, o] of r) obs.set(x, o); }
     }
     const titles = [...new Set(batch.flatMap((file) => store.read<P>(file).photos.filter((p) => p.src === 'commons' && (again || !p.read)).map((p) => p.id)))];
     const got = new Map<string, CreditFile>();
@@ -1612,9 +1618,13 @@ async function fillCreditsStep(): Promise<void> {
       if (applyCredits(d, obs, got, day, c)) store.write(file, d);
     }
     process.stdout.write(`\r  ${c.pages} pages read: ${c.read} credits read, ${c.changed} corrected, ${c.dropped} photographs dropped…   `);
+    // At the day's allowance the run stops: every request after it would be refused unsent (the pages left are asked tomorrow).
+    if (spent) break;
   }
+  if (spent) console.log(`\r  ${spent}: ${files.length - c.pages} pages not asked today, and the credits of the last read left as they were; run --fill credits again tomorrow, after midnight UTC; it reads only what is left.`);
   console.log(`\r  ${c.pages} pages read: ${c.read} credits read again and stamped ${day}, ${c.changed} corrected, ${c.dropped} photographs dropped${c.recaptive ? `, ${c.recaptive} whose captive mark iNaturalist changed` : ''}${c.unread ? `, ${c.unread} not answered (left as they were, with no day)` : ''}${c.lines.length ? `:\n${c.lines.slice(0, 200).map((l) => `    ${l}`).join('\n')}${c.lines.length > 200 ? `\n    … ${c.lines.length - 200} more` : ''}` : '.'}`);
-  if (failed || c.unread) { console.log(`  ${failed} requests not answered: run --fill credits again; it reads only what is left.`); unfinished(); }
+  if (spent) unfinished();
+  else if (failed || c.unread) { console.log(`  ${failed} requests not answered: run --fill credits again; it reads only what is left.`); unfinished(); }
   writeIndexFromDisk();
 }
 
