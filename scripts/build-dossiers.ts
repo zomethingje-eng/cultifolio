@@ -1615,7 +1615,7 @@ async function fillCreditsStep(): Promise<void> {
     for (const file of batch) {
       const d = store.read<P>(file);
       c.pages++;
-      if (applyCredits(d, obs, got, day, c)) store.write(file, d);
+      if (applyCredits(d, obs, got, day, c, { again })) store.write(file, d);
     }
     process.stdout.write(`\r  ${c.pages} pages read: ${c.read} credits read, ${c.changed} corrected, ${c.dropped} photographs dropped…   `);
     // At the day's allowance the run stops: every request after it would be refused unsent (the pages left are asked tomorrow).

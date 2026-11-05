@@ -42,7 +42,7 @@ export function stampNew<P extends Stamped>(before: readonly Stamped[] | null | 
 export const observationOf = (page: string | undefined): string | null => { const m = /\/observations\/(\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/i.exec(page ?? ''); return m ? m[1].toLowerCase() : null; };
 
 /** What iNaturalist answers of an observation for the credits (v2, these fields only). */
-export interface CreditObs { id: number; uuid?: string; photos?: Array<{ id: number; license_code?: string | null; attribution?: string | null }>; user?: { login?: string; name?: string | null }; /** Whether the observer, or iNaturalist's community, marks the plant captive or cultivated now (the merge, round eighty-five; review-d D13). */ captive?: boolean }
+export interface CreditObs { id: number; uuid?: string; photos?: Array<{ id: number; license_code?: string | null; attribution?: string | null }>; user?: { login?: string; name?: string | null }; /** Whether the observer, or iNaturalist's community, marks the plant captive or cultivated now (the merge, round eighty-five; review-d D13). */ captive?: boolean; /** Asked by this number or uuid, and absent from a whole answer: iNaturalist no longer holds it (the owner's run of 5 November 2026: three observations deleted, HTTP 410). */ gone?: string }
 /** What Commons answers of a file for the credits (`imageinfo`'s `extmetadata`). */
 export interface CreditFile { title: string; missing?: boolean; artist?: string; licence?: string }
 
@@ -52,6 +52,7 @@ export type CreditRead = { credit: string; licence: 'cc0' | 'pd' | 'by' | 'by-sa
 /** An iNaturalist photograph's credit as the build makes it (`inat.photos`), from the observation read again. */
 export function inatCredit(photoId: string, o: CreditObs | undefined): CreditRead {
   if (!o) return null;
+  if (o.gone) return { drop: `iNaturalist no longer holds observation ${o.gone} (deleted, or no longer public)` };
   const p = (o.photos ?? []).find((x) => String(x.id) === photoId);
   if (!p) return { drop: `iNaturalist's observation ${o.id} no longer holds photograph ${photoId}` };
   const tag = licenceTag(p.license_code ?? null);
@@ -83,10 +84,13 @@ export interface CreditCounts { pages: number; read: number; changed: number; dr
  * leaves the photograph as it was, unstamped). Returns what changed, as lines for the log. Photographs of other
  * sources (GBIF's, read from their records by `--fill gbif-licence`) are left as they are.
  */
-export function applyCredits(d: { key?: unknown; name?: { scientific?: string }; photos: CreditPhoto[] }, obs: ReadonlyMap<string, CreditObs>, files: ReadonlyMap<string, CreditFile>, day: string, c: CreditCounts): boolean {
+export function applyCredits(d: { key?: unknown; name?: { scientific?: string }; photos: CreditPhoto[] }, obs: ReadonlyMap<string, CreditObs>, files: ReadonlyMap<string, CreditFile>, day: string, c: CreditCounts, opts: { /** `--again`: every photograph was asked, the ones read before too. */ again?: boolean } = {}): boolean {
   let touched = false;
   const keep: CreditPhoto[] = [];
   for (let p of d.photos) {
+    // A photograph read on an earlier day was not asked this run (the fill asks only those with no day, but `--again`):
+    // it stays as it was, and is not counted "not answered" (the owner's run of 5 November 2026 said 950, of which 10).
+    if (!opts.again && p.read) { keep.push(p); continue; }
     const r = p.src === 'inat' ? (observationOf(p.page) != null ? inatCredit(p.id, obs.get(observationOf(p.page)!)) : null) : p.src === 'commons' ? commonsFileCredit(files.get(p.id)) : null;
     if (p.src === 'inat' || p.src === 'commons') { if (r) c.read++; else c.unread++; }
     if (!r) { keep.push(p); continue; }
@@ -120,10 +124,17 @@ export const CREDIT_FILES_URL = (titles: readonly string[]) => `https://commons.
 
 /** Reads the observations' credits (all numbers, or all uuids); one the answer lacks is not in the map (its photograph then stays unstamped). Keyed by number and by uuid. */
 export async function readObservations(f: JsonFetcher, ids: readonly string[]): Promise<Map<string, CreditObs> | null> {
-  const r = await f<{ results?: CreditObs[] }>(CREDIT_OBS_URL(ids));
+  const r = await f<{ total_results?: number; results?: CreditObs[] }>(CREDIT_OBS_URL(ids));
   if (r.status === 'none') return new Map();
   if (r.status !== 'ok') return null;
-  return new Map((r.data.results ?? []).flatMap((o) => [[String(o.id), o] as const, ...(o.uuid ? [[o.uuid.toLowerCase(), o] as const] : [])]));
+  const results = r.data.results ?? [];
+  const out = new Map<string, CreditObs>(results.flatMap((o) => [[String(o.id), o] as const, ...(o.uuid ? [[o.uuid.toLowerCase(), o] as const] : [])]));
+  // A whole answer (every result it counts is here, at most the two hundred asked) that lacks an observation asked:
+  // iNaturalist no longer holds it, and its photographs go. A partial answer says nothing of the rest.
+  if (typeof r.data.total_results === 'number' && r.data.total_results === results.length && results.length <= ids.length) {
+    for (const id of ids) if (!out.has(id.toLowerCase())) out.set(id.toLowerCase(), { id: 0, gone: id });
+  }
+  return out;
 }
 /** Reads the files' credits; a title Commons says is missing is marked so. */
 export async function readFiles(f: JsonFetcher, titles: readonly string[]): Promise<Map<string, CreditFile> | null> {
