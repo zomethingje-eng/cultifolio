@@ -218,7 +218,7 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
     expect(code('src/routes/+page.server.ts')).not.toMatch(/getDossier|feature\b/);
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
     // Round eighty-five: a summary, then the rules folded under it.
-    expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<p class="sum">The front page's photographs are picked by rule from the popular genera, not by hand\.<\/p>\s*<details class="full in-full"><summary>The rules in full<\/summary>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);
+    expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<p class="sum">The front page's photographs are picked by rule from the popular genera, not by hand\.<\/p>\s*<details class="full in-full"><summary>The rules in full(?:<span class="sr">[^<]*<\/span>)?<\/summary>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);
     expect(how).not.toMatch(/shown whole/);
   });
   it('the phone search placeholder fits', () => {

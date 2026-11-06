@@ -12,8 +12,10 @@
  *    Fails without `open = false; hi = -1;` in the `pointerdown` handler (r84k-picker passed all 12 runs so).
  * 3. Add pressed while the reference's search is out waits for it, and files the reference's key on one press (C2).
  *    Fails with `check()` not awaiting the search out (`current.done`).
- * 4. A late answer that resolves the name clears "Add as typed" (C2; C8's 3): Enter arms the name while the search is
- *    held, and the search's answer then resolves it. Fails without `armed = false` in the search's resolution.
+ * 4. A late answer that resolves the name leaves no "Add as typed" (C2; C8's 3). Round eighty-six (review-c C2): Enter
+ *    no longer arms the name while the search is held, since a press in that window filed a plant the reference holds
+ *    with no key; the button reads "Add" while the search is out, and still "Add", with the reference's key, once it
+ *    answers. Fails with Enter arming before its check concludes (r86base's `armed = true` in the Enter handler).
  * 5. The room under the field holds its height under a press on Add, so Add does not move from under the finger and the
  *    press is taken (outside review A22). Fails without `held`.
  *
@@ -134,11 +136,12 @@ describe('the picker on the add form', () => {
       const input = m.page.locator('#species-name');
       await input.fill('Copiapoa humilis');
       await until(() => s.asked.search > 0 && s.asked.names > 0, 'both services asked');
-      await input.press('Enter'); // Enter on a name nothing has resolved arms it
-      await expect.poll(() => add(m.page).innerText()).toBe('Add as typed');
+      await input.press('Enter'); // Enter on a name nothing has resolved yet: its check waits for the reference's search
+      // Never armed while the search is out (round eighty-six; review-c C2): read across a second, not once.
+      for (let i = 0; i < 10; i++) { expect(await add(m.page).innerText()).not.toBe('Add as typed'); await new Promise((r) => setTimeout(r, 100)); }
       held.open();
       await expect.poll(() => m.page.locator('.picker .pill.ok').innerText(), { timeout: 15_000 }).toContain('GBIF 5384999'); // resolved by the late answer
-      await expect.poll(() => add(m.page).innerText()).toBe('Add'); // reverted: still "Add as typed"
+      await expect.poll(() => add(m.page).innerText()).toBe('Add'); // r86base: "Add as typed" while the search was out
     } finally {
       held.open();
       await m.close();

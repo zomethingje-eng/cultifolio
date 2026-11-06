@@ -1,4 +1,4 @@
-import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
+import { BY_ID, type JsonFetcher, type FetchResult, type SourceResult } from '../fetch';
 import type { PageId } from '../../core/page-id';
 import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
@@ -114,7 +114,7 @@ export async function checkIds(f: JsonFetcher, ids: readonly number[]): Promise<
   const all = [...new Set(ids)];
   for (let i = 0; i < all.length; i += IDS_PER_ASK) {
     const part = all.slice(i, i + IDS_PER_ASK);
-    const r = await f<{ results: Array<{ id: number; name?: string; rank?: string; is_active?: boolean; current_synonymous_taxon_ids?: number[] | null }> }>(`${INAT}/taxa/${part.join(',')}`);
+    const r = await f<{ results: Array<{ id: number; name?: string; rank?: string; is_active?: boolean; current_synonymous_taxon_ids?: number[] | null }> }>(`${INAT}/taxa/${part.join(',')}`, BY_ID);
     if (r.status === 'none') { part.forEach((id) => out.set(id, { active: false })); continue; }
     if (r.status !== 'ok') return r;
     for (const t of r.data.results ?? []) {

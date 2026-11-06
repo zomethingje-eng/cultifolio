@@ -10,7 +10,9 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
-const maps = (p: Page) => p.locator('.mapbox svg').evaluateAll((xs) => xs.map((x) => x.outerHTML));
+// A map's files are named in data-href until it nears the viewport, then in href (round eighty-six; outside review B's 4):
+// the same map either way.
+const maps = (p: Page) => p.locator('.mapbox svg').evaluateAll((xs) => xs.map((x) => x.outerHTML.replaceAll(' data-href="', ' href="')));
 
 test('the maps drawn in the browser are the ones the server drew @phone', async ({ page, browser }) => {
   const errors: string[] = [];

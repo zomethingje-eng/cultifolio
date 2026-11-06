@@ -171,7 +171,9 @@ test('r62g 8: Leave says how many records the visitor added or changed, and asks
   await page.locator('#species-name').blur();
   page.on('dialog', (d) => void d.accept());
   await page.locator('button.add').click();
-  await page.locator('button.add').click().catch(() => {}); // "Add as typed", when the name service is not reached
+  // "Add as typed", when the name service is not reached and the first press only asked; since round eighty-six the first
+  // press usually files, so the second is tried briefly and only while the form is there (the owner's WebKit run).
+  if (/\/plants\/new/.test(page.url())) await page.locator('button.add').click({ timeout: 3_000 }).catch(() => {});
   await expect(page).toHaveURL(/\/plants\//, { timeout: 15_000 });
   let said = '';
   page.removeAllListeners('dialog');

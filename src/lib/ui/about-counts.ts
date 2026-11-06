@@ -40,3 +40,16 @@ export async function liveCounts(f: typeof fetch = fetch): Promise<Counts | null
 
 /** A count as the pages write it: 48,357. */
 export const countText = (n: number) => n.toLocaleString('en-GB');
+
+const pow2 = (x: number) => 2 ** Math.ceil(Math.log2(Math.max(1, x)));
+/**
+ * The reference's file counts at a species count, as /about/formats states them (round eighty-six; review S's S4: the
+ * page said them at round eighty-four's 48,357 three uploads on). The rules are the build's own (`rowFilesFor`,
+ * `cardFilesFor`, `olderFilesFor` in `$dossier/lookups`, `searchDirsFor` in `$core/search-files`), written again here so
+ * the about page's script does not carry the search; `tests/unit/r86w-about.test.ts` holds the two to one answer.
+ */
+export function fileCounts(species: number): { genusRows: number; otherRows: number; cards: number; names: number; searchDirs: number } {
+  let dirs = 64;
+  while (dirs < 4096 && species > dirs * 160) dirs *= 2;
+  return { genusRows: Math.max(16, pow2(species / 150)), otherRows: Math.max(16, pow2(species / 600)), cards: Math.max(64, pow2(species / 64)), names: Math.max(64, pow2(species / 100)), searchDirs: dirs };
+}

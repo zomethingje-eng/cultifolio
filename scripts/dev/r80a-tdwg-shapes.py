@@ -61,6 +61,20 @@ Round eighty-five (G; the owner's decisions 1 to 3, outside review A3, A4): the 
 
   python3 scripts/dev/r80a-tdwg-shapes.py <tblLevel3.txt> <tblLevel4.txt> <ne_10m_admin_1_states_provinces.geojson> scripts/tdwg3-shapes.json <tblGazetteer.txt> --islands <ne_10m_minor_islands.geojson> --report <report.json> --draw <draw.json>
   python3 scripts/dev/r80a-tdwg-shapes.py <tblLevel3.txt> <tblLevel4.txt> <ne_10m_admin_1_states_provinces.geojson> <out.json> --r83
+
+Round eighty-six (the plan's B3 and B4; outside review B): the file's rule is r86. `--r85` writes round eighty-five's file
+byte for byte.
+  - Kashmir: Natural Earth files Gilgit-Baltistan ("Northern Areas") and Azad Kashmir under Pakistan, and both went to
+    Pakistan's shape (the east of Gilgit-Baltistan, beyond Pakistan's box, to none). TDWG's gazetteer files Gilgit and
+    Baltistan under WHM-JK, Jammu-Kashmir, in the West Himalaya, and its Jammu-Kashmir is the former state, whose
+    Pakistani-held part is Gilgit-Baltistan and Azad Kashmir; TDWG's own boxes agree (Pakistan's ends at 36.90 N and
+    75.39 E, short of Gilgit-Baltistan's north and east; the West Himalaya's reaches 72.54 E and 37.02 N, which only
+    Gilgit-Baltistan gives it). Both go to the West Himalaya, counted under Pakistan's code (`NE_NAME_L3`), so a record
+    there stating PK is the West Himalaya's.
+  - The countries GBIF states a record's (ISO 3166-1) where Natural Earth files the place under another: Svalbard and Jan
+    Mayen SJ and Bouvet I. BV (Natural Earth: Norway), Bonaire, Saba and St Eustatius BQ (the Netherlands), the French
+    side of St Martin MF (TDWG writes Guadeloupe's GP), and Clipperton I. CP (TDWG writes French Polynesia's PF), so a
+    record stating its own island's code is that region's country (`GBIF_ISO`).
 """
 import json, sys, unicodedata, re, collections
 
@@ -71,6 +85,10 @@ if R83: args.remove('--r83')
 R84 = R83 or '--r84' in args
 if '--r84' in args: args.remove('--r84')
 R85 = not R84
+# Round eighty-six: `--r85` writes round eighty-five's file byte for byte (no Kashmir, no GBIF codes, rule r85).
+R85_ONLY = '--r85' in args
+if R85_ONLY: args.remove('--r85')
+R86 = R85 and not R85_ONLY
 ISLANDS = None
 if '--islands' in args:
     i = args.index('--islands'); ISLANDS = args[i + 1]; del args[i:i + 2]
@@ -160,6 +178,12 @@ NE_NAME_L3 = {} if R83 else {'Crimea': ('KRY', 'UA'), 'Sevastopol': ('KRY', 'UA'
     # The Iles Eparses (Europa, Bassas da India, Juan de Nova, Glorioso) are TDWG's Mozambique Channel Is. (the gazetteer's
     # "Europa I."); their middle is in no box, so no rule below places them.
     "Iles Eparses de l'ocean Indien": ('MCI', 'TF')}
+if R86:
+    # Round eighty-six (B4): Gilgit-Baltistan and Azad Kashmir are TDWG's Jammu-Kashmir (WHM-JK), the West Himalaya's.
+    NE_NAME_L3.update({'Northern Areas': ('WHM', 'PK'), 'Azad Kashmir': ('WHM', 'PK')})
+# Round eighty-six (B3): the codes GBIF states a record's for a place TDWG's tables or Natural Earth file under another
+# country's code, by TDWG's unit, each added to its region's countries.
+GBIF_ISO = {'SVA-OO': 'SJ', 'BOU-OO': 'BV', 'NLA-BO': 'BQ', 'LEE-NL': 'BQ', 'LEE-SM': 'MF', 'CPI-CL': 'CP'} if R86 else {}
 # Round eighty-four (G): states or provinces no rule above places, where two of their country's boxes hold them whole,
 # placed by what Natural Earth or TDWG's own unit says of them: New Zealand's by Natural Earth's `region` (Nelson,
 # Marlborough and Tasman are "South Island", which New Zealand North's box overlaps); Brazil's Distrito Federal, TDWG's
@@ -535,6 +559,11 @@ if R85:
         meta['islands'] = "Natural Earth 1:10m minor islands (public domain, version 5.1.1), each placed in the region of the nearest shape, or of the box of a region with none that holds it"
     meta['source'] = "Natural Earth 1:10m states and provinces (public domain), placed in TDWG's level-3 regions (WGSRPD second edition) by TDWG's tables and gazetteer"
     meta['simplified'] = 'Douglas-Peucker 0.02 degrees; thousandths of a degree, [lon, lat]'
+if R86:
+    meta['rule'] = 'r86'
+    for u, iso in GBIF_ISO.items():
+        c = next(r['L3 code'] for r in L4 if r['L4 code'] == u)
+        if c in countries and iso not in countries[c]: countries[c] = sorted(countries[c] + [iso])
 json.dump({'meta': meta, 'shapes': shapes, **({'islands': islands, 'countries': countries, 'places': places} if R85 else {})}, open(out, 'w'), separators=(',', ':'))
 print(f"{len(shapes)} regions with shapes, {len(partial)} by their box only")
 print('box only:', ' '.join(f"{c}({'; '.join(v)})" for c, v in sorted(partial.items())))

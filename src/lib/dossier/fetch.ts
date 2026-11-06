@@ -31,11 +31,20 @@ export type SourceResult<T> = Exclude<FetchResult<T>, { status: 'none' }> | { st
 export interface FetchOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;
-  /** Treat 404 as "none" (default true). */
+  /**
+   * Treat a 404 as "none": only for an endpoint whose 404 means "no such record" (a GBIF usage or occurrence by its key, an
+   * iNaturalist taxon by its id, an IPNI record by its id, a Wikipedia article by its title). Anywhere else a 404 is an
+   * error, said "did not answer" (rule 2): a search, a query or an API whose address answers 404 has moved or failed, and
+   * says nothing about the plant (round eighty-six; the default was true, so a 404 from MediaWiki's API, Wikidata's query
+   * service or iNaturalist's observation search would have been read as "nothing to report").
+   */
   noneOn404?: boolean;
   /** Internal: which retry this is (0 = first try). */
   attempt?: number;
 }
+
+/** The options of a request to an endpoint whose 404 means "no such record" (`noneOn404`). */
+export const BY_ID: Readonly<FetchOptions> = Object.freeze({ noneOn404: true });
 
 export const USER_AGENT = 'Cultifolio/3.0 (https://cultifolio.com; hello@cultifolio.com)';
 
@@ -171,7 +180,8 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         signal: ctl.signal
       });
       answered = true;
-      if (res.status === 404 && opts.noneOn404 !== false) return { status: 'none' };
+      // Round eighty-six (A11): a 404 is "none" only where the caller says it means "no such record" (`BY_ID`).
+      if (res.status === 404 && opts.noneOn404 === true) return { status: 'none' };
       if (res.status === 429 && hostTouchy(host)) {
         // Still throttled after a cooldown: back to cooling at once; --only-refused (or a key) is the way through.
         coolUntil.set(host, Date.now() + COOLDOWN_MS);
@@ -249,16 +259,47 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
   };
 }
 
+/**
+ * A fixture recorded for Wikipedia's REST summary (`rest_v1/page/summary/<title>`: `{ type, title, extract, revision }`),
+ * as every test and fixture before round eighty-six recorded it, answers the action API's one-title lead request
+ * (`leadsUrl`) that the summary asks since then, in that API's shape: the title reached (a redirect when it is not the one
+ * asked), the extract as the lead, the revision, a disambiguation page marked, a missing page (`null`, or REST's
+ * not-found type) missing. A fixture recorded in the action API's shape is answered as it is.
+ */
+const LEAD_ONE = /^https:\/\/en\.wikipedia\.org\/w\/api\.php\?action=query&format=json&formatversion=2&prop=extracts\|revisions\|pageprops&[^|]*&titles=([^|&]+)$/;
+const restKey = (title: string) => `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+export function restAsLead(asked: string, data: unknown): unknown {
+  const r = data as { type?: string; title?: string; extract?: string; revision?: number | string; query?: unknown } | null;
+  if (r && typeof r === 'object' && 'query' in r) return r;
+  if (!r || (typeof r.type === 'string' && /not_found/.test(r.type))) return { batchcomplete: true, query: { pages: [{ title: asked, missing: true }] } };
+  const title = (r.title ?? asked).replace(/_/g, ' ');
+  const revid = Number(r.revision);
+  return { batchcomplete: true, query: { ...(title !== asked ? { redirects: [{ from: asked, to: title }] } : {}), pages: [{ title, extract: r.extract ?? '', ...(Number.isSafeInteger(revid) && revid > 0 ? { revisions: [{ revid }] } : {}), ...(r.type === 'disambiguation' ? { pageprops: { disambiguation: '' } } : {}) }] } };
+}
+
 /** A fetcher backed by a map of URL → JSON, for tests and fixtures. Unmatched URLs are "refused" so a test can never mistake a missing fixture for an absence. */
 export function fixtureFetcher(table: Record<string, unknown>, fallback: FetchResult<never> = { status: 'refused', detail: 'no fixture' }): JsonFetcher {
   const entries = Object.entries(table);
+  const find = (url: string): [boolean, unknown] => {
+    for (const [pat, data] of entries) if (url === pat || url.startsWith(pat) || (pat.startsWith('re:') && new RegExp(pat.slice(3)).test(url))) return [true, data];
+    return [false, undefined];
+  };
   return async <T>(url: string): Promise<FetchResult<T>> => {
-    for (const [pat, data] of entries) {
-      if (url === pat || url.startsWith(pat) || (pat.startsWith('re:') && new RegExp(pat.slice(3)).test(url))) {
-        if (data === null) return { status: 'none' };
-        if (typeof data === 'object' && data && '__status' in (data as Record<string, unknown>)) return data as FetchResult<T>;
-        return { status: 'ok', data: data as T };
+    const one = LEAD_ONE.exec(url);
+    if (one) {
+      const asked = decodeURIComponent(one[1]);
+      const [hit, data] = find(url)[0] ? find(url) : find(restKey(asked));
+      if (hit) {
+        if (data && typeof data === 'object' && '__status' in (data as Record<string, unknown>)) return data as FetchResult<T>;
+        return { status: 'ok', data: restAsLead(asked, data) as T };
       }
+      return fallback;
+    }
+    const [hit, data] = find(url);
+    if (hit) {
+      if (data === null) return { status: 'none' };
+      if (typeof data === 'object' && data && '__status' in (data as Record<string, unknown>)) return data as FetchResult<T>;
+      return { status: 'ok', data: data as T };
     }
     return fallback;
   };

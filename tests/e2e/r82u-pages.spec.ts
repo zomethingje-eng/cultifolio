@@ -106,7 +106,7 @@ test('r82u 3: the climate chip says none apart from not asked and not checked, u
   for (const q of ['/', '/?chip=climate', '/?chip=noclimate']) {
     await page.goto(q); await ready(page);
     const chip = page.locator('.chiprow a[href*="chip=noclimate"]');
-    await expect(chip).toHaveText(/^No climate,?\s*0,\s*1 not asked, 1 not checked$/); // base: "Without climate, 3"; round 84: "2 not checked"
+    await expect(chip).toHaveText(/^No climate,?\s*0,\s*1 not asked, 1 not checked, 1 pending$/); // base: "Without climate, 3"; round 84: "2 not checked"; round 86 (S15): the pending on the chip
     await expect(chip).toHaveAttribute('title', /0 with no habitat climate derived; besides them, 1 not asked, 1 not checked/);
   }
   await expect(page.locator('.seccount:visible').last()).toContainText('3 species without habitat climate: 0 with none derived, 1 not asked, 1 not checked, 1 pending');
@@ -219,7 +219,8 @@ test('r82u 12: a climate from few records is marked on its figures and in its cl
   await expect(page.locator('#few-records-mark')).toHaveText('from few records: 4 in 4 cells');
   await expect(page.locator('#few-records-mark')).toHaveAttribute('href', '#few-records');
   await expect(page.locator('#few-records-glance')).toContainText('From few records: 4 records in 4 grid cells.');
-  await expect(page.locator('#few-records')).toHaveText('From few records: this habitat climate is read from 4 records in 4 grid cells; a page says so under 12 records or 5 cells, and shows the figures as read.');
+  await expect(page.locator('#few-records')).toHaveText('From few records: this habitat climate is read from 4 records in 4 grid cells; a page says so under 12 records or 5 cells, and shows the figures as read. The rule.'); // round eighty-six (P11): its rule linked
+  await expect(page.locator('#few-records a.help')).toHaveAttribute('href', '/about/how#few');
   await expect(page.locator('.glance .card')).toHaveCount(5); // the figures are all there
   // A page of many records carries no mark (guard).
   await page.goto('/species/copiapoa-cinerea'); await ready(page);

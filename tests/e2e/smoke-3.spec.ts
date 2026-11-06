@@ -651,7 +651,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   // all-engines rerun), where Chromium here takes about 9.
   test.setTimeout(60_000);
   // The name service is not reachable here (no upstream), so a name outside the fixture corpus resolves to nothing: the
-  // first Add arms the field and asks, the second keeps exactly what was typed (round twenty-three, 4).
+  // form asks once, and Add then keeps exactly what was typed (round twenty-three, 4; one press since round eighty-six).
   await page.goto('/plants/new'); await ready(page);
   // In Safari's engine the first Add left the field unarmed: pressed before the page had its handlers, or as the line the
   // name check writes under the field pushed the button down. Hydrated first, and the check's answer on screen (its pill)
@@ -663,9 +663,10 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   // upstream), its sentence saying so, which comes without a pill (round sixty-five; the strict run, where waiting for the
   // pill alone failed two times in five). 15 s, as the import's name checks have.
   await expect(page.locator('.picker .pill.warn').or(page.getByRole('status').filter({ hasText: 'The name service did not answer' })).first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: /^Add/ }).click();
-  await expect(page).toHaveURL(/\/plants\/new$/);
+  // Since round eighty-six (review C's C2, review S's S3) the field is armed once the check has concluded, on leaving it:
+  // the line and the button say "Add as typed" before any press, and one press files the name as typed.
   await expect(page.locator('.picker .hint', { hasText: /press (?:Add|“Add[^”]*”) to keep exactly what you typed/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Add as typed/ })).toBeVisible();
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;

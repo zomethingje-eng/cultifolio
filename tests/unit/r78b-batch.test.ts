@@ -15,17 +15,32 @@
  *     (`prop=...|info`), so a batched build records the summary's revision as the per-species REST answer does. The
  *     recorded batch answer was recorded with the REST answers of the same moment; each page's `lastrevid` in it is the
  *     revision its REST answer carried, and its address gains `|info`.
+ *   - Round eighty-six (outside review B's 5, the plan's B7): the per-species summary is no longer the REST summary but the
+ *     action API's lead of one title (`leadsUrl`), the batch's own request for twenty; the recorded answers are read under
+ *     the addresses asked now (`now86`): each REST answer as the one-title lead it stands for (`restAsLead`), the batch's
+ *     answer under its new address, its `lastrevid` read as the revision. The four species' REST texts and the batch's
+ *     leads were the same, so the equality stands.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { buildDossier } from '$dossier/build';
-import type { JsonFetcher, FetchResult } from '$dossier/fetch';
+import { restAsLead, type JsonFetcher, type FetchResult } from '$dossier/fetch';
+import { leadsUrl } from '$dossier/sources/wikipedia';
 
 const batch = await import('$dossier/batch').catch(() => null);
 const need = () => { if (!batch) throw new Error('src/lib/dossier/batch.ts is missing'); return batch; };
 
 type Recorded = Record<string, Record<string, unknown>>;
-const recorded = JSON.parse(readFileSync('tests/unit/fixtures/r78b-batch-recorded.json', 'utf8')) as { species: Array<{ key: number; name: string }>; answers: Recorded };
+const raw = JSON.parse(readFileSync('tests/unit/fixtures/r78b-batch-recorded.json', 'utf8')) as { species: Array<{ key: number; name: string }>; answers: Recorded };
+/** The recorded answers under the addresses the build asks since round eighty-six (see the header). */
+const REST = 'https://en.wikipedia.org/api/rest_v1/page/summary/';
+const OLD_BATCH = 'https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&prop=extracts|pageprops|info&ppprop=disambiguation&exintro=1&explaintext=1&exlimit=20&redirects=1&titles=';
+const now86 = (t: Record<string, unknown>) => Object.fromEntries(Object.entries(t).map(([u, v]) => {
+  if (u.startsWith(REST)) { const title = decodeURIComponent(u.slice(REST.length)).replace(/_/g, ' '); return [leadsUrl([title]), restAsLead(title, v)]; }
+  if (u.startsWith(OLD_BATCH)) return [leadsUrl(u.slice(OLD_BATCH.length).split('|').map(decodeURIComponent)), v];
+  return [u, v];
+}));
+const recorded = { species: raw.species, answers: Object.fromEntries(Object.entries(raw.answers).map(([k, t]) => [k, now86(t)])) as Recorded };
 /** A recorded answer table as a fetcher: an address not recorded is refused, so a test never takes a gap for an absence. */
 const replay = (table: Record<string, unknown>, asked?: string[]): JsonFetcher =>
   (async <T>(url: string): Promise<FetchResult<T>> => {
@@ -58,7 +73,7 @@ describe('equality on recorded answers: the batched path writes what the per-spe
       // questions the batches answer (the item by GBIF key, the item, the summary). A title's own item, read for its
       // proof (Welwitschia, the genus's article), is asked on its own in both, as before.
       const own = Object.keys(recorded.answers[`perSpecies:${sp.name}`]).filter((u) => WIKIMEDIA.test(u));
-      const batched = /haswbstatement%3AP846|action=wbgetentities&format=json&ids=|\/page\/summary\//;
+      const batched = /haswbstatement%3AP846|action=wbgetentities&format=json&ids=|prop=extracts/;
       expect(own.filter((u) => batched.test(u)).length).toBeGreaterThanOrEqual(2);
       const left = asked.slice(before).filter((u) => WIKIMEDIA.test(u));
       expect(left.filter((u) => batched.test(u))).toEqual([]);
@@ -104,7 +119,7 @@ describe('rule 2: a batch that does not answer is not checked, never none', () =
     const net = replay({ [extractsUrl(ask)]: { batchcomplete: true, continue: { excontinue: 1 }, query: { pages: [{ ns: 0, title: 'Nopea nonexistens', missing: true }, { pageid: 1, ns: 0, title: 'Aloe vera' }] } } });
     const b = batchSources(net, { wikidata: false });
     await b.prefetch(ask.map((name) => ({ name })));
-    expect(b.heldAt(summaryUrl('Nopea nonexistens'))).toEqual({ status: 'none' });
+    expect(b.heldAt(summaryUrl('Nopea nonexistens'))).toMatchObject({ status: 'ok', data: { query: { pages: [{ title: 'Nopea nonexistens', missing: true }] } } });
     expect(b.heldAt(summaryUrl('Aloe vera'))).toBeUndefined();
   });
 });
@@ -124,7 +139,7 @@ describe('rule 3: the item by GBIF key, as the search answers it', () => {
   });
 });
 
-describe('the REST summary\'s shape from TextExtracts', () => {
+describe('the lead from TextExtracts (the REST summary\'s shape until round eighty-six)', () => {
   it('the lead\'s first paragraph, empty brackets closed up', () => {
     const { restExtract } = need();
     expect(restExtract('Aloe vera () is a succulent plant species of the genus Aloe. It is widely distributed.\nAn evergreen perennial, it originates from the Arabian Peninsula.\n\n')).toBe('Aloe vera is a succulent plant species of the genus Aloe. It is widely distributed.');
@@ -136,8 +151,9 @@ describe('the REST summary\'s shape from TextExtracts', () => {
     const net = replay({ [extractsUrl(ask)]: { batchcomplete: true, query: { redirects: [{ from: 'Echinocactus grusonii', to: 'Kroenleinia grusonii' }], pages: [{ pageid: 7, ns: 0, title: 'Kroenleinia grusonii', extract: 'Kroenleinia grusonii, popularly known as the golden barrel cactus, is a species of barrel cactus.' }, { pageid: 8, ns: 0, title: 'Mercury', extract: 'Mercury may refer to:', pageprops: { disambiguation: '' } }] } } });
     const b = batchSources(net, { wikidata: false });
     await b.prefetch(ask.map((name) => ({ name })));
-    expect(b.heldAt(summaryUrl('Echinocactus grusonii'))).toEqual({ status: 'ok', data: { type: 'standard', title: 'Kroenleinia grusonii', extract: 'Kroenleinia grusonii, popularly known as the golden barrel cactus, is a species of barrel cactus.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Kroenleinia_grusonii' } } } });
-    expect(b.heldAt(summaryUrl('Mercury'))).toMatchObject({ status: 'ok', data: { type: 'disambiguation' } });
+    // Each title's part of the answer, held under its one-title address, as that request would be answered.
+    expect(b.heldAt(summaryUrl('Echinocactus grusonii'))).toEqual({ status: 'ok', data: { batchcomplete: true, query: { redirects: [{ from: 'Echinocactus grusonii', to: 'Kroenleinia grusonii' }], pages: [{ pageid: 7, ns: 0, title: 'Kroenleinia grusonii', extract: 'Kroenleinia grusonii, popularly known as the golden barrel cactus, is a species of barrel cactus.' }] } } });
+    expect(b.heldAt(summaryUrl('Mercury'))).toMatchObject({ status: 'ok', data: { query: { pages: [{ title: 'Mercury', pageprops: { disambiguation: '' } }] } } });
   });
 });
 

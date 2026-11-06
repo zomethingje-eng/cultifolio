@@ -24,11 +24,16 @@ test("a species page fetches its own regions' map files, and no others @phone", 
   const maps: string[] = [];
   page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.startsWith('/maps/')) maps.push(u.pathname); });
   await page.goto('/species/welwitschia-mirabilis'); await ready(page);
+  // Round eighty-six (outside review B's 4): the maps take their files when they near the viewport.
+  await page.locator('.maprow').scrollIntoViewIfNeeded();
   const world = page.locator('.mapbox svg.map-world use.range');
   await expect(world).toHaveCount(2);
   // Drawn: Namibia's shape has its size, so its file came.
   await expect.poll(() => world.first().evaluate((e) => Math.round((e as SVGGraphicsElement).getBBox().height))).toBeGreaterThan(8);
-  await expect.poll(() => maps.filter((m) => /^\/maps\/[wr]\//.test(m)).sort()).toEqual(['/maps/r/r-ANG.svg', '/maps/r/r-NAM.svg', '/maps/w/w-ANG.svg', '/maps/w/w-NAM.svg']);
+  // Counted as distinct files: since round eighty-six a script sets each map's addresses, and WebKit then asks a close-up's
+  // region file once for each of the two layers that draw it (its land and its range), where Chromium asks once (the
+  // owner's WebKit run). The test is of which files, as r80u offline 2 counts the install.
+  await expect.poll(() => [...new Set(maps.filter((m) => /^\/maps\/[wr]\//.test(m)))].sort()).toEqual(['/maps/r/r-ANG.svg', '/maps/r/r-NAM.svg', '/maps/w/w-ANG.svg', '/maps/w/w-NAM.svg']);
   expect(maps.filter((m) => /regions(50|110)/.test(m))).toEqual([]);
 });
 

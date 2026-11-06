@@ -9,7 +9,7 @@ import type { JsonFetcher } from '$dossier/fetch';
 import type { Climate } from '$dossier/schema';
 
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
-import type { ClimateProvider } from '$dossier/build';
+import type { ClimateProvider, EnvelopeOptions } from '$dossier/build';
 import type { Admission } from '$dossier/tdwg-shapes';
 /** The reasons a record is in range, best first (`Admission`): a cell keeps its best record's. */
 const ADMISSIONS: ReadonlyArray<Admission> = ['strict', 'buffer', 'coast', 'island'];
@@ -65,12 +65,22 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
    * are the few basins whose whole cell lies below sea level (Death Valley's floor, the Qattara and Turfan depressions,
    * the Caspian shore), which read as sea here.
    */
-  async function readCell(lat: number, lon: number): Promise<{ id: string; months: Month[]; elevationM?: number } | null> {
+  async function readCell(lat: number, lon: number, drawnLand?: EnvelopeOptions['drawnLand']): Promise<{ id: string; months: Month[]; elevationM?: number; drawn?: true } | null> {
     const cell = await o.grid.cell(lat, lon);
     if (!cell) return null;
     const h = await o.grid.header();
     const v = decodeCell(h, cell.buf);
-    if (v.elevationM == null) return null;
+    // Round eighty-six (the Howea finding): a cell the elevation layer reads as sea, where a native region's drawn land
+    // (its shape or a minor island) lies, is an island narrower than ETOPO's 60″ pixels: Lord Howe Island, 1 to 2 km across,
+    // whose north-western cell held 6 of Howea belmoreana's records and was left out as sea, so the page had two land cells
+    // and no climate. It is read for its CHELSA months, with no elevation (so no height correction), and said so.
+    let drawn: true | undefined;
+    if (v.elevationM == null) {
+      if (!drawnLand) return null;
+      const c = cellOf(h, lat, lon), m = cellCentre(h, c.row, c.col), half = h.cell / 2;
+      if (!drawnLand({ s: m.lat - half, w: m.lon - half, n: m.lat + half, e: m.lon + half })) return null;
+      drawn = true;
+    }
     const need: ClimateVar[] = ['tasmax', 'tasmin', 'tas', 'pr'];
     if (!v.months.every((m) => need.every((k) => typeof m[k] === 'number'))) return null;
     const months = v.months.map((m) => ({
@@ -83,7 +93,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       vpdKpa: m.vpd != null ? r2(m.vpd / 1000) : undefined,
       windMs: m.sfcWind != null ? r1(m.sfcWind) : undefined
     }));
-    return { id: cell.id, months, elevationM: v.elevationM };
+    return { id: cell.id, months, ...(v.elevationM != null ? { elevationM: v.elevationM } : {}), ...(drawn ? { drawn } : {}) };
   }
 
   /** Daily extremes at one point, lapse-corrected to its cell's elevation (the land's: scripts/pack-climate.py leaves the sea floor out). A negative elevation, which only a grid packed before that could give, is not corrected for. */
@@ -155,7 +165,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
   }
 
   return {
-    async envelope(points): Promise<Climate> {
+    async envelope(points, opts?: EnvelopeOptions): Promise<Climate> {
       const h = await o.grid.header().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
       if ('error' in h) return { status: 'refused', detail: `climate grid unavailable: ${h.error}` };
       // One read per distinct cell: a site visited a hundred times is one cell of climate, not a hundred votes. The cell is
@@ -170,11 +180,11 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         if (e) { e.n++; if (ADMISSIONS.indexOf(how) < ADMISSIONS.indexOf(e.how)) e.how = how; }
         else byCell.set(c.id, { ...cellCentre(h, c.row, c.col), n: 1, how });
       }
-      const read: Array<{ id: string; lat: number; lon: number; n: number; how: Admission; months: Month[]; elevationM?: number }> = [];
+      const read: Array<{ id: string; lat: number; lon: number; n: number; how: Admission; months: Month[]; elevationM?: number; drawn?: true }> = [];
       let sea = 0;
       try {
         for (const [, p] of byCell) {
-          const c = await readCell(p.lat, p.lon);
+          const c = await readCell(p.lat, p.lon, opts?.drawnLand);
           if (c) read.push({ ...c, lat: p.lat, lon: p.lon, n: p.n, how: p.how });
           else sea++;
         }
@@ -207,6 +217,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         if (used.length < 3) return { status: 'none', detail: `only ${used.length} distinct land cell${used.length === 1 ? '' : 's'} of the climate grid on the ${useNorth ? 'north' : 'south'}ern side of the equator hold${used.length === 1 ? 's' : ''} an in-range record placed to within 10 km (${northPole.length} poleward of 10° north, ${southPole.length} poleward of 10° south: the two sides' seasons are not combined); three are needed for an envelope` };
       }
       const records = used.reduce((a, c) => a + c.n, 0); // the records in the cells the envelope reads, not every in-range record (round thirty-three, 4)
+      const drawnN = used.filter((c) => c.drawn).length;
       const years = used.map((c) => c.months);
       const months = monthStat(years, 0.5), p10 = monthStat(years, 0.1), p90 = monthStat(years, 0.9);
       // Annual rain per cell, then its percentiles: a sum of monthly percentiles would add months from different cells' years.
@@ -240,7 +251,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       if (landFraction < 0.5) { typical = nearest; landFraction = nearestLand; }
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
-        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding ${records} of the ${points.length} in-range records${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells poleward of 10° north, ${hemispheres.south} poleward of 10° south: the two sides' seasons are not combined, and cells within 10° of the equator stay in)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean nightly low nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land and none of the ${tried} next candidates within 2 °C of the median was mostly land` : ''}); its position is the cell centre`,
+        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding ${records} of the ${points.length} in-range records${drawnN ? ` (${drawnN} of them ${drawnN === 1 ? 'a cell' : 'cells'} the elevation layer reads as sea, read for the native region's land the regions' shapes draw in ${drawnN === 1 ? 'it' : 'them'}: an island narrower than the layer's 60″ pixels; no elevation there)` : ''}${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells poleward of 10° north, ${hemispheres.south} poleward of 10° south: the two sides' seasons are not combined, and cells within 10° of the equator stay in)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean nightly low nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land and none of the ${tried} next candidates within 2 °C of the median was mostly land` : ''}); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);

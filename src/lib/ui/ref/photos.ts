@@ -28,7 +28,7 @@ type Up = Record<string, { status: string; detail?: string } | undefined>;
  * photographs: beside photographs, its earlier answer was carried over. Before round sixty-two every one of them was
  * said to have "did not answer", which is untrue of a source that was never asked (round sixty-two; outside review A35).
  */
-export function photoSourceGaps(upstream: Up, photos: number): { names: string[]; clause: string; allSkipped: boolean; allUncredited: boolean } | null {
+export function photoSourceGaps(upstream: Up, photos: number): { names: string[]; clause: string; allSkipped: boolean; allUncredited: boolean; what: string } | null {
   // iNaturalist's photograph rows answered (by a fill, or a build carried over) settle iNaturalist: a taxon row carried as
   // "not asked" does not make the photographs "not asked" (round seventy-one; S-F5: 8 of 32 live pages sampled said so).
   const inatAnswered = ['inat.photos.wild', 'inat.photos.cultivated'].some((k) => ['ok', 'none'].includes(upstream[k]?.status ?? ''));
@@ -56,6 +56,10 @@ export function photoSourceGaps(upstream: Up, photos: number): { names: string[]
     names: [...by.keys()],
     clause: list(parts),
     allSkipped: keys.every((k) => upstream[k]?.status === 'skipped'),
-    allUncredited: keys.every((k) => (upstream[k]?.detail ?? '').startsWith('no credited photograph'))
+    allUncredited: keys.every((k) => (upstream[k]?.detail ?? '').startsWith('no credited photograph')),
+    // What the mark under the name names (round eighty-six; review S's S15): "Photographs not asked" on Aria latifolia,
+    // where only GBIF's media was not asked and iNaturalist and Commons answered with nothing. Where another photograph
+    // source answered, the mark names the sources that did not ("GBIF media not asked"); where none did, "Photographs".
+    what: PHOTO_SOURCES.some((k) => k !== 'inat.taxon' && !keys.includes(k) && ['ok', 'none'].includes(upstream[k]?.status ?? '')) ? list([...by.keys()]) : 'Photographs'
   };
 }

@@ -197,7 +197,7 @@ describe('the search from key files (round seventy-seven)', () => {
     expect(how).not.toMatch(/which the server answers from its (?:own )?index/);
     expect(searchDirsFor(8947)).toBe(64);
     // Round eighty-four (review S's 6): the count by its rule, and at the live size, not round seventy-seven's sixty-four.
-    expect(formats).toContain('The number of directory files is sixty-four, doubled while the species count is more than 160 times it, up to 4,096: 512 at 48,357 species.');
+    expect(formats).toContain('The number of directory files is sixty-four, doubled while the species count is more than 160 times it, up to 4,096: {countText(files.searchDirs)} at {countText(COUNTS_ON.species)} species.'); // round eighty-six (S4): at the count --index wrote
     expect(searchDirsFor(48_357)).toBe(512);
     expect(SEARCH_SPLIT).toBe(200);
     expect(how).toContain(`A beginning shared by more than ${SEARCH_SPLIT} species has files one letter longer too`);

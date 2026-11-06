@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { stampRead, stampNew, applyCredits, observationOf, inatCredit, commonsFileCredit, CREDIT_OBS_URL, type CreditCounts } from '$dossier/photo-read';
 import { readRevision, revisionWanted, type RevisionCounts, type RevisionPage } from '$dossier/revision-fill';
 import { summary } from '$dossier/sources/wikipedia';
+import { restAsLead } from '$dossier/fetch';
 import type { JsonFetcher } from '$dossier/fetch';
 
 const counts = (): CreditCounts => ({ pages: 0, read: 0, changed: 0, dropped: 0, unread: 0, lines: [] });
@@ -66,7 +67,8 @@ describe('the day a credit was read (decision 7)', () => {
 });
 
 describe('the revision of a summary (decision 8)', () => {
-  const fetcher = (answer: Record<string, unknown> | null): JsonFetcher => (async () => (answer ? { status: 'ok', data: answer } : { status: 'error', detail: 'timed out' })) as unknown as JsonFetcher;
+  // Round eighty-six (B7): the lead is read by the action API; the REST-shaped answers recorded here are given in its shape (`restAsLead`).
+  const fetcher = (answer: Record<string, unknown> | null): JsonFetcher => (async (url: string) => (answer ? { status: 'ok', data: restAsLead(new URL(url).searchParams.get('titles') ?? '', answer) } : { status: 'error', detail: 'timed out' })) as unknown as JsonFetcher;
   const page = (): RevisionPage => ({ key: 'k298116', name: { scientific: 'Aloe vera' }, summary: { text: 'Aloe vera is a succulent plant species of the genus Aloe.', url: 'https://en.wikipedia.org/wiki/Aloe_vera', title: 'Aloe vera' }, upstream: { wikipedia: { status: 'ok', at: '2026-10-20T00:00:00.000Z' } } });
   it('a build reads the revision with the lead', async () => {
     const r = await summary(fetcher({ title: 'Aloe vera', extract: 'Aloe vera is a succulent plant species of the genus Aloe.', revision: '1381175077', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Aloe_vera' } } }), 'Aloe vera');
@@ -82,7 +84,7 @@ describe('the revision of a summary (decision 8)', () => {
     const changed = page();
     await readRevision(fetcher({ title: 'Aloe vera', extract: 'Aloe vera is a succulent plant of the genus Aloe, grown widely.', revision: '1390000000' }), changed, '2026-11-02', c);
     expect(changed.summary).toMatchObject({ revision: 1390000000, text: 'Aloe vera is a succulent plant of the genus Aloe, grown widely.' });
-    expect(changed.upstream?.wikipedia?.detail).toMatch(/read again at revision 1390000000 of 2026-11-02, it had changed/);
+    expect(changed.upstream?.wikipedia?.detail).toMatch(/read again at revision 1390000000 of 2026-11-02, it (?:had changed|differed \(other\))/); // round eighty-six: "the opening paragraph … differed (other)"
     const moved = page();
     expect(await readRevision(fetcher({ title: 'Aloe barbadensis', extract: 'Another.', revision: '1' }), moved, '2026-11-02', c)).toBe(false);
     expect(moved.summary?.revision).toBeUndefined();

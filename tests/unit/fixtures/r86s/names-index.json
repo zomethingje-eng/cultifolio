@@ -1,0 +1,295 @@
+[
+{
+"key": "k2651075",
+"gbif": 3084097,
+"slug": "ariocarpus-fissuratus",
+"name": "Ariocarpus fissuratus",
+"family": "Cactaceae",
+"common": "Chautle-living Rock",
+"commons": [
+"False peyote",
+"Living-rock",
+"Living-rock cactus",
+"Star cactus",
+"Star-rock"
+],
+"origin": [
+"Texas",
+"Mexico Northeast",
+"Mexico Southwest"
+],
+"photos": 72,
+"syn": [
+"Anhalonium engelmannii",
+"Anhalonium fissuratum",
+"Mammillaria fissurata",
+"Roseocactus fissurams",
+"Roseocactus fissuratus",
+"Roseocactus intermedius"
+],
+"older": [
+"Roseocactus lloydii",
+"Ariocarpus intermedius",
+"Ariocarpus lloydii"
+],
+"grown": 81
+},
+{
+"key": "k2664164",
+"gbif": 5384219,
+"slug": "astrophytum-asterias",
+"name": "Astrophytum asterias",
+"family": "Cactaceae",
+"common": "Sand-dollar cactus",
+"commons": [
+"Seaurchin starcactus",
+"Star cactus",
+"Star Peyote",
+"Sea-urchin cactus",
+"Silver-dollar cactus",
+"Star-peyote cactus",
+"Sanddollar"
+],
+"origin": [
+"Texas",
+"Mexico Northeast"
+],
+"photos": 87,
+"syn": [
+"Echinocactus asterias",
+"Echinocactus asterias var. nudus",
+"Astrophytum asterias var. magnipunctatum",
+"Astrophytum asterias var. multipunctatum",
+"Astrophytum asterias var. nudicarpa",
+"Astrophytum asterias var. nudum"
+],
+"grown": 365
+},
+{
+"key": "k2341111",
+"gbif": 7329207,
+"slug": "lithops-lesliei",
+"name": "Lithops lesliei",
+"family": "Aizoaceae",
+"origin": [
+"Botswana",
+"Cape Provinces",
+"Free State",
+"Northern Provinces"
+],
+"photos": 36,
+"syn": [
+"Mesembryanthemum ferrugineum",
+"Mesembryanthemum lesliei",
+"Lithops lesliei f. albiflora",
+"Lithops lesliei subsp. albiflora",
+"Lithops lesliei subsp. albinica",
+"Lithops lesliei var. applanata"
+],
+"older": [
+"Lithops orpenii",
+"Lithops venteri"
+],
+"grown": 88
+},
+{
+"key": "k2337255",
+"gbif": 7282936,
+"slug": "lophophora-diffusa",
+"name": "Lophophora diffusa",
+"family": "Cactaceae",
+"common": "Peyote",
+"origin": [
+"Mexico Northeast"
+],
+"photos": 61,
+"syn": [
+"Peyotl diffusus",
+"Peyotl koehresii",
+"Peyotl viridescens",
+"Lophophora diffusa subsp. diffusa",
+"Lophophora diffusa subsp. kubesae",
+"Lophophora diffusa subsp. viridescens"
+],
+"older": [
+"Lophophora koehresii",
+"Lophophora viridescens"
+],
+"grown": 67
+},
+{
+"key": "k2337299",
+"gbif": 5384220,
+"slug": "lophophora-williamsii",
+"name": "Lophophora williamsii",
+"family": "Cactaceae",
+"common": "Indian-dope",
+"commons": [
+"Cactus pudding",
+"Devil's-root",
+"Diabolic-root",
+"Divine cactus",
+"Dry-whiskey",
+"Dumpling cactus",
+"Mescal-button",
+"Mescal-buttons",
+"Turnip cactus",
+"Whiskey cactus",
+"White-mule"
+],
+"origin": [
+"Texas",
+"Mexico Northeast",
+"Mexico Southwest"
+],
+"photos": 103,
+"syn": [
+"Anhalonium lewinii",
+"Anhalonium williamsii",
+"Ariocarpus williamsii",
+"Echinocactus lewinii",
+"Echinocactus lewisii",
+"Echinocactus williamsianus"
+],
+"older": [
+"Echinocactus williamsii",
+"Mammillaria lewinii",
+"Mammillaria williamsii",
+"Peyotl xochimilcensis",
+"Peyotl zacatensis",
+"Lophophora echinata",
+"Lophophora jourdaniana",
+"Lophophora lewinii",
+"Lophophora lutea",
+"Lophophora pentagona",
+"Lophophora pluricostata"
+],
+"grown": 519
+},
+{
+"key": "k2414504",
+"gbif": 7280604,
+"slug": "pelecyphora-aselliformis",
+"name": "Pelecyphora aselliformis",
+"family": "Cactaceae",
+"common": "Hatchet cactus",
+"commons": [
+"Little peyote",
+"Woodlouse cactus"
+],
+"origin": [
+"Mexico Northeast",
+"Mexico Southwest"
+],
+"photos": 37,
+"syn": [
+"Anhalonium aselliforme",
+"Ariocarpus aselliformis",
+"Mammillaria aselliformis",
+"Pelecyphora aselliformis var. concolor"
+],
+"grown": 27
+},
+{
+"key": "k174739",
+"gbif": 2879735,
+"slug": "quercus-rysophylla",
+"name": "Quercus rysophylla",
+"family": "Fagaceae",
+"common": "Loquat leaf oak",
+"origin": [
+"Mexico Northeast",
+"Mexico Gulf"
+],
+"photos": 33,
+"grown": 116
+},
+{
+"key": "k3330712",
+"gbif": 7802717,
+"slug": "sabdariffa-acetosella",
+"name": "Sabdariffa acetosella",
+"family": "Malvaceae",
+"origin": [
+"Burundi",
+"Zaïre",
+"Angola",
+"Zambia",
+"Zimbabwe"
+],
+"photos": 100,
+"syn": [
+"Hibiscus acetosella",
+"Hibiscus eetveldeanus",
+"Hibiscus surattensis subsp. eetveldeanus"
+],
+"grown": 699
+},
+{
+"key": "k2932587",
+"gbif": 2688180,
+"slug": "selaginella-lepidophylla",
+"name": "Selaginella lepidophylla",
+"family": "Selaginellaceae",
+"common": "Resurrection-plant",
+"commons": [
+"Rose-of-Jericho",
+"Dinosaur plant",
+"False rose of Jericho",
+"Flower of stone",
+"Resurrection moss"
+],
+"origin": [
+"New Mexico",
+"Texas",
+"Mexico Central",
+"Mexico Northeast",
+"Mexico Gulf",
+"Mexico Northwest",
+"Mexico Southwest",
+"Mexico Southeast",
+"Costa Rica",
+"El Salvador"
+],
+"photos": 61,
+"syn": [
+"Lycopodioides lepidophylla",
+"Lycopodium lepidophyllum",
+"Lycopodium nidiforme",
+"Selaginella rediviva",
+"Selaginella thoytsiana"
+],
+"grown": 184
+},
+{
+"key": "k3016262",
+"gbif": 10334868,
+"slug": "selenicereus-undatus",
+"name": "Selenicereus undatus",
+"family": "Cactaceae",
+"common": "Nightblooming Cactus",
+"origin": [
+"Mexico Central",
+"Mexico Northeast",
+"Mexico Gulf",
+"Mexico Southwest",
+"Mexico Southeast",
+"El Salvador",
+"Guatemala",
+"Honduras"
+],
+"photos": 100,
+"syn": [
+"Cereus tricostatus",
+"Cereus undatus",
+"Cereus undulatus",
+"Harrisia undata",
+"Hyalocereus undatus",
+"Hylocereus tricostatus"
+],
+"older": [
+"Hylocereus undatus"
+],
+"grown": 5847
+}
+]

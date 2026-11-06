@@ -180,3 +180,12 @@ export function homonymOf(typed: string, hit: Searchable & { homBy?: string[][] 
   return { name, text: by.length ? by.map((a) => `${name} ${a.trim()}`).join(' and ') : `${name}, with no author in the record` };
 }
 
+/**
+ * A catalogue or picker row found by GBIF's name for the page's own key, where Kew's name heads the page (the index's
+ * `gname`), as the row says it (round eighty-six; review-w W1, review-p P10): the species page says "is GBIF's name for
+ * this plant", and the row said "older name", which for the stapeliads is false (Ceropegia alstonii is Bruyns's 2017
+ * combination, newer than Hoodia alstonii).
+ */
+export const gbifNameWords = (name: string) => `GBIF's name for this plant: ${name}`;
+/** The older name a hit was found by is GBIF's name for its key (`gname`). */
+export const isGbifName = (older: string | null | undefined, hit: { gname?: string }) => !!older && !!hit.gname && nameWords(older).join(' ') === nameWords(hit.gname).join(' ');

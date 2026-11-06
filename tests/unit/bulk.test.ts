@@ -22,7 +22,7 @@ describe('WCVP index', () => {
     expect(got.rows[3].establishmentMeans).toBe('DOUBTFUL');
     expect(got.rows[2].establishmentMeans).toBe('INTRODUCED');
     expect(got.rows[0].source).toMatch(/WCVP/);
-    expect(got.kew).toEqual({ lifeform: 'succulent shrub', climate: 'desert or dry shrubland' }); // Kew's own words ride along
+    expect(got.kew).toEqual({ lifeform: 'succulent shrub', climate: 'desert or dry shrubland', area: 'Namibia to Cape Prov.' }); // Kew's own words ride along (its area too, round eighty-six: review D2)
     expect(w.distributions('Tylecodon wallichii')).toBeNull(); // accepted but not wanted, no rows kept
     expect(w.distributions('Nobody knowsii')).toBeNull();
     const a = w.accepted('Tylecodon pearsonii');

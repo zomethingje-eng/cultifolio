@@ -60,7 +60,9 @@ describe('the close-up\'s names', () => {
     // The frame is 8.4° to 11.9° E; the long name's region reaches past its east edge, the short one's middle is at 10.15° E.
     const svg = regionSvg([], pts, undefined, 'Records', [{ name: 'Bosnia-Herzegovina Federation', box: { s: 44.6, w: 11.5, n: 45.6, e: 20 } }, { name: 'Ligur', box: { s: 45.0, w: 10.05, n: 45.2, e: 10.25 } }]);
     const ls = labels(svg);
-    expect(ls.length).toBeGreaterThanOrEqual(1);
+    // Round eighty-six (review P's P1): a name is written only on its own region's land, so the long name, which fits in
+    // the frame only clamped back west of its region's edge, is left out rather than written there.
+    expect(ls.map((l) => l.name)).not.toContain('Bosnia-Herzegovina Federation');
     for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) expect(overlap(ls[i].box, ls[j].box), `${ls[i].name} over ${ls[j].name}`).toBe(false);
   });
   it('a name is not drawn over the scale bar, nor over one of a few records', () => {

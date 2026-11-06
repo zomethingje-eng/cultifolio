@@ -192,7 +192,7 @@ describe('A1, A4, A5, S-F2: --fill summaries', () => {
     const { f, asked } = world({ items: { Q208276: { sitelink: 'Saguaro' } } });
     await checkSummaries(store(docs) as never, f, NOW);
     expect(docs.v.upstream.wikipedia).toEqual({ status: 'ok', at: NOW(), detail: "Wikipedia's article Saguaro, the English article of this species' Wikidata item (Q208276)" }); // base: the carry's record kept
-    expect(asked.some((u) => u.includes('/page/summary/'))).toBe(false);
+    expect(asked.some((u) => u.includes('prop=extracts'))).toBe(false); // the article's lead (the REST summary before round eighty-six)
   });
   it('a set-aside title left refused is asked again, and taken back on a proof (F1)', async () => {
     const docs = { w: doc('Welwitschia mirabilis', undefined, 'Q156926', { status: 'refused', detail: "Wikipedia redirects Welwitschia mirabilis to Welwitschia; whether it is this species' article was not checked: Wikidata refused (HTTP 429)" }) };
@@ -205,13 +205,13 @@ describe('A1, A4, A5, S-F2: --fill summaries', () => {
     const docs = { d: doc('Drosera montana', undefined, 'Q5308558', { status: 'error', detail: "Wikipedia's article Drosera tomentosa; whether it is this species' article was not checked: Wikidata did not answer (x)" }) };
     const { f, asked } = world({ items: { Q5308558: { sitelink: 'Drosera tomentosa' } } });
     await checkSummaries(store(docs) as never, f, NOW);
-    expect(asked.some((u) => u.includes('/page/summary/Drosera_tomentosa'))).toBe(true); // guard
+    expect(asked.some((u) => u.includes('prop=extracts') && u.endsWith('titles=Drosera%20tomentosa'))).toBe(true); // guard
   });
   it("the item's sitelink is asked before the title a record names (F7)", async () => {
     const docs = { d: doc('Dypsis lutescens', 'Areca palm', 'Q1', { status: 'ok', detail: "Wikipedia redirects Golden cane palm to Areca palm, whose lead is this species'" }) };
     const { f, asked } = world({ items: { Q1: { sitelink: 'Chrysalidocarpus lutescens' } } });
     await checkSummaries(store(docs) as never, f, NOW);
-    expect(asked.find((u) => u.includes('/page/summary/'))).toMatch(/Chrysalidocarpus_lutescens$/); // guard
+    expect(asked.find((u) => u.includes('prop=extracts'))).toMatch(/titles=Chrysalidocarpus%20lutescens$/); // guard
   });
   it("a recorded redirect onto this species' own name names the proof (F2)", async () => {
     const docs = { d: doc('Welwitschia mirabilis', 'Welwitschia mirabilis', undefined, { status: 'ok', detail: "Wikipedia redirects Welwitschia to Welwitschia mirabilis, whose lead is this species'" }) };

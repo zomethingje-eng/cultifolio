@@ -57,9 +57,9 @@ describe('the SQL download', () => {
   const q = sqlQuery([5384013, 3084426]);
   it('is one SELECT on occurrence, of the reader\'s columns under the reader\'s names, filtered as the DWCA is', () => {
     expect(q).toBe(
-      "SELECT gbifid, occurrence.gbif_classification.specieskey AS specieskey, occurrence.gbif_classification.taxonkey AS taxonkey, occurrence.gbif_classification.acceptedtaxonkey AS acceptedtaxonkey, decimallatitude, decimallongitude, coordinateuncertaintyinmeters, coordinateprecision, \"year\", countrycode, basisofrecord, license, datasetkey, establishmentmeans.concept AS establishmentmeans, degreeofestablishment.concept AS degreeofestablishment FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN ('5384013', '3084426'))"
+      "SELECT gbifid, occurrence.gbif_classification.specieskey AS specieskey, occurrence.gbif_classification.taxonkey AS taxonkey, occurrence.gbif_classification.acceptedtaxonkey AS acceptedtaxonkey, decimallatitude, decimallongitude, coordinateuncertaintyinmeters, coordinateprecision, \"year\", countrycode, stateprovince, basisofrecord, license, datasetkey, establishmentmeans.concept AS establishmentmeans, degreeofestablishment.concept AS degreeofestablishment FROM occurrence WHERE occurrence.hascoordinate = TRUE AND occurrence.hasgeospatialissues = FALSE AND occurrence.occurrencestatus = 'PRESENT' AND EXISTS(occurrence.gbif_classification.taxonkeys, taxonkey -> taxonkey IN ('5384013', '3084426'))"
     );
-    expect(SQL_SELECT.length).toBe(15);
+    expect(SQL_SELECT.length).toBe(16); // round eighty-six (review D4): and the record's stated state or province
   });
   it('keeps GBIF\'s rules: no comment, no *, no sub-query, HAVING or QUALIFY, "year" quoted, numbers as GBIF\'s keys in strings', () => {
     const full = sqlQuery(keys);

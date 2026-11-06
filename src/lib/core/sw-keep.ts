@@ -162,12 +162,59 @@ export async function saveCarry(storage: CacheStorageLike, current: string, page
 export interface Carried { read: number; gone: number; left: number }
 
 /**
+ * A map file a species page draws from: a coastline, the world's regions in one file, or one region's shape at either
+ * scale (`$lib/map/still`). Only these are fetched and kept for a page (round eighty-six; review C's C4): a list handed
+ * over by a page or read from its data names nothing else.
+ */
+export const isMapFile = (p: unknown): p is string => typeof p === 'string' && /^\/maps\/(?:land110|land50|regions110|w\/w-[A-Z]{3}|r\/r-[A-Z]{3})\.svg$/.test(p);
+/** At most this many map files for one page: the most a range of 157 regions draws is two coastlines, the world's file and the close-up's few dozen. */
+export const MAP_FILES_MAX = 120;
+
+/**
+ * The map files a species page's data names (`mapFiles`, which the server adds to a move inside the app's data), read from
+ * the framework's `__data.json` without its parser: each node's data is one flat list whose first item is the page's
+ * object, its fields the places in the list of their values. Nothing found, or a list it cannot read, is none.
+ */
+export function mapFilesOfData(text: string): string[] {
+  try {
+    const j = JSON.parse(text) as { nodes?: unknown[] };
+    for (const node of j.nodes ?? []) {
+      const data = (node as { data?: unknown } | null)?.data;
+      if (!Array.isArray(data)) continue;
+      const root = data[0] as Record<string, unknown> | null;
+      if (!root || typeof root !== 'object' || Array.isArray(root) || typeof root.mapFiles !== 'number') continue;
+      const list = data[root.mapFiles];
+      if (!Array.isArray(list)) continue;
+      return [...new Set(list.map((i) => (typeof i === 'number' ? data[i] : null)).filter(isMapFile))].slice(0, MAP_FILES_MAX);
+    }
+  } catch {
+    /* not the data of a page: no files */
+  }
+  return [];
+}
+
+/**
+ * The map files given (only those `isMapFile` and `ours` accept), each fetched and kept unless already held. Returns false
+ * when one did not reach the server (the caller tries again later), true otherwise; a file the server does not have is
+ * passed over.
+ */
+export async function keepFiles(cache: CacheLike, files: readonly unknown[], fetcher: (url: string) => Promise<Response>, origin: string, ours: (path: string) => boolean = () => true): Promise<boolean> {
+  for (const f of [...new Set(files)].filter(isMapFile).filter(ours).slice(0, MAP_FILES_MAX)) {
+    if (await cache.match(origin + f)) continue;
+    const got = await fetcher(origin + f).catch(() => null);
+    if (!got || got.status >= 500) return false;
+    if (got.ok) await cache.put(origin + f, got);
+  }
+  return true;
+}
+
+/**
  * Each page on the list read again (its `__data.json` from the network) and kept in this build's cache, with `files` (the
- * species page's build files) first. A page the server no longer has (404, 410) is dropped; a request that does not reach
+ * species page's build files) first, and after each page the map files its data names (`ours`: those this build serves). A page the server no longer has (404, 410) is dropped; a request that does not reach
  * the server, or a 5xx, stops the round, and what is left waits on the list for the next. The list is written back as it
  * shrinks, so a worker stopped half-way goes on where it was.
  */
-export async function carryOver(storage: CacheStorageLike, current: string, fetcher: (url: string) => Promise<Response>, origin: string, files: readonly string[] = []): Promise<Carried> {
+export async function carryOver(storage: CacheStorageLike, current: string, fetcher: (url: string) => Promise<Response>, origin: string, files: readonly string[] = [], ours: (path: string) => boolean = () => true): Promise<Carried> {
   const cache = await storage.open(current);
   const r = await cache.match(CARRY_KEY);
   let pages: string[] = [];
@@ -185,8 +232,14 @@ export async function carryOver(storage: CacheStorageLike, current: string, fetc
     const url = `${origin}${page}/__data.json`;
     const got = await fetcher(url).catch(() => null);
     if (!got || got.status >= 500) break; // not reached, or the server failing: the rest wait
-    if (got.ok) { await cache.put(url, got); done.read++; }
-    else done.gone++; // a page the server no longer has: nothing to keep
+    if (got.ok) {
+      // With the files its two maps draw from, which the data names (round eighty-six; review C's C4): the page carried
+      // over opened offline with its words and figures and two empty maps. A file not reached leaves the page on the list.
+      const maps = mapFilesOfData(await got.clone().text().catch(() => ''));
+      await cache.put(url, got);
+      if (!(await keepFiles(cache, maps, fetcher, origin, ours))) break;
+      done.read++;
+    } else done.gone++; // a page the server no longer has: nothing to keep
     pages.shift();
     await saveCarry(storage, current, pages);
   }

@@ -215,15 +215,16 @@ const KEW_ASKED = /asked by Kew's name .+ first, then by GBIF's/;
  * `--list-renamed` (round eighty-five, the owner's decision 6; review-d D3): the pages Kew's name heads where GBIF names
  * the key otherwise, not yet built online by Kew's name, as `--keys` reads a list (the GBIF key, then the names). A page
  * built by Kew's name says so in its Wikipedia row (`kewAskedWords`), so a list written again after a stop holds only the
- * pages left.
+ * pages left. `again` (round eighty-six; review D's D11, the names agent's `crossIds` change: a page Kew's name heads takes
+ * Kew's name's own Wikidata item) lists the pages built so already too, to build them again online.
  */
-export function renamedLines(pages: Iterable<{ key?: unknown; ids?: { gbif?: number | null }; name: Headed['name']; upstream?: Record<string, { detail?: string } | undefined> }>): { lines: string[]; done: number } {
+export function renamedLines(pages: Iterable<{ key?: unknown; ids?: { gbif?: number | null }; name: Headed['name']; upstream?: Record<string, { detail?: string } | undefined> }>, again = false): { lines: string[]; done: number } {
   const lines: string[] = [];
   let done = 0;
   for (const d of pages) {
     const k = kewHeadingOf(d);
     if (!k || d.ids?.gbif == null) continue;
-    if (KEW_ASKED.test(d.upstream?.wikipedia?.detail ?? '')) { done++; continue; }
+    if (KEW_ASKED.test(d.upstream?.wikipedia?.detail ?? '')) { done++; if (!again) continue; }
     lines.push(`${d.ids.gbif}\t${k.scientific} (GBIF: ${d.name.gbif!.scientific})`);
   }
   return { lines, done };

@@ -57,7 +57,10 @@ test.describe('the page as sent', () => {
     // With scripts off: named, with its dots, and the caption.
     const off = await browser.newPage({ javaScriptEnabled: false });
     await off.goto('/species/copiapoa-cinerea');
-    const served = await off.locator('.mapbox svg.map-region').evaluate((x) => x.outerHTML);
+    // A map's files are named in data-href until it nears the viewport, then in href (round eighty-six; outside review
+    // B's 4): the same map either way.
+    const html = (x: Element) => x.outerHTML.replaceAll(' data-href="', ' href="');
+    const served = await off.locator('.mapbox svg.map-region').evaluate(html);
     await expect(off.locator('.mapbox svg.map-region')).toHaveAttribute('role', 'img');
     expect(served.match(RECORD)?.length).toBe(52);
     await off.close();
@@ -68,7 +71,7 @@ test.describe('the page as sent', () => {
       new MutationObserver((ms) => { for (const m of ms) for (const n of m.removedNodes) if (n instanceof Element && (n.matches('.mapwrap, svg.map-region') || n.querySelector?.('svg.map-region'))) w.__mapGone++; }).observe(document, { childList: true, subtree: true });
     });
     await page.goto('/species/copiapoa-cinerea'); await ready(page);
-    expect(await page.locator('.mapbox svg.map-region').evaluate((x) => x.outerHTML)).toBe(served);
+    expect(await page.locator('.mapbox svg.map-region').evaluate(html)).toBe(served);
     expect(await page.evaluate(() => (window as unknown as { __mapGone: number }).__mapGone)).toBe(0);
     // A move inside the app: the page draws the next map from its data, and back again the first, as the server drew it.
     await page.locator('#s-related ~ .relstrip a', { hasText: 'Copiapoa humilis' }).first().click();
@@ -76,7 +79,7 @@ test.describe('the page as sent', () => {
     expect(await page.locator(RECORDS).count()).toBe(52);
     await page.goBack();
     await expect(page.locator('.mapbox svg.map-region')).toHaveAttribute('aria-label', 'Openly licensed records of Copiapoa cinerea');
-    expect(await page.locator('.mapbox svg.map-region').evaluate((x) => x.outerHTML)).toBe(served);
+    expect(await page.locator('.mapbox svg.map-region').evaluate(html)).toBe(served);
     expect(errors).toEqual([]);
   });
 

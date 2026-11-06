@@ -12,7 +12,7 @@ import { fillGbifLicence, fillGbifLicenceAll, checkSummaries, rebuildList } from
 import { OPEN_NONE } from '$dossier/open-gbif-fill';
 import { COMMONS_NONE } from '$dossier/commons-fill';
 import { buildDossier } from '$dossier/build';
-import { fixtureFetcher, type JsonFetcher } from '$dossier/fetch';
+import { fixtureFetcher, restAsLead, type JsonFetcher } from '$dossier/fetch';
 import { copiapoa } from '../../fixtures/upstream';
 
 afterEach(() => { mwWait.tries = 1; });
@@ -185,8 +185,9 @@ describe('--fill summaries (M3, R46-12)', () => {
     const redirects: Record<string, string> = { 'Weingartia_pulchra': 'Weingartia canigueralii', 'Kopsia_fruticosa': 'Kopsia' };
     const f = (async (url: string) => {
       asked.push(url);
-      const t = /page\/summary\/(.+)$/.exec(url)?.[1];
-      if (t) return redirects[t] ? { status: 'ok', data: { type: 'standard', title: redirects[t], extract: LEADS[redirects[t]] } } : { status: 'none' };
+      // The article's lead by the action API since round eighty-six (B7; it was the REST summary), in its shape (`restAsLead`).
+      const t = url.includes('prop=extracts') ? new URL(url).searchParams.get('titles') ?? undefined : undefined;
+      if (t) return { status: 'ok', data: restAsLead(t, redirects[t.replace(/ /g, '_')] ? { type: 'standard', title: redirects[t.replace(/ /g, '_')], extract: LEADS[redirects[t.replace(/ /g, '_')]] } : null) };
       if (url.includes('titles=')) return { status: 'ok', data: { entities: { '-1': { missing: '' } } } };
       return { status: 'ok', data: { entities: { Q1: { sitelinks: {} }, Q2: { sitelinks: { enwiki: { title: 'Saguaro' } } } } } };
     }) as unknown as JsonFetcher;

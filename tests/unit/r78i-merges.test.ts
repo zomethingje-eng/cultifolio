@@ -89,6 +89,6 @@ describe('the key of a page merged here is read whatever its type', () => {
   });
   it('--list-extra-keys passes each merge\'s kept page to the rule', () => {
     // Round eighty (A): the page joined by its GBIF key, or by its id where it has none (`mergeTarget`).
-    expect(readFileSync('scripts/extra-keys-list.ts', 'utf8')).toMatch(/const into = new Map\(o\.merges\.map\(\(m\) => \[m\.from, mergeTarget\(m\)\]\)\);[\s\S]*extraKeysFor\([^\n]*holders, merged, into\)\)/);
+    expect(readFileSync('scripts/extra-keys-list.ts', 'utf8')).toMatch(/const into = new Map\(o\.merges\.map\(\(m\) => \[m\.from, mergeTarget\(m\)\]\)\);[\s\S]*extraKeysFor\([^\n]*holders, merged, into(?:, \{ infraFromHolder: o\.infraFromHolder \})?\)\)/); // round eighty-six (D6): and the option
   });
 });

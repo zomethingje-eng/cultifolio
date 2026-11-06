@@ -19,7 +19,7 @@ export type NameCheck =
    * older name, which `via` gives (round eighty-five; review-w W2, outside review A11: "Trichocereus pachanoi" was "not in
    * the reference" while Echinopsis macrogona holds "Trichocereus pachanoi f. peruvianus").
    */
-  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'infra' | 'spelling' | 'similar'; slug?: string; via?: string }
+  | { s: 'near'; suggestion: string; key: number | null; why: 'older name' | 'infra' | 'spelling' | 'similar'; slug?: string; via?: string; /** the older name is GBIF's name for the page's key (the index's `gname`; round eighty-six, review-w W1) */ gbif?: true }
   | { s: 'missing' }
   /** The reference was not reached, or the search allowance was spent: not checked, which is not "missing". */
   | { s: 'unchecked' }
@@ -35,7 +35,7 @@ export type NameCheck =
   | { s: 'genus' };
 
 /** An entry as the check reads it: `gbif` is the page's GBIF key (round seventy-eight), what a plant files. */
-type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[]; kew?: string[] };
+type Entry = { slug: string; name: string; gbif?: number; syn?: string[]; older?: string[]; kew?: string[]; gname?: string };
 export interface Lookup {
   entries(slugs: string[]): Promise<Map<string, Entry> | null>;
   search(q: string): Promise<Entry[] | { limited: number } | null>;
@@ -127,7 +127,7 @@ export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry
   // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
   // And Kew's older names, which the search reads too (round eighty; review-d 5).
   const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? []), ...(h.kew ?? [])].some((n) => n.toLowerCase() === want));
-  if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name', slug: older.slug };
+  if (older) return { s: 'near', suggestion: older.name, key: older.gbif ?? null, why: 'older name', slug: older.slug, ...(older.gname?.toLowerCase() === want ? { gbif: true as const } : {}) };
   // A name below the species typed, held as an older name: its first two words, past a rank word, are the name typed.
   const binomial = (n: string) => n.toLowerCase().split(/\s+/).filter((w) => w !== '×').slice(0, 2).join(' ');
   const below = (n: string) => n.trim().split(/\s+/).filter((w) => w !== '×').length > 2 && binomial(n) === want;

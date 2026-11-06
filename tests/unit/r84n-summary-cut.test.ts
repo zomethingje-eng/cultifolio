@@ -12,10 +12,11 @@ import { readFileSync } from 'node:fs';
 import { sentenceCut, firstSentences } from '$core/text';
 import { summary } from '$dossier/sources/wikipedia';
 import { safeUrls, type Dossier } from '$dossier/schema';
-import type { JsonFetcher } from '$dossier/fetch';
+import { restAsLead, type JsonFetcher } from '$dossier/fetch';
 
 const martini = 'Euphorbia × martini is a hybrid spurge, the cross between E. amygdaloides × E. characias subsp. characias';
-const wiki = (extract: string) => (async () => ({ status: 'ok', data: { extract, title: 'Euphorbia × martini', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Euphorbia_%C3%97_martini' } } } })) as unknown as JsonFetcher;
+// Round eighty-six (B7): the action API's lead, from the REST-shaped answer this test was written with (`restAsLead`).
+const wiki = (extract: string) => (async () => ({ status: 'ok', data: restAsLead('Euphorbia × martini', { extract, title: 'Euphorbia × martini', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Euphorbia_%C3%97_martini' } } }) })) as unknown as JsonFetcher;
 
 describe('a summary that does not end a sentence', () => {
   it('is cut with an ellipsis and marked; one that ends a sentence is as it was', () => {

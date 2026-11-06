@@ -4,7 +4,11 @@
   const parts = $derived(nameParts(name));
 </script>
 
-<span class="sciname">{#each parts as p}{#if p.italic}<i>{p.text}</i>{:else}{p.text}{/if}{/each}{#if authorship}&nbsp;<span class="auth">{authorship}</span>{/if}</span>
+<!-- A plain space before the author (round eighty-six; review W's W5, P's P4): the no-break space glued the epithet to the
+     author's first word, so a long author took the epithet to the next line ("Sabdariffa / acetosella (Welw. ex Hiern) …")
+     though the binomial fitted, and an author kept whole ran out of the name card at 320 px. Now the line breaks before
+     the author, and the author wraps within itself. -->
+<span class="sciname">{#each parts as p}{#if p.italic}<i>{p.text}</i>{:else}{p.text}{/if}{/each}{#if authorship}{' '}<span class="auth">{authorship}</span>{/if}</span>
 
 <style>
   .auth { font-style: normal; font-size: 0.72em; color: var(--ink3); }

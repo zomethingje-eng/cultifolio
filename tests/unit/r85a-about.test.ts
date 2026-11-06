@@ -146,7 +146,7 @@ describe('2. summaries first, the rules one tap away (S11, A22)', () => {
   });
   it('/about/formats: each section is its summary, the format in full one tap away', () => {
     const src = raw(FILE.formats);
-    expect([...src.matchAll(/<summary>The format in full<\/summary>/g)].length).toBeGreaterThan(12);
+    expect([...src.matchAll(/<summary>The format in full(?:<span class="sr">[^<]*<\/span>)?<\/summary>/g)].length).toBeGreaterThan(12); // round eighty-six (W15): each named by its section for a screen reader
     expect(visibleWords(src)).toBeLessThan(1500); // base: 20,000
   });
   /** A small document of nested lists, enough for the two behaviours. */

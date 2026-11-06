@@ -7,12 +7,12 @@
   import { accNo } from '$lib/db/types';
   import type { PageId } from '$core/page-id';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, type Found, type SearchRegion } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOf, type Found, type SearchRegion } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import { collection } from '$lib/db/collection.svelte';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { slugify, speciesSlug, genusOf, withoutSign } from '$core/names';
   import { groupFor } from '$core/regions';
@@ -21,7 +21,7 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
-  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, homonymOf, mergedOf, mergedSentence, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
+  import { searchedSentence, narrowSentence, countSentence, moreOf, regionSentence, olderNameOf, homonymOf, mergedOf, mergedSentence, gbifNameWords, isGbifName, SEARCH_PAGE, SEARCH_MORE, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -671,6 +671,10 @@
   const ncParts = (notChecked: number, notAsked: number | null | undefined): string[] =>
     notAsked == null ? (notChecked ? [`${fmtN(notChecked)} not checked or not asked`] : []) : [...(notAsked ? [`${fmtN(notAsked)} not asked`] : []), ...(notChecked - notAsked > 0 ? [`${fmtN(notChecked - notAsked)} not checked`] : [])];
   const chipNc = $derived(ncParts(data.notChecked ?? 0, data.notAsked).join(', '));
+  // The pending said on the chip too, not in its title alone (round eighty-six; review S's S15): "No climate 9,773, 934 not
+  // asked" beside "All 48,375" and "Climate known 37,667" added to one short, Monsonia lheritieri's pending page.
+  const pendingWords = (n: number | undefined) => (n ? `${fmtN(n)} pending` : '');
+  const chipRest = $derived([chipNc, pendingWords(data.pending)].filter(Boolean).join(', '));
   /** A tile's second line: the English name, unless it is only the genus again (Welwitschia's is "Welwitschia"), when the family says more (round fifty-nine; self review). */
   const commonOr = (c: { name: string; common?: string; family?: string }) => (c.common && c.common.toLowerCase() !== c.name.split(' ')[0].toLowerCase() ? c.common : c.family);
   const fmtN = (n: number) => n.toLocaleString('en-US');
@@ -694,21 +698,37 @@
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
+  type Tile = { /** the page a missing name's plants say it is an older name of, or GBIF's name for (round eighty-six; review-w W2) */ olderOf?: { name: string; gbif: boolean }; slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
-    const toTile = (s: { slug: string; name: string; genus?: boolean }): Tile => {
+    const toTile = (s: { slug: string; name: string; genus?: boolean; olderOf?: string }): Tile => {
       // A genus is no species of the index: its tile links its row, which `/species/<genus>` opens (round eighty-one, H).
       if (s.genus) return { slug: s.slug, name: s.name, genus: true };
       const found = bySlug?.get(s.slug) as Tile | undefined;
       // A hybrid's name with its sign, where the index entry has it without (an index made before round eighty-one).
       const e = found && s.name.includes('×') && !found.name.includes('×') && withoutSign(s.name) === withoutSign(found.name) ? { ...found, name: s.name } : found;
-      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug };
+      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug, ...(bySlug && s.olderOf ? { olderOf: { name: s.olderOf, gbif: gbifNamed.get(s.slug) === s.olderOf } } : {}) };
       // From the whole index (after a search) the entry carries its photograph; an own tile shows it only when switched on.
       return e.thumb && !prefs.referencePhotos ? { ...e, thumb: undefined, alt: undefined, thumbOff: true } : e;
     };
     return { grow: list.filter((s) => s.grown > 0).map(toTile), follow: list.filter((s) => !s.grown && s.followed).map(toTile) };
+  });
+  /**
+   * Of the names a grower's plants carry with the page they were found to belong to (`olderOf`) and no page of their own,
+   * those that are GBIF's name for that page's key, by the copy of its sheet the build files under the name, read by hash
+   * group as a plant's page reads it (round eighty-six; review-w W1, W2): the tile then says "GBIF's name for", as the
+   * plant's page does. Asked once a name.
+   */
+  let gbifNamed = $state(new Map<string, string | null>());
+  $effect(() => {
+    if (!ownEntries) return;
+    for (const s of mine.values()) {
+      if (!s.olderOf || ownEntries.has(s.slug) || untrack(() => gbifNamed.has(s.slug))) continue;
+      gbifNamed.set(s.slug, null);
+      const slug = s.slug, want = s.olderOf;
+      void gbifNamedOf(s.name).then((g) => { if (g && g.name === want) gbifNamed = new Map(gbifNamed).set(slug, g.name); });
+    }
   });
   const grownN = $derived(mineTiles.grow.length);
   const followingN = $derived(mineTiles.follow.length);
@@ -721,7 +741,7 @@
     q = '';
   };
   /** The climate state in words: a refusal is never shown as an absence. */
-  /** A page without a GBIF key (round seventy-nine; `$core/no-gbif`): a page (it has an id) whose entry carries no GBIF key. Its climate is not checked. */
+  /** A page without a GBIF key (round seventy-nine; `$core/no-gbif`): a page (it has an id) whose entry carries no GBIF key. Its climate is not asked (round eighty-six: "not checked" here was the old word). */
   const keyless = (c: { key?: string; gbif?: number }) => !!c.key && c.gbif == null;
   const climateWord = (c: string, noKey = false) => (c === 'ok' ? 'habitat climate known' : c === 'pending' && noKey ? "habitat climate not asked: GBIF's records were not asked, the page having no GBIF key" : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
 </script>
@@ -826,7 +846,7 @@
       <div class="fam" class:common={!!commonOr(c) && commonOr(c) !== c.family}>{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing ? 'not in the reference' : ''}</div>
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing && c.olderOf ? `${c.olderOf.gbif ? "GBIF's name for" : 'an older name of'} ${c.olderOf.name}` : ''}</div><!-- a name with no page and no word of one: the caption says "no page under this name", and nothing more is known (round eighty-six; review-w W2: "not in the reference" was said of older names) -->
     </div>
   </a>
 {/snippet}
@@ -850,7 +870,7 @@
     <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[merged ? mergedSentence(merged) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[merged ? mergedSentence(merged) : older && isGbifName(older, c as unknown as Found) ? gbifNameWords(older) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig" aria-hidden="true">›</span>
   </a>
@@ -1004,7 +1024,7 @@
                filter like the others, off by default and the same on every device; the about page says how they are chosen. -->
           {#if data.grown}<a class="chipbtn" class:on={chip === 'grown'} aria-current={chip === 'grown' ? 'page' : undefined} href="?by={data.by}&chip=grown" title="The species of the {data.grown.genera === 1 ? 'genus' : `${fmtN(data.grown.genera)} genera`} most observed in cultivation on iNaturalist" data-sveltekit-noscroll aria-label="Popular genera: {fmtN(data.grown.species)} species">Popular genera<span class="sep0">{', '}</span><span class="n">{fmtN(data.grown.species)}</span></a>{/if}
           <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll aria-label="Climate known: {fmtN(data.withClimate)} species">Climate known<span class="sep0">{', '}</span><span class="n">{fmtN(data.withClimate)}</span></a>
-          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll aria-label="No climate: {fmtN(noneN)} species{chipNc ? `; besides them, ${chipNc}` : ''}" title="{fmtN(noneN)} with no habitat climate derived{chipNc ? `; besides them, ${chipNc} (not asked: the page has no GBIF key, so its records were not asked; not checked: a source did not answer)` : ''}{data.pending ? `, ${fmtN(data.pending)} pending` : ''}">No climate<span class="sep0">{', '}</span><span class="n">{fmtN(noneN)}</span>{#if chipNc}<span class="nc"><span class="sep0">{', '}</span>{chipNc}</span>{/if}</a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll aria-label="No climate: {fmtN(noneN)} species{chipRest ? `; besides them, ${chipRest}` : ''}" title="{fmtN(noneN)} with no habitat climate derived{chipNc ? `; besides them, ${chipNc} (not asked: the page has no GBIF key, so its records were not asked; not checked: a source did not answer)` : ''}{data.pending ? `, ${fmtN(data.pending)} pending` : ''}">No climate<span class="sep0">{', '}</span><span class="n">{fmtN(noneN)}</span>{#if chipRest}<span class="nc"><span class="sep0">{', '}</span>{chipRest}</span>{/if}</a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
         <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>

@@ -44,8 +44,16 @@ describe("the range of the page's own Kew entry", () => {
     expect(d.data.rows.map((r) => r.locationId).sort()).toEqual(['TDWG:GRB', 'TDWG:SWE']);
     expect(d.data.rangeVia).toMatchObject({ kind: 'synonym-of', entry: 'Epilobium angustifolium L.', row: 'Chamaenerion angustifolium (L.) Scop.' });
   });
-  it('a name that reaches an entry below the page\'s entry keeps its narrower range (Orbea maculata subsp. rangeana)', async () => {
+  // Round eighty-six (review D10): a page is headed by its Kew entry since round eighty-five, so a name reaching an entry
+  // below the page's reads the page's entry's range, not the narrower one (Stapelia hirsuta showed var. hirsuta's).
+  it('a name that reaches an entry below the page\'s entry reads the page\'s entry\'s range (round eighty-six; was the narrower one)', async () => {
     const f = bulkFetcher(base, { wcvp: index(), entryOf: () => '9001' });
+    const d = await gbif.distributions(f, 9430168);
+    expect(d.status === 'ok' && d.data.rows.map((r) => r.locationId).sort()).toEqual(['TDWG:BOT', 'TDWG:NAM']);
+    expect(d.status === 'ok' && d.data.rangeVia).toMatchObject({ kind: 'kew-entry', entry: 'Orbea maculata (N.E.Br.) L.C.Leach' });
+  });
+  it('a name that reaches the page\'s own entry keeps its answer (Orbea maculata subsp. rangeana, its own page)', async () => {
+    const f = bulkFetcher(base, { wcvp: index(), entryOf: () => '9002' });
     const d = await gbif.distributions(f, 9430168);
     expect(d.status === 'ok' && d.data.rows.map((r) => r.locationId)).toEqual(['TDWG:NAM']);
   });

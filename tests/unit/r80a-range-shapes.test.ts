@@ -19,14 +19,17 @@ const t = regionTester(file);
 describe("the range test by the regions' shapes", () => {
   it('Nairobi is in Kenya, not in Tanzania, though in Tanzania\'s box; Dar es Salaam and Arusha are in Tanzania', () => {
     expect(t.hasShape('TAN') && t.hasShape('KEN')).toBe(true);
-    expect(t.inRegion(-1.253, 36.81, 'TAN')).toBe(false);
-    expect(t.inRegion(-1.253, 36.81, 'KEN')).toBe(true);
-    expect(t.inRegion(-6.8, 39.28, 'TAN')).toBe(true);
-    expect(t.inRegion(-3.37, 36.68, 'TAN')).toBe(true);
+    // Each record states its country, as GBIF's do (round eighty-six: the margin takes only a record that states the region's).
+    expect(t.inRegion(-1.253, 36.81, 'TAN', 'KE')).toBe(false);
+    expect(t.inRegion(-1.253, 36.81, 'KEN', 'KE')).toBe(true);
+    expect(t.inRegion(-6.8, 39.28, 'TAN', 'TZ')).toBe(true);
+    expect(t.inRegion(-3.37, 36.68, 'TAN', 'TZ')).toBe(true);
   });
   it('a record just off the coast is inside (the buffer), one far off is not', () => {
-    expect(t.inRegion(-6.8, 39.33, 'TAN')).toBe(true); // Dar es Salaam's harbour mouth
-    expect(t.inRegion(-6.8, 40.3, 'TAN')).toBe(false); // the open sea, inside the box
+    expect(t.inRegion(-6.8, 39.33, 'TAN', 'TZ')).toBe(true); // Dar es Salaam's harbour mouth
+    expect(t.inRegion(-6.8, 40.3, 'TAN', null)).toBe(false); // the open sea, inside the box, stating no country
+    // Stating Tanzania's TZ, the island rule's box takes it (review D8, not settled in round eighty-six: `islandBox`).
+    expect(t.admit(-6.8, 40.3, ['TAN'], 'TZ')?.by).toBe('box');
   });
   it('a region without a shape is its box, as before', () => {
     const none = Object.keys(TDWG3).find((c) => !t.hasShape(c))!;
@@ -38,11 +41,11 @@ describe("the range test by the regions' shapes", () => {
     const native = ['NGA', 'CAF', 'CMN', 'CON', 'EQG', 'GAB', 'ZAI', 'TAN'].map((code) => ({ code, box: TDWG3[code] }));
     const r = rangeTest(native, t)!;
     expect(r.words).toMatch(/^records tested against (the native regions'|\d+ of the 8 native regions') shapes/);
-    const rec = (lat: number, lon: number) => ({ key: 1, decimalLatitude: lat, decimalLongitude: lon, basisOfRecord: 'HUMAN_OBSERVATION', license: 'CC_BY_4_0', datasetKey: 'd', coordinateUncertaintyInMeters: 10 });
-    const read = readRecords([rec(-1.253, 36.81), rec(-6.8, 39.28), rec(4.36, 18.56)], native.map((n) => n.box), true, undefined, r.test);
+    const rec = (lat: number, lon: number, countryCode: string) => ({ key: 1, decimalLatitude: lat, decimalLongitude: lon, countryCode, basisOfRecord: 'HUMAN_OBSERVATION', license: 'CC_BY_4_0', datasetKey: 'd', coordinateUncertaintyInMeters: 10 });
+    const read = readRecords([rec(-1.253, 36.81, 'KE'), rec(-6.8, 39.28, 'TZ'), rec(4.36, 18.56, 'CF')], native.map((n) => n.box), true, undefined, r.test);
     expect(read.nOutside).toBe(1);
     expect(read.open.map((p) => p[0])).toEqual([-6.8, 4.36]);
     // Without the shapes, the box test as before: Nairobi counted inside.
-    expect(readRecords([rec(-1.253, 36.81)], native.map((n) => n.box), true).nOutside).toBe(0);
+    expect(readRecords([rec(-1.253, 36.81, 'KE')], native.map((n) => n.box), true).nOutside).toBe(0);
   });
 });

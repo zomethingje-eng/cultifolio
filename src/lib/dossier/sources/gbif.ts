@@ -1,5 +1,5 @@
 import type { RangeVia } from '../range-via';
-import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
+import { BY_ID, type JsonFetcher, type FetchResult, type SourceResult } from '../fetch';
 import { licenceTag, isOpen, type LicenceTag } from '$core/licence';
 import { ownByAuthor, plainlyAnother, inFamily } from '../authors';
 
@@ -57,7 +57,8 @@ export interface GbifSpecies {
   basionymKey?: number;
 }
 
-export const species = (f: JsonFetcher, key: number) => f<GbifSpecies>(`${GBIF}/species/${key}`);
+// A usage, its synonyms, names, range or an occurrence by its key: GBIF's 404 is "no such record" (`BY_ID`; round eighty-six, A11).
+export const species = (f: JsonFetcher, key: number) => f<GbifSpecies>(`${GBIF}/species/${key}`, BY_ID);
 
 /**
  * One of GBIF's synonyms as the builder keeps it beside the names: its own record, the name it was first published under,
@@ -85,7 +86,7 @@ export async function synonyms(f: JsonFetcher, key: number): Promise<Synonyms> {
   const raw: SynonymAnswer[] = [];
   let ended = false;
   for (let p = 0; p < SYNONYM_PAGES && !ended; p++) {
-    const r = await f<{ results: SynonymAnswer[]; endOfRecords?: boolean }>(`${GBIF}/species/${key}/synonyms?limit=${SYNONYM_PAGE}&offset=${raw.length}`);
+    const r = await f<{ results: SynonymAnswer[]; endOfRecords?: boolean }>(`${GBIF}/species/${key}/synonyms?limit=${SYNONYM_PAGE}&offset=${raw.length}`, BY_ID);
     if (r.status !== 'ok') {
       if (p > 0 && r.status === 'none') { ended = true; break; } // nothing past the end
       return r;
@@ -136,7 +137,7 @@ export async function vernacular(f: JsonFetcher, key: number): Promise<FetchResu
   let ended = false;
   for (let p = 0; p < VERNACULAR_PAGES && !ended; p++) {
     // From the rows read so far: a server that gives fewer than asked per page loses none between pages.
-    const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }>; endOfRecords?: boolean }>(`${GBIF}/species/${key}/vernacularNames?limit=${VERNACULAR_PAGE}&offset=${rows.length}`);
+    const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }>; endOfRecords?: boolean }>(`${GBIF}/species/${key}/vernacularNames?limit=${VERNACULAR_PAGE}&offset=${rows.length}`, BY_ID);
     if (r.status !== 'ok') {
       if (p > 0 && r.status === 'none') { ended = true; break; } // nothing past the end
       return r;
@@ -181,6 +182,11 @@ export interface GbifDistribution {
 export interface KewDescription {
   lifeform?: string;
   climate?: string;
+  /**
+   * Kew's own words for where the plant grows (WCVP's geographic_area: "New Zealand (Poor Knights Is., Hen I.)"), quoted
+   * on the page (round eighty-six; review D2). Never read as a range: the range is Kew's distribution rows.
+   */
+  area?: string;
 }
 
 /**
@@ -226,7 +232,7 @@ export interface DistributionAnswer {
  * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
  */
 export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; noKew?: string; synonymOf?: DistributionAnswer['synonymOf']; rangeVia?: RangeVia; kewFile?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; noKew?: string; unasked?: string; synonymOf?: DistributionAnswer['synonymOf']; rangeVia?: RangeVia; kewFile?: string }>(`${GBIF}/species/${key}/distributions?limit=200`, BY_ID);
   if (r.status !== 'ok') return r;
   // Kew's rows of the species' words by another author, which are another name (round seventy; triage-69 B4): said in the record.
   const other = r.data.otherAuthor ? { otherAuthor: r.data.otherAuthor } : {};
@@ -243,6 +249,9 @@ export async function distributions(f: JsonFetcher, key: number): Promise<Source
     if (!seen.has(k)) seen.set(k, d);
   }
   // A "none" from Kew's files says why (round eighty-two, F; review 1's 7): `noKew`, the bulk path's words.
+  // Kew's file answered and GBIF's national checklists were not asked (an offline re-derivation; round eighty-six, review
+  // D's D12): Kew's answer, with the checklists said as not asked, never as holding none.
+  if (!seen.size && r.data.unasked && (r.data.otherAuthor || r.data.noKew)) return { status: 'none', detail: `${r.data.otherAuthor ?? r.data.noKew}; GBIF's national checklists not asked (${r.data.unasked})` };
   return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false, ...other } } : r.data.otherAuthor ? { status: 'none', detail: r.data.otherAuthor } : r.data.noKew ? { status: 'none', detail: `${r.data.noKew}; GBIF holds no national checklist's range for it` } : { status: 'none' };
 }
 
@@ -359,7 +368,7 @@ export async function usages(f: JsonFetcher, name: string): Promise<FetchResult<
 export async function kewEntryIpni(f: JsonFetcher, keys: readonly number[]): Promise<FetchResult<Array<{ id: string; label: string }>>> {
   const out: Array<{ id: string; label: string }> = [];
   for (const k of keys) {
-    const r = await f<{ scientificName?: string; references?: string }>(`${GBIF}/species/${k}`);
+    const r = await f<{ scientificName?: string; references?: string }>(`${GBIF}/species/${k}`, BY_ID);
     if (r.status === 'none') continue;
     if (r.status !== 'ok') return r;
     const id = /urn:lsid:ipni\.org:names:([\w-]+)$/.exec(r.data.references ?? '')?.[1];
@@ -376,6 +385,8 @@ export interface GbifOccurrence {
   decimalLongitude?: number;
   year?: number;
   countryCode?: string;
+  /** The state or province the record states (round eighty-six; review D4): decides a border inside one country. */
+  stateProvince?: string;
   basisOfRecord?: string;
   license?: string;
   datasetKey?: string;
@@ -401,7 +412,16 @@ export interface OccPage {
   results: GbifOccurrence[];
   endOfRecords: boolean;
   count: number;
+  /** A page answered from a GBIF download's files (`bulkFetcher`; round eighty-six, review D's D5): the download's DOI and the day GBIF made it. */
+  downloadDoi?: string;
+  downloadDay?: string;
 }
+
+/**
+ * The record's words for photographs read from a GBIF download's files (round eighty-six; review D's D5): which download,
+ * and the day GBIF made it, which the record keeps as its `asOf`, so the credits say that day, never the build's.
+ */
+export const mediaFileWords = (doi: string | undefined, day: string | undefined) => `from the GBIF download${doi ? ` https://doi.org/${doi.replace(/^https?:\/\/doi\.org\//, '')}` : ''}${day ? `, of ${day}` : ''}`;
 
 /**
  * Up to `pages` × 300 georeferenced records with licence and dataset on each.
@@ -452,8 +472,11 @@ export interface OccMedia {
   specimen?: boolean;
 }
 
-/** Still images attached to occurrences, already filtered to open licences. */
-export async function media(f: JsonFetcher, key: number): Promise<FetchResult<OccMedia[]>> {
+/**
+ * Still images attached to occurrences, already filtered to open licences. Answered from a download's files, the answer
+ * says which download and the day GBIF made it (`asOf`, `detail`; round eighty-six, review D's D5).
+ */
+export async function media(f: JsonFetcher, key: number): Promise<(FetchResult<OccMedia[]> | { status: 'none'; detail?: string }) & { asOf?: string }> {
   // Not preserved specimens: a herbarium sheet's scan is not a photograph of the plant growing (round thirty, R2-12); the bulk path already leaves them out.
   // Human observations only, as the bulk path reads the download (round seventy-one; self-review 70 C4): MACHINE_OBSERVATION
   // brought Meise's herbarium scans (18 of 100 GBIF-led tiles), an NMNH line drawing (Adenia lobata's lead) and pollen
@@ -466,6 +489,7 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
   // went out as "Michael Sim, CC BY, via GBIF" on the record's licence). The download path reads the same way (bulk.ts).
   const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&limit=100`);
   if (r.status !== 'ok') return r;
+  const file = r.data.downloadDay || r.data.downloadDoi ? { detail: mediaFileWords(r.data.downloadDoi, r.data.downloadDay), ...(r.data.downloadDay ? { asOf: r.data.downloadDay } : {}) } : {};
   const out: OccMedia[] = [];
   for (const o of r.data.results) {
     // iNaturalist images reach GBIF through a CC-BY-NC dataset; the per-photo licence is what counts, and it is on the media object.
@@ -476,11 +500,11 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
       out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.taxonKey ? { taxonKey: o.taxonKey } : {}), ...(o.basisOfRecord && o.basisOfRecord !== 'HUMAN_OBSERVATION' ? { specimen: true } : {}) });
     }
   }
-  return out.length ? { status: 'ok', data: out } : { status: 'none' };
+  return out.length ? { status: 'ok', data: out, ...file } : { status: 'none', ...file };
 }
 
 /** One occurrence record with its media, as GBIF serves it: `--fill gbif-licence` reads each stored photograph's own licence from it. */
-export const occurrence = (f: JsonFetcher, key: number) => f<GbifOccurrence>(`${GBIF}/occurrence/${key}`);
+export const occurrence = (f: JsonFetcher, key: number) => f<GbifOccurrence>(`${GBIF}/occurrence/${key}`, BY_ID);
 
 export async function suggest(f: JsonFetcher, q: string): Promise<FetchResult<Array<{ key: number; scientificName: string; rank: string; status?: string; family?: string }>>> {
   const r = await f<Array<{ key: number; scientificName: string; rank: string; status?: string; family?: string }>>(

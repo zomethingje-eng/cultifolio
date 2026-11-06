@@ -78,9 +78,12 @@ describe("round eighty-four's shapes", () => {
     ['the Channel, 12 km off Eastbourne: not France\'s', 50.65, 0.3, 'FRA', false],
     ['the open sea off Dar es Salaam, 100 km out', -6.8, 40.3, 'TAN', false]
   ];
-  it.each(cases)('%s (%f, %f): in %s is %s', (_name, lat, lon, code, inside) => {
+  // Round eighty-six (outside review B's 6): the margin and the coast reach take only a record that states the region's
+  // country, so the records off a coast state theirs, as the real ones do (Kenting's specimens state TW).
+  const stated: Record<string, string> = { 'Kenting, 1991 specimens': 'TW', 'the Frioul islands off Marseille': 'FR', "the Channel, 12 km off Eastbourne: England's": 'GB', "the Channel, 12 km off Eastbourne: not France's": 'GB' };
+  it.each(cases)('%s (%f, %f): in %s is %s', (name, lat, lon, code, inside) => {
     expect(t.hasShape(code)).toBe(true);
-    expect(t.inRegion(lat, lon, code)).toBe(inside);
+    expect(t.inRegion(lat, lon, code, stated[name] ?? null)).toBe(inside);
   });
 
   it('round eighty-three\'s shapes are unchanged but for Santa Fe joining Argentina Northeast, Navassa Haiti, and four islets', () => {
@@ -95,9 +98,10 @@ describe('a box is tested with the same buffer as a shape (A2)', () => {
   const b = TDWG3[none];
   it('a record a little outside a box with no shape is inside, one further is not', () => {
     expect(t.hasShape(none)).toBe(false);
-    expect(t.inRegion(b.s - 0.03, (b.w + b.e) / 2, none)).toBe(true);
-    expect(t.inRegion(b.s - SHAPE_BUFFER_DEG - 0.02, (b.w + b.e) / 2, none)).toBe(false);
-    expect(regionTester(file, 0).inRegion(b.s - 0.03, (b.w + b.e) / 2, none)).toBe(false);
+    // A record in the margin states its country (round eighty-six): the Cocos (Keeling) Islands' CC.
+    expect(t.inRegion(b.s - 0.03, (b.w + b.e) / 2, none, 'CC')).toBe(true);
+    expect(t.inRegion(b.s - SHAPE_BUFFER_DEG - 0.02, (b.w + b.e) / 2, none, 'CC')).toBe(false);
+    expect(regionTester(file, 0).inRegion(b.s - 0.03, (b.w + b.e) / 2, none, 'CC')).toBe(false);
   });
   it('a grown box across the antimeridian stays one', () => {
     const g = grownBox({ s: 0, w: 179.98, n: 1, e: -179.9 }, 0.05);

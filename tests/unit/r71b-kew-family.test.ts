@@ -22,7 +22,7 @@ describe('Kew\'s real rows: Ixora coccinea', () => {
     w.addDist(parseWcvpDist(D, '103356|IND|India|0|0|0'));
     const got = w.distributions('Ixora coccinea', 'Comm. ex Lam.', 'Rubiaceae');
     expect(got && got !== 'ambiguous' && got.rows.map((r) => r.locality)).toEqual(['India']);
-    expect(got && got !== 'ambiguous' && got.kew).toEqual({ lifeform: 'shrub', climate: 'wet tropical' });
+    expect(got && got !== 'ambiguous' && got.kew).toEqual({ lifeform: 'shrub', climate: 'wet tropical', area: 'W. & S. India, Sri Lanka, Bangladesh to Indo-China' }); // and Kew's area (round eighty-six: review D2)
   });
 });
 

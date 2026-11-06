@@ -43,10 +43,11 @@ describe('r80u offline files', () => {
     for (const r of ['src/routes/+page.svelte', 'src/routes/plants/[acc]/+page.svelte', 'src/routes/places/+layout.ts', 'src/routes/propagation/new/+page.svelte', 'src/routes/labels/+page.svelte', 'src/routes/backup/+page.svelte', 'src/routes/sync/+page.svelte', 'src/routes/today/+page.svelte', 'src/routes/settings/+page.svelte', 'src/routes/offline/+page.svelte']) expect(OFFLINE_ROUTE.test(r), r).toBe(true);
     for (const r of ['src/routes/species/[slug]/+page.svelte', 'src/routes/about/how/+page.svelte', 'src/routes/compare/+page.svelte']) expect(OFFLINE_ROUTE.test(r), r).toBe(false);
   });
-  it('the worker precaches the list when the build hands it over, leaves out the share image, the large icons, the maps and WOFF, and answers any page offline with its own', () => {
+  it('the worker precaches the list when the build hands it over, leaves out the share image, the large icons, the region map files and WOFF, and answers any page offline with its own', () => {
     const sw = readFileSync('src/service-worker.ts', 'utf8');
     expect(sw).toMatch(/OFFLINE_BUILD\.has\(p\)/);
-    expect(sw).toMatch(/OFFLINE_FILES = new Set\(\['\/favicon\.svg', '\/manifest\.webmanifest', '\/icon-192\.png'\]\)/);
+    // Round eighty-six (review C's C4): and the two coastlines, which every species page's maps draw on.
+    expect(sw).toMatch(/OFFLINE_FILES = new Set\(\['\/favicon\.svg', '\/manifest\.webmanifest', '\/icon-192\.png', '\/maps\/land110\.svg', '\/maps\/land50\.svg'\]\)/);
     expect(sw).toMatch(/\/\\\.woff\$\/\.test\(p\)/);
     expect(sw).toMatch(/if \(request\.mode === 'navigate'\) \{\n\s+try \{\n\s+return await fetch\(request\);\n\s+\} catch \{\n\s+return \(await cache\.match\('\/offline'\)\) \?\? Response\.error\(\);/);
     // Agent O's dev-only corpus server comes first (the merge, round eighty).

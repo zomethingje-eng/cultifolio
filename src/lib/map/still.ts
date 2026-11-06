@@ -12,6 +12,9 @@
  * negative-scale transform once the viewBox is zoomed in.
  * Rendered as strings so the server can inline them. The coastline itself is
  * a static SVG referenced with <use>, fetched once and cached for every page.
+ * A map drawn below the fold names its files in `data-href` rather than `href` (`defer`; round eighty-six, outside
+ * review B's 4): `$lib/map/near` turns each into `href` when its map nears the viewport, or before a print, so a phone's
+ * first load does not fetch the coastlines while the lead photograph is still on its way.
  */
 import type { Box } from '$core/geo';
 import { REGION_AT, INSIDE, REGIONS_WORLD, REGIONS_CLOSE, REGIONS_WORLD_ALL } from './regions-drawn';
@@ -40,21 +43,31 @@ function boxRects(boxes: Box[], cls: string): string {
 
 /** The region a box is (tdwg3.json's box, as every dossier and the catalogue give it), by its south-west corner. */
 export const regionOfBox = (b: Box): string | undefined => REGION_AT[`${b.s},${b.w}`];
+/** The two coastlines: the world map's (1:110m) and the close-up's (1:50m). */
+export const LAND_WORLD = '/maps/land110.svg';
+export const LAND_CLOSE = '/maps/land50.svg';
+/** A `<use>`'s file: `href`, or `data-href` for a map drawn when it nears the viewport (round eighty-six; outside review B's 4). */
+const ref = (href: string, defer: boolean) => `${defer ? 'data-href' : 'href'}="${href}"`;
 /**
- * The native range: each region's shape from its own file in `dir` (round eighty-five: one small file a region, so a page
- * fetches its own regions' shapes and no others), once a region; a box no shape is drawn for, as its rectangle.
+ * Each region's shape, once a region, from its own file in `dir` (round eighty-five: one small file a region, so a page
+ * fetches its own regions' shapes and no others), or from `all` past WORLD_FILE_AT regions; a box no shape is drawn for, as
+ * the box itself. What `rangeShapes` draws and `mapFiles` lists, so the two cannot name different files.
  */
-function rangeShapes(boxes: Box[], dir: string, all?: string, cls = 'range'): string {
+function shapeRefs(boxes: Box[], dir: string, all?: string): Array<string | Box> {
   const codes = new Set(boxes.map(regionOfBox).filter(Boolean));
   const many = !!all && codes.size > WORLD_FILE_AT;
   const seen = new Set<string>();
-  let out = '';
+  const out: Array<string | Box> = [];
   for (const b of boxes) {
     const c = regionOfBox(b);
-    if (!c) out += cls === 'range' ? boxRects([b], 'range') : '';
-    else if (!seen.has(c)) { seen.add(c); out += `<use class="${cls}" href="${many ? `${all}#${c}` : `${dir}${c}.svg#r`}"/>`; }
+    if (!c) out.push(b);
+    else if (!seen.has(c)) { seen.add(c); out.push(many ? `${all}#${c}` : `${dir}${c}.svg#r`); }
   }
   return out;
+}
+/** The native range: each region's shape (`shapeRefs`); a box no shape is drawn for, as its rectangle. */
+function rangeShapes(boxes: Box[], dir: string, all?: string, cls = 'range', defer = false): string {
+  return shapeRefs(boxes, dir, all).map((r) => (typeof r === 'string' ? `<use class="${cls}" ${ref(r, defer)}/>` : cls === 'range' ? boxRects([r], 'range') : '')).join('');
 }
 /** Whether a region's shape holds the whole of a frame (a rectangle wholly inside its shape holds it). */
 export function frameInside(b: Box, w: number, n: number, e: number, s: number): boolean {
@@ -62,12 +75,12 @@ export function frameInside(b: Box, w: number, n: number, e: number, s: number):
   return !!c && (INSIDE[c] ?? []).some(([rs, rw, rn, re]) => rs <= s && rw <= w && rn >= n && re >= e);
 }
 
-export function worldSvg(boxes: Box[], centroid?: { lat: number; lon: number }, title = 'World map'): string {
+export function worldSvg(boxes: Box[], centroid?: { lat: number; lon: number }, title = 'World map', defer = false): string {
   return (
     `<svg class="map map-world" viewBox="-180 -85 360 160" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc(title)}">` +
     `<rect class="sea" x="-180" y="-90" width="360" height="180"/>` +
-    `<use class="land" href="/maps/land110.svg#land"/>` +
-    rangeShapes(boxes, REGIONS_WORLD, REGIONS_WORLD_ALL) +
+    `<use class="land" ${ref(`${LAND_WORLD}#land`, defer)}/>` +
+    rangeShapes(boxes, REGIONS_WORLD, REGIONS_WORLD_ALL, 'range', defer) +
     (centroid ? `<circle class="pin" cx="${centroid.lon}" cy="${-centroid.lat}" r="2.2"/>` : '') +
     `</svg>`
   );
@@ -85,7 +98,14 @@ const pct = (n: number) => `${Math.round(n * 1000) / 10}%`;
  * the SVG; the words are HTML laid over it, placed by share of the frame, so they are the page's own size and font at any
  * width (an SVG's text scales with its frame: 9 px on a 320 px phone, 16 px on a desktop).
  */
-function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArray<{ name: string; box: Box }>, points: ReadonlyArray<readonly [number, number]> = []): { lines: string; words: string } {
+/**
+ * Where each region's name may be written: rectangles [s, w, n, e] wholly inside its drawn shape (`./region-labels`,
+ * written by scripts/dev/r86m-label-rects.py). A table of about 38 kB, so the browser's script does not carry it: the
+ * server draws the page's close-up with it, and a move inside the app loads it when it draws one (the species page).
+ */
+export type LabelAt = Readonly<Record<string, ReadonlyArray<readonly [number, number, number, number]>>>;
+
+function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArray<{ name: string; box: Box }>, points: ReadonlyArray<readonly [number, number]> = [], labelAt?: LabelAt): { lines: string; words: string } {
   const W = e - w, H = n - s;
   // The frame's own 3:2 box, the view fitted into it ("meet"): where a degree falls, as a share of the box.
   const k = Math.min(1.5 / W, 1 / H), ox = (1.5 - W * k) / 2, oy = (1 - H * k) / 2;
@@ -116,12 +136,16 @@ function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArr
   // field of colour (round eighty-four, W1: Echeveria desmetiana's close-up was one green field, "Mexico Central").
   const within = labels.find((l) => frameInside(l.box, w, n, e, s));
   if (within) return { lines, words: words + `<span class="mlab mlab-in" style="left:50%;top:10%">Inside ${esc(within.name)}</span>` };
-  // The regions' names, each at its box's middle clamped into the frame, largest box first, none over another, over the
-  // scale bar's words or over a record (round eighty-five; outside review A20, W4: "ItalyYugoslavia", "20Spain km",
-  // Argentina Northwest over one of Echinopsis thelegona's three dots). Each is tested where it is drawn, after the clamp
-  // (before, it was tested where it would have been, so two names clamped to one edge ran together); where it would cover
-  // something, a place one or two lines above or below is tried, else the name is left out (the regions are listed beside
-  // the map).
+  // The regions' names, largest box first, none over another, over the scale bar's words or over a record (round
+  // eighty-five; outside review A20, W4: "ItalyYugoslavia", "20Spain km", Argentina Northwest over one of Echinopsis
+  // thelegona's three dots). Each is tested where it is drawn, after the clamp (before, it was tested where it would have
+  // been, so two names clamped to one edge ran together); where it would cover something, a place one or two lines above
+  // or below is tried, else the name is left out (the regions are listed beside the map).
+  // And each is written only on its own region's land (round eighty-six; review P's P1): at the middle of the largest of
+  // its rectangles inside its shape that the frame shows, and at any place tried only if that place is inside one of them.
+  // It was the middle of the region's box clipped to the frame, which for an L-shaped region cut by the frame is another
+  // region's land: Hoodia alstonii's close-up wrote "Cape Provinces" across southern Namibia. A region the table does not
+  // have (a box drawn as a box) is its box; one it has but was not given (`labelAt` not yet loaded) is not named.
   const placed: Array<[number, number, number, number]> = [];
   /** Where each name placed belonged, before it was moved off a record or the scale bar. */
   const homes: number[][] = [];
@@ -132,13 +156,24 @@ function closeUp(w: number, n: number, e: number, s: number, labels: ReadonlyArr
   for (const l of order.slice(0, 8)) {
     const b = l.box;
     if (b.w > b.e || b.e < w || b.w > e || b.n < s || b.s > n) continue; // outside the frame, or across the antimeridian
-    const cx = Math.min(Math.max((Math.max(b.w, w) + Math.min(b.e, e)) / 2, w), e), cy = Math.min(Math.max((Math.max(b.s, s) + Math.min(b.n, n)) / 2, s), n);
+    const code = regionOfBox(b);
+    const rects: ReadonlyArray<readonly [number, number, number, number]> = code ? (labelAt?.[code] ?? []) : [[b.s, b.w, b.n, b.e]];
+    // Its own land in the frame, as shares of the frame [x0, y0, x1, y1], the largest first.
+    const own = rects
+      .map(([rs, rw, rn, re]) => [Math.max(rs, s), Math.max(rw, w), Math.min(rn, n), Math.min(re, e)] as const)
+      .filter(([cs, cw, cn, ce]) => cs <= cn && cw <= ce)
+      .sort((p, q) => (q[2] - q[0]) * (q[3] - q[1]) - (p[2] - p[0]) * (p[3] - p[1]))
+      .map(([cs, cw, cn, ce]) => [fx(cw), fy(cn), fx(ce), fy(cs)] as const);
+    if (!own.length) continue;
+    /** On its own land (a point region's rectangle has no size: only its point, unmoved, is on it). */
+    const onOwn = (x: number, y: number) => own.some(([x0, y0, x1, y1]) => x >= x0 - 1e-9 && x <= x1 + 1e-9 && y >= y0 - 1e-9 && y <= y1 + 1e-9);
     // Its room, as a share of the frame: about 0.6 em a letter at a frame of about 300 px, 1.4 em tall.
     const hw = Math.min(0.45, (l.name.length * 0.0125)), hh = 0.045;
-    const spots = [0, -2.4 * hh, 2.4 * hh, -4.8 * hh, 4.8 * hh].map((dy) => {
-      const x = Math.min(Math.max(fx(cx), 0.02 + hw), 0.98 - hw), y = Math.min(Math.max(fy(cy) + dy, 0.06), 0.88);
+    const spots = own.flatMap(([x0, y0, x1, y1]) => [0, -2.4 * hh, 2.4 * hh, -4.8 * hh, 4.8 * hh].map((dy) => {
+      const x = Math.min(Math.max((x0 + x1) / 2, 0.02 + hw), 0.98 - hw), y = Math.min(Math.max((y0 + y1) / 2 + dy, 0.06), 0.88);
       return [x, y, [x - hw, y - hh, x + hw, y + hh]] as const;
-    });
+    })).filter(([x, y]) => onOwn(x, y));
+    if (!spots.length) continue;
     // Over another name, or where another name belonged: left out, as before (a name moved off its region for another
     // name misleads).
     if (onName(spots[0][2]) || homes.some((p) => over(spots[0][2], p))) continue;
@@ -186,8 +221,8 @@ export function mapPoints(o: { open: ReadonlyArray<readonly [number, number, ...
   return o.open.map((p, i) => (sea.has(i) ? [p[0], p[1], 1] : [p[0], p[1]]));
 }
 
-export function regionSvg(boxes: Box[], allPoints: ReadonlyArray<MapPoint>, centroid?: { lat: number; lon: number }, title = 'Regional map', labels: ReadonlyArray<{ name: string; box: Box }> = []): string {
-  const points = allPoints.map((p) => [p[0], p[1]] as [number, number]);
+/** The close-up's frame (west, north, east, south), or null where there is nothing to frame (it is then the world map). */
+function closeFrame(boxes: Box[], points: ReadonlyArray<readonly [number, number, ...unknown[]]>, centroid?: { lat: number; lon: number }): { w: number; n: number; e: number; s: number } | null {
   // Frame: union of boxes (or point extent), padded, aspect ~ 4:3, clamped to the world.
   let s = 90,
     w = 180,
@@ -216,7 +251,7 @@ export function regionSvg(boxes: Box[], allPoints: ReadonlyArray<MapPoint>, cent
     }
     for (const p of points) feed(p[0], p[1]);
   }
-  if (n < s) return worldSvg([], centroid, title);
+  if (n < s) return null;
   const pad = Math.max(1, (n - s) * 0.35, (e - w) * 0.2);
   s = Math.max(-85, s - pad);
   n = Math.min(85, n + pad);
@@ -234,24 +269,48 @@ export function regionSvg(boxes: Box[], allPoints: ReadonlyArray<MapPoint>, cent
     w = Math.max(-180, c - wantW / 2);
     e = Math.min(180, c + wantW / 2);
   }
+  return { w, n, e, s };
+}
+/** The boxes a frame shows (a box across the antimeridian is kept). */
+const inFrame = (boxes: Box[], f: { w: number; n: number; e: number; s: number }) => boxes.filter((b) => b.w > b.e || !(b.e < f.w || b.w > f.e || b.n < f.s || b.s > f.n));
+
+/**
+ * Every file the page's two maps draw from (`worldSvg` and `regionSvg` of the same range and records), without drawing
+ * them: what the service worker keeps with a species page it carries over an update, so the page opens offline with its
+ * maps (round eighty-six; review C's C4). Paths, without the fragment.
+ */
+export function mapFiles(boxes: Box[], points: ReadonlyArray<readonly [number, number, ...unknown[]]>, centroid?: { lat: number; lon: number }): string[] {
+  const out = new Set<string>([LAND_WORLD]);
+  const add = (refs: Array<string | Box>) => { for (const r of refs) if (typeof r === 'string') out.add(r.split('#')[0]); };
+  add(shapeRefs(boxes, REGIONS_WORLD, REGIONS_WORLD_ALL));
+  const f = closeFrame(boxes, points, centroid);
+  if (f) { out.add(LAND_CLOSE); add(shapeRefs(inFrame(boxes, f), REGIONS_CLOSE)); }
+  return [...out];
+}
+
+export function regionSvg(boxes: Box[], allPoints: ReadonlyArray<MapPoint>, centroid?: { lat: number; lon: number }, title = 'Regional map', labels: ReadonlyArray<{ name: string; box: Box }> = [], defer = false, labelAt?: LabelAt): string {
+  const points = allPoints.map((p) => [p[0], p[1]] as [number, number]);
+  const f = closeFrame(boxes, points, centroid);
+  if (!f) return worldSvg([], centroid, title, defer);
+  const { w, n, e, s } = f;
   const r = Math.max(0.05, (e - w) / 220);
-  const framed = boxes.filter((b) => b.w > b.e || !(b.e < w || b.w > e || b.n < s || b.s > n));
+  const framed = inFrame(boxes, f);
   const atSea = allPoints.filter((p) => p[2] === 1);
   const pts = dots(allPoints.filter((p) => p[2] !== 1).map((p) => [p[0], p[1]] as const), r) + (atSea.length ? `<g class="occ-sea" stroke-width="${short(r * 0.6, 4)}">${atSea.map((p) => `<circle cx="${short(p[1], 4)}" cy="${short(-p[0], 4)}" r="${short(r, 4)}"/>`).join('')}</g>` : '');
-  const up = closeUp(w, n, e, s, labels, points);
+  const up = closeUp(w, n, e, s, labels, points, labelAt);
   if (atSea.length) up.words += `<span class="mkey">○ ${atSea.length === 1 ? 'a record' : `${atSea.length} records`} off the drawn coast</span>`;
   // The words over the map are for the eye: the map's name says what it is, and the regions are listed beside it.
   return (
     `<div class="mapwrap">` +
     `<svg class="map map-region" viewBox="${w} ${-n} ${e - w} ${n - s}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(title)}">` +
     `<rect class="sea" x="-180" y="-90" width="360" height="180"/>` +
-    `<use class="land" href="/maps/land50.svg#land"/>` +
+    `<use class="land" ${ref(`${LAND_CLOSE}#land`, defer)}/>` +
     up.lines +
     // Only the regions the frame shows: a page of many regions asks for the few its close-up draws (round eighty-five).
     // Each region's own outline is laid as land first, so an island the 1:50m coastline does not draw (Genovesa, the Poor
     // Knights) is land under its range and its records, and the range's edge and the land's coincide (W4).
-    rangeShapes(framed, REGIONS_CLOSE, undefined, 'land') +
-    rangeShapes(framed, REGIONS_CLOSE) +
+    rangeShapes(framed, REGIONS_CLOSE, undefined, 'land', defer) +
+    rangeShapes(framed, REGIONS_CLOSE, undefined, 'range', defer) +
     pts +
     (centroid ? `<circle class="pin" cx="${centroid.lon}" cy="${-centroid.lat}" r="${r * 2.5}"/>` : '') +
     `</svg>` +

@@ -16,7 +16,7 @@ type Page = { key: number | null; id?: string; name: { scientific: string; kew?:
 const own = (s: string) => Buffer.from(s, 'utf8').toString('utf8');
 const kept = (r: KewRow): KewRow => ({ id: own(r.id), name: own(r.name), authors: own(r.authors), status: own(r.status), rank: own(r.rank), accepted: own(r.accepted), parent: own(r.parent), powo: '', ...(r.homotypic ? { homotypic: true } : {}) });
 
-export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[]; reference?: ReadonlySet<number> }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number; none: NoKeyReading[] } | null> {
+export async function listExtraKeys(o: { bulk: string; backbone: string; pages: Page[]; merges: Merge[]; reference?: ReadonlySet<number>; infraFromHolder?: boolean }): Promise<{ keys: ExtraKey[]; refused: Refused[]; pages: number; usages: number; noEntry: number; none: NoKeyReading[] } | null> {
   const csv = `${o.bulk}/wcvp_names.csv`;
   const away = new Set(o.merges.map((m) => m.from));
   const pages = o.pages.filter((p) => p.key == null || !away.has(p.key));
@@ -44,7 +44,7 @@ export async function listExtraKeys(o: { bulk: string; backbone: string; pages: 
   for (const k of reference) for (const a of bb.lineage(k).slice(1)) holders.set(a, [...(holders.get(a) ?? []), k]);
   const merged = new Map(o.merges.map((m) => [m.from, slugify(m.name)]));
   const into = new Map(o.merges.map((m) => [m.from, mergeTarget(m)]));
-  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '', ...(p.id ? { id: p.id } : {}) }, idx, bb, reference, holders, merged, into));
+  const run = () => pages.map((p) => extraKeysFor({ key: p.key, entry: p.name.kew?.entry ?? '', ...(p.id ? { id: p.id } : {}) }, idx, bb, reference, holders, merged, into, { infraFromHolder: o.infraFromHolder }));
   // First without what GBIF files under each candidate; then that is read, with Kew's rows of its words, and the rule run again.
   // The merged keys too (round eighty, A): each is read by the page it joins whatever the rule makes of it.
   const candidates = new Set([...run().flatMap((r) => r.keys.map((k) => k.key)), ...o.merges.map((m) => m.from)]);

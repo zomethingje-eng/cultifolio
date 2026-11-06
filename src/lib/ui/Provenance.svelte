@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Dossier } from '$dossier/schema';
-  import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail, foundNotShown, registerRow } from '$lib/ui/ref/upstream';
+  import { UPSTREAM_WORD as label, UPSTREAM_NAME, climateDetail, foundNotShown, registerRow, registerDetail } from '$lib/ui/ref/upstream';
   import { readerWords } from '$lib/ui/ref/words';
   // What it reads of the record, and the count of the datasets its open records came from: the species page carries the count, not the list (round seventy-seven).
   let { dossier, datasets }: { dossier: Pick<Dossier, 'upstream' | 'built'> & Partial<Pick<Dossier, 'photos' | 'climate' | 'distribution'>>; datasets: number } = $props();
@@ -11,10 +11,8 @@
   // review's 2, the words review's 12).
   // An answer the page shows none of says what was found (round eighty-two, F; review 1's 29).
   // In a reader's words: no file of the repository, and a merged page's key said as that (round eighty-four; A6e).
-  // The row's status word is its pill; a detail that opens with the same words does not say them twice (round eighty-five;
-  // "not asked not asked: two Wikidata items …").
-  const once = (status: string, t: string) => { const w = (label[status] ?? status).split(':')[0]; return t.startsWith(`${w}: `) ? t.slice(w.length + 2) : t; };
-  const detail = (src: string, d: string | undefined) => once(dossier.upstream[src] ? registerRow(src, dossier.upstream[src]!, dossier).status : '', readerWords([src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, registerRow(src, dossier.upstream[src]!, dossier), dossier)].filter(Boolean).join('; ')));
+  // The row's status word is its pill; the detail does not say it again (round eighty-five; round eighty-six, S15: `registerDetail`).
+  const detail = (src: string, d: string | undefined) => registerDetail(dossier.upstream[src] ? registerRow(src, dossier.upstream[src]!, dossier).status : '', readerWords([src === 'climate' ? climateDetail(d, dossier.upstream) : d, foundNotShown(src, registerRow(src, dossier.upstream[src]!, dossier), dossier)].filter(Boolean).join('; ')));
   // Two answers where one is taken is a settled answer, not a failure: no warning tone (round sixty-nine; triage-68 M8).
   const tone = (s: string) => (s === 'ok' ? 'ok' : s === 'none' || s === 'skipped' || s === 'ambiguous' ? '' : 'warn');
 </script>
@@ -42,7 +40,15 @@
   .prov[open] > summary .op { display: none; }
   summary:hover .k { color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
-  .rows { display: grid; gap: 0.3rem; margin-block: 0.8rem; }
+  /* One column no wider than the card: the column took the width of a row's whole line as its least, so at 200 % text each
+     row ran out of the page (Galaxy S8: the page 495 px wide at 360, "gbif.species" cut at the card's edge) (round
+     eighty-six; review P's P7). Held to the card, a row wraps, and a word longer than the card breaks where it must: the
+     source's key, or a download's address (https://doi.org/10.15468/dl.…). */
+  .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.3rem; margin-block: 0.8rem; }
+  .row > * { min-width: 0; overflow-wrap: anywhere; }
   .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: var(--fs-md); }
+  /* A row's name, its key and its reason wrap inside the card at 200% text, not past the screen's edge (round eighty-six;
+     review P's P7: 495 px of page at 360). */
+  .row > span, .row code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
   .small { font-size: var(--fs-md); }
 </style>

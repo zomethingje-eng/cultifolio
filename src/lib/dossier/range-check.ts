@@ -17,6 +17,7 @@
  * Pure: the script reads the files and says the lines.
  */
 import { regionTester, grownBox, SHAPE_BUFFER_DEG, COAST_DEG, ISLAND_DEG, ADMISSIONS, type Admission, type RegionTester, type ShapesFile } from './tdwg-shapes';
+import { ADMISSION_POLICY } from './admission-policy';
 import { TDWG3 } from './tdwg';
 import { inBox } from '$core/geo';
 
@@ -28,10 +29,12 @@ export const CELL_SLACK_DEG = 0.036;
  * diagonal. A cell holding a record the coast rule took (an islet off Korea's west coast, 36.30 N 126.31 E) has its middle
  * up to that much further out to sea; testing the middle against the coast reach alone listed Semiaquilegia adoxoides,
  * whose records are in range (the owner's walk, 31 October 2026). Round eighty-five reads a cell by the reason the dossier
- * gives it (`cellReached`); this stays for a page derived before.
+ * gives it (`cellReached`); this stays for a page derived before. A cell states no country, so the policy's clauses for a
+ * record that states none (round eighty-six) do not apply to it: the reaches are tested as the derivation's own policy
+ * reaches them, widened.
  */
 export function cellTester(file: ShapesFile): RegionTester {
-  return regionTester(file, SHAPE_BUFFER_DEG + CELL_SLACK_DEG, COAST_DEG + CELL_SLACK_DEG);
+  return regionTester(file, { ...ADMISSION_POLICY, marginDeg: SHAPE_BUFFER_DEG + CELL_SLACK_DEG, coastDeg: COAST_DEG + CELL_SLACK_DEG, missingCountry: { margin: true, coast: true, island: true } });
 }
 
 /**
@@ -141,13 +144,18 @@ export function checkPage(d: CheckPage, cell: RegionTester, records: RegionTeste
   return { cellOutside, oldRule, openOutside, edgeOutside, uncounted, reasonDiffers, ...(cellOnOtherLand ? { cellOnOtherLand } : {}), ...(o?.admitted ? { admitted: o.admitted } : {}), ...(d.climate?.status === 'ok' && d.climate.admitted ? { cellsAdmitted: d.climate.admitted } : {}) };
 }
 
-/** The pages the check names in its output whatever they hold (review A1, B1, D2, A2): each must read as fixed. */
-export const NAMED_CASES: ReadonlyArray<{ key: string; name: string; was: string; needs?: 'climate' }> = [
+/**
+ * The pages the check names in its output whatever they hold (review A1, B1, D2, A2): each must read as fixed, but a case
+ * held `open` (round eighty-six), which is said as it stands and never called fixed.
+ */
+export const NAMED_CASES: ReadonlyArray<{ key: string; name: string; was: string; needs?: 'climate'; open?: string }> = [
   { key: 'k298116', name: 'Aloe vera', was: 'typical cell 25.425 N, 56.175 E, in Fujairah (United Arab Emirates), outside Oman, its one native region; then (round eighty-four) 25.325 N, 56.325 E at Khor Fakkan, Sharjah, by the margin of Oman\'s Madha enclave' },
   // Round eighty-five (the owner's decisions 1 and 2; reviews D4, A3, A5, B1).
   { key: 'k525228', name: 'Dracaena trifasciata', was: 'typical cell 2.475 S, 28.875 E, in Rwanda 2 km from Bukavu, by the margin of Zaire' },
   { key: 'k303171', name: 'Cordyline fruticosa', was: 'an open record at Tweed Heads, 28.230 S, 153.473 E, inside New South Wales, by the margin of Queensland' },
-  { key: 'k291500', name: 'Xeronema callistemon', was: 'no climate: its records on the Poor Knights, 21 km off the drawn coast, outside the range', needs: 'climate' },
+  // Round eighty-six (review D2): its island records are in, but its typical spot is Auckland, where it grows in gardens;
+  // Kew gives its area as the Poor Knights and Hen I. alone. Not fixed: said as it stands, with Kew's area on the page.
+  { key: 'k291500', name: 'Xeronema callistemon', was: 'no climate: its records on the Poor Knights, 21 km off the drawn coast, outside the range', open: "review D2: the typical spot is read from all its in-range records, Auckland's and Wellington's garden plants among them; Kew gives its area as \"New Zealand (Poor Knights Is., Hen I.)\", which the page shows beside the spot" },
   { key: 'k2453705', name: 'Veronica bollonsii', was: 'no climate: 24 of its records on islands off Northland outside the range', needs: 'climate' },
   { key: 'k2810307', name: 'Ficus elastica', was: 'typical cell 22.125 N, 88.575 E, in the Sundarbans of West Bengal, in none of its native regions' },
   { key: 'k307568', name: 'Galanthus nivalis', was: "typical cell 50.875 N, 5.475 E, in Belgian Limburg (introduced), let in by France's box" },
@@ -165,8 +173,13 @@ export function caseLine(c: (typeof NAMED_CASES)[number], d: CheckPage | undefin
   if (!d || !f) return { ok: false, line: `${c.name} (${c.key}): no dossier on disk under this id` };
   const at = d.climate?.status === 'ok' ? d.climate.at : undefined;
   const where = at ? `typical cell ${at.lat} N, ${at.lon} E, ${f.cellOutside ? 'OUTSIDE its native regions' : 'inside its native regions'}` : `no climate (${d.climate?.status ?? 'none'})`;
-  const ok = !f.cellOutside && !f.oldRule && !f.openOutside && !f.edgeOutside && !f.uncounted && !f.reasonDiffers && (c.needs !== 'climate' || d.climate?.status === 'ok');
+  const ruled = !f.cellOutside && !f.oldRule && !f.openOutside && !f.edgeOutside && !f.uncounted && !f.reasonDiffers;
+  const ok = ruled && (c.needs !== 'climate' || d.climate?.status === 'ok');
   const by = f.admitted ? ` (${reasonWords(f.admitted)})` : '';
   const recs = d.occurrences ? `; ${d.occurrences.nOpenInRange ?? 0} open and ${d.occurrences.nRestrictedInRange ?? 0} restricted records in range${by}, ${d.occurrences.nOutsideRange ?? 0} outside` : '';
-  return { ok, line: `${ok ? 'fixed' : 'NOT FIXED'}: ${c.name} (${c.key}): ${where}${recs}; records tested by ${d.occurrences?.rangeRule ? `shapes rule ${d.occurrences.rangeRule}` : `a rule before ${rule}`}. Before: ${c.was}.` };
+  const said = `${c.name} (${c.key}): ${where}${recs}; records tested by ${d.occurrences?.rangeRule ? `shapes rule ${d.occurrences.rangeRule}` : `a rule before ${rule}`}. Before: ${c.was}.`;
+  // A case held open is never "fixed" (round eighty-six; review D2): it says why it is open, and stops the upload only for a
+  // fault of the range rule's own, as any page would.
+  if (c.open) return { ok: ruled, line: `${ruled ? 'held open' : 'NOT FIXED'}: ${said} Open: ${c.open}.` };
+  return { ok, line: `${ok ? 'fixed' : 'NOT FIXED'}: ${said}` };
 }

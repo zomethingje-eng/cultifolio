@@ -250,8 +250,11 @@
   .fields input, .inline select { font: inherit; font-size: var(--fs-md); padding: 8px 10px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   .body :global(.seg > button) { min-height: 44px; }
-  .body :global(.seg.lenseg) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 440px); border-radius: var(--r); }
-  .body :global(.seg.lenseg > button) { white-space: normal; justify-content: center; text-align: center; padding: 6px 8px; line-height: 1.25; } /* reaches into the toggle group's own markup (round fifty-eight; the accessibility review) */
+  /* Every choice here as equal columns whose words may wrap, not the length one alone (round eighty-six; outside review B's
+     3: at 200% text "°F and inches" was cut at the group's edge, with no page-wide overflow to show it). Reaches into the
+     toggle group's own markup (round fifty-eight; the accessibility review). */
+  .body :global(.seg) { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: min(100%, 440px); border-radius: var(--r); }
+  .body :global(.seg > button) { white-space: normal; overflow-wrap: anywhere; justify-content: center; text-align: center; padding: 6px 8px; line-height: 1.25; }
   /* One option per line, its name above and its hint under it (round fifty-eight; the grower review). */
   .opt + .opt { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
   .optlab { margin: 0 0 8px; font-size: var(--fs-md); font-weight: 600; color: var(--ink); }

@@ -58,7 +58,7 @@
     <tbody>
       <tr><th scope="row">GBIF Backbone Taxonomy</th><td>The name's key, its older names (synonyms), family and order, and English names.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
       <tr><th scope="row">GBIF occurrence records</th><td>Wild records for the map, the marker and the habitat climate; and records of cultivated plants, counted once to make the species list.</td><td>Per record: <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>; CC BY-NC records are used but never published.</td></tr>
-      <tr><th scope="row">World Checklist of Vascular Plants (WCVP), RBG Kew</th><td>The accepted name and author, the native range, and Kew's one-line description.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
+      <tr><th scope="row">World Checklist of Vascular Plants (WCVP), RBG Kew</th><td>The accepted name and author, the native range, Kew's one-line description, and Kew's own words for the range, quoted.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
       <tr><th scope="row">CHELSA V2.1</th><td>Monthly climate normals, 1981–2010.</td><td><a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a></td></tr>
       <tr><th scope="row">ETOPO 2022 (NOAA)</th><td>Elevation, and which grid cells are land.</td><td>Public domain</td></tr>
       <tr><th scope="row">NASA POWER</th><td>Daily temperatures, for the extremes and the cold floor.</td><td>Public domain</td></tr>
@@ -75,18 +75,22 @@
 
   <h3 id="names">The name</h3>
   <p class="sum">A page is headed by the name Kew's World Checklist accepts for it, with Kew's author and Kew's family. GBIF's name for the same plant, where it differs, is listed as an older name, and a plant you recorded under it still finds the page. A name is matched to a source only where the match is certain.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <!-- Each fold is named by its section for a screen reader, which lists them by name: thirty-four folds all called "The rules in full" said one name over and over (round eighty-six; review W's W15). -->
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the name</span></summary>
   <ul class="rules">
     <li>A page whose id begins <code>k</code> is headed by Kew's accepted name for that entry, with Kew's author, whole. A name below species carries its rank word (subsp., var., f.), on every page.</li>
     <li>GBIF's name for the page's key, where it is other words, is one of the page's older names, so its old address moves to the page, as any older name's does, and the search finds it.</li>
     <li>The family shown is Kew's, from the same entry.</li>
-    <li>Kew is the authority for names everywhere. A name Kew accepts, or files under another species it accepts, is never a search name of a page it does not lead to.</li>
+    <li>Kew is the authority for names everywhere. A name of a page's record that Kew's file places only in another plant is taken off the page's older names, its search names and its addresses.</li>
+    <li>That test reads the names as the record writes them. A name of GBIF's below the species keeps its rank word, whatever the word ("proles", "subvar.", "nothosubsp."), so it is never cut to its first two words and so to another species' name: GBIF's "Paeonia corallina proles ovatifolia" is not taken for Paeonia corallina, which Kew files under Paeonia mascula.</li>
     <li>A page reached by another name says whose verdict joins the two names. GBIF's backbone accepts Agave amica, and Kew's World Checklist holds it as a synonym of Polianthes tuberosa, which heads the page: the page says so, never that GBIF accepts the heading.</li>
     <li>A plant you recorded under the old heading keeps its name and its GBIF key. The reference files the page's figures under the old heading too, for a plant of the page's own GBIF key only. The plant's page then shows that page, says the plant is filed under GBIF's name for its key, and offers to file it under the page's name.</li>
     <li>The old name leads to the page too, as one of its older names, except where Kew's file holds that name for another plant.</li>
     <li>A plant filed under a name that has no page of its own offers "Is it an older name?". Pressed, it looks among the older names. Where the name is an older name of a page, the plant's page says so, links that page, and offers to file it there, the old name kept as received.</li>
     <li>Where a page holds a variety, subspecies or form of the name as an older name, and no page holds the name itself, that is said, with the name the page holds.</li>
     <li>The add form says a name is an older name of a page only when no page is headed by it and that page holds it as an older name, or the name's own page was merged into it. The same spelling by another author names another plant, so it is never called an older name.</li>
+    <li>A name GBIF's name service gives the very key a page reads GBIF's records under is GBIF's name for that page, and the add form, the search, an imported plant's row and the plant's page all say so ("GBIF's name for Hoodia alstonii"), not that it is an older name.</li>
+    <li>When the field is left, or Return is pressed in it, the form first finishes asking whether the reference holds the name. Only when it does not, or holds it as an older name or GBIF's name of a page, does the button read "Add as typed", and then one press files the plant as typed. A press while the question is still out waits for its answer.</li>
     <li>A name you keep as typed after the add form or an import named its page carries that page. The plant's page shows that species at once, found by its hash group.</li>
     <li>A page without a Kew entry of its own, a <code>g</code> page, is headed by GBIF's name. There were {countText(COUNTS_ON.gPages)} such pages on {COUNTS_ON.on}.</li>
     <li>A species is headed by its species entry. A subspecies or variety never lists its own species' accepted name as an older name, and an autonym, such as Stapelia hirsuta var. hirsuta, has no author of its own, as the Code of nomenclature says.</li>
@@ -99,10 +103,11 @@
   </details>
 
   <h3 id="common">English names</h3>
-  <p class="sum">The English name shown is one GBIF's sources give, picked by a fixed rule, never by hand. It is not always the name growers use most. Every English name a source gives is searched, whether shown or not.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <p class="sum">The English name shown is one GBIF's sources give, picked by a fixed rule, never by hand. It is not always the name growers use most. Every name GBIF's sources mark as English is searched, whether shown or not. A name with no language marked is never shown; only NCBI's are searched, so "peyote" finds Lophophora williamsii.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: English names</span></summary>
   <ul class="rules">
-    <li>The common name is one of the English names GBIF reports. A page with no GBIF key takes Wikidata's (<a href="#no-gbif-key">below</a>).</li>
+    <li>The common name is one of the English names GBIF reports: the rows GBIF's sources mark as English. A row with no language marked is never shown. A page with no GBIF key takes Wikidata's (<a href="#no-gbif-key">below</a>).</li>
+    <li>The rows NCBI's taxonomy gives with no language marked are searched, never shown. Of 121 such names on 788 pages read, 114 were English ("peyote", "dragon fruit") and 7 were not ("babosa"), so they find a plant and never name it. Other sources' rows with no language marked are not read: Catalogue of Life's are in many languages ("Hingstkastanje", "Cekuh").</li>
     <li>A source that lists several names in one entry, separated by commas ("Sago palm, King sago, Sago cycad"), gives each as a name of its own. A comma inside brackets does not part names: "Prickly pear (Indian fig, Barbary fig)" is one.</li>
     <li>Spellings of one name count as one name: case, hyphens, spaces, apostrophes, accents, a full stop at the end, and a compound written open or closed ("Century plant" and "Centuryplant").</li>
     <li>Names are put in order by a fixed rule: the name more of GBIF's sources give first, then a name GBIF marks preferred (a flag one dataset sets, so it only breaks a tie), then the order in which GBIF's list gives the names, which is not always the alphabet.</li>
@@ -131,7 +136,7 @@
 
   <h3 id="range">The native range</h3>
   <p class="sum">The native range is Kew's, from its World Checklist, in Kew's own regions. Wild records are tested against it, so a garden escape abroad does not set the climate. Where Kew's entry is not certainly the page's plant, no range is taken.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the native range</span></summary>
   <ul class="rules">
     <li>The range is read from Kew's files of the day the page states: the "Extracted" day of Kew's README, 4 June 2026 for this reference. The record of the page's sources says "as of" that day, not the day the page was built.</li>
     <li><span id="regions">A range is in Kew's units, the level-3 regions of the World Geographical Scheme for Recording Plant Distributions (TDWG), under the scheme's own names, some of them historical (Yugoslavia, Czechoslovakia, Lebanon-Syria). A species page names them as Kew does and says so beside the range.</span></li>
@@ -140,6 +145,7 @@
     <li>A page of the species list reads the range of its own Kew entry wherever GBIF's name leads to another entry or to none (GBIF's Chamaenerion angustifolium is Kew's Epilobium angustifolium), and says whose range it is.</li>
     <li>Where Kew has no entry, the range is the countries that national checklists report through GBIF, said as that. Those checklists state presence, not native status, so no record is tested against them.</li>
     <li>Kew's own one-line description of a species, its life form and climate class, is quoted and credited to WCVP, RBG Kew. Nothing is derived from it.</li>
+    <li id="cultigen">A plant Kew lists only as a cultigen, its area given as "as a cultigen from Peru" (the tomato) or "as a cultigen from Greece" (saffron), has no wild range: its region is the one the crop comes from. The page names that region "(as a cultigen)" wherever it names it, quotes Kew's words, and reads no habitat climate from the plant's records, which are of gardens and fields.</li>
     <li>Kew's own names for each page's plant (its accepted entry, the names Kew files under it, and older names Kew accepts as species of their own) are read from Kew's files. The page lists the last apart from its other older names.</li>
   </ul>
   </details>
@@ -169,7 +175,7 @@
 
   <h3 id="hybrids">Hybrids</h3>
   <p class="sum">A named hybrid such as Mentha × piperita is a page like any species, written with the sign as Kew writes it. It has a habitat climate when its wild records allow one. A cross you record with no page of its own has no habitat.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: hybrids</span></summary>
   <ul class="rules">
     <li>A hybrid's heading, title, tile and name in the search take Kew's name for its entry, with the sign, from <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/src/lib/core/hybrids.json">the list of hybrids</a>, made from the species list and Kew's file (486 hybrids, from Kew's file of 2026-06-04).</li>
     <li>The page says the parents Kew's file states.</li>
@@ -182,7 +188,7 @@
 
   <h3 id="keys">GBIF keys, and pages that are one plant</h3>
   <p class="sum">GBIF sometimes files one plant's records under two names. A page reads the other name's records too, but only where Kew holds that name as the same plant. Two pages that are one plant are merged into one.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: GBIF keys, and pages that are one plant</span></summary>
   <ul class="rules">
     <li>Records come from GBIF under the page's own key, as GBIF held them on the day it made the download, which the page states.</li>
     <li>Where GBIF files the same plant under another key too, that key's records and photographs are read as well: from GBIF's download where it holds them, and from GBIF's search otherwise, sampled as the page's own (<a href="#sample">below</a>). The page names each key and how its records were read.</li>
@@ -202,8 +208,8 @@
   </details>
 
   <h3 id="no-gbif-key">Species with no GBIF key</h3>
-  <p class="sum">Some species Kew accepts are not one accepted species in GBIF's backbone. Their pages take their names and range from Kew, and their records only from GBIF keys Kew's file names as this plant. Where there are none, the page says its records were not checked, and why.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <p class="sum">Some species Kew accepts are not one accepted species in GBIF's backbone. Their pages take their names and range from Kew, and their records only from GBIF keys Kew's file names as this plant. Where there are none, the page says its records were not asked, and why.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: species with no GBIF key</span></summary>
   <ul class="rules">
     <li>A species Kew accepts is on the list by its own records, its collector genus or its page already here, whatever GBIF holds.</li>
     <li>Where GBIF's backbone holds no one accepted species of its name that is this plant, the page is never matched to GBIF by its name. GBIF may hold the name only as another species' synonym, not at all, only as several doubtful names, or only under a genus it files in another order than Kew's family while its accepted genus of that name is in that order (Xanthoceras sorbifolium, whose one accepted usage GBIF files in the grasses).</li>
@@ -228,7 +234,7 @@
 
   <h3 id="climate-data">Climate and elevation</h3>
   <p class="sum">The monthly climate is CHELSA's, the elevation ETOPO's and the daily extremes NASA POWER's, read on one grid of 0.05° squares. The maps' coasts and regions are Natural Earth's.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: climate and elevation</span></summary>
   <ul class="rules">
     <li>Monthly climate normals come from <b>CHELSA V2.1</b> (1981–2010, 30 arc-seconds), packed to a 0.05° grid: day and night temperature, rainfall, solar radiation, relative humidity, vapour-pressure deficit and wind.</li>
     <li>Elevation comes from <b>ETOPO 2022</b> on the same grid.</li>
@@ -239,8 +245,8 @@
   </details>
 
   <h3 id="photos">Photographs</h3>
-  <p class="sum">Photographs come from GBIF's records, iNaturalist and Wikimedia Commons, each with its author and licence. Wild plants lead; cultivated ones are marked so. A file that may be another plant, a map, a drawing or a pressed specimen is not shown.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <p class="sum">Photographs come from GBIF's records, iNaturalist and Wikimedia Commons, each with its author and licence. A photograph of the plant in cultivation leads where iNaturalist has one; cultivated ones are marked so. A file that may be another plant, a map, a drawing or a pressed specimen is not shown.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: photographs</span></summary>
   <ul class="rules">
     <li>Photographs come first from the media that <b>GBIF</b>'s occurrence download carries, drawn from records under an open licence first. Research-grade iNaturalist observations and other observation datasets reach GBIF this way.</li>
     <li>Where the records came as GBIF's SQL download, which carries no media, a download of the same records that carry images is read, and for a species that download did not ask for, GBIF is asked instead, human observations only, as the download is read.</li>
@@ -255,12 +261,12 @@
     <li>An observation of a taxon below the species that Kew's file places under another species is left out.</li>
     <li>Then, for a species the download does not hold and iNaturalist gave fewer than six, GBIF's records under an open licence (CC0 or CC BY). Last, <b>Wikimedia Commons</b>, whose files do not count towards the six.</li>
     <li>Every photograph is restricted by its own licence to CC0, public domain, CC BY and CC BY-SA, whatever dataset it came through. A GBIF photograph whose own media item states no licence is not published under its record's.</li>
-    <li>The credits under the gallery say the day each source was read: each photograph's own day where the build recorded it, else the day its source was asked.</li>
+    <li>The credits under the gallery say the day each source was read: each photograph's own day where the build recorded it, else the day its source was asked, or, for GBIF's photographs read from a GBIF download, the day GBIF made the download.</li>
     <li>Each carries its licence, and its author where the source names one. An iNaturalist photograph's author is its observer, by name or, where there is none, login, under CC0 too ("Alan Weakley, no rights reserved (CC0)").</li>
     <li>Under CC BY and CC BY-SA a photograph without an author is not published. An e-mail address is never published as an author, and a credit naming only one counts as none.</li>
     <li>iNaturalist's grey stand-in for a photograph it has not yet processed is not a photograph.</li>
     <li>A photograph in the public domain is labelled "Public domain", never CC0, which is a waiver only an author can make.</li>
-    <li>The lead photograph is iNaturalist's wild one first, then GBIF's, then iNaturalist's cultivated, then Commons'. GBIF's media of a record that is not an observation of the living plant, or on a herbarium's own host, is not shown.</li>
+    <li>The lead photograph is taken from iNaturalist's cultivated set first, the plant as it is grown, then iNaturalist's wild set, then GBIF's, then Commons'. Of these, one its source states at least 640 pixels on its long side leads: one not upright first, and the first photograph of its observation before a later one. Where no source states such a size, the first not stated smaller leads, one not upright first. GBIF's media of a record that is not an observation of the living plant, or on a herbarium's own host, is not shown.</li>
     <li>A photograph that two species' pages would both show is shown on neither. The one exception is an iNaturalist observation GBIF files under the other page by an older name Kew accepts as the first page's species: it is shown on the first page only.</li>
     <li>On a species page and on the compare page each photograph shows its author and licence. A small tile elsewhere gives the licence and the author's name, cut to forty characters ("Photo: CC BY, Jane Doe").</li>
     <li>A tile names the site the photograph came from instead where the credit cannot be said short and true. The species page it opens gives the full credit and a link to the source.</li>
@@ -300,6 +306,7 @@
     <li>Of the rest, files whose name holds the species' epithet come first, and of those, files at least 500 pixels wide. A Commons file leads only a page with no photograph of a living plant from iNaturalist or GBIF.</li>
     <li>A Commons photograph is loaded at whichever of Commons' own versions the place needs: 960 pixels wide for the lead (500 on a phone, or where the screen needs no more), and 500 on the compare page.</li>
     <li>It is loaded at 250 on a front-page tile, in the strip under a species' name and on a Related tile, and at 120 in a catalogue row or beside a genus.</li>
+    <li>The strip's photographs under a species' name are asked for only once the lead photograph has loaded or failed, or two and a half seconds after the page can wait for it, so on a slow connection the lead comes first. Their squares are kept meanwhile, so nothing moves when they arrive.</li>
     <li>It is never loaded as the original upload where Commons has a version the place can use. An upload from 501 to 960 pixels wide leads at its own width.</li>
     <li>One no wider than 500 is loaded at Commons' largest version below its own width, 250 or 120, and whole only where it is 120 pixels wide or less, or its width is not known.</li>
     <li>One Commons gave no smaller version of is shown as uploaded.</li>
@@ -307,13 +314,13 @@
   </details>
 
   <h3 id="summary">The quoted summary</h3>
-  <p class="sum">The summary is the opening of the English Wikipedia article, quoted as written and credited, with the day it was read and the article's revision it was quoted from. It is quoted only where the article is shown to be about this plant.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <p class="sum">The summary is the English Wikipedia article's opening paragraph, quoted word for word as plain text and credited, with the article's revision it was read at and the day it was read. It is quoted only where the article is shown to be about this plant. A summary read before November 2026 is Wikipedia's summary service's text, which leaves some words in brackets out; its credit says so until it is read again.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the quoted summary</span></summary>
   <ul class="rules">
-    <li>The summary is the opening of <b>Wikipedia</b>'s article, quoted as written, kept visibly apart and credited, with a link where more followed. It is four sentences at most, within the first 1,500 characters.</li>
+    <li>The summary is the article's opening paragraph: the first paragraph of the article's lead as <b>Wikipedia</b>'s API gives it in plain text (TextExtracts), word for word, its brackets kept. Where the plain text leaves a bracket empty, a pronunciation having been taken out, the empty bracket is closed up, and a label left with nothing after it ("US:") is taken out of a bracket that keeps words. It is kept visibly apart and credited, with a link where more followed. It is four sentences at most, within the first 1,500 characters.</li>
     <li>It is cut only where a sentence ends. A summary that does not end a sentence, as Wikipedia gives it, ends with "…" and links the article, as one cut short does, whenever it was built.</li>
-    <li>It is the first paragraph of the lead as Wikipedia gives it in plain text, its brackets kept, and none left empty where a pronunciation was taken out.</li>
-    <li>The page names the article's revision the summary was quoted from, and links that revision. A fill asks for the article again, records its revision, and quotes it anew where its opening changed.</li>
+    <li>The paragraph and the article's revision are read in one request, twenty articles a request, so the revision the page names and links is the one the words were read at. The page gives the day it was read too.</li>
+    <li>A summary read before November 2026 is the text of Wikipedia's summary service (its REST API's page summary), which leaves out words in brackets, a pronunciation and often more; its credit names the service. A fill reads every such summary again as the opening paragraph, and quotes it anew where it differs.</li>
   </ul>
   </details>
   <details class="more"><summary>When a summary under another title is quoted</summary>
@@ -337,7 +344,7 @@
 
   <h3 id="ids">Identifiers and links</h3>
   <p class="sum">The links to POWO, IPNI, World Flora Online and iNaturalist come from Kew's file and from Wikidata. An identifier is linked only where it is shown to be this plant's.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: identifiers and links</span></summary>
   <ul class="rules">
     <li>The species' identifiers in POWO, IPNI, World Flora Online and iNaturalist, and the title of its English Wikipedia article, come from <b>Wikidata</b>, from the item that carries the species' GBIF key.</li>
     <li>The IPNI and POWO links are Kew's number for the name and author wherever Kew holds one, read from the same file as the range, whether or not the Wikidata item gives a number, and whatever Wikidata answered. An item's number Kew holds for another author's name is never linked.</li>
@@ -377,7 +384,7 @@
 
   <h3 id="inat">The iNaturalist taxon</h3>
   <p class="sum">The iNaturalist taxon a page links is checked with iNaturalist before any photograph of it is asked for. It is taken only where it is shown to be this species.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the iNaturalist taxon</span></summary>
   <ul class="rules">
     <li>Every iNaturalist taxon id, from Wikidata or kept from the previous build, is checked with iNaturalist: by the build, or, where the build left iNaturalist to the daily fill, by the fill, thirty ids a request, before it asks iNaturalist for any photograph of the taxon.</li>
     <li>Until the fill reaches it, a page may show the wild photographs the open data holds under an id not yet checked, or say it holds none.</li>
@@ -405,14 +412,14 @@
   <section aria-labelledby="list">
   <h2 id="list">Which species are here</h2>
   <p class="sum">The list of species was derived by rule, not chosen by hand. It holds every species with at least three records of cultivated plants, and every species of 173 collector genera. A species that is not here says nothing about the plant, only about the list.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: which species are here</span></summary>
   <ul class="rules">
     <li>The list is <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/species-list.txt">the species list</a> in the source code, made by rule on 19 October 2026 and added to since only by the rules below.</li>
     <li>It holds every species Kew's World Checklist accepts with at least three records of cultivated plants.</li>
     <li>It holds every species Kew accepts of 173 collector genera taken whole: the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs and their like, less their hybrids, in <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/specialist-genera.txt">the list of collector genera</a>.</li>
-    <li>It keeps every species that was already in the reference, so that no page falls out.</li>
+    <li>It keeps every species that was already in the reference, so that no page falls out; 26 species are here for that reason alone.</li>
     <li>A species Kew accepts that GBIF folds into a variety or a synonym of another page's species gets a page of its own when growers name it. Echinopsis pachanoi, San Pedro, is one.</li>
-    <li>Each page is the species of the Kew entry it cites, or of its name where Kew holds that name for one species alone; 26 species are here for that reason alone. Pages whose names Kew's checklist does not place keep GBIF's key.</li>
+    <li>Each page is the species of the Kew entry it cites, or of its name where Kew holds that name for one species alone. Pages whose names Kew's checklist does not place keep GBIF's key.</li>
     <li>The records counted are iNaturalist's observations marked captive or cultivated, and GBIF's living-specimen records from living collections.</li>
     <li>GBIF's count only from datasets that a stated rule finds to be living collections, by each dataset's own description. A dataset that names a genebank (germplasm, a seed bank, plant genetic resources or passport data, in the words of FAO's genebank standards) is left out.</li>
     <li>One whose title, keywords or publisher names a botanic garden, an arboretum, a garden or a living collection is counted. Any other, such as a register of street trees or a field survey, is not.</li>
@@ -426,7 +433,7 @@
   </details>
   <h3 id="grown">"Popular genera"</h3>
   <p class="sum">"Popular genera" narrows the front page's catalogue to the genera growers record most often in cultivation on iNaturalist. It is a count of observations, made once and dated.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: "Popular genera"</span></summary>
   <ul class="rules">
     <li>The front page's catalogue is the same on every device: every genus and every species.</li>
     <li>Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist's observations of plants marked captive or cultivated, across the reference's genera that were counted.</li>
@@ -437,7 +444,7 @@
   </details>
   <h3 id="feature">The photographs on the front page</h3>
   <p class="sum">The front page's photographs are picked by rule from the popular genera, not by hand.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the photographs on the front page</span></summary>
   <ul class="rules">
     <li>The front page's photographs are chosen by rule, not by hand, from the "Popular genera", most grown first.</li>
     <li>Of each such genus, one species with eight photographs or more and a habitat climate: the one most observed in cultivation on iNaturalist, then the most photographed. The first 48 genera that have one make the strip, and twelve of them are shown a day, in turn.</li>
@@ -450,7 +457,7 @@
   <section aria-labelledby="search">
   <h2 id="search">Search</h2>
   <p class="sum">Search finds a species by its name, an older name, an English name, its family or where it grows. A name you type exactly comes first, then the species whose English name it is. A query that matches nothing is tried again with a typing error forgiven, and the page says so.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: search</span></summary>
   <ul class="rules">
     <li>First, a name typed as a name, its genus first: <span class="ex" data-q="copi" data-order="Copiapoa" data-first>"copi" is the Copiapoas</span>. A genus that only begins with a word typed whole comes after the common names holding the word whole: <span class="ex" data-q="rose" data-order="Rosa | Rosenbergiodendron">"rose" is the roses before Rosenbergiodendron</span>.</li>
     <li>Then an older name typed as one: <span class="ex" data-q="Sansevieria trifasciata" data-order="Dracaena trifasciata" data-first>"Sansevieria trifasciata" is Dracaena trifasciata</span>. A species that holds the name exactly comes first: <span class="ex" data-q="Cornus mascula" data-order="Cornus mas | Cornus officinalis" data-first>"Cornus mascula" is Cornus mas before Cornus officinalis</span>.</li>
@@ -481,12 +488,12 @@
   </details>
   <h3 id="search-reading">How a query is read</h3>
   <p class="sum">A query is read as a botanical name written the way growers write it, so an author, a cultivar or "cf." is left out. A query that finds nothing is tried again, and the page says how it read it.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: how a query is read</span></summary>
   <ul class="rules">
     <li>A query is read as a botanical name written the way growers write it. Var., subsp., f., fo. and v. are ranks; after cv. the rest is a cultivar and is left out.</li>
     <li>"cf.", "cfr.", "aff.", "vel aff.", "nr." and "near" (between two words of a name) are skipped. "sp.", "spp." and "nov." end the name.</li>
     <li>"x" or "×" marks a hybrid, and the name starts again after it, so the word after the sign is never an author. A hybrid is found the same with the sign, with an "x" or with neither.</li>
-    <li>A cultivar in quotes after the name, any quotes („…“ and «…» among them), is left out when it begins with a capital. Quotes around the whole query are taken off, and the text inside is searched.</li>
+    <li>A cultivar in quotes after the name, any quotes („…“ and «…» among them), is left out when it begins with a capital. A cultivar whose name holds an apostrophe is not read as one, and its words are searched: "Galanthus 'Wendy's Gold'" finds nothing. Quotes around the whole query are taken off, and the text inside is searched.</li>
     <li>An author citation pasted after a name is left out, in either case ("L.", "l.", "Britton &amp; Rose").</li>
     <li>A capitalised word is read as an author only after an epithet of four letters or more. A word ending in a full stop, or a capitalised abbreviation of four characters or fewer ("St.", "L."), is read so only after an epithet or a rank. So "Lily of St. James" and "String of pearls." are searched whole.</li>
     <li>When the reading as a botanical name would leave words out, the whole query is read against the English names first.</li>
@@ -495,7 +502,7 @@
     <li>A genus of the reference typed in full is matched only as typed. So "Aloe × nobilis", a hybrid the reference does not hold, is not Margaritaria nobilis by a word one letter from "aloe"; it is answered by its first parent.</li>
     <li>After a first word with a capital, a capitalised word is matched only against a whole word: <span class="ex" data-q="Aloe Verra" data-order="Aloe vera" data-first>"Aloe Verra" is Aloe vera</span>, not a plant of Algeria, and "Echeveria Lola" is not Echeveria lilacina.</li>
     <li>Then the query is tried again on its first two words. A hyphenated epithet is one word, and a hybrid formula is tried on its first parent. A single letter, two words whose second is a small word such as "of", or words of a sentence ("this is the one my grandmother grew"), are never tried again.</li>
-    <li>Still nothing: a last word of five letters or more is read from fewer of its letters, as a name still being typed is (one, two and three fewer, then its first four), and the first reading that answers is shown. So "lithops lesleyi" is Lithops lesliei, and the page says which letters it read.</li>
+    <li>Still nothing: a last word of five letters or more is read from fewer of its letters, as a name still being typed is (one, two and three fewer, then its first four), and the first reading that answers is shown. So "lithops lesleyi" is Lithops lesliei, and the page says which letters it read. A query of two words or more is read so only when its first word is a genus here: "false roselle" is never read as "false rose".</li>
     <li>Last, a genus followed by capitalised words (a cultivar without quotes, "Crassula Gollum") is answered with its genus, but only when the first word is a genus here. A common name in title case ("St Johns Wort") is never cut to its first word.</li>
     <li>Whenever words were left out, the page says so: "Searched for “Copiapoa cinerea”, leaving out “Phil.”". When the query was tried again: "Nothing matched … as written. Showing results for …". When matches came by a similar spelling, it says that too.</li>
     <li>The search finds its matches in files the reference is built with (<a href="#corpus">below</a>). Where those files say only that more than 2,000 species would have to be looked through for every word, it lists none and says "Too many species match “…” to list them all. Type another letter or another word to narrow it."</li>
@@ -507,7 +514,8 @@
     <li>A name two species or more hold goes to none of them. The page says it is an older name of those species, and names each with the author under which its record holds the name ("Echeveria farinosa Lindl., now Dudleya farinosa; Echeveria farinosa VanHoutte, now Dudleya pulverulenta").</li>
     <li>Where GBIF files one name by one author under two of them it says so ("one name, not two").</li>
     <li>But the old address of a page merged into one of them goes to that one (/species/echeveria-peacockii is Echeveria desmetiana, though Kew's file also files the name under Dudleya pulverulenta). The page says the name is merged into it, and is also an older name of the others, with the author under which each one's record holds it.</li>
-    <li>An address the backbone resolves through a subspecies or variety goes to its species, and the page says so while the server holds the backbone's answer, a day.</li>
+    <li>An address the backbone resolves through a subspecies or variety goes to its species, and the page says so, from the names its record holds under the species' varieties.</li>
+    <li>An address under a name Kew's file holds as an older name of one species here goes to that species without asking GBIF; one Kew holds for two goes to neither. GBIF's answer never leads to a page whose record says Kew holds the name for another plant: the address is then answered "not found", saying what Kew holds.</li>
     <li>The search is kept in the page's address, so a reload or a shared link answers it again. Back from a species page returns to the same list, as long as it was, at the same place.</li>
   </ul>
   </details>
@@ -517,7 +525,7 @@
   <section aria-labelledby="written">
   <h2 id="written">Who writes the words</h2>
   <p class="sum">Nothing about a species is written for its page by a person or by AI, apart from credited quotations. Every sentence is a quotation, a figure with its source, or a labelled reading of a fixed rule. The templates were written once, the same for every species.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: who writes the words</span></summary>
   <ul class="rules">
     <li>The figures at the top, the season card and the cultivation sheet are figures with their sources, and the readings two fixed rules make of them. Each section's "How this section is made" says which figure each sentence rests on.</li>
     <li>The templates those sentences are filled into, the labels and the notices were written once, for every species, by the author with Claude, an AI model, as the code was. They are in <a href="#source">the source code</a>, and no text is written or generated for any one species.</li>
@@ -531,7 +539,7 @@
   <section aria-labelledby="refusal">
   <h2 id="refusal">A refusal is not an absence</h2>
   <p class="sum">Sources time out and go down. When one does, the page says "not checked", and where a source was not asked, "not asked", rather than showing an empty list. "We have no answer" and "there is nothing" are different facts, and a grower needs to know which.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: a refusal is not an absence</span></summary>
   <ul class="rules">
     <li>Where a page's records were not checked, it says so once, under the name, with why; each section that needs the records points there ("see under the name") rather than saying it again.</li>
     <li>Wherever there is no room for the sentence, the mark is one dashed pill reading "not checked", or "not asked" for a source not asked, the same on every page, and tapping it says which source, and when.</li>
@@ -551,7 +559,7 @@
   <section aria-labelledby="records">
   <h2 id="records">Which records count</h2>
   <p class="sum">GBIF's records include garden plants, herbarium sheets placed at the herbarium, and plants outside their native range. A species page keeps only wild records inside Kew's native range. Every record left out is counted, and the page says why.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: which records count</span></summary>
   <ul class="rules">
     <li id="sample">The build reads a species' georeferenced records with no flagged geospatial issue: at most 2,000 from GBIF's download, or, where the download does not hold the species, up to three pages of 300 from GBIF's search.</li>
     <li>From the download, where GBIF holds more than 2,000, the sample is chosen by grid cell, not by the file's order: one record from every distinct 0.05° cell first, then more from each cell in turn. So a sample covers the whole range.</li>
@@ -562,7 +570,7 @@
   </details>
   <h3 id="default-points">Default points</h3>
   <p class="sum">Some datasets put records they have no locality for at a country's or a province's middle. A record at such a point is left out, unless its dataset states it is placed to within 10 km.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: default points</span></summary>
   <ul class="rules">
     <li>A record at a dataset's default point is left out too, and counted. A default point is a coordinate where the open records of 20 species or more of this reference lie, nearly all with no year.</li>
     <li>It is most often a country's or a province's middle that a dataset gives records it has no place for: one in the middle of Mexico is on the maps of 180 species. The points are read from the reference's own records and listed in <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/default-points.txt">the list of default points</a>.</li>
@@ -571,22 +579,26 @@
   </ul>
   </details>
   <h3 id="shapes">Inside the native range</h3>
-  <p class="sum">Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border or off a coast counts only when it lies in no other region's shape and its stated country, where it states one, is that region's country. A record on a native island too small to draw counts.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <p class="sum">Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border, off a coast or on an island too small to draw counts only when it states that region's country, and a record 0.02° or less inside a neighbouring region's shape counts for the native one only by its stated country and, where it names one, its state.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: inside the native range</span></summary>
   <ul class="rules">
     <li>Each record left is tested against the native range from Kew, and a record outside it is discarded. Restricted records are tested exactly as open ones are.</li>
     <li>A record is inside a native region when it lies in the region's shape.</li>
-    <li>A record in no region's shape counts for a native region within the buffer of 0.05° beyond its edge (about 5.6 km), or off its coast within the coast reach. That is only when its stated country, where it states one, is the country of the region it would count for.</li>
-    <li>A record inside another region's shape is that region's, native or not, however near the native one. Aloe vera's record at Khor Fakkan lies in the Gulf States' shape, so it does not count for Oman, though Oman's border is in reach.</li>
+    <li>A record in no region's shape counts for a native region within the buffer of 0.05° beyond its edge (about 5.6 km), or off its coast within the coast reach. That is only when it states the country of the region it would count for.</li>
+    <li>A record that states no country counts only where it lies inside a native shape, inside the box of a native region with no shape, or on a native minor island: no region is guessed for it.</li>
+    <li>The shapes are simplified to about 2 km (0.02°), so a border is drawn no closer than that. A record inside a neighbouring region's shape but within 0.02° of a native one counts for the native region when its stated country is that region's and not the neighbour's. Where both are of its country (the Free State and KwaZulu-Natal), the state or province the record names decides: it counts when that is the native region's, and not when it is the neighbour's. A record that names neither counts, since within the drawing's own accuracy the line cannot tell.</li>
+    <li>Any other record inside another region's shape is that region's, native or not. Aloe vera's record at Khor Fakkan lies in the Gulf States' shape and states the Emirates, so it does not count for Oman, though Oman's border is in reach.</li>
+    <li>These are the rules of shapes rule r86, which each page names. A page whose records were tested by r85 also let in, by the buffer and the coast reach, a record that stated no country, and none across a border.</li>
     <li>The shapes are Natural Earth's states and provinces (public domain), placed in Kew's regions by TDWG's own tables and simplified to about 2 km. TDWG's own outlines are not openly licensed, so they are not used.</li>
-    <li>They follow TDWG's scheme exactly. Morocco's southern provinces are split at the Western Sahara line, Tarfaya to Morocco and the rest to Western Sahara, and Darjeeling is in the East Himalaya, as TDWG's EHM-DJ.</li>
+    <li>They follow TDWG's scheme exactly. Morocco's southern provinces are split at the Western Sahara line, Tarfaya to Morocco and the rest to Western Sahara, and Darjeeling is in the East Himalaya, as TDWG's EHM-DJ. Since rule r86, Gilgit-Baltistan and Azad Kashmir are in the West Himalaya, where TDWG's gazetteer files Gilgit and Baltistan (WHM-JK, Jammu-Kashmir), not in Pakistan.</li>
+    <li>A region's countries are those GBIF states a record's, Svalbard's SJ, Bouvet Island's BV, the Caribbean Netherlands' BQ, Saint-Martin's MF and Clipperton Island's CP among them.</li>
     <li>Islands a coarser drawing missed are placed in their regions: the Kermadec Islands, Los Roques, the Aru Islands and Cocos Island. The Snares stay in New Zealand South, where TDWG's gazetteer files them, and Kenting's records lie just off the drawn coast of Taiwan, so they count by the buffer.</li>
     <li>A province TDWG's tables write under an older code (the former Yugoslavia's), or under none (Somaliland, South Sudan, Northern Cyprus, the West Bank), is placed in its TDWG region. An islet the simplification would drop is kept as drawn.</li>
     <li>A remote island that does not fit its region is put in its own region, or left out, rather than costing the whole region its shape.</li>
     <li>366 of the 369 regions have a shape. The other three are tested by their boxes: Christmas Island and the Cocos (Keeling) Islands, which Natural Earth's provinces do not draw, and the South China Sea, whose Spratly Islands TDWG gives no country.</li>
     <li>A region's box is its bounding rectangle, tested with the same buffer as a shape. A box takes in its neighbours' corners, so it can let in a record from a country next door.</li>
-    <li id="coast-reach">The coast reach is 0.15° (about 16.7 km). A record in no region's shape, at sea or on an islet the shapes do not draw, counts for the region whose drawn coast is nearest within it. A record on another region's land never does: Belgium is no part of France's range, however near.</li>
-    <li id="islands">A record beyond the coast reach, in no shape, counts for a native region where a source puts land there. That is an island of Natural Earth's minor islands, each given to the region of the nearest shape. Or the record states that region's country and lies within 0.5° of its shape (about 55 km), or inside its box.</li>
+    <li id="coast-reach">The coast reach is 0.15° (about 16.7 km). A record in no region's shape, at sea or on an islet the shapes do not draw, counts for the region whose drawn coast is nearest within it, when it states that region's country. A record on another region's land never does: Belgium is no part of France's range, however near.</li>
+    <li id="islands">A record beyond the coast reach, in no shape, counts for a native region where a source puts land there. That is an island of Natural Earth's minor islands, each given to the region of the nearest shape. Or the record states that region's country and lies within 0.5° of its shape (about 55 km), or inside its box, and no other country's drawn land lies nearer.</li>
     <li>So the Poor Knights lily's records on its own islands count for New Zealand North.</li>
     <li>Each page's record of its sources says how its records, open and restricted alike, were tested: by the native regions' shapes, by their boxes, or by how many of each, and the rule of the shapes it used.</li>
     <li>A page's record of its sources gives the day it was built, and its records were tested by the rules of that day.</li>
@@ -602,7 +614,7 @@
   <section aria-labelledby="marker">
   <h2 id="marker">The map marker</h2>
   <p class="sum">The marker is where the records are densest, and it decides nothing else. It sits on a real record where it can. The climate is not read at the marker.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the map marker</span></summary>
   <ul class="rules">
     <li>Records are binned at 1°. The bin with most neighbours wins if it holds at least half the records or twice the runner-up.</li>
     <li>If no bin dominates at 1°, the test repeats at 2° and 4°, and the densest 4° block stands when none dominates even there.</li>
@@ -617,12 +629,13 @@
   <section aria-labelledby="climate">
   <h2 id="climate">The climate across the range</h2>
   <p class="sum">The habitat climate is read across all the well-placed wild records read, not at one point. Each place is counted once, however often it was visited. The page shows the middle year and the span the species is recorded in.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the climate across the range</span></summary>
   <ul class="rules">
     <li>A record counts for the climate when it is placed to within 10 km. With no stated accuracy, a person's observation with coordinates to three decimals counts, the way a phone records them.</li>
     <li>A herbarium sheet placed at a locality's centre with no figure, and every vaguer record, stays on the map and off the climate.</li>
     <li>Each record that counts names one 0.05° cell of the climate grid, and each distinct cell is read once. A site visited a hundred times is one cell of climate, not a hundred votes.</li>
     <li>A cell at sea or on ice is dropped and counted. Land is the grid's elevation layer, which averages only land, so a cell with no land has no elevation. The few basins whose whole cell lies below sea level read as sea.</li>
+    <li>A cell the elevation layer reads as sea is read all the same where a native region's drawn shape or minor island lies in it: an island narrower than the layer's 60″ pixels, such as Lord Howe Island. Its climate is the cell's, with no elevation, so no height correction is made there, and the page's record says how many such cells it read.</li>
     <li>A species recorded in strength on both sides of the equator takes its year from the larger side alone, since a January median over both is a month no place has. That is three or more cells poleward of 10° on the smaller side, and a fifth of the cells that far out.</li>
     <li>Cells within 10° of the equator stay in either way, and the page says what was left out.</li>
     <li>Three land cells holding in-range records placed to within 10 km are the minimum; with fewer, the page says so and derives nothing.</li>
@@ -636,11 +649,11 @@
   </details>
   <h3 id="few">From few records</h3>
   <p class="sum">A climate read from fewer than 12 records, or fewer than 5 grid cells, is marked "from few records", with both counts. It is shown as read.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: from few records</span></summary>
   <ul class="rules">
     <li>Three agreeing records are enough for a narrow endemic.</li>
     <li>A habitat climate read from fewer than 12 records, or from fewer than 5 grid cells, is marked "from few records" on the page's figures and in its climate section, with the two counts written out, and shown as read.</li>
-    <li>A page with few records shows where its typical cell is, beside the figures read there.</li>
+    <li>A page with few records shows where its typical cell is, beside the figures read there, and Kew's own words for where the plant grows, where Kew gives them. The page does not judge whether the spot lies in Kew's area: Kew's words name islands and districts no shape here draws. The Poor Knights lily's spot is in Auckland, among garden plants, and Kew's area is "New Zealand (Poor Knights Is., Hen I.)".</li>
   </ul>
   </details>
   </section>
@@ -649,7 +662,7 @@
   <section aria-labelledby="extremes">
   <h2 id="extremes">The extremes at a typical spot</h2>
   <p class="sum">Cold nights and hot days need one daily weather series, so they are read at one place in the range: a typical spot. They are corrected for height. Where the series and the habitat disagree by more than that correction can explain, they are set aside, and the page says why.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the extremes at a typical spot</span></summary>
   <ul class="rules">
     <li>The typical spot is the grid cell whose coldest month's mean nightly low is nearest the median of that figure across the range.</li>
     <li>Its NASA POWER cell (0.5° by 0.625°) must be mostly land, by the same elevation layer. A cell on a coast or an island is averaged with the sea, so up to eleven more candidates within 2 °C of the median are tried.</li>
@@ -663,7 +676,7 @@
   </details>
   <h3 id="set-aside">When extremes are set aside</h3>
   <p class="sum">The extremes are set aside when the weather cell stands too far above or below the spot, or when its nights are more than 1.5 °C warmer than the habitat's coldest month allows. The page says which, and keeps the figures in its record.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: when extremes are set aside</span></summary>
   <ul class="rules">
     <li>The extremes are set aside, and no cold floor is read from them, for one of three reasons. The page names the one that applies, in its own words, wherever it says they were not used.</li>
     <li>The ground is too far off: the weather cell stands more than 1,000 m above or below the typical spot, so its extremes are other terrain's.</li>
@@ -679,7 +692,7 @@
   <section aria-labelledby="year">
   <h2 id="year">What the rules read</h2>
   <p class="sum">Two fixed rules read the middle year for seasons: one from the rain, one from the temperature. Every sentence they make is labelled as a reading. None of it says when the plant grows.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: what the rules read</span></summary>
   <ul class="rules">
     <li>The rain rule: the wet season is the smallest set of months that carries 70% of the median year's rain.</li>
     <li>A wet season more than half a degree cooler than the year's mean is a winter growing season; more than half a degree warmer, a summer one; within that band, neither.</li>
@@ -693,7 +706,7 @@
   </details>
   <h3 id="shift">Your months</h3>
   <p class="sum">Habitat months are named with their hemisphere. The season card shifts them by six months for a collection in the other hemisphere.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: your months</span></summary>
   <ul class="rules">
     <li>Wherever habitat months are printed, the page names the hemisphere they belong to.</li>
     <li>Where the shift rule applies, it gives them shifted six months for a collection in the other hemisphere. The rule applies where the temperature curve moves 4 °C or more and the habitat lies 10° or more from the equator.</li>
@@ -709,7 +722,7 @@
   <section aria-labelledby="floor">
   <h2 id="floor">The cold floor</h2>
   <p class="sum">The cold floor is the night only one in a hundred is colder than, at a typical spot in the range. It is a fact about a place, not a tested limit for a plant in a pot. Where it cannot be read, a monthly figure stands in, named as what it is.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the cold floor</span></summary>
   <ul class="rules">
     <li>The floor is the 1st-percentile night at a typical spot in the range, from NASA POWER.</li>
     <li>When no extremes are on file, no floor is read. That is when none were read, the source refused or was not asked, the weather cell is mostly sea, or they were set aside (<a href="#set-aside">above</a>).</li>
@@ -723,7 +736,7 @@
   <section aria-labelledby="archetypes">
   <h2 id="archetypes">Care groups</h2>
   <p class="sum">The app keeps a small table of care groups, such as "cactus or succulent". A page takes its group only where Kew's own description of the species agrees. The table gives no figure and no advice.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: care groups</span></summary>
   <ul class="rules">
     <li>The groups: cactus or succulent; bulb, tuber or caudex; tropical foliage plant; orchid; epiphyte; fern or moss; carnivorous plant; temperate garden plant. They are resolved species, then genus, then family.</li>
     <li>Most of the table lists whole genera, and a genus can hold more than one kind of plant. So a page takes its listing only where Kew's own description of the species (its life form and climate, shown as "Kew's description") agrees.</li>
@@ -745,7 +758,7 @@
   <section aria-labelledby="notes">
   <h2 id="notes">The figures at the top</h2>
   <p class="sum">The top of a species page states each habitat figure once, with its source beside it. The cards further down hold the full sentences and rules. A plant's own page puts the same figures beside the space it lives in, and gives no verdict.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the figures at the top</span></summary>
   <ul class="rules">
     <li>On a phone, "Habitat in short" sits above the photographs: the cold floor (or, when none is read, the coldest month's mean nightly low, named so), the rain a year, the open-sky light and the season, each with its source, and the few-records mark where it applies. The full cards stay below.</li>
     <li>The cold floor (1 night in 100), with the record low over the same years beside it, both at a typical spot, from NASA POWER. When no floor is read, the coldest month's mean nightly low, named so.</li>
@@ -769,7 +782,7 @@
   <section aria-labelledby="related">
   <h2 id="related">Similar habitat climate</h2>
   <p class="sum">Near the foot of a species page, Related lists up to six species whose habitat climate is nearest. It compares climates month by month, and nothing else. Two plants from alike climates can still want different things in a pot.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: similar habitat climate</span></summary>
   <ul class="rules">
     <li>The distance is one number: the root of the mean squared difference, month by month, in mean daily high and mean nightly low, plus the difference in rain on a log scale.</li>
     <li>The rain is taken as each month's rain plus 1 mm, so a month with none can be compared, and weighted so that a factor of 2.7 in that figure counts as three degrees: in a month of 100 mm against one of 270 mm, three degrees; in a month of 1 mm against one of 2.7 mm, under two.</li>
@@ -783,7 +796,7 @@
   <section aria-labelledby="corpus">
   <h2 id="corpus">How the reference is stored</h2>
   <p class="sum">The reference is built on a PC and uploaded as files: one per species page, and small files the server reads instead of the whole index. Each file is named by a hash of its content. So no cache can mix two versions, and a refresh uploads only what changed.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: how the reference is stored</span></summary>
   <ul class="rules">
     <li>Beside the species files, the build works out once what the server would otherwise work out for every request: the index, each hash group's entries and figure sheets, the search's files, and the catalogue's rows for each grouping and chip.</li>
     <li>The rows under "Popular genera" are worked out by the server from the genus rows' files and the counts' file, once for each reference.</li>
@@ -810,7 +823,7 @@
   <section aria-labelledby="collection">
   <h2 id="collection">Your collection</h2>
   <p class="sum">Everything you record stays in this browser, as a log of changes. Two copies of a collection merge by one rule, so a restore or a sync loses nothing. Sync encrypts on the device with a key only you hold.</p>
-  <details class="full in-full"><summary>The rules in full</summary>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: your collection</span></summary>
   <ul class="rules">
     <li>Your records live in your browser's storage as an append-only log of field-level changes, each stamped with a hybrid logical clock.</li>
     <li>What the app shows is a reading of the log from the start. It is kept as a snapshot between loads, so opening the app does not read every change again; <a href="/about/formats#snapshot">the formats page</a> says when the snapshot is dropped.</li>
@@ -858,9 +871,9 @@
   <ul class="rules">
     <li>The service worker is installed from the second page this device opens on the site: a page loaded in full, a reload, or a move inside the app to another address.</li>
     <li>It is installed at once on a page of your own collection (My plants, My spaces, Propagation, Today, Sync, Labels or Backup, an import among them), or as soon as the device holds a collection: a plant added, a species followed, a backup restored, sync set up.</li>
-    <li>The install fetches, once, the app's own files that the pages working offline use: the scripts, styles and typefaces of the collection's pages, the front page and the offline page, the species page's styles, the tab's icon and the web manifest. It fetches the collection's pages, the offline page and the front page too.</li>
+    <li>The install fetches, once, the app's own files that the pages working offline use: the scripts, styles and typefaces of the collection's pages, the front page and the offline page, the species page's styles, the tab's icon, the web manifest and the maps' two coastlines. It fetches the collection's pages, the offline page and the front page too.</li>
     <li>The app's other files (a species page's scripts, the maps, the large icons and the share image other sites show beside a link) are kept the first time a page asks for them.</li>
-    <li>So a species page opened online, by its address or by a link inside the app, is readable offline after. When the app updates itself, it reads the last fifty species pages you opened again from the server, one request each, so they stay readable offline in the new version.</li>
+    <li>So a species page opened online, by its address or by a link inside the app, is readable offline after. When the app updates itself, it reads the last fifty species pages you opened again from the server, one request each, and each of their maps' files it does not already keep, so they stay readable offline, with their maps, in the new version. A species page read online also hands the worker its maps' files to keep, though its maps are drawn only when you scroll near them.</li>
     <li>From then on, when a page loads, the worker asks this site whether a new version is out: one conditional request for <code>/service-worker.js</code>, once each time a page is loaded in full. Moving between pages inside the app does not repeat it.</li>
     <li>When a move between pages fails or ends on an error page, the framework asks once for <code>/_app/version.json</code>, to learn whether a new version is out, and when one is, the app asks once more for <code>/service-worker.js</code>, so the new version's worker is fetched.</li>
   </ul>
@@ -911,7 +924,7 @@
     <li>The National Weather Service's are the only weather alerts read, so a place it does not cover says its forecast is clear, never "All clear.".</li>
     <li>A name the reference does not answer to is asked of GBIF (api.gbif.org) from the server too.</li>
     <li>Those three are the only hosts the server asks. Your browser asks no host but this site and the four image hosts. "Use my location" asks the browser for its position; how the browser finds it is the browser's own.</li>
-    <li>One host is Cloudflare's own, not this site's choice. Cloudflare, which serves the site, adds two headers of its network error logging to every answer (<code>Report-To</code> and <code>NEL</code>), while that setting of Cloudflare's is on for the site, as it is in October 2026.</li>
+    <li>One host is Cloudflare's own, not this site's choice. Cloudflare, which serves the site, adds two headers of its network error logging to every answer (<code>Report-To</code> and <code>NEL</code>), while that setting of Cloudflare's is on for the site, as it was when last checked, on 5 November 2026.</li>
     <li>A browser that honours them (Chrome, Edge and other Chromium browsers) then reports to <code>a.nel.cloudflare.com</code>, from your address and for a week, any request to this site that fails, naming the address that failed. The site's code cannot remove these headers; the setting is the owner's to turn off.</li>
     <li>The site's three typefaces are among its own files. Until they arrive, a page is set in faces the device already has, each scaled to the same average width, so the text hardly moves when they land: Segoe UI, Georgia and Consolas on Windows; Helvetica Neue, Georgia and Menlo on Apple devices; Liberation and DejaVu on Linux.</li>
   </ul>
@@ -1061,7 +1074,7 @@
     <dt>Homotypic</dt><dd>Of two names: resting on one type specimen, so one plant by definition, as a basionym and every name moved from it are. A heterotypic synonym rests on another type: a botanist's judgement that two plants are one.</dd>
     <dt>Autonym</dt><dd>The name a species' own subspecies or variety takes when another is named, repeating the species' epithet: Stapelia hirsuta var. hirsuta. It has no author of its own.</dd>
     <dt>Pro parte</dt><dd>"In part": a synonym that stands for only part of a species. Its records are no one species', so they are not read.</dd>
-    <dt>Buffer</dt><dd>How far beyond a region's drawn edge a record still counts for it: 0.05°, about 5.6 km, the drawing's own accuracy. Only for a record in no region's shape whose stated country, where it states one, is that region's country.</dd>
+    <dt>Buffer</dt><dd>How far beyond a region's drawn edge a record still counts for it: 0.05°, about 5.6 km, the drawing's own accuracy. Only for a record in no region's shape that states that region's country.</dd>
     <dt>Coast reach</dt><dd>How far off a drawn coast a record at sea, or on an islet too small to draw, still counts for the region whose coast is nearest: 0.15°, about 16.7 km.</dd>
     <dt>KV</dt><dd>Cloudflare's key-value store, in which the server keeps its short-lived counters and some copies.</dd>
     <dt>/24, /48, /64</dt><dd>A block of internet addresses that share their first part. An IPv4 /24 is 256 addresses, often one office or one mobile carrier's cell. An IPv6 /64 is usually one household, and a /48 one site or one customer of a provider.</dd>
@@ -1105,6 +1118,11 @@
   .rules li { margin: 6px 0; }
   .more, .full { margin: 4px 0 14px; }
   .more > summary, .full > summary { cursor: pointer; font-weight: 600; min-height: var(--tap); display: flex; align-items: center; } /* 44 px under a finger */
+  /* The species page's "›", turned when open, so a fold reads as one that opens: display flex drops the browser's own
+     triangle, and "The rules in full" read as a small heading (round eighty-six; review P's P8). */
+  .more > summary::before, .full > summary::before { content: '›'; content: '›' / ''; display: inline-block; width: 1em; flex: none; color: var(--accent); font-weight: 700; transition: transform 0.15s; }
+  .more[open] > summary::before, .full[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .more > summary::before, .full > summary::before { transition: none; } }
   .store { margin: 10px 0 4px; font-weight: 600; }
   .gloss dt { font-weight: 700; margin-top: 10px; }
   .gloss dd { margin: 2px 0 0 0; }

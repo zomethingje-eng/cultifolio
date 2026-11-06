@@ -252,10 +252,16 @@ const RANK_WORDS = new Set(['sect', 'subsect', 'subg', 'subgen', 'ser', 'subser'
  */
 export function canonicalSynonym(s: string): string | null {
   const t = s.trim();
-  const m = /^([A-Z][a-z]+(?:-[a-z]+)?) ([a-z][a-z-]+)(?: (?:var\.|subsp\.|ssp\.|f\.) ([a-z][a-z-]+))?/.exec(t);
+  // Every rank word below the species, not only "var.", "subsp.", "ssp." and "f.": GBIF's "Sorbus aria proles latifolia"
+  // and "Pteris aquilina subvar. latiuscula" were cut to the binomial of another species, which the index then made an
+  // older name of the page (round eighty-six; review-s S1's truncation, plan A8). An abbreviation with its full stop, a
+  // whole word (proles, lusus, race, grex, forma) as written.
+  const m = /^([A-Z][a-z]+(?:-[a-z]+)?) ([a-z][a-z-]+)(?: ((?:var|subsp|ssp|f|fo|subvar|subf|nothosubsp|nothovar|nothof|convar|prol)\.|forma|proles|lusus|race|grex) ([a-z][a-z-]+))?/.exec(t);
   if (!m) return null;
   // Not a name of a species: a section or subgenus ("Opuntia sect. Tuna"), an undetermined one ("Echinopsis sp."), a rank
   // word where the epithet would be, or a misapplied name (auct.), which is a use of the name and not a name (round thirty-three, 13).
   if (t[m[0].length] === '.' || RANK_WORDS.has(m[2]) || /\bauct\b/.test(t)) return null;
-  return m[3] ? `${m[1]} ${m[2]} ${/subsp\.|ssp\./.test(s) ? 'subsp.' : /var\./.test(s) ? 'var.' : 'f.'} ${m[3]}` : `${m[1]} ${m[2]}`;
+  return m[3] ? `${m[1]} ${m[2]} ${INFRA_RANK[m[3].replace(/\.$/, '')]} ${m[4]}` : `${m[1]} ${m[2]}`;
 }
+/** A rank word below the species as the canonical form writes it ("ssp." as "subsp.", "fo." and "forma" as "f."). */
+const INFRA_RANK: Record<string, string> = { var: 'var.', subsp: 'subsp.', ssp: 'subsp.', f: 'f.', fo: 'f.', forma: 'f.', subvar: 'subvar.', subf: 'subf.', nothosubsp: 'nothosubsp.', nothovar: 'nothovar.', nothof: 'nothof.', convar: 'convar.', prol: 'proles', proles: 'proles', lusus: 'lusus', race: 'race', grex: 'grex' };

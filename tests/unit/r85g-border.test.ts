@@ -30,7 +30,8 @@ beforeAll(() => { t.landOf(0, 0); }, 120_000);
 describe('the shapes file of round eighty-five', () => {
   it('names its rule, and gives each region its countries, its islands and each polygon its place', () => {
     expect(file.meta.rule).toBe(RANGE_RULE);
-    expect(RANGE_RULE).toBe('r85');
+    // Round eighty-six: the rule is r86 (`admission-policy.ts`; the file of r86 places Kashmir and adds GBIF's codes).
+    expect(RANGE_RULE).toBe('r86');
     expect(file.countries?.OMA).toEqual(['OM']);
     expect(file.countries?.GST).toEqual(['AE', 'BH', 'QA']);
     expect(file.countries?.WSA).toEqual(['EH', 'MA']);
@@ -63,7 +64,8 @@ describe('decision 1: the border rule', () => {
     expect(sea).not.toBeNull();
     expect(t.admit(sea!, 58.55, ['OMA'], 'OM')?.how).toMatch(/buffer|coast/);
     expect(t.admit(sea!, 58.55, ['OMA'], 'AE')).toBeNull();
-    expect(t.admit(sea!, 58.55, ['OMA'], null)).not.toBeNull(); // no country stated: the shapes alone decide
+    // Round eighty-six (outside review B's 6): no country stated is no country guessed; the margin does not take it.
+    expect(t.admit(sea!, 58.55, ['OMA'], null)).toBeNull();
   });
   it('a record inside a non-native region is that region\'s, whatever its distance from the native edge', () => {
     expect(t.landOf(-28.230027, 153.473134)).toEqual(['NSW']);
@@ -111,7 +113,10 @@ describe("decision 3: TDWG's scheme", () => {
     // Kenting lies off Natural Earth's own coast (unsimplified, Pingtung ends at 21.905° N): the margin takes it.
     ['Kenting', 21.9267, 120.7239, 'TAI', true]
   ];
-  for (const [what, lat, lon, code, want] of cases) it(`${what}: ${want ? 'in' : 'not in'} ${code}`, () => expect(t.inRegion(lat, lon, code)).toBe(want));
+  // The records off a drawn coast state their country, as GBIF's do (round eighty-six: the margin and the coast reach take
+  // only a record that states the region's).
+  const stated: Record<string, string> = { "Costa Rica's Cocos I. (CPI-CO)": 'CR', 'Los Roques (VNA-OO)': 'VE', Kenting: 'TW' };
+  for (const [what, lat, lon, code, want] of cases) it(`${what}: ${want ? 'in' : 'not in'} ${code}`, () => expect(t.inRegion(lat, lon, code, stated[what] ?? null)).toBe(want));
   it('Tarfaya is Morocco\'s, by its own country', () => expect(t.admit(27.94, -12.93, ['MOR'], 'MA')).not.toBeNull());
 });
 
@@ -119,8 +124,9 @@ describe('every record says why it is in range, and the dossier counts it', () =
   const rec = (key: number, lat: number, lon: number, countryCode: string, license = 'CC_BY_4_0'): GbifOccurrence => ({ key, decimalLatitude: lat, decimalLongitude: lon, countryCode, basisOfRecord: 'HUMAN_OBSERVATION', license, coordinateUncertaintyInMeters: 30, year: 2020 }) as GbifOccurrence;
   it("Aloe vera: Khor Fakkan's record is out, Oman's are in, and each is counted by its reason", () => {
     const inside = rangeTest([{ code: 'OMA', box: TDWG3.OMA }], t)!;
-    expect(inside.rule).toBe('r85');
-    expect(inside.words).toContain("on no other region's land and in the region's own country");
+    expect(inside.rule).toBe(RANGE_RULE);
+    // Round eighty-six: the words are the policy's (`recordWords`).
+    expect(inside.words).toContain("counted only when it states the region's country");
     const data = [rec(1, 25.345, 56.315, 'AE'), rec(2, 23.6, 58.4, 'OM'), rec(3, 22.95, 57.53, 'OM'), rec(4, 25.437721, 56.168707, 'AE', 'CC_BY_NC_4_0')];
     const r = readRecords(data, [TDWG3.OMA], true, undefined, inside.admit);
     expect(r.nOutside).toBe(2);

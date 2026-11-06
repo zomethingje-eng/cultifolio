@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keepFresh, resumeFresh } from '$lib/sync/fresh-key';
   /**
    * Sync between your devices. One vault key, made here once, is all there
    * is: it encrypts everything before it leaves the device, and it is what a
@@ -38,8 +39,10 @@
     if (demo) return;
     await sync.init();
     try {
-      const kept = sessionStorage.getItem(FRESH);
+      // A key made before a replace is not offered again (round eighty-six; `fresh-key.ts`).
+      const kept = resumeFresh(sessionStorage.getItem(FRESH), sync.wasIn);
       if (kept && !sync.configured && mode === 'idle') { freshKey = kept; typedBack = ''; mode = 'create'; }
+      else if (!kept) dropFresh();
     } catch { /* no session storage: the key lives in the page only */ }
   });
   const dropFresh = () => { try { sessionStorage.removeItem(FRESH); } catch { /* fine */ } };
@@ -71,7 +74,7 @@
   const saved = $derived(!!freshKey && typedBack.trim().toUpperCase() === freshKey.slice(-5).toUpperCase());
   function startCreate() {
     freshKey = newVaultKey();
-    try { sessionStorage.setItem(FRESH, freshKey); } catch { /* fine */ }
+    try { sessionStorage.setItem(FRESH, keepFresh(freshKey)); } catch { /* fine */ }
     typedBack = '';
     copied = false;
     err = '';

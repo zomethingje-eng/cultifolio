@@ -13,6 +13,7 @@ import { lookupOf } from './lookup';
 import { upstreamCall } from './sync';
 import { workerKey } from './worker-cache';
 import { canonicalSynonym } from '$core/names';
+import { plainName } from '$dossier/lookups';
 import type { PageId } from '$core/page-id';
 
 export interface SynonymAnswer {
@@ -23,6 +24,28 @@ export interface SynonymAnswer {
   acceptedName: string;
   /** The reference's slug for the accepted species, when it holds it. */
   slug: string | null;
+  /**
+   * GBIF files the name under a page whose record says Kew's file places it in another plant (`name.kew.elsewhere`):
+   * the address does not lead there (`slug` is null), and the 404 says what Kew holds (round eighty-six; review-c C1,
+   * review-d D3). `page` is that page's heading; `accepted`, Kew accepts the name as a species of its own
+   * (`name.kew.acceptedElsewhere`).
+   */
+  elsewhere?: { page: string; accepted: boolean };
+}
+
+/** The part of a dossier's names the Kew placement is read from. */
+export type KewPlaced = { kew?: { elsewhere?: readonly string[]; acceptedElsewhere?: readonly string[] } | null } | null | undefined;
+/**
+ * Whether a page's record says Kew's file places one of these names in another plant (`name.kew.elsewhere`), and whether
+ * Kew accepts it as a species of its own (`acceptedElsewhere`); null when it does not (round eighty-six; review-c C1).
+ * Compared as names, the authors left out (`canonicalSynonym`, `plainName`): "Anacampseros schmidtii (Berger) Poelln."
+ * is Anacampseros schmidtii.
+ */
+export function placedElsewhere(name: KewPlaced, asked: readonly string[]): { accepted: boolean } | null {
+  const want = new Set(asked.map(plainName));
+  const has = (list: readonly string[] | undefined) => (list ?? []).some((x) => { const c = typeof x === 'string' ? canonicalSynonym(x) : null; return !!c && want.has(plainName(c)); });
+  if (!has(name?.kew?.elsewhere)) return null;
+  return { accepted: has(name?.kew?.acceptedElsewhere) };
 }
 
 /** A species slug as a name the backbone can match: `haworthia-attenuata-var-radula` → `Haworthia attenuata var. radula`. */
@@ -72,14 +95,18 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
  */
 export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held'> {
   const a = await synonymAsk(platform, fetch, slug, held, ip);
-  return a === 'refused' ? 'unchecked' : a;
+  return a === 'refused' || a === 'unread' ? 'unchecked' : a;
 }
 /**
  * `synonymOf`, with GBIF's own refusal of this site's request (its 429 or 403) as `'refused'`, which the 404 says as
  * that, never as "GBIF's name service did not answer" (round sixty-seven; triage-66 S8, R45-11). `synonymOf` keeps its
  * answers (a refusal is `'unchecked'` there) for a caller that does not word the two apart.
  */
-export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held' | 'refused'> {
+/**
+ * `'unread'` (round eighty-six; review-c C5): GBIF answered, and the record of the page its answer leads to, which the
+ * answer is checked against, could not be read: a check that did not happen, said as that, never "no page".
+ */
+export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held' | 'refused' | 'unread'> {
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null; // a binomial at least: a bare genus is not a species address
   // Keyed by the build (round sixty-nine; triage-68 W3): the answer is GBIF's, but what this build makes of it is its own.
@@ -124,7 +151,18 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
   // Of the two, the one the index lists first, as the scan of the index found it (round seventy-six: read by key). Each is
   // a GBIF key: the page whose own GBIF key it is (round seventy-eight; the alias), never a page's id.
   const found = (await Promise.all(keys.map((k) => look.gbif(k)))).filter((e) => !!e).sort((a, b) => a!.at - b!.at);
-  return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: found[0]?.slug ?? null };
+  const page = found[0];
+  if (!page) return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: null };
+  // The page's own record first, as `gbifNamedPage` reads it (round eighty-six; review-c C1, review-d D3): a name Kew's
+  // file places in another plant left the page's older names, search names and addresses in round eighty-five, and GBIF's
+  // match sent its address back (`/species/echinopsis-chalaensis` to Echinopsis macrogona, `/species/orbea-carnosa` to
+  // its subspecies keithii, both of which Kew accepts apart). A record that cannot be read is a check that did not happen.
+  let d: { name?: KewPlaced } | null;
+  try { d = (await getDossier(platform, fetch, page.key, held ?? (await corpusNow(platform, fetch)))) as { name?: KewPlaced } | null; } catch { return 'unread'; }
+  if (!d) return 'unread';
+  const away = placedElsewhere(d.name, [name, matched]);
+  if (away) return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: null, elsewhere: { page: page.name, accepted: away.accepted } };
+  return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: page.slug };
 }
 
 /**
@@ -132,28 +170,18 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
  * the address moves there and the page says so (`?was=`). Null where no page has the key, the page shows the name
  * already (its own address would have answered), or its record says Kew's file holds the name for another plant.
  */
-async function gbifNamedPage(platform: Platform, fetch: Fetch, name: string, key: number, held: Loaded | undefined): Promise<SynonymAnswer | null> {
+async function gbifNamedPage(platform: Platform, fetch: Fetch, name: string, key: number, held: Loaded | undefined): Promise<SynonymAnswer | null | 'unread'> {
   const c = held ?? (await corpusNow(platform, fetch));
   const page = await lookupOf(c, platform, fetch).gbif(key);
   if (!page || page.name.replace(/×\s*/g, '').toLowerCase() === name.toLowerCase()) return null;
-  const d = (await getDossier(platform, fetch, page.key, c).catch(() => null)) as { name?: { kew?: { accepted?: { other?: string } } | null } } | null;
-  if (!d || d.name?.kew?.accepted?.other) return null;
+  // A record the index lists that cannot be read is a check that did not happen, said so and kept by no one, never "no
+  // page" kept five minutes (round eighty-six; review-c C5: a failed bucket read of a renamed page's record answered its
+  // former heading "No species page for …").
+  let d: { name?: { kew?: { accepted?: { other?: string } } | null } } | null;
+  try { d = (await getDossier(platform, fetch, page.key, c)) as typeof d; } catch { return 'unread'; }
+  if (!d) return 'unread';
+  if (d.name?.kew?.accepted?.other) return null;
   return { matched: name, acceptedKey: page.key, acceptedName: page.name, slug: page.slug };
-}
-
-/**
- * The backbone's cached answer for a name, read from the Worker's cache only, never asked (round seventy-one; S-F8): the
- * redirect from `/species/echinopsis-pachanoi` put GBIF's answer there a moment before, so the page it lands on can say
- * why it was sent, without trusting `?was=` (anyone can write it) and without a request of its own. Null on any miss.
- */
-export async function cachedMatch(platform: Platform, name: string): Promise<{ status?: string; matchType?: string; acceptedUsageKey?: number; speciesKey?: number } | null> {
-  const cache = platform?.caches?.default;
-  if (!cache || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
-  const hit = await cache.match(workerKey('match', { name: name.toLowerCase() })).catch(() => undefined /* an edge cache that cannot be read is a miss: the name is then asked of GBIF */);
-  if (!hit) return null;
-  const body = (await hit.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!body || typeof body !== 'object') return null;
-  return { status: typeof body.status === 'string' ? body.status : body.synonym === true ? 'SYNONYM' : undefined, matchType: typeof body.matchType === 'string' ? body.matchType : undefined, acceptedUsageKey: typeof body.acceptedUsageKey === 'number' ? body.acceptedUsageKey : undefined, speciesKey: typeof body.speciesKey === 'number' ? body.speciesKey : undefined };
 }
 
 /**

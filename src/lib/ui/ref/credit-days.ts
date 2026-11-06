@@ -4,6 +4,10 @@
  * photograph's own day where the fill wrote one (`read`), else the day its source's row in the record of sources was
  * answered (a file's day where it was read from a file). Said once per source and day: "Credits as read from iNaturalist
  * on 2026-10-27 and from Wikimedia Commons on 2026-10-22".
+ *
+ * Only an answered row lends its day (round eighty-six; outside review B's 2): a row that says the source broke, refused,
+ * had none, was ambiguous or was not asked is not evidence that a kept credit was read that day. A photograph with no day
+ * of its own under such a row is said as read on a day not recorded, not given the failed attempt's day.
  */
 export type CreditUp = Record<string, { status: string; at?: string; asOf?: string } | undefined>;
 type P = { src?: string; captive?: boolean; read?: string };
@@ -16,19 +20,24 @@ export const rowOf = (p: P): string | null => (p.src === 'inat' ? (p.captive ? '
 const DAY = /^\d{4}-\d{2}-\d{2}/;
 
 export function creditDays(photos: readonly P[], upstream: CreditUp): string {
-  const by = new Map<string, Set<string>>();
+  const by = new Map<string, { days: Set<string>; unknown: number }>();
   for (const p of photos) {
     const name = NAME[p.src ?? ''];
     if (!name) continue;
     const row = rowOf(p);
     const u = row ? upstream[row] : undefined;
-    const day = (DAY.exec((p as { read?: string }).read ?? '') ?? (u && u.status !== 'skipped' ? DAY.exec(u.asOf ?? u.at ?? '') : null))?.[0];
-    if (!day) continue;
-    const set = by.get(name) ?? new Set<string>();
-    set.add(day);
-    by.set(name, set);
+    const day = (DAY.exec(p.read ?? '') ?? (u && u.status === 'ok' ? DAY.exec(u.asOf ?? u.at ?? '') : null))?.[0];
+    const e = by.get(name) ?? { days: new Set<string>(), unknown: 0 };
+    if (day) e.days.add(day);
+    else e.unknown++;
+    by.set(name, e);
   }
-  const parts = [...by].map(([name, ds]) => `from ${name} on ${[...ds].sort().join(', ')}`);
+  const parts = [...by].map(([name, { days, unknown }]) => {
+    const on = [...days].sort().join(', ');
+    if (!unknown) return `from ${name} on ${on}`;
+    if (!days.size) return `from ${name} on a day not recorded`;
+    return `from ${name} on ${on} (${unknown === 1 ? "one photograph's day" : `${unknown} photographs' days`} not recorded)`;
+  });
   if (!parts.length) return '';
   return `Credits as read ${parts.length < 2 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`}`;
 }
@@ -49,6 +58,16 @@ export function summaryRevision(s: { url?: string; revision?: number | string; r
   }
   const day = DAY.exec(s.read ?? '')?.[0] ?? (row && row.status === 'ok' ? DAY.exec(row.at ?? '')?.[0] ?? null : null);
   return { rev, href, day };
+}
+
+/**
+ * What the quotation is, after its article's title (round eighty-six; outside review B's 5, the plan's B7): the article's
+ * opening paragraph where it was read so (`from: 'lead'`), else Wikipedia's summary service's text, read before November
+ * 2026, which leaves out words in brackets, so the credit never calls that text the article's own opening.
+ */
+export function summaryWhat(s: { from?: string } | null | undefined): string {
+  if (!s) return '';
+  return s.from === 'lead' ? ', its opening paragraph' : ", as Wikipedia's summary service gives it";
 }
 
 /**

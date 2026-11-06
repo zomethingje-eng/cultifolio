@@ -166,7 +166,9 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const narrow = plotW < 420;
   const deg = (v: number) => temp(v, units, 1).replace(/ °[CF]$/, '°');
   const minLabel = c.extremes ? (narrow ? `${deg(c.extremes.minAbs)} lowest night` : `${deg(c.extremes.minAbs)} lowest night in ${c.extremes.years} years, NASA POWER`) : '';
-  const maxLabel = c.extremes ? (narrow ? `${deg(c.extremes.maxP99)} hot day, 1 in 100` : `${deg(c.extremes.maxP99)} 99th-percentile day, NASA POWER`) : '';
+  // One name for the hot day, the legend's (round eighty-six; review W's W9): the chart said "99th-percentile day", the
+  // phone's drawing "hot day, 1 in 100" and the legend "1-in-100 hot day", three names on one chart.
+  const maxLabel = c.extremes ? (narrow ? `${deg(c.extremes.maxP99)} 1-in-100 hot day` : `${deg(c.extremes.maxP99)} 1-in-100 hot day, NASA POWER`) : '';
   if (c.extremes) {
     const lab = (v: number, t: string) => xsLabels.push({ x0: edge - extW(t), x1: edge, y: ty(v) + 3.5 });
     lab(c.extremes.minAbs, minLabel);
@@ -238,7 +240,7 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       : `Mean daily high from ${temp(c.months[dayLo].tmax, units)} in ${at(days, false)} to ${temp(c.months[warmest].tmax, units)} in ${at(days, true)}; mean nightly low from ${temp(c.months[coldest].tmin, units)} in ${at(nights, false)} to ${temp(c.months[nightHi].tmin, units)} in ${at(nights, true)}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(centre + 1) % 12]}, is the three months around the coldest month's mean nightly low${coldTies.length < 2 || coldTies.length >= 12 ? '' : coldRun != null ? `, centred on the ${coldTies.length} months in a row that tie for it` : `, around the first of the ${coldTies.length} months that tie for it`}. `) +
     (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain in the median year (the twelve monthly medians added), ${wettest}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
-    (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
+    (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 1-in-100 hot day (the 99th-percentile day) ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
     (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');
 
   return {

@@ -38,8 +38,30 @@ const list = parseSpeciesList(readFileSync(listFile, 'utf8'));
 const keyless = list.filter((e) => e.gbifKey == null && e.kewId);
 const reference = new Set(list.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : [])));
 console.log(`${listFile}: ${keyless.length} species without a GBIF key; the reference's ${reference.size} GBIF keys are the other pages`);
-const r = await listExtraKeys({ bulk, backbone, pages: keyless.map((e) => ({ key: null, id: e.pageId, name: { scientific: e.name, kew: { entry: e.kewId! } } })), merges: parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')), reference });
+const infra = args.includes('--infra-from-holder');
+const r = await listExtraKeys({ bulk, backbone, pages: keyless.map((e) => ({ key: null, id: e.pageId, name: { scientific: e.name, kew: { entry: e.kewId! } } })), merges: parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')), reference, infraFromHolder: infra });
 if (!r) { console.error(`no backbone export at ${backbone}`); process.exit(2); }
+/*
+ * `--infra-from-holder` (round eighty-six; review D's D6, the owner to decide on the count): the keys a variety or subspecies
+ * GBIF files under another page's key would give a page without a GBIF key, when Kew's synonymy places it in that page's
+ * plant (`extraKeysFor`'s `infraFromHolder`). Written alone to `extra-keys-infra.txt` in the project folder, each said with
+ * the page that would leave its records out; nothing else is written. The build reads them only when told
+ * (`--infra-keys extra-keys-infra.txt`), first with `--dry-run`.
+ */
+if (infra) {
+  const out = arg('--out') ?? 'extra-keys-infra.txt';
+  const taken = r.keys.filter((k) => k.from !== undefined);
+  const byKeyName = new Map(list.flatMap((e) => (e.gbifKey != null ? [[e.gbifKey, `${e.name}${e.kewId ? ` (k${e.kewId})` : ''}`] as const] : [])));
+  const nameOf = new Map(list.map((e) => [e.pageId, e.name] as const));
+  writeFileSync(out, formatExtraKeys(taken, [
+    "Round eighty-six (review D's D6): the keys of varieties and subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder). Read by the build only with --infra-keys <this file>; the page named in the last but one column leaves their records out.",
+    `Made ${new Date().toISOString().slice(0, 10)} from ${listFile} and GBIF's backbone export (${backbone.replace(/^.*[\\/]/, '')}): ${taken.length} keys on ${new Set(taken.map((k) => k.pageId)).size} pages.`,
+    "page id, key, GBIF's name, GBIF's status, Kew's row, Kew's reading, how, -, the keys under it not read (or -), the page key GBIF files it under, the keys under it read with it (or -)"
+  ]));
+  for (const k of taken) console.log(`  ${nameOf.get((k.pageId ?? '') as never) ?? k.pageId} [${k.pageId}] would read GBIF's key ${k.key}, ${k.label} (Kew: ${k.kewLabel})${k.with?.length ? `, with ${k.with.length} key${k.with.length === 1 ? '' : 's'} under it` : ''}${k.except?.length ? `, not ${k.except.length} under it (${k.except.join(', ')})` : ''}; ${byKeyName.get(k.from!) ?? `the page of key ${k.from}`} would leave them out`);
+  console.log(`  ${taken.length} keys on ${new Set(taken.map((k) => k.pageId)).size} pages → ${out}; nothing else written. Next: --keys <those pages and the pages named> --offline --grid climate --bulk bulk --infra-keys ${out} --dry-run`);
+  process.exit(0);
+}
 const pages = new Set(r.keys.map((k) => k.pageId));
 const day = /wcvp_names\.csv of (\d{4}-\d{2}-\d{2})/.exec(readFileSync(listFile, 'utf8'))?.[1] ?? 'a day not known';
 writeFileSync(KEW_EXTRA_KEYS, formatExtraKeys(r.keys, [

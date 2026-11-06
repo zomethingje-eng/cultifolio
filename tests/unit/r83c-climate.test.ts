@@ -42,7 +42,7 @@ describe("1. the regions' shapes hold the whole region", () => {
     expect(t.inRegion(31.9, 35.2, 'PAL')).toBe(true);
     expect(t.inRegion(31.5, 34.47, 'PAL')).toBe(true);
     expect(t.inRegion(35.34, 33.32, 'CYP')).toBe(true); // Kyrenia
-    expect(t.inRegion(60.1, 19.94, 'FIN')).toBe(true); // Mariehamn
+    expect(t.inRegion(60.1, 19.94, 'FIN', 'AX')).toBe(true); // Mariehamn, by the margin of the drawn coast: a record there states Aland's AX (round eighty-six: the margin takes only a record that states the region's country)
     expect(t.inRegion(9.56, 44.06, 'ETH')).toBe(false);
   });
   it('an islet is kept: the Maldives, Nauru', () => {

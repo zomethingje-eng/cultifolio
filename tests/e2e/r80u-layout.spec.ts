@@ -146,9 +146,13 @@ test('r80u layout 12: the name check\'s line names the button as it reads, "Add 
   await page.fill('#species-name', 'Notaplantia fakeus');
   await page.locator('#species-name').blur();
   await expect(page.locator('.picker .pill.warn').or(page.getByRole('status').filter({ hasText: 'The name service did not answer' })).first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: /^Add/ }).click();
+  // Round eighty-six (review-c C2, review-s S3): the leave's concluded check arms the name, so the button already reads
+  // "Add as typed" and the line names it so, before any press; one press then files it as the line says. (It was: a
+  // first press armed, and the line had said "Add keeps exactly what you typed" of a press that filed nothing.)
   await expect(page.getByRole('button', { name: 'Add as typed' })).toBeVisible();
   await expect(page.locator('.picker .hint')).toContainText('press “Add as typed” to keep exactly what you typed');
+  await page.getByRole('button', { name: 'Add as typed' }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
 });
 
 test('r80u layout 13: a page of the collection, drawn on the device, raises no warning about unused preloaded fonts; a server page still preloads them @phone', async ({ page, request }) => {

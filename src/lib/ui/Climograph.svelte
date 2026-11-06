@@ -94,7 +94,7 @@
       {#if b.lo != null && b.hi != null}<line class="whisker" x1={b.x + b.w / 2} x2={b.x + b.w / 2} y1={b.hi} y2={b.lo} />{/if}
     {/each}
     {#if x.rain.dry}<text class="drylab" x={x.left + x.plotW / 2} y={x.rain.top + x.rain.height / 2 + 4}>{dryLabel(x.units)}</text>{/if}
-    <text class="panel" x={x.left + 2} y={x.rain.top - 2}>{rainUnit(x.units)} rain</text>
+    <text class="panel" x={x.left + 2} y={x.rain.top - 2}>Rain ({rainUnit(x.units)})</text><!-- "in rain", set in capitals, read "IN RAIN" (round eighty-six; W9) -->
     <line class="axis" x1={x.left} x2={x.left + x.plotW} y1={rbOf(x)} y2={rbOf(x)} />
 
     <!-- light and humidity strip -->

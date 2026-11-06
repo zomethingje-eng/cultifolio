@@ -43,7 +43,8 @@ const CINEREA_COPY = { key: 'k9', gbif: 77001, slug: 'copiapoa-oldname', via: 'g
 test('r85k-p 1: a plant under GBIF\'s name for a page\'s key opens on that page, says so, and files there in one tap @phone', async ({ page }) => {
   await aliasRoute(page, CINEREA_COPY);
   await seed(page, 'r-old', { acc: '2026-0051', taxonName: 'Copiapoa oldname', taxonKey: 77001 });
-  await expect(page.locator('#found-by')).toHaveText("Filed under GBIF's name for its key; the reference heads its page Copiapoa cinerea"); // base: nothing said
+  // Round eighty-six (review-w W1): one set of words for GBIF's name on every surface, "GBIF's name for <page>".
+  await expect(page.locator('#found-by')).toHaveText("GBIF's name for Copiapoa cinerea"); // base: nothing said
   await expect(page.locator('#found-by a')).toHaveAttribute('href', '/species/copiapoa-cinerea');
   await expect(page.locator('#name-not-in-reference')).toHaveCount(0);
   await expect(page.locator('#key-differs')).toHaveCount(0);

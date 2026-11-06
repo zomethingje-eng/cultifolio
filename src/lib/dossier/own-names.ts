@@ -24,7 +24,9 @@ export type SynonymLike = string | { name: string; key?: number; rank?: string; 
 
 /** Words that begin an author, not an epithet: "Aus bus de Wild.", "Aus bus ex Steud.". */
 const PARTICLE = new Set(['ex', 'et', 'de', 'des', 'du', 'da', 'del', 'della', 'di', 'van', 'von', 'der', 'den', 'le', 'la', 'f']);
-const RANK = /^(subsp\.|ssp\.|var\.|f\.|fo\.|forma|subvar\.|nothosubsp\.|nothovar\.)$/i;
+// Every rank word below the species that Kew's file or GBIF writes (round eighty-six; the plan's B6, as the names agent's A8
+// reads them in `canonicalSynonym`): "proles" or "subf." read as an epithet made "Paeonia corallina proles" a name.
+const RANK = /^(subsp\.|ssp\.|var\.|f\.|fo\.|forma|subvar\.|subf\.|nothosubsp\.|nothovar\.|nothof\.|convar\.|prol\.|proles|lusus|race|grex)$/i;
 
 /**
  * A scientific name's canonical form: the genus, the epithet and an infraspecific epithet, without authors or rank words

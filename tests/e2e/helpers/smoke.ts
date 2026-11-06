@@ -25,7 +25,10 @@ export async function addPlant(p: import('@playwright/test').Page) {
   // second, which the race did not know, and waited out the test (round seventy-one, the owner's run).
   const asked = p.locator('.picker .hint', { hasText: /(?:press (?:Add|“Add[^”]*”) to keep|Add keeps) exactly what you typed/ });
   await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
-  if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
+  // Since round eighty-six (review C's C2) the line can show with the button already reading "Add as typed", and the first
+  // press then files: a second press would meet the disabled "Adding…" button, then a page gone. So the second press is
+  // made only if the form is still there to take it, briefly, and the page's address decides (the owner's WebKit run).
+  if (await asked.isVisible() && /\/plants\/new/.test(p.url())) await p.getByRole('button', { name: /^Add/ }).click({ timeout: 3_000 }).catch(() => undefined);
   await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
 }
 /** A day on the machine's own calendar, as the app dates things: `toISOString()` is UTC and is tomorrow for four evening hours in the Americas (round thirty, R1-3). */

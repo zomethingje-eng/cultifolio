@@ -352,6 +352,19 @@ export async function sheetForNameOr(name: string, key: number | null | undefine
   if (!s) return 'none';
   return s;
 }
+/**
+ * Whether a name is GBIF's name for a page's own key, where Kew's name heads the page: the copy of that page's sheet the
+ * build files under the name's address (`via: 'gbif'`; round eighty-five, `gbif-alias.ts`), read from the same hash group
+ * a plant's page asks for (round eighty-six; review-w W1, W2): its page's address and heading. Null when the name has no
+ * such copy, or the group was not reached. Nothing of the page's is taken for a plant of another key by it: it words a line.
+ */
+export async function gbifNamedOf(name: string): Promise<{ slug: string; name: string } | null> {
+  const slug = speciesSlug(name);
+  const m = await sheetsOr([slug]);
+  if (isUnreached(m)) return null;
+  const s = m.get(slug) as (Sheet & { via?: string; page?: string }) | undefined;
+  return s?.via === 'gbif' && typeof s.page === 'string' ? { slug: s.page, name: s.name.scientific } : null;
+}
 /** `sheetForNameOr` with null for any failure, for a page that does not say why. */
 export async function sheetForName(name: string, key: number | null | undefined): Promise<Sheet | 'none' | null> {
   const s = await sheetForNameOr(name, key);

@@ -1,7 +1,7 @@
 import { ownSynonyms } from '$core/shown-names';
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer } from '$lib/server/dossiers';
-import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch, type SynonymAnswer } from '$lib/server/synonyms';
+import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer, kewHolders } from '$lib/server/dossiers';
+import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, placedElsewhere, type SynonymAnswer } from '$lib/server/synonyms';
 import { lookupOf, addressOf, mergedHolder, type Lookup } from '$lib/server/lookup';
 import { plainName, synonymKey, type Card } from '$dossier/lookups';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
@@ -14,7 +14,8 @@ import { unitsFor } from '$lib/server/units';
 import { englishNames, generaOf, mergedNamesOf } from '$dossier/index-entry';
 import { addressGenus } from '$lib/ui/ref/notes';
 import { authorKey, plainlyAnother } from '$dossier/authors';
-import { regionSvg, mapPoints } from '$lib/map/still';
+import { regionSvg, mapPoints, mapFiles } from '$lib/map/still';
+import { LABEL_AT } from '$lib/map/region-labels';
 import { unitName } from '$core/regions';
 import { drawOnce } from '$lib/server/drawn';
 import { describedBy } from '$lib/ui/ref/words';
@@ -48,7 +49,20 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   //   found as written (N3), and each holder named with the author under which its record holds the name, read from its
   //   dossier's stored synonyms, or with none where the record has none or could not be read.
   // - An old name the reference's own older names hold, held by one species: moved there (round thirty-one, 3).
-  const at = await addressOf(look, params.slug, (slug) => resolveSlug(platform, fetch, slug, c));
+  const found0 = await addressOf(look, params.slug, (slug) => resolveSlug(platform, fetch, slug, c));
+  // Kew's older names next, before GBIF is asked (round eighty-six; review-c C1, review-d D3): a name the index's `kew`
+  // list of one page holds is that page's address, as an older name of `syn` or `older` is; one two pages hold leads to
+  // neither, and the 404 names both (rule 3). GBIF's match sent `/species/anacampseros-schmidtii` to the page it lumps
+  // the name into, Anacampseros albissima, where Kew's file holds it under A. dinteri, a page here.
+  const at: typeof found0 = await (async () => {
+    if (found0.kind !== 'ask') return found0;
+    const n = nameFromSlug(params.slug);
+    if (!n || !/^[A-Z][a-z]+ [a-z]/.test(n)) return found0;
+    const kh = await kewHolders(platform, fetch, n, c);
+    if (kh.length === 1) return { kind: 'older' as const, slug: kh[0].slug, matched: n, name: kh[0].name, key: kh[0].key };
+    if (kh.length > 1) return { kind: 'shared' as const, name: n, holders: kh.map((e) => [e.key, e.slug, e.name] as [PageId, string, string]), inGenus: (await look.genera()).get(n.split(' ')[0]) ?? 0 };
+    return found0;
+  })();
   if (at.kind === 'move') {
     if (!at.slug) error(404, { message: 'No species page at this address' });
     redirect(301, `/species/${encodeURIComponent(at.slug)}${url.search}`);
@@ -82,6 +96,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     let unchecked = false;
     let heldBack = false; // the site held its call to GBIF back: not asked, never "did not answer" (round sixty-one)
     let gbifRefused = false; // GBIF refused this site's request: said as a refusal (round sixty-seven; S8)
+    let recordUnread = false; // GBIF answered; the record its answer leads to could not be read (round eighty-six; review-c C5)
     // The reference's own nearest names (below), asked beside GBIF's name service rather than after it: the two do not
     // depend on each other, and a missing address waited 4.4 s for one and then the other (round eighty; review-w 14).
     const asked = nameFromSlug(params.slug);
@@ -93,10 +108,11 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
       void nearest();
       // `synonymAsk` tells GBIF's own refusal of this site's request apart (round sixty-seven; triage-66 S8, R45-11).
       const asked = await synonymAsk(platform, fetch, params.slug, c, clientIp(getClientAddress)); // the reader's part of GBIF's share as well as the site's (round sixty-two; the server review's 3, outside review A29)
-      unchecked = asked === 'unchecked' || asked === 'held' || asked === 'refused';
+      unchecked = asked === 'unchecked' || asked === 'held' || asked === 'refused' || asked === 'unread';
       heldBack = asked === 'held';
       gbifRefused = asked === 'refused';
-      syn = asked === 'unchecked' || asked === 'held' || asked === 'refused' ? null : asked;
+      recordUnread = asked === 'unread';
+      syn = asked === 'unchecked' || asked === 'held' || asked === 'refused' || asked === 'unread' ? null : asked;
     }
     if (syn?.slug) {
       setHeaders({ 'cache-control': 'public, max-age=86400' });
@@ -117,11 +133,18 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const found = asked ? await nearest() : null;
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
     const species = genus ? { name: asked, genus, inGenus: (await look.genera()).get(genus) ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
+    // GBIF files the name under a page whose record says Kew's file places it in another plant: what Kew holds, and why
+    // the address does not lead to the page GBIF lumps it into (round eighty-six; review-c C1, review-d D3).
+    if (syn?.elsewhere) {
+      const gbifSaid = plainName(syn.acceptedName) === plainName(syn.elsewhere.page) ? syn.elsewhere.page : `${syn.acceptedName} (the reference's ${syn.elsewhere.page})`;
+      const kewSaid = syn.elsewhere.accepted ? `Kew's World Checklist accepts ${syn.matched} as a species of its own` : `Kew's World Checklist holds ${syn.matched} for another plant than ${syn.elsewhere.page}`;
+      error(404, { message: `${kewSaid}, and no page of the reference holds the name. GBIF's backbone files it under ${gbifSaid}, so this address does not lead there`, species: species ? { ...species, accepted: undefined } : undefined });
+    }
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
     // A held call is "not asked", a silence "not checked" (round sixty-two; visitor-words 12, rule 2). "The calls this site
     // allows" covers the site's share and this address's part of it alike.
     // Each said in the order it happened, the held call with GBIF as its subject (round sixty-two; the words review's 15).
-    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute" : gbifRefused ? "Whether it is an older name for a species that is here was not checked: GBIF refused this site's request" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
+    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute" : gbifRefused ? "Whether it is an older name for a species that is here was not checked: GBIF refused this site's request" : recordUnread ? "Whether it is an older name for a species that is here was not checked: the record of the page GBIF's answer leads to could not be read just now" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
@@ -182,7 +205,9 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const was = url.searchParams.get('was');
   // Compared without rank markers, since the backbone's canonical form of a variety drops "var." (round thirty-four).
   const plain = plainName;
-  const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x)].map(plain);
+  // Kew's names for the plant too (`name.kew.synonyms`), now that an address under one of them leads here (round
+  // eighty-six; review-c C1: Anacampseros schmidtii is A. dinteri's by Kew's file).
+  const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x), ...(d.name.kew?.synonyms ?? [])].map(plain);
   const ownNames = new Set(listed);
   // The binomial of a listed variety counts too: the backbone files "Trichocereus pachanoi" under a variety of
   // T. macrogonus, and the address `trichocereus-pachanoi` reached the page with no line saying why (round thirty-five, R1-12).
@@ -198,14 +223,21 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // the others instead. No redirect sends a shared name here; a link written by hand, or a redirect a browser kept from
   // before, can. The name itself is looked up: a variety GBIF places under this species is GBIF's answer for that variety.
   const wellFormed = !!was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was);
-  // A name the record does not list, which the backbone files under a subspecies or variety of this species: the
-  // redirect put GBIF's answer in the Worker's cache, and only that answer, never the link, says so (round seventy-one;
-  // S-F8: `/species/echinopsis-pachanoi` landed on Trichocereus macrogonus with no word why).
+  // A name the record does not list among its own, which GBIF's backbone files under a subspecies or variety of this
+  // species (round seventy-one; S-F8: `/species/echinopsis-pachanoi` landed on Trichocereus macrogonus with no word why):
+  // read from the record's own names under its varieties (`name.infra`, GBIF's export), never from the Worker's cache of
+  // GBIF's answer, which a data centre that had not answered the redirect did not hold, and the page then said nothing of
+  // why the grower was there (round eighty-six; review-c C3).
   const listedHere = ownNames.has(wasPlain) || asVariety || ofOlder;
-  const m = wellFormed && !listedHere ? await cachedMatch(platform, was!) : null;
-  // GBIF's keys are compared with the page's own GBIF key, never its id (round seventy-eight).
-  const wasBelow = !!m && m.status === 'SYNONYM' && m.matchType === 'EXACT' && m.speciesKey === d.ids.gbif && m.acceptedUsageKey !== d.ids.gbif;
+  const infraNames = new Set((d.name.infra ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x).map(plain));
+  const wasBelow = wellFormed && !listedHere && infraNames.has(wasPlain);
   const shownWas = wellFormed && (listedHere || wasBelow) ? was : null;
+  // A name the record says Kew's file places in another plant (`name.kew.elsewhere`): the line says so, and names that
+  // plant's page where exactly one page here holds the name among Kew's older names (round eighty-six; review-c C1:
+  // "… does not list this name among its synonyms" was said of Anacampseros schmidtii, which Kew files under A. dinteri).
+  const away = shownWas ? placedElsewhere(d.name, [shownWas]) : null;
+  const kewHeld = away ? (await kewHolders(platform, fetch, shownWas!, c)).filter((e) => e.key !== key) : [];
+  const wasKew = away ? { accepted: away.accepted, holder: kewHeld.length === 1 ? { slug: kewHeld[0].slug, name: kewHeld[0].name } : null } : null;
   // A name another species here is accepted under names no one species here, as a shared older name does (round
   // seventy-one; S-F3: `?was=Annona%20muricata` on Annona montana, which holds Vellozo's homonym, said the backbone
   // accepted this species as Annona muricata, the soursop's name).
@@ -250,8 +282,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // data. A move inside the app asks for the data alone (`isDataRequest`), and gets it all, as before: the page draws the
   // map from it, and the offline page and a tab of the build before read what they always did. Anything else that is not
   // plainly the page's HTML (a caller that does not say) gets the whole data too.
-  const regionMark = isDataRequest === false ? drawOnce(locals, 'region-map', describedBy(regionSvg(shown.distribution.boxes, points, shown.centroid, `Openly licensed records of ${shown.name.scientific}`, shown.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! }))), 'records-caption')) : null; // tied to its caption (round eighty-four; B8)
-  const map: { regionMark?: string; points?: typeof points } = regionMark ? { regionMark } : { points };
+  const regionMark = isDataRequest === false ? drawOnce(locals, 'region-map', describedBy(regionSvg(shown.distribution.boxes, points, shown.centroid, `Openly licensed records of ${shown.name.scientific}`, shown.distribution.native.filter((r) => r.box).map((r) => ({ name: unitName(r.name), box: r.box! })), true, LABEL_AT), 'records-caption')) : null; // tied to its caption (round eighty-four; B8); drawn near the viewport, its names on their own land (round eighty-six; outside review B's 4, review P's P1)
+  // A move inside the app's data names the files the two maps draw from too, for the service worker, which keeps them with
+  // a page it carries over an update (round eighty-six; review C's C4): the page's HTML names them in its markup.
+  const map: { regionMark?: string; points?: typeof points; mapFiles?: string[] } = regionMark ? { regionMark } : { points, mapFiles: mapFiles(shown.distribution.boxes, points, shown.centroid) };
   const sent = regionMark ? { ...shown, name: { ...shown.name, vernacular: shown.name.vernacular.filter((v) => v.source === 'Wikidata') } } : shown;
   return {
     viaPage: viaEntry ? { slug: viaEntry.slug, name: viaEntry.name } : null,
@@ -269,8 +303,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     wasMerged,
     /** Species of the reference accepted under the old name: the line names them, and never says the backbone accepts this species as it. */
     wasAcceptedBy: acceptedElsewhere,
-    /** The old name is one the backbone files under a subspecies or variety of this species, by its cached answer. */
+    /** The old name is one GBIF's backbone files under a subspecies or variety of this species, by the record's `name.infra` (round eighty-six; review-c C3). */
     wasBelow,
+    /** The old name is one the record says Kew's file places in another plant, with that plant's page when one page here holds it (round eighty-six; review-c C1). */
+    wasKew,
     /** The record's older names that are another species' accepted name here, with the record's authors. */
     namedElsewhere,
     /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */

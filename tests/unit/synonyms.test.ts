@@ -7,7 +7,9 @@ vi.mock('$lib/server/dossiers', async (importOriginal) => {
   ];
   // The corpus the names are read from (through its index since round seventy-six's lookups; it was `getIndex`)
   const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'synonyms-test', etag: null, fromStore: false, manifest: null, buckets: 32 };
-  return { ...(await importOriginal<typeof import('$lib/server/dossiers')>()), getIndex: async () => idx, corpusNow: async () => corpus };
+  // The record of the page GBIF's answer leads to, read before the address moves there (round eighty-six; review-c C1):
+  // here one that places no name elsewhere.
+  return { ...(await importOriginal<typeof import('$lib/server/dossiers')>()), getIndex: async () => idx, corpusNow: async () => corpus, getDossier: async () => ({ name: { synonyms: [] } }) };
 });
 
 import { nameFromSlug, synonymOf, synonymInIndex } from '$lib/server/synonyms';

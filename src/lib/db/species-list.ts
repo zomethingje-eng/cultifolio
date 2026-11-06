@@ -14,6 +14,12 @@ export interface MySpecies {
   followed: boolean;
   /** A genus (or a nothogenus) alone: the record of plants filed under their genus ("Echeveria 'Perle von Nurnberg'"), whose tile is the genus's, never a species "not in the reference" (round eighty-one, H). */
   genus?: boolean;
+  /**
+   * The species page the add form or the import found the name to be an older name of, or GBIF's name for, as a growing
+   * plant of it carries it (`olderOf`): the tile says it, as the plant's page does (round eighty-six; review-w W2: the
+   * tile said "not in the reference" of Aloe aristata, whose plants' pages said "An older name of Aristaloe aristata").
+   */
+  olderOf?: string;
 }
 
 /**
@@ -36,8 +42,8 @@ export function mySpeciesOf(accessions: readonly Accession[], taxa: readonly Tax
     const slug = speciesSlug(a.taxonName);
     if (!slug) continue;
     const cur = out.get(slug);
-    if (cur) cur.grown++;
-    else out.set(slug, { slug, name: speciesName(a.taxonName), gbifKey: a.taxonKey ?? null, grown: 1, followed: false, ...(isGenusOnly(a.taxonName) ? { genus: true } : {}) });
+    if (cur) { cur.grown++; if (!cur.olderOf && a.olderOf) cur.olderOf = a.olderOf; }
+    else out.set(slug, { slug, name: speciesName(a.taxonName), gbifKey: a.taxonKey ?? null, grown: 1, followed: false, ...(isGenusOnly(a.taxonName) ? { genus: true } : {}), ...(a.olderOf ? { olderOf: a.olderOf } : {}) });
   }
   for (const t of taxa) {
     const slug = t.id;

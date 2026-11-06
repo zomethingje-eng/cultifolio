@@ -26,7 +26,7 @@
     return [...m.entries()].map(([k, n]) => (n > 1 ? `${k} (${n})` : k)).join('; ');
   });
   /** The lead's own credit, with whether it was cultivated and its day, which the band on a phone leaves out (round eighty-five). */
-  const leadCredit = $derived(hero && lead ? `${credit(hero)}${hero.captive === true ? ', in cultivation' : hero.captive === false ? ', observed growing wild' : ''}${hero.observedOn ? `, ${hero.observedOn}` : ''}` : '');
+  const leadCredit = $derived(hero && lead ? `${credit(hero)}${hero.captive === true ? ', in cultivation' : hero.captive === false ? ', observed growing wild' : ''}${hero.observedOn ? `, observed ${hero.observedOn}` : ''}` : '');
   /** The day each source's credits were read, for the photographs credited here (decision 7; `credit-days.ts`). */
   const days = $derived(creditDays(lead && hero ? [hero, ...shown] : shown, upstream));
 </script>
@@ -34,17 +34,21 @@
 {#if hero && !strip}
   <figure class="hero card">
     <a href={hero.page ?? hero.url} rel="noopener"><img src={hero.url} alt="{name}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" /></a>
-    <figcaption class="faint small">{shownAttribution(hero)}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</figcaption>
+    <figcaption class="faint small">{shownAttribution(hero)}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · observed ' + hero.observedOn : ''}</figcaption><!-- "observed": the observation's day, apart from the day the credit was read (round eighty-six; W11) -->
   </figure>
 {/if}
 {#if hero}
+  <!-- One credit line for any count (round eighty-six; outside review B's 1): with a lead and nothing else, the line still
+       names the lead's credit and the day it was read; the grid is drawn only when there is more to show. -->
   {#if rest.length}
     <div class="grid">
       {#each shown as p, i (p.src + p.id)}
         <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={p.thumb} alt="{name}, photograph {i + 1}" loading="lazy" onerror={(e) => { const a = (e.currentTarget as HTMLImageElement).closest('a'); a?.classList.add('failed'); }} />{#if p.captive}<span class="tag">cultivated</span>{/if}<span class="nope">did not load</span></a>
       {/each}
     </div>
-    <p class="credits faint">{#if leadCredit}The photograph at the top: {leadCredit}.{' '}{/if}Photographs: {credits}.{#if days}{' '}<span id="credit-days">{days}.</span>{/if} <a class="help" href="https://creativecommons.org/about/cclicenses/" rel="noopener">What each licence allows</a>.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
+  {/if}
+  {#if rest.length || leadCredit}
+    <p class="credits faint">{#if leadCredit}{rest.length ? 'The photograph at the top' : 'The photograph'}: {leadCredit}.{' '}{/if}{#if credits}Photographs: {credits}.{/if}{#if days}{' '}<span id="credit-days">{days}.</span>{/if} <a class="help" href="https://creativecommons.org/about/cclicenses/" rel="noopener">What each licence allows</a>.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
   {/if}
 {:else}
   <div class="empty card">

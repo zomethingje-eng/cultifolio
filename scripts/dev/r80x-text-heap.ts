@@ -42,7 +42,8 @@ const lines = (head: string, row: (i: number) => string) => {
   // Records: 2,000 datasets, each first seen far into the file.
   before = used();
   const occ = new OccIndex(2000);
-  const o = lines(OCC_TERMS.join('\t'), (i) => [1_000_000_000 + i, -33.5, 18.5, '', '', 2020, 'ZA', 'HUMAN_OBSERVATION', 'CC_BY_4_0', `${String(Math.floor((i * 2000) / N)).padStart(8, '0')}-22c7-4a22-a47d-8c48425ef4a7`, '', '', '', 2_000_000 + (i % 100), 2_000_000 + (i % 100), 2_000_000 + (i % 100)].join('\t') + `\tŁódź, ${'by the road '.repeat(20)}`);
+  // The columns in `OCC_TERMS`' order; round eighty-six added the record's state, after its country.
+  const o = lines(OCC_TERMS.join('\t'), (i) => [1_000_000_000 + i, -33.5, 18.5, '', '', 2020, 'ZA', 'Western Cape', 'HUMAN_OBSERVATION', 'CC_BY_4_0', `${String(Math.floor((i * 2000) / N)).padStart(8, '0')}-22c7-4a22-a47d-8c48425ef4a7`, '', '', '', 2_000_000 + (i % 100), 2_000_000 + (i % 100), 2_000_000 + (i % 100)].join('\t') + `\tŁódź, ${'by the road '.repeat(20)}`);
   j = 0;
   for await (const line of o.rl) { if (j++ === 0) { h = occHeader(line); continue; } const r = parseOccRow(h, line); if (r) occ.add(r); }
   occ.seal();

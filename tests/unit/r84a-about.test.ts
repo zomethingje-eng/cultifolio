@@ -245,9 +245,12 @@ describe('6. /about/formats states the key files as the code types them (S6)', (
     expect(cardFilesFor(48_357)).toBe(1024);
     expect(olderFilesFor(48_357)).toBe(512);
     expect([rowFilesFor('genus', 48_357), rowFilesFor('family', 48_357)]).toEqual([512, 128]);
-    expect(formats).toContain('512 at 48,357 species'); // the search's directories and the files of names
-    expect(formats).toContain('1,024 at 48,357 species');
-    expect(formats).toContain('At 48,357 species: 512 for genera, 128 for the others.');
+    // Round eighty-six (review S's S4): said at the count --index last wrote, by fileCounts (r86w-about holds it to these rules).
+    const src = readFileSync('src/routes/about/formats/+page.svelte', 'utf8');
+    expect(src).toContain('{countText(files.searchDirs)} at {countText(COUNTS_ON.species)} species'); // the search's directories
+    expect(src).toContain('{countText(files.names)} at {countText(COUNTS_ON.species)} species'); // the files of names
+    expect(src).toContain('{countText(files.cards)} at {countText(COUNTS_ON.species)} species');
+    expect(src).toContain('At {countText(COUNTS_ON.species)} species, on {COUNTS_ON.on}: {countText(files.genusRows)} for genera, {countText(files.otherRows)} for the others.');
     expect(formats).not.toMatch(/at the present size/); // base: 256, 128 and sixty-four "at the present size", round seventy-seven's
   });
 });

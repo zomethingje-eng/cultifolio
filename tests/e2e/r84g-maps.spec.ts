@@ -15,6 +15,8 @@ test('the maps draw the regions by their shapes, from files kept a day @phone', 
   const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
   await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
   await page.goto('/species/welwitschia-mirabilis'); await ready(page);
+  // Round eighty-six (outside review B's 4): the maps take their files when they near the viewport.
+  await page.locator('.maprow').scrollIntoViewIfNeeded();
   const world = page.locator('.mapbox svg.map-world');
   await expect(world.locator('use.range')).toHaveCount(2);
   await expect(world.locator('rect.range')).toHaveCount(0);
@@ -35,6 +37,7 @@ test('the maps draw the regions by their shapes, from files kept a day @phone', 
   }
 
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  await page.locator('.maprow').scrollIntoViewIfNeeded();
   await expect(page.locator('.mapbox svg.map-region use.range[href="/maps/r/r-CLN.svg#r"]')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

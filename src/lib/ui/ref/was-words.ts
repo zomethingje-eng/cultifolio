@@ -18,7 +18,9 @@
  *
  * The parts are text with the heading or GBIF's name in italics, so the page renders them without HTML.
  */
-export type Part = { t: string; i?: true };
+import { canonicalSynonym } from '$core/names';
+
+export type Part = { t: string; i?: true; /** a link to another page of the reference (round eighty-six) */ href?: string };
 
 export type WasIn = {
   /** The name the page was reached by. */
@@ -41,6 +43,15 @@ export type WasIn = {
   below?: boolean;
   /** The page has no GBIF key (its names are Kew's alone). */
   gbifless?: boolean;
+  /**
+   * The record's names Kew's file places in another plant (`name.kew.elsewhere`, with their authors as stored), and those
+   * of them Kew accepts as species of their own (`name.kew.acceptedElsewhere`): of such a name the line never says Kew
+   * "does not list" it (round eighty-six; review-c C1).
+   */
+  kewElsewhere?: readonly string[] | null;
+  kewAcceptedElsewhere?: readonly string[] | null;
+  /** The one page of the reference whose Kew older names hold the name, when there is exactly one. */
+  kewHolder?: { slug: string; name: string } | null;
 };
 
 /** Words alone: no case, no hybrid sign, no rank marker, one space. */
@@ -66,6 +77,19 @@ export function onlySpelling(a: string, b: string): boolean {
 }
 
 const has = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => plainWords(x) === plainWords(name));
+/** The same, for names stored with their authors ("Anacampseros schmidtii (Berger) Poelln."): the name's words alone. */
+const hasNamed = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => { const c = canonicalSynonym(x); return !!c && plainWords(c) === plainWords(name); });
+
+/**
+ * What Kew's World Checklist holds of a name the record says it places in another plant (round eighty-six; review-c
+ * C1): under the one page here that holds it among Kew's older names, linked; as a species of its own; or in another
+ * plant than the heading. Never "does not list".
+ */
+function kewElsewhereTail(w: WasIn, H: Part): Part[] {
+  if (w.kewHolder) return [{ t: " Kew's World Checklist holds it as a synonym of " }, { t: w.kewHolder.name, i: true, href: `/species/${w.kewHolder.slug}` }, { t: ', which has its own page here, not of ' }, H, { t: '.' }];
+  if (hasNamed(w.kewAcceptedElsewhere, w.was)) return [{ t: " Kew's World Checklist accepts it as a species of its own, apart from " }, H, { t: ', and no page of the reference holds it.' }];
+  return [{ t: " Kew's World Checklist holds it for another plant than " }, H, { t: ', which heads this page.' }];
+}
 
 /** The line after the bold old name, as parts; the page renders `<b>{was}</b> ` and then these. */
 export function wasLine(w: WasIn): Part[] {
@@ -74,6 +98,11 @@ export function wasLine(w: WasIn): Part[] {
   const gbifName = w.gbifName && plainWords(w.gbifName) !== plainWords(w.heading) ? w.gbifName : null;
   // The name GBIF's backbone files the key under: its own where Kew's heads the page, else the heading (GBIF's).
   const G: Part = gbifName ? { t: gbifName, i: true } : H;
+  // A name Kew's file places in another plant: GBIF's filing, then Kew's placement (round eighty-six; review-c C1:
+  // "Echinopsis chalaensis … Kew's World Checklist accepts the species as Echinopsis macrogona" left out that Kew accepts
+  // E. chalaensis apart).
+  const away = hasNamed(w.kewElsewhere, w.was) && !(gbifName && plainWords(w.was) === plainWords(gbifName));
+  if (w.below && away) return [{ t: "is, in GBIF's backbone, a synonym of a subspecies or variety of " }, G, { t: gbifName ? ", GBIF's name for this plant." : '.' }, ...kewElsewhereTail(w, H)];
   if (w.below) {
     return gbifName
       ? [{ t: "is, in GBIF's backbone, a synonym of a subspecies or variety of " }, G, { t: ", GBIF's name for this plant. Kew's World Checklist accepts the species as " }, H, { t: ', which heads this page. The reference files species, so the name is shown here.' }]
@@ -91,6 +120,7 @@ export function wasLine(w: WasIn): Part[] {
     return [{ t: "is GBIF's name for this plant, and GBIF's backbone accepts it. Kew's World Checklist accepts the plant as " }, H, { t: ', which heads this page: the reference takes its names from Kew.' }];
   }
   const what = w.variety ? 'an older name of a variety of this species' : w.ofOlder ? 'a variety under an older name of this species' : 'an older name of this species';
+  if (away) return [{ t: `is ${w.variety ? 'an older name of a variety of this species' : 'an older name of this species'} in GBIF's backbone, which files it under ` }, G, { t: gbifName ? ", GBIF's name for this plant." : '.' }, ...kewElsewhereTail(w, H)];
   const inKew = has(w.kewSynonyms, w.was);
   const inGbif = has(w.gbifSynonyms, w.was) || !!w.variety || !!w.ofOlder;
   if (inKew) {

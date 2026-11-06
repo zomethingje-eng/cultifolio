@@ -6,7 +6,7 @@
  */
 import { prepare, search, hasExact, rankedWords, relaxedQuery, searchGenera, type Prepared } from '$core/search';
 import { queryPlan, candidates, postingFileOf } from '$core/postings';
-import { searchFromFiles, searchDirsFor, searchDirsOfQuery, type SearchReader, type Dir, type Answers, type Tables, type Blocks } from '$core/search-files';
+import { searchFromFiles, searchDirsFor, searchDirsOfQuery, kewHoldersFromFiles, kewHoldersOfIndex, type SearchReader, type Dir, type Answers, type Tables, type Blocks } from '$core/search-files';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { heldNamesOf } from '$dossier/photo-kind';
@@ -701,6 +701,19 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   const near = candidates(plan.near, posting);
   if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
   return paged(search(prepare(entries(near), generaOfIndex(idx)), q));
+}
+/**
+ * The species of the reference whose Kew older names (`kew` in the index, Kew's synonyms the page's own older names do
+ * not hold) hold this name as written, in the index's order (round eighty-six; review-c C1, review-d D3): an address
+ * under one of them is that page's, as an older name in `syn` or `older` is, and is never asked of GBIF's match, which
+ * sent `/species/anacampseros-schmidtii` to Anacampseros albissima, though Kew files the name under A. dinteri. From the
+ * key files' `@` file of the name's genus under a corpus searched from them, from the index otherwise. A file that
+ * cannot be read is a 503, as every search read is, never "none".
+ */
+export async function kewHolders(platform: Platform, fetch: Fetch, name: string, held?: Loaded): Promise<IndexEntry[]> {
+  const c = held ?? (await loadIndex(platform, fetch));
+  if (searchedFromFiles(c)) return kewHoldersFromFiles(keyReader(c, platform, fetch), name);
+  return kewHoldersOfIndex(await indexOf(c, platform, fetch), name);
 }
 /**
  * The reference's regions of origin, as the search's tables name them (round eighty): what a query naming a region is

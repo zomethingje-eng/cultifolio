@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { load } from '../../src/routes/species/[slug]/+page.server';
-import { sharedNameMessage, cachedMatch } from '$lib/server/synonyms';
+import { sharedNameMessage } from '$lib/server/synonyms';
 import { workerKey } from '$lib/server/worker-cache';
 import type { IndexEntry, Loaded } from '$lib/server/dossiers';
 import { gbifPage } from '../../src/lib/core/page-id';
@@ -16,7 +16,8 @@ const entry = (key: number, name: string, syn: string[] = []): IndexEntry => ({ 
 const idx: IndexEntry[] = [entry(2, 'Annona montana', ['Annona marcgravii', 'Annona muricata']), entry(5, 'Annona muricata', ['Annona macrocarpa']), entry(3952140, 'Trichocereus macrogonus', ['Cereus macrogonus'])];
 const synonyms: Record<number, string[]> = { 2: ['Annona marcgravii Mart.', 'Annona muricata Vell.', 'Annona pisonis Mart.'], 5: ['Annona macrocarpa Wercklé'], 3952140: ['Cereus macrogonus Salm-Dyck'] };
 const FIXTURE = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8')) as { key: string; slug: string; name: { scientific: string; synonyms: string[] } };
-const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, ids: { ...(FIXTURE as { ids?: object }).ids, gbif: e.gbif }, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.gbif!] ?? [] } });
+const infraOf: Record<number, string[]> = {};
+const dossierOf = (e: IndexEntry) => ({ ...FIXTURE, key: e.key, ids: { ...(FIXTURE as { ids?: object }).ids, gbif: e.gbif }, slug: e.slug, name: { ...FIXTURE.name, scientific: e.name, genus: e.name.split(' ')[0], synonyms: synonyms[e.gbif!] ?? [], ...(infraOf[e.gbif!] ? { infra: infraOf[e.gbif!] } : {}) } });
 const STORE = { get: async (path: string) => { const e = idx.find((x) => path.endsWith(`/${x.key}.json`)); return e ? { json: async () => dossierOf(e) } : null; } };
 const corpus = { at: Date.now(), idx, bySlug: new Map(idx.map((e) => [e.slug, e.key])), corpus: 'r71f', etag: null, fromStore: true, manifest: null, buckets: 32 } as unknown as Loaded;
 const noGbif = (async (u: string | URL) => { throw new Error(`asked ${String(u)}`); }) as typeof fetch;
@@ -50,16 +51,23 @@ describe('S-F3: an older name that is another species\' accepted name here', () 
   });
 });
 
-describe('S-F8: an address resolved through a variety says why, from GBIF\'s cached answer only', () => {
-  it('/species/echinopsis-pachanoi landing on Trichocereus macrogonus says so', async () => {
-    const data = (await load(event('trichocereus-macrogonus', '?was=Echinopsis%20pachanoi', cacheWith('Echinopsis pachanoi', PACHANOI)))) as Data;
-    expect(data.was).toBe('Echinopsis pachanoi');
-    expect(data.wasBelow).toBe(true);
+describe('S-F8: an address resolved through a variety says why, from the record (round eighty-six: review-c C3)', () => {
+  // Round eighty-six (review-c C3): the line is read from the record's own names under its varieties (`name.infra`), never
+  // from GBIF's answer in the Worker's cache, which one data centre held and the next did not.
+  it('/species/echinopsis-pachanoi landing on Trichocereus macrogonus says so, with or without a cached answer', async () => {
+    infraOf[3952140] = ['Echinopsis pachanoi'];
+    try {
+      for (const caches of [undefined, cacheWith('Echinopsis pachanoi', PACHANOI)]) {
+        const data = (await load(event('trichocereus-macrogonus', '?was=Echinopsis%20pachanoi', caches))) as Data;
+        expect(data.was).toBe('Echinopsis pachanoi');
+        expect(data.wasBelow).toBe(true);
+      }
+    } finally { delete infraOf[3952140]; }
   });
-  it('guard: with no cached answer, or one for another species, a link written by hand says nothing', async () => {
+  it('guard: a name the record does not hold under its varieties says nothing, whatever the cache holds', async () => {
     expect(((await load(event('trichocereus-macrogonus', '?was=Echinopsis%20pachanoi'))) as Data).was).toBeNull();
+    expect(((await load(event('trichocereus-macrogonus', '?was=Echinopsis%20pachanoi', cacheWith('Echinopsis pachanoi', PACHANOI)))) as Data).was).toBeNull();
     expect(((await load(event('annona-montana', '?was=Echinopsis%20pachanoi', cacheWith('Echinopsis pachanoi', PACHANOI)))) as Data).was).toBeNull();
-    expect(await cachedMatch(undefined, 'Echinopsis pachanoi')).toBeNull();
   });
 });
 

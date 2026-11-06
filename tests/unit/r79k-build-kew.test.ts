@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import type { FetchResult, JsonFetcher } from '../../src/lib/dossier/fetch';
 import { buildKewDossier, kewInatTaxon, kewOwnNames, kewItem, type KewSpecies } from '../../src/lib/dossier/build-kew';
+import { restAsLead } from '../../src/lib/dossier/fetch';
 import { kewItemUrl, entityUrl, summaryUrl, kewItemsQuery, batchSources } from '../../src/lib/dossier/batch';
 import { NO_GBIF_WHY, NO_GBIF_CLIMATE } from '../../src/lib/core/no-gbif';
 import { INAT } from '../../src/lib/dossier/sources/inat';
@@ -51,7 +52,7 @@ const answers = (over: Record<string, unknown> = {}) => ({
   [kewItemUrl({ ipni: cypress.ipni, powo: cypress.powo })]: sparql([['60451554-2', 'Q50843040']]),
   // The item carries a GBIF key, GBIF's synonym Cupressus lusitanica: it is not read.
   [entityUrl('Q50843040')]: entity('Q50843040', { P31: [{ id: 'Q16521' }], P225: ['Hesperocyparis lusitanica'], P3151: ['1515661'], P846: ['2684069'], P7715: ['wfo-0000912972'] }, 'Hesperocyparis lusitanica'),
-  [summaryUrl('Hesperocyparis lusitanica')]: { type: 'standard', title: 'Hesperocyparis lusitanica', extract: 'Hesperocyparis lusitanica, the Mexican cypress, is a species of conifer.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Hesperocyparis_lusitanica' } } },
+  [summaryUrl('Hesperocyparis lusitanica')]: restAsLead('Hesperocyparis lusitanica', { type: 'standard', title: 'Hesperocyparis lusitanica', extract: 'Hesperocyparis lusitanica, the Mexican cypress, is a species of conifer.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Hesperocyparis_lusitanica' } } }),
   [`${INAT}/taxa/1515661`]: { results: [{ id: 1515661, name: 'Hesperocyparis lusitanica', rank: 'species', is_active: true }] },
   [`re:^${INAT.replace(/\./g, '\\.')}/observations\\?`]: { results: [] },
   're:^https://commons\\.wikimedia\\.org/': null,

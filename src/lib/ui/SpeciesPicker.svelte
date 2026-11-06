@@ -16,7 +16,7 @@
   import { parseName, speciesNotStated } from '$core/names';
   import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
-  import { mergedSentence } from '$lib/ui/ref/searched';
+  import { mergedSentence, gbifNameWords } from '$lib/ui/ref/searched';
   import { localRow, olderLine, offeredReading, genusReading, type PickerRow } from '$lib/ui/picker-rows';
   import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick, rankedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
@@ -25,7 +25,7 @@
   // name as received (round sixty-two; the grower review, 9).
   // `reserve`: keep the room the check's words take under the field, so what follows never moves when they arrive
   // (round sixty-seven; triage-66 P10).
-  let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', labelledby = undefined, describedby = undefined, unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { /** The field's name, by id: the label around the field also holds the check's pills and lines, which a screen reader read as its name (round eighty-one; the desktop review's 7). */ labelledby?: string; /** The form's own hint under the field, by id. */ describedby?: string; reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
+  let { reserve = false, linked = false, addLabel = 'Add', value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', labelledby = undefined, describedby = undefined, unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null), pressing = false }: { /** The form's press is being checked (its "Checking the name…"): a check concluding meanwhile is the press's to answer, and arms nothing itself (round eighty-six; review-s S3, review-c C2). */ pressing?: boolean; /** The field's name, by id: the label around the field also holds the check's pills and lines, which a screen reader read as its name (round eighty-one; the desktop review's 7). */ labelledby?: string; /** The form's own hint under the field, by id. */ describedby?: string; reserve?: boolean; /** the name and its key came with the link (a species page's "Add one"): until the grower types, only the key's pill can still change, so the room kept is one line (round eighty) */ linked?: boolean; /** what the form's button reads once the name is armed, for the line that names it (round eighty) */ addLabel?: string; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
   // `similar`: found by a similar spelling (the server's near pass); `asCultivar`: the genus offered for a genus followed by
   // capitalised words, the rest kept as a cultivar; a key below 1 is a row with no key to file (round sixty-two; A7).
   // `merged`: a reference row found by the name of a page merged into it, which the search lists first for that name (round eighty-three).
@@ -319,7 +319,11 @@
     // variety or a variety reached through a synonym is filed with no key, and said.
     const key = s.key > 0 && filesKey(value, s) ? s.key : null;
     const written = pickedName(value, s);
-    received = droppedByPick(value, written);
+    // The page's row picked for a name typed in full that is one of its older names, or GBIF's name for it: the name
+    // typed is kept as the name as received, as "File it under" keeps it on the plant's page (round eighty-six; review-w
+    // W3: "Hibiscus acetosella" picked as Sabdariffa acetosella kept nothing of what was typed).
+    const typedName = parseName(value).scientific;
+    received = s.local && !s.similar && (s.older || s.gname) && sameName(s.older ?? s.gname ?? '', typedName) && !sameName(written, value) ? value.trim() : droppedByPick(value, written);
     value = written;
     ownValue = written;
     reparse(value);
@@ -464,6 +468,8 @@
     // A row found by the name of a page merged into it says so, as the catalogue's row does (round eighty-three).
     if (s.local && s.merged) return { ...page, shown: ` · ${mergedSentence(s.merged)}${keyed ? '' : '; no key filed'}` };
     // Why the row is offered, when it is by an older name or another author's (round eighty-four; review-s S8).
+    // GBIF's name for the page's key is said as that, never "older name" (round eighty-six; review-w W1).
+    if (s.local && s.gname) return { ...page, shown: ` · ${gbifNameWords(s.gname)}${keyed ? '' : '; no key filed'}` };
     if (s.local && (s.older || s.hom)) return { ...page, shown: ` · ${s.older ? `older name: ${s.older}` : `older name under another author: ${s.hom!.text}`}${keyed ? '' : '; no key filed'}` };
     // A page without a GBIF key (round seventy-nine): its own page, with no key to file, which is said as that, whenever a
     // pick files its own name, typed in full or not (round eighty-five; review-s S7: "Echinopsis cuzcoensis · its species
@@ -506,6 +512,13 @@
    */
   const older = $derived(resolved === 'unknown' ? undefined : olderLine(suggestions, parseName(value).scientific));
   const olderRow = $derived(older?.row);
+  /**
+   * The name typed is GBIF's name for the page's own key, where Kew's name heads the page (round eighty-six; review-w W1,
+   * review-p P10): the key the name service gave for it is the page's GBIF key, or the reference's row says so (`gname`).
+   * Said "GBIF's name for", as the species page says it, never "an older name of": Ceropegia alstonii is Bruyns's 2017
+   * name, newer than Hoodia alstonii.
+   */
+  const gbifNamed = $derived(!!olderRow && older?.why === 'older' && ((taxonKey != null && olderRow.key > 0 && taxonKey === olderRow.key) || (!!olderRow.gname && sameName(olderRow.gname, parseName(value).scientific))));
   const nearest = $derived(!taxonKey && (resolved === 'no' || resolved === 'unreached') ? (olderRow ?? suggestions.find(olderOfTyped) ?? suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
   function onBlur(e: FocusEvent) {
     // Focus moving inside the picker (a click on a row) is not a leave.
@@ -514,8 +527,32 @@
       if (focused()) return; // back in the field meanwhile
       open = false;
       hi = -1;
-      checkExact();
+      const left = value;
+      void checkExact().then(() => armIfConcluded(left));
     }, 150);
+  }
+  /**
+   * The one place a name typed is armed (round eighty-six; review-c C2, review-s S3, review-p P5): once a leave's or an
+   * Enter's check has concluded that the reference holds the name as no page's own (nothing resolved it, or it is an older
+   * name of a page, or GBIF's name for one), the button reads "Add as typed" and the line says that it keeps the name, so
+   * the first press does what the line says. Enter armed before the reference's search had answered, and a press inside
+   * that window filed a plant the reference holds with no key; a leave armed nothing, and the line said "Add keeps exactly
+   * what you typed" of a press that only armed. A check that concludes under the form's own press is the press's to answer
+   * (`pressing`): the press then shows the line and arms, and the next files.
+   */
+  /** A check that concluded while a press outside the picker was down: armed when the press is over, unless it was the form's. */
+  let armAfterHold: string | null = null;
+  function armIfConcluded(asked: string) {
+    if (pressing || armed || value !== asked || !value.trim()) return;
+    // Under a finger already down (the room is held, and what the check says is not yet shown): the press began on the
+    // button as it was, so it is the press's to answer; armed after it, if it was not the form's (`held`).
+    if (held) { armAfterHold = asked; return; }
+    // Only a name the form would ask about: a cross, a cultivar of a genus alone and a name with "cf.", "aff." or "sp." are
+    // filed as written with nothing to ask (`check`, the form's `save`), so arming one said "Add as typed" and "Pick a name
+    // from the list" of a hybrid the form files under its genus (round eighty-six; smoke-1's hybrid on the merged base).
+    const p = parseName(value);
+    if (kind === 'hybrid' || p.kind === 'hybrid' || p.qualifier || speciesNotStated(p)) return;
+    if ((!taxonKey && !keyless && (resolved === 'no' || resolved === 'unreached')) || (typed && olderRow)) armed = true;
   }
   /**
    * A press anywhere outside the picker closes the list at once (round eighty-four; review-c C1), and holds the room under
@@ -549,6 +586,7 @@
         removeEventListener('pointercancel', release, true);
         held = null;
         undo = null;
+        if (armAfterHold != null) { const asked = armAfterHold; armAfterHold = null; armIfConcluded(asked); }
       };
     };
     addEventListener('pointerdown', down, true);
@@ -646,8 +684,12 @@
     }
     open = false;
     hi = -1;
-    armed = true;
-    checkExact();
+    // Armed once the check has concluded, never before (round eighty-six; review-c C2: Enter, then Add while the
+    // reference's search was out, filed "Copiapoa humilis" with no key in 10 of 10 runs). A name too short to check has
+    // nothing to wait for.
+    if (value.trim().length < 4) { armed = true; return; }
+    const asked = value;
+    void checkExact().then(() => armIfConcluded(asked));
   }
 </script>
 
@@ -690,10 +732,10 @@
   {#if taxonKey}<span class="pill ok" title="Filed under GBIF's key {taxonKey}, the number GBIF's backbone gives this name">GBIF {taxonKey}</span>{:else if keyless}<span class="pill">no key filed</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone{nearest ? '' : ', kept as typed'}</span>{:else if resolved === 'unreached'}<span class="pill warn">{nameRefusal ? 'name service not asked' : 'name service not reached'}{nearest ? '' : ', kept as typed'}</span>{/if}
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar{notStated ? ', species not stated' : ''}</span>{/if}
   <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
-  {#if olderRow}<p class="hint" id={armed ? `${listId}-hint` : undefined} role="status">{older?.why === 'merged' ? 'Its page was merged into ' : 'An older name of '}<button type="button" class="linkish" onclick={() => pick(olderRow)}><SpeciesName name={olderRow.name} /></button>, which has a species page: pick it, or {armed ? `press “${addLabel}” to keep` : 'Add keeps'} exactly what you typed.</p>
-  {:else if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
+  {#if olderRow}<p class="hint" id={armed ? `${listId}-hint` : undefined} role="status">{older?.why === 'merged' ? 'Its page was merged into ' : gbifNamed ? "GBIF's name for " : 'An older name of '}<button type="button" class="linkish" onclick={() => pick(olderRow)}><SpeciesName name={olderRow.name} /></button>, which has a species page: pick it, or {armed ? `press “${addLabel}” to keep` : 'Add keeps'} exactly what you typed.</p>
+  {:else if nearest}<p class="hint" id={armed ? `${listId}-hint` : undefined} role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise {armed ? `“${addLabel}”` : 'Add'} keeps exactly what you typed.</p><!-- the button's own words once armed (round eighty-six; review-s S3) -->
   {:else if readAsCultivar && armed}<p class="hint" id="{listId}-hint" role="status">No species of that name was found, so it is read as the genus <i>{readAsCultivar}</i> with a cultivar. Press Add to keep it, or change the name.</p>
-  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press {addLabel === 'Add' ? 'Add' : `“${addLabel}”`} to keep exactly what you typed.</p><!-- the button's own words: it reads "Add as typed" by then (round eighty; the desktop review's 11) -->
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{resolved === 'unreached' && !gbifRefused && !nameRefusal ? '' : namesSaid}{refSaid}Pick a name from the list, or press {addLabel === 'Add' ? 'Add' : `“${addLabel}”`} to keep exactly what you typed.</p><!-- a plain failure of the name service is the pill's to say ("name service not reached"): said twice, the line ran to a fourth line on a phone once a leave armed it, and moved what follows (round eighty-six; r67p P10) --><!-- the button's own words: it reads "Add as typed" by then (round eighty; the desktop review's 11) -->
   {:else if nameServiceDown && refDown}<p class="hint svc" role="status">{namesSaid}{refSaid}A name typed in full is kept as typed and checked later.</p>
   <!-- With a key found, or a pill that already says the name is kept as typed, the line does not say it again: it then fits the room kept for it (round sixty-seven; triage-66 P10). -->
   {:else if nameServiceDown}<p class="hint svc" role="status">{gbifRefused ? "GBIF refused this site's request for names, so only" : nameRefusal ? `The name service was not asked: ${nameRefusal}. Only` : 'The name service did not answer, so only'} the reference's own species are offered{taxonKey || resolved === 'no' || resolved === 'unreached' ? '' : '; a name typed in full is kept as typed and checked later'}.</p>

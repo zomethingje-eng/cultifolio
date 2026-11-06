@@ -27,7 +27,7 @@
   import { readSearch } from '$lib/import/check';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { entriesFor, sheetForNameOr, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
+  import { entriesFor, sheetForNameOr, gbifNamedOf, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
   import { unreachedClause } from '$lib/ui/reach-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
@@ -147,7 +147,7 @@
    * own page asks the reference by hash group, never by name, so the name goes to the catalogue's search only on that
    * press, as the search box sends it. `older` is the page found, with a way to file the plant under it.
    */
-  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null; via?: string } | null>(null);
+  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null; via?: string; /** the name is GBIF's name for the page's key (round eighty-six; review-w W1) */ gbif?: boolean } | null>(null);
   async function lookOlder() {
     if (!a) return;
     const name = speciesOf(a.taxonName);
@@ -156,9 +156,14 @@
     if (olderLook?.for !== a?.taxonName) return;
     if (got === null || !Array.isArray(got)) { olderLook = { for: a.taxonName, state: 'unreached' }; return; }
     const r = readSearch(name, true, got);
+    // GBIF's name for the page's key, said as that (round eighty-six; review-w W1): by the row (`gname`), or by the copy
+    // of the page's sheet the build files under the name.
+    const g = r.s === 'near' && r.why === 'older name' && !r.gbif ? await gbifNamedOf(name) : null;
+    if (olderLook?.for !== a?.taxonName) return;
+    const gbif = r.s === 'near' && r.why === 'older name' && (!!r.gbif || (!!g && g.slug === r.slug));
     // A name below the one typed held as an older name is said as that (round eighty-five; review-w W2): "Trichocereus
     // pachanoi" was told it is no older name, though Echinopsis macrogona holds its form f. peruvianus.
-    olderLook = r.s === 'near' && (r.why === 'older name' || r.why === 'infra') ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key, ...(r.why === 'infra' && r.via ? { via: r.via } : {}) } : { for: a.taxonName, state: 'none' };
+    olderLook = r.s === 'near' && (r.why === 'older name' || r.why === 'infra') ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key, ...(r.why === 'infra' && r.via ? { via: r.via } : {}), ...(gbif ? { gbif: true } : {}) } : { for: a.taxonName, state: 'none' };
   }
   $effect(() => { void a?.taxonName; untrack(() => { if (olderLook && olderLook.for !== a?.taxonName) olderLook = null; }); });
   /** Files the plant under the page its name is an older name of, as Edit would, the old name kept as received and in the log. */
@@ -172,7 +177,7 @@
     const newFull = `${taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     refiling = true;
     try {
-      const why = foundBy?.how === 'gbif' ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : "the reference's name; the old one is an older name of it";
+      const why = foundBy?.how === 'gbif' || (!foundBy && olderLook?.state === 'older' && olderLook.gbif) ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : "the reference's name; the old one is an older name of it";
       await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull, ...(a.olderOf ? { olderOf: null } : {}) }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (${why})`, auto: true }]);
       olderLook = null;
       toast.show(`Now filed under ${taxonName}; the old name is kept as received.`);
@@ -219,7 +224,14 @@
       if (got === 'none' && olderOf && !sameName(olderOf, name)) {
         const o = await sheetForNameOr(olderOf, null);
         if (seq !== asked) return;
-        if (o && o !== 'none' && !isUnreached(o)) { got = o; by = { how: 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null }; }
+        if (o && o !== 'none' && !isUnreached(o)) {
+          got = o;
+          // GBIF's name for that page's own key is said as that, by the copy the build files under the name (round
+          // eighty-six; review-w W1: the same name typed said "GBIF's name", imported said "An older name of").
+          const g = await gbifNamedOf(name);
+          if (seq !== asked) return;
+          by = { how: g && g.slug === o.slug ? 'gbif' : 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null };
+        }
       }
       foundBy = by;
       refWhy = isUnreached(got) ? got : null;
@@ -778,8 +790,8 @@
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
         <!-- A page found for the plant by its key or by the form's answer, said as how (round eighty-five; review-c C4, review-s S2, outside review A16a). -->
-        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}Filed under GBIF's name for its key; the reference heads its page{:else if foundBy.how === 'merged'}Its page was merged into{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
-        {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
+        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}GBIF's name for{:else if foundBy.how === 'merged'}Its page was merged into{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
+        {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else if olderLook.gbif}GBIF's name for{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
         {:else if asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{#if parseName(a.taxonName).epithet && !parseName(a.taxonName).qualifier}{#if olderLook?.state === 'asking'}{' '}<span class="muted" role="status">looking among older names…</span>{:else if olderLook?.state === 'none'}<span id="older-name-none" role="status">, nor is it an older name of one</span>{:else if olderLook?.state === 'unreached'}<span id="older-name-unreached" role="status">; the reference's search did not answer, so older names were not checked. <button class="linkish tap" type="button" onclick={lookOlder}>Try again</button></span>{:else}{' '}<button class="linkish tap" type="button" id="look-older" onclick={lookOlder} title="Sends this name to the reference's search, as the search box does">Is it an older name?</button>{/if}{/if}{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}

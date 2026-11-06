@@ -8,10 +8,11 @@
 import { describe, it, expect } from 'vitest';
 import { summary } from '$dossier/sources/wikipedia';
 import { firstSentences } from '$core/text';
-import type { JsonFetcher } from '$dossier/fetch';
+import { restAsLead, type JsonFetcher } from '$dossier/fetch';
 
 const lead = (n: number) => Array.from({ length: n }, (_, i) => `Sentence ${i + 1} of the lead says something about the plant and its habitat in the mountains, with a little more detail than needed to make it long enough to count here, and more, and spectacularly more.`).join(' ');
-const wiki = (extract: string) => (async () => ({ status: 'ok', data: { extract, title: 'Aus bus', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Aus_bus' } } } })) as unknown as JsonFetcher;
+// Round eighty-six (B7): the action API's lead, from the REST-shaped answer this test was written with (`restAsLead`).
+const wiki = (extract: string) => (async () => ({ status: 'ok', data: restAsLead('Aus bus', { extract, title: 'Aus bus', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Aus_bus' } } }) })) as unknown as JsonFetcher;
 
 describe('the summary is cut where a sentence ends', () => {
   it('a long lead keeps its whole sentences within 1,500 characters, and says more followed', async () => {

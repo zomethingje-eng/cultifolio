@@ -11,12 +11,12 @@
  *     search's answer is held as the items found, two at most, as the search gives them.
  *   - **Wikidata, the item.** `wbgetentities` for one item, claims and the English sitelink, is the same entity JSON read
  *     fifty items a request (`ENTITY_IDS`), as `--fill wikidata` already reads it.
- *   - **Wikipedia, the summary.** The REST summary of one title is answered from the Action API's TextExtracts, twenty
- *     titles a request (`EXTRACT_TITLES`, TextExtracts' own limit for a lead), redirects followed as the REST API follows
- *     them, a disambiguation page said as one. The extract is the lead's first paragraph (`restExtract`), the shape the
- *     REST API gives; where the two differ, the batch's is the text, and the comparison of round seventy-eight says how
- *     (docs/review-78/fix-b.md). The licence and the attribution are the article's, as before: CC BY-SA 4.0 and its
- *     address, which the page links (rule 4).
+ *   - **Wikipedia, the summary.** The builder asks the action API for one title's lead (`leadsUrl`, `summary` in
+ *     sources/wikipedia.ts; round eighty-six: the article's opening paragraph and its revision in one request, where it
+ *     asked the REST summary before); the batch asks the same request for twenty titles (`EXTRACT_TITLES`, TextExtracts'
+ *     own limit for a lead) and holds each title's part of the answer under its one-title address, redirects and
+ *     disambiguation as the answer gives them. The licence and the attribution are the article's, as before: CC BY-SA 4.0
+ *     and its address, which the page links (rule 4).
  *
  * Rule 2: a batch that does not answer is held as that failure for every species in it, so each says "not checked"
  * (refused or failed), never "none", and the builder keeps what the previous build had, as for any source that did not
@@ -28,6 +28,7 @@
  * held for it, so asked once either way), so that its item too is asked in the batch.
  */
 import type { JsonFetcher, FetchOptions, FetchResult } from './fetch';
+import { leadsUrl, openingParagraph, articleUrl as wikiArticleUrl, LEAD_TITLES, type LeadsAnswer } from './sources/wikipedia';
 
 /** Species a chunk asks the batches for, just before they are built: about 25 MB of held answers at most. */
 export const BATCH_CHUNK = 500;
@@ -43,18 +44,17 @@ export const KEW_SPARQL_SPECIES = 50;
 /** Items a `wbgetentities` request reads: the API's limit for an anonymous client. */
 export const ENTITY_IDS = 50;
 /** Titles a TextExtracts request reads: the API's limit for a lead (`exintro`). */
-export const EXTRACT_TITLES = 20;
+export const EXTRACT_TITLES = LEAD_TITLES;
 
 const WDQS = 'https://query.wikidata.org/sparql';
 const WD_API = 'https://www.wikidata.org/w/api.php';
-const WP_API = 'https://en.wikipedia.org/w/api.php';
 
 /** The builder's question for the item by GBIF key (`crossIds`): the exact address. */
 export const p846SearchUrl = (gbifKey: number) => `${WD_API}?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}`;
 /** The builder's read of one item (`entityOf`, and `speciesItems` for one item): the exact address. */
 export const entityUrl = (id: string) => `${WD_API}?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki`;
-/** The builder's question for a title's summary (`summary`): the exact address. */
-export const summaryUrl = (title: string) => `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+/** The builder's question for a title's summary (`summary`): the exact address, the action API's lead of that one title (round eighty-six). */
+export const summaryUrl = (title: string) => leadsUrl([title]);
 
 /** The builder's GBIF name match for a species listed by name (`gbif.matchName`): the exact address. */
 export const matchUrl = (name: string) => `https://api.gbif.org/v1/species/match?strict=false&name=${encodeURIComponent(name)}`;
@@ -93,20 +93,13 @@ export const kewItemsOf = (k: KewIds, r: KewItemAnswer): string[] => {
   return out;
 };
 export const entitiesUrl = (ids: readonly string[]) => `${WD_API}?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims|sitelinks&sitefilter=enwiki`;
-export const extractsUrl = (titles: readonly string[]) => `${WP_API}?action=query&format=json&formatversion=2&prop=extracts|pageprops|info&ppprop=disambiguation&exintro=1&explaintext=1&exlimit=${EXTRACT_TITLES}&redirects=1&titles=${titles.map((t) => encodeURIComponent(t)).join('|')}`;
+/** The batch's request for many titles' leads: the builder's own request, for twenty titles (round eighty-six). */
+export const extractsUrl = (titles: readonly string[]) => leadsUrl(titles);
 
 type SparqlAnswer = { results?: { bindings?: Array<{ k?: { value?: string }; item?: { value?: string } }> } };
 type Entity = { id?: string; missing?: string; claims?: unknown; sitelinks?: Record<string, { title: string }> };
 type EntitiesAnswer = { entities?: Record<string, Entity>; error?: { code?: string; info?: string } };
-type ExtractsAnswer = {
-  query?: {
-    normalized?: Array<{ from: string; to: string }>;
-    redirects?: Array<{ from: string; to: string; tofragment?: string }>;
-    pages?: Array<{ title: string; missing?: boolean; invalid?: boolean; extract?: string; pageprops?: { disambiguation?: string }; lastrevid?: number }>;
-  };
-  continue?: unknown;
-  error?: { code?: string; info?: string };
-};
+type ExtractsAnswer = LeadsAnswer;
 
 /** A MediaWiki error in an HTTP 200 (a lag, a bad parameter), as the builder's `mwError` reads it. */
 const mwError = (d: unknown) => {
@@ -122,28 +115,11 @@ function failed(r: FetchResult<unknown>, what: string): FetchResult<never> {
   return { status: 'error', detail: `${why} (batched: ${what})` };
 }
 
-/**
- * The summary's extract from TextExtracts' plain-text lead: its first paragraph with text, as the REST summary takes it,
- * with the brackets TextExtracts leaves where it took out a pronunciation closed up ("Aloe vera () is …", "The papaya
- * (US: ) is …"). Unlike the REST summary, a bracket with words in it is kept: "Heptapleurum actinophyllum (formerly
- * Schefflera actinophylla) is a tree", "Tarragon (Artemisia dracunculus), also known as estragon", as the article
- * writes them. Round seventy-eight's live comparison of 50 species found the two texts the same but for those brackets
- * (6 of 50) and a trailing line break (1); the article's own words are what the page quotes (`/about/how`).
- */
-export function restExtract(lead: string): string {
-  const para = lead.split('\n').map((p) => p.trim()).find((p) => p.length > 0) ?? '';
-  // A bracket left with nothing but labels and separators once its pronunciation was taken out ("(US: )", "(; Greek)").
-  const emptied = (inner: string) => /^\s*listen\s*$/i.test(inner) || inner.replace(/\b(?:[A-Z][A-Za-z]{0,11}|listen|pronounced)\s*:/g, '').replace(/[\s,;:]/g, '') === '';
-  return para
-    .replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (emptied(inner) ? '' : m))
-    .replace(/\(\s*[;,]\s*/g, '(')
-    .replace(/\s*[;,]\s*\)/g, ')')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
+/** The opening paragraph as the page quotes it (`openingParagraph` in sources/wikipedia.ts; its name before round eighty-six). */
+export const restExtract = openingParagraph;
 
-/** A title's article address as the REST API writes it in `content_urls`. */
-export const articleUrl = (title: string) => `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_')).replace(/%2F/g, '/').replace(/%3A/g, ':').replace(/%2C/g, ',').replace(/%28/g, '(').replace(/%29/g, ')')}`;
+/** A title's article address. */
+export const articleUrl = wikiArticleUrl;
 
 /** What one species of a chunk is: its GBIF key when the list gives one, and its name (the title asked when no item gives another). */
 export interface BatchJob {
@@ -273,7 +249,7 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
     return sitelinks;
   }
 
-  /** Each title's summary as the REST API answers it, twenty titles a request. */
+  /** Each title's lead, twenty titles a request, held under the one-title request's address as that request would be answered. */
   async function summaries(titles: readonly string[]): Promise<void> {
     const all = [...new Set(titles.filter((t) => t.trim()))];
     for (let i = 0; i < all.length; i += EXTRACT_TITLES) {
@@ -287,26 +263,17 @@ export function batchSources(net: JsonFetcher, opts: { wikidata?: boolean; wikip
         continue;
       }
       const q = r.data.query!;
-      const norm = new Map((q.normalized ?? []).map((n) => [n.from, n.to]));
-      const redir = new Map((q.redirects ?? []).map((n) => [n.from, n.to]));
       const pages = new Map(q.pages!.map((p) => [p.title, p]));
       // An answer cut short by TextExtracts (`continue`) holds only the pages that came with their extract.
       const cut = r.data.continue != null;
       for (const t of part) {
-        const n = norm.get(t) ?? t;
-        const to = redir.get(n) ?? n;
-        const p = pages.get(to);
+        const normalized = (q.normalized ?? []).filter((x) => x.from === t);
+        const n = normalized[0]?.to ?? t;
+        const redirects = (q.redirects ?? []).filter((x) => x.from === n);
+        const p = pages.get(redirects[0]?.to ?? n);
         if (!p || p.invalid) continue;
-        if (p.missing) {
-          hold(summaryUrl(t), { status: 'none' });
-          continue;
-        }
-        if (p.extract == null && cut) continue;
-        const disambiguation = p.pageprops?.disambiguation != null;
-        hold(summaryUrl(t), {
-          status: 'ok',
-          data: { type: disambiguation ? 'disambiguation' : 'standard', title: p.title, extract: restExtract(p.extract ?? ''), content_urls: { desktop: { page: articleUrl(p.title) } }, ...(p.lastrevid ? { revision: p.lastrevid } : {}) }
-        });
+        if (!p.missing && p.extract == null && cut) continue;
+        hold(summaryUrl(t), { status: 'ok', data: { batchcomplete: true, query: { ...(normalized.length ? { normalized } : {}), ...(redirects.length ? { redirects } : {}), pages: [p] } } });
       }
     }
   }

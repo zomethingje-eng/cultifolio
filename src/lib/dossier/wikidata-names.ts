@@ -237,9 +237,10 @@ type Page = {
  * Wikidata item, `WD_NAMES_ITEMS` items a query; with `keyed`, also of every page with a GBIF key whose GBIF names give
  * it no English name (the owner's decision: off by default). Each page's earlier Wikidata rows are replaced by the
  * answer, its GBIF rows left as they are; a page whose query did not answer is left as it was, and counted (rule 2).
- * Where no item was taken, the page's record says why. Then the index.
+ * Where no item was taken, the page's record says why. Then the index. `dry` (round eighty-six) asks and counts as a run
+ * does, and writes nothing.
  */
-export async function fillWikidataNames(store: Store, f: JsonFetcher, o: { keyed?: boolean; now?: () => string } = {}): Promise<WdNamesCounts> {
+export async function fillWikidataNames(store: Store, f: JsonFetcher, o: { keyed?: boolean; now?: () => string; dry?: boolean } = {}): Promise<WdNamesCounts> {
   const en = englishNames;
   const now = o.now ?? (() => new Date().toISOString());
   const c: WdNamesCounts = { read: 0, keyless: 0, keyed: 0, items: 0, queries: 0, taken: 0, shown: 0, none: 0, noItem: 0, unchecked: 0, written: 0, lines: [] };
@@ -313,7 +314,8 @@ export async function fillWikidataNames(store: Store, f: JsonFetcher, o: { keyed
     }
     // A page the answer leaves as it was is not written: its record keeps the day it was first read so.
     if (said() === before) continue;
-    store.write(w.file, d);
+    // `dry` (round eighty-six; review S's S2): counted and said, never written, so the owner sees what `--keyed` would give first.
+    if (!o.dry) store.write(w.file, d);
     c.written++;
   }
   return c;

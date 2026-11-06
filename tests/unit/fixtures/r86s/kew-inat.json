@@ -1,0 +1,151 @@
+[
+ {
+  "key": "k2783547",
+  "name": {
+   "scientific": "Echinopsis pachanoi",
+   "synonyms": [
+    "Trichocereus schoenii Rauh & Backeb.",
+    "Trichocereus santaensis Rauh & Backeb.",
+    "Trichocereus pachanoi Britton & Rose",
+    "Trichocereus torataensis F.Ritter",
+    "Cereus pachanoi (Britton & Rose) Werderm.",
+    "Echinopsis schoenii (Rauh & Backeb.) H.Friedrich & G.D.Rowley",
+    "Trichocereus macrogonus subsp. sanpedro M.H.J.van der Meer",
+    "Trichocereus macrogonus var. pachanoi (Britton & Rose) Albesiano & R.Kiesling",
+    "Echinopsis santaensis (Rauh & Backeb.) H.Friedrich & G.D.Rowley",
+    "Trichocereus macrogonus subsp. pachanoi (Britton & Rose) Lodé"
+   ]
+  },
+  "ids": {
+   "powo": "urn:lsid:ipni.org:names:88444-2",
+   "ipni": "88444-2",
+   "wikidata": "Q133426",
+   "wfo": "wfo-0000662239",
+   "wikipedia": "Echinopsis pachanoi"
+  },
+  "upstream": {
+   "inat.taxon": {
+    "status": "none",
+    "at": "2026-11-03T14:23:46.164Z",
+    "detail": "iNaturalist's taxon 327669 (Echinopsis pachanoi) is inactive; asked by name; not taken: iNaturalist files Echinopsis pachanoi as Trichocereus macrogonus pachanoi, which is neither this species' name nor one of Kew's names for it"
+   }
+  }
+ },
+ {
+  "key": "k2391670",
+  "name": {
+   "scientific": "Opuntia nicholii",
+   "synonyms": [
+    "Opuntia xerocarpa Griffiths",
+    "Opuntia hystricina var. nicholii (L.D.Benson) Backeb.",
+    "Opuntia xanthostemma K.Schum.",
+    "Opuntia rhodantha K.Schum. ex Rehnelt",
+    "Opuntia erinacea var. rhodantha (K.Schum. ex Rehnelt) L.D.Benson",
+    "Opuntia polyacantha var. nicholii (L.D.Benson) B.D.Parfitt",
+    "Opuntia erinacea var. xanthostemma (K.Schum.) L.D.Benson",
+    "Opuntia rhodantha var. xanthostemma (K.Schum.) Rehder",
+    "Opuntia rhodantha var. spinosior Boissev. & C.Davidson",
+    "Opuntia rhodantha f. xanthostemma (K.Schum.) Rehder",
+    "Opuntia polyacantha var. rhodantha (K.Schum. ex Rehnelt) M.H.J.van der Meer",
+    "Opuntia polyacantha subsp. nicholii (L.D.Benson) M.H.J.van der Meer"
+   ]
+  },
+  "ids": {
+   "powo": "urn:lsid:ipni.org:names:175365-2",
+   "ipni": "175365-2",
+   "wikidata": "Q17237480",
+   "wfo": "wfo-0001220306"
+  },
+  "upstream": {
+   "inat.taxon": {
+    "status": "none",
+    "at": "2026-11-03T14:22:49.331Z",
+    "detail": "iNaturalist's taxon 165896 (Opuntia nicholii) is inactive; asked by name; not taken: iNaturalist files Opuntia nicholii as Opuntia polyacantha nicholii, which is neither this species' name nor one of Kew's names for it"
+   }
+  }
+ },
+ {
+  "key": "k45518",
+  "name": {
+   "scientific": "Coffea dewevrei",
+   "synonyms": [
+    "Coffea neoarnoldiana A.Chev.",
+    "Coffea royauxii De Wild.",
+    "Coffea sylvatica A.Chev.",
+    "Coffea dybowskii H.C.Hall",
+    "Coffea dybowskii Pierre ex De Wild.",
+    "Coffea excelsa A.Chev.",
+    "Coffea liberica var. dewevrei (De Wild. & T.Durand) Lebrun",
+    "Coffea arnoldiana De Wild.",
+    "Coffea aruwimiensis De Wild.",
+    "Coffea zenkeri K.Krause ex De Wild.",
+    "Coffea dewevrei var. dybowskii (Pierre ex De Wild.) A.Chev.",
+    "Coffea dewevrei var. sylvatica (A.Chev.) A.Chev.",
+    "Coffea dewevrei var. excelsa (A.Chev.) A.Chev.",
+    "Coffea dewevrei var. aruwimiensis (De Wild.) A.Chev.",
+    "Coffea dewevrei var. zenkeri (K.Krause ex De Wild.) A.Chev.",
+    "Coffea dewevrei var. ituriensis A.Chev.",
+    "Coffea dewevrei var. neoarnoldiana (A.Chev.) A.Chev."
+   ]
+  },
+  "ids": {
+   "powo": "urn:lsid:ipni.org:names:747092-1",
+   "ipni": "747092-1",
+   "wikidata": "Q39791158",
+   "wfo": "wfo-0000910888",
+   "wikipedia": "Coffea dewevrei"
+  },
+  "upstream": {
+   "inat.taxon": {
+    "status": "none",
+    "at": "2026-11-03T14:22:40.185Z",
+    "detail": "not taken: iNaturalist files Coffea dewevrei as Coffea liberica dewevrei, which is neither this species' name nor one of Kew's names for it"
+   }
+  }
+ },
+ {
+  "key": "k3032815",
+  "name": {
+   "scientific": "Solanum wallacei",
+   "synonyms": [
+    "Solanum xanti var. wallacei A.Gray",
+    "Solanum umbelliferum var. wallacei (A.Gray) D.J.Keil",
+    "Solanum wallacei var. viridis Parish"
+   ]
+  },
+  "ids": {
+   "powo": "urn:lsid:ipni.org:names:240009-2",
+   "ipni": "240009-2",
+   "wikidata": "Q5233204",
+   "wfo": "wfo-0001032489",
+   "wikipedia": "Solanum wallacei"
+  },
+  "upstream": {
+   "inat.taxon": {
+    "status": "none",
+    "at": "2026-11-03T14:23:16.204Z",
+    "detail": "iNaturalist's taxon 79145 (Solanum wallacei) is inactive; asked by name; not taken: iNaturalist files Solanum wallacei as Solanum umbelliferum wallacei, which is neither this species' name nor one of Kew's names for it"
+   }
+  }
+ },
+ {
+  "key": "k500397",
+  "name": {
+   "scientific": "Anacampseros schoenlandii",
+   "synonyms": []
+  },
+  "ids": {
+   "powo": "urn:lsid:ipni.org:names:698292-1",
+   "ipni": "698292-1",
+   "wikidata": "Q55650870",
+   "wfo": "wfo-0000533001"
+  },
+  "upstream": {
+   "inat.taxon": {
+    "status": "none",
+    "at": "2026-10-28T01:01:52.217Z",
+    "detail": "carried from build of 2026-10-22 (rederive); that build: not taken: iNaturalist files Anacampseros schoenlandii as Anacampseros arachnoides, another species of this reference"
+   }
+  }
+ }
+]

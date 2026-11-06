@@ -96,7 +96,7 @@ describe("A5: a thin page says where its typical cell is", () => {
     const { fewRecords, fewRecordsSentence } = await import('$core/few-records');
     const f = fewRecords({ status: 'ok', records: 10, cells: 6, place: 'São Paulo, Brazil' });
     expect(f).toEqual({ records: 10, cells: 6, place: 'São Paulo, Brazil' });
-    expect(fewRecordsSentence(f!)).toMatch(/The typical spot, where the cold figures are read, is in São Paulo, Brazil\.$/);
+    expect(fewRecordsSentence(f!)).toMatch(/The typical spot, where the cold figures are read, is in São Paulo, Brazil \(Natural Earth's provinces\)\.$/); // round eighty-six: its source said
     // A page of today's corpus has no place: the notice as before.
     expect(fewRecordsSentence(fewRecords({ status: 'ok', records: 10, cells: 6 })!)).not.toContain('typical spot');
   });

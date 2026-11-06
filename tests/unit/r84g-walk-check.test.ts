@@ -78,11 +78,14 @@ describe('--check-ranges, after the walk and before the upload', () => {
     expect(r.stdout).toContain('fixed: Indigofera taiwaniana (k2864797): typical cell 21.925 N, 120.725 E, inside its native regions');
     expect(r.stdout).toContain('Not ready to upload.');
   });
-  it('the five cases right, every page inside its range: it passes, and says each one fixed', () => {
+  it('the cases right, every page inside its range: it passes, says each one fixed, and the Poor Knights lily held open', () => {
     const dir = folder(fixed);
     const r = builder(dir, '--check-ranges');
     expect(r.status, r.stdout + r.stderr).toBe(0);
-    for (const n of ['Aloe vera', 'Ficus elastica', 'Galanthus nivalis', 'Melissa officinalis', 'Indigofera taiwaniana', 'Dracaena trifasciata', 'Cordyline fruticosa', 'Xeronema callistemon', 'Veronica bollonsii']) expect(r.stdout).toMatch(new RegExp(`fixed: ${n} \\(k\\d+\\)`));
+    for (const n of ['Aloe vera', 'Ficus elastica', 'Galanthus nivalis', 'Melissa officinalis', 'Indigofera taiwaniana', 'Dracaena trifasciata', 'Cordyline fruticosa', 'Veronica bollonsii']) expect(r.stdout).toMatch(new RegExp(`fixed: ${n} \\(k\\d+\\)`));
+    // Round eighty-six (review D2): the Poor Knights lily's typical spot is Auckland's gardens; never said fixed.
+    expect(r.stdout).not.toMatch(/fixed: Xeronema/);
+    expect(r.stdout).toMatch(/held open: Xeronema callistemon \(k291500\): .* Open: review D2/);
     expect(r.stdout).toContain(`0 with a typical cell outside every native region, 0 whose records were not tested by rule ${RANGE_RULE}`);
     expect(r.stdout).toContain('ready to upload');
     expect(existsSync(join(dir, 'check-ranges.txt'))).toBe(false);

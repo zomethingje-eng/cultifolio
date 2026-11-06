@@ -37,12 +37,17 @@ export type PickerRow = {
   merged?: string;
   /** The older name of this page the row was found by. */
   older?: string;
+  /**
+   * GBIF's name for this page's own key, where Kew's name heads the page, when the row was found by it (the index's
+   * `gname`; round eighty-six, review-w W1): said "GBIF's name for", never "older name".
+   */
+  gname?: string;
   /** The name of this page's record under another author that the row was found by. */
   hom?: { name: string; text: string };
 };
 
 /** A hit of the reference's search as the check reads it. */
-export type Hit = Searchable & { gbif?: number; homBy?: string[][] };
+export type Hit = Searchable & { gbif?: number; homBy?: string[][]; gname?: string };
 
 /**
  * Whether the words typed take the hit by one of its common names (its headline, its other English names or their
@@ -62,7 +67,8 @@ export function localRow(text: string, hit: Hit, similar: boolean): PickerRow {
   const hom = similar || merged || older ? null : homonymOf(text, hit);
   const typedGenus = (nameWords(text)[0] ?? '').slice(0, 4);
   const far = !!typedGenus && !hit.name.toLowerCase().startsWith(typedGenus) && !byCommonName(text, hit);
-  return { key: hit.gbif ?? -1, name: hit.name, family: hit.family, local: true, similar, far, ...(merged ? { merged } : {}), ...(older ? { older } : {}), ...(hom ? { hom } : {}) };
+  const gname = older && hit.gname && sameName(older, hit.gname) ? older : null;
+  return { key: hit.gbif ?? -1, name: hit.name, family: hit.family, local: true, similar, far, ...(merged ? { merged } : {}), ...(older ? { older } : {}), ...(gname ? { gname } : {}), ...(hom ? { hom } : {}) };
 }
 
 /**

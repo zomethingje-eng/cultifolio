@@ -214,7 +214,7 @@ test('A13: the catalogue\'s chips are each named in one phrase', async ({ page }
   await page.goto('/'); await ready(page);
   const chips = page.getByRole('navigation', { name: 'Filter the catalogue' });
   // r84base: "No climate , 2" from its parts, and "No climate , 9,711 , 919 not checked" on the live corpus.
-  await expect(chips.getByRole('link', { name: /^No climate: [\d,]+ species(; besides them, [\d,]+ not (?:asked|checked|checked or not asked)(, [\d,]+ not checked)?)?$/ })).toHaveCount(1);
+  await expect(chips.getByRole('link', { name: /^No climate: [\d,]+ species(; besides them, [\d,]+ not (?:asked|checked|checked or not asked)(, [\d,]+ not checked)?(, [\d,]+ pending)?)?$/ })).toHaveCount(1); // round eighty-six (S15): the pending said too
   await expect(chips.getByRole('link', { name: /^All: [\d,]+ species$/ })).toHaveCount(1);
   await expect(chips.getByRole('link', { name: /^Climate known: [\d,]+ species$/ })).toHaveCount(1);
 });

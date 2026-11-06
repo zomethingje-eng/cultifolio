@@ -135,8 +135,17 @@ describe("7. the credits' days, the summary's revision and route (decisions 7, 8
   it('each source\'s day, a photograph\'s own day first', async () => {
     const { creditDays } = await import('$lib/ui/ref/credit-days');
     const up = { 'inat.photos.cultivated': { status: 'ok', at: '2026-10-27T02:00:00Z' }, commons: { status: 'ok', at: '2026-10-22T10:00:00Z' }, 'gbif.media': { status: 'skipped', at: '2026-10-22T10:00:00Z' } };
-    expect(creditDays([{ src: 'inat', captive: true }, { src: 'commons' }, { src: 'gbif' }], up)).toBe('Credits as read from iNaturalist on 2026-10-27 and from Wikimedia Commons on 2026-10-22');
+    expect(creditDays([{ src: 'inat', captive: true }, { src: 'commons' }, { src: 'gbif' }], up)).toBe('Credits as read from iNaturalist on 2026-10-27, from Wikimedia Commons on 2026-10-22 and from GBIF on a day not recorded');
     expect(creditDays([{ src: 'gbif', read: '2026-11-02' }], up)).toBe('Credits as read from GBIF on 2026-11-02');
+  });
+  // Round eighty-six (outside review B's 2): a failed, refused, empty, ambiguous or skipped row lends no day; a photograph's
+  // own day still stands after a failed refresh.
+  it.each(['error', 'refused', 'none', 'ambiguous', 'skipped'])('a row that says %s is not a read day', async (status) => {
+    const { creditDays } = await import('$lib/ui/ref/credit-days');
+    const up = { 'gbif.media': { status, at: '2026-11-05T00:00:00Z' } };
+    expect(creditDays([{ src: 'gbif' }], up)).toBe('Credits as read from GBIF on a day not recorded');
+    expect(creditDays([{ src: 'gbif', read: '2026-11-02' }], up)).toBe('Credits as read from GBIF on 2026-11-02');
+    expect(creditDays([{ src: 'gbif', read: '2026-11-02' }, { src: 'gbif' }], up)).toBe("Credits as read from GBIF on 2026-11-02 (one photograph's day not recorded)");
   });
   it('the revision linked, the day read; and the route of an article under another title', async () => {
     const { summaryRevision, summaryRoute } = await import('$lib/ui/ref/credit-days');

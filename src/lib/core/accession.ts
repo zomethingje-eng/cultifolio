@@ -16,6 +16,24 @@ export interface NumberingScheme {
 export const DEFAULT_SCHEME: NumberingScheme = { mode: 'year', width: 4 };
 
 /**
+ * Whether a stored numbering setting is one the numbering can use (round eighty-six; the plan's A10). The check was that
+ * `width` is a number: a setting record synced from another device, merged from a backup or written by hand with a width
+ * of 1e9, Infinity or -1 passed it, and `padStart` threw "Invalid string length" (or the import's pattern was no regular
+ * expression) on every open of the add form, the import and Settings. Now the width is a whole number from 1 to the
+ * fifteen digits a plant number may run to, and a prefix scheme's prefix a text that, with the hyphen and that many
+ * digits, is a plant number (`plantNumberProblem`). Anything else is not a scheme, and the default stands.
+ */
+export function isScheme(s: unknown): s is NumberingScheme {
+  if (!s || typeof s !== 'object') return false;
+  const { mode, prefix, width } = s as Partial<NumberingScheme>;
+  if (mode !== 'year' && mode !== 'prefix') return false;
+  if (typeof width !== 'number' || !Number.isInteger(width) || width < 1 || width > PLANT_NUMBER_DIGITS) return false;
+  if (mode === 'year') return true;
+  if (prefix === undefined) return true; // `nextAccession` numbers it "ACC-"
+  return typeof prefix === 'string' && prefix.trim() === prefix && prefix.length > 0 && plantNumberProblem(`${prefix}-${'0'.repeat(width)}`) === null;
+}
+
+/**
  * The longest plant number kept, in characters, and the longest run of digits in one (round eighty-five; outside review
  * A10): fifteen digits, every run of which is a whole number JavaScript counts exactly (2^53 has sixteen), so the next
  * number is always found; a nursery's thirteen-digit barcode still fits.

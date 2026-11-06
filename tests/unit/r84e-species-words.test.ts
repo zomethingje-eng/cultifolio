@@ -107,7 +107,7 @@ describe("2. the chart at a phone's width", () => {
   it('at 268 px (a 320 px phone) the extremes\' labels fit the plot, and the months are initials', () => {
     const g = climograph(input, 268);
     expect(g.temp.minAbs!.label).toBe('-24.1° lowest night');
-    expect(g.temp.maxP99!.label).toBe('30.0° hot day, 1 in 100');
+    expect(g.temp.maxP99!.label).toBe('30.0° 1-in-100 hot day'); // round eighty-six (W9): the legend's name
     for (const l of [g.temp.minAbs!.label, g.temp.maxP99!.label]) expect(l.length * 6.2).toBeLessThan(g.plotW - 14);
     expect(g.months[0]).toBe('J');
   });

@@ -57,6 +57,13 @@ export interface IndexEntry {
    * there is none.
    */
   merged?: string[];
+  /**
+   * GBIF's name for the page's own key, where Kew's name heads the page (`name.gbif.scientific`, species part), when the
+   * page answers to it (one of `syn` or `older`), written at index time (round eighty-six; review-w W1, review-p P10):
+   * a row found by it says "GBIF's name for this plant", as the species page does, never "older name". Absent in an index
+   * built before (the rows then say "older name", as they did), and on a page GBIF's own name heads.
+   */
+  gname?: string;
   /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
   changed?: number;
   /**
@@ -523,12 +530,25 @@ export function indexNames(vernacular: VernacularName[], scope: NameScope = {}):
   const spellings = pooledSpellings(vernacular, [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x));
   return spellings.length ? { ...names, spellings } : names;
 }
+/**
+ * The sources whose rows with no language marked are searched as English, never shown (round eighty-six; review S's S2):
+ * NCBI's Taxonomy, whose common names GBIF passes on with no language. Of its 121 such rows on the 788 pages review D and
+ * review S read, 114 are English ("peyote" and "mescal buttons" on Lophophora williamsii, "dragon fruit" on Selenicereus
+ * undatus, "tomato", "galangal") and 7 are not ("acibar" and "babosa" on Aloe vera, "chatas", "chula", "maranga"), so they
+ * find a plant and never name it. Catalogue of Life's rows with no language are in every language ("Cekuh", "Hingstkastanje",
+ * "Horse-chestnut (EN)": 465 such rows), and the other sources' are mostly not English (GRIN's "bai mu", TAXREF's
+ * Mahorian names): none of them is read. A fixed list, written here and on /about/how.
+ */
+export const UNMARKED_ENGLISH: ReadonlySet<string> = new Set(['NCBI Taxonomy']);
+/** A row searched as English: one a source marks English, or one with no language from a source of `UNMARKED_ENGLISH` (never shown). */
+export const searchedAsEnglish = (v: VernacularName) => v.lang === 'eng' || (!v.lang && typeof v.source === 'string' && UNMARKED_ENGLISH.has(v.source));
+
 /** The English spellings of `vernacular` whose search words are those of no name in `shown` nor of an earlier spelling, in GBIF's order. */
 export function pooledSpellings(vernacular: VernacularName[], shown: string[]): string[] {
   const seen = new Set(shown.map((n) => searchWords(n).join(' ')));
   const out: string[] = [];
   for (const v of vernacular) {
-    if (v.lang !== 'eng' || typeof v.name !== 'string') continue;
+    if (!searchedAsEnglish(v) || typeof v.name !== 'string') continue;
     for (const name of namesOf(v.name).flatMap((n) => { const l = latinName(n); return l ? [l] : []; })) {
       const k = searchWords(name).join(' ');
       if (!k || seen.has(k)) continue;
@@ -722,7 +742,7 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
       if (k === 'syn') { if (syn.length) o.syn = syn; continue; }
       if (k === 'older') { if (older.length) o.older = older; place(); continue; }
       if (k === 'hom' || k === 'homBy') continue;
-      if (k === 'kew' || k === 'merged' || k === 'changed' || k === 'near') place();
+      if (k === 'kew' || k === 'merged' || k === 'gname' || k === 'changed' || k === 'near') place();
       if (k === 'kew') { if (kew.length) o.kew = kew; continue; }
       o[k] = v;
     }

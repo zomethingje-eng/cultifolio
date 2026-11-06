@@ -136,7 +136,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // S6: "sansiveria" took "sansiveri", one letter from two obscure Dracaenas' older names, and stopped there, where
   // "sans" is every Dracaena once a Sansevieria).
   if (!a.hits.length && !a.narrow && !at && !a.total && !genusReading(q)) {
-    for (const shorter of shorterReadings(q)) {
+    // Only a phrase whose first word is a genus here (round eighty-six; review S's S2: "false roselle" was read as "false rose").
+    const genera = new Set([...(await lookupOf(c, platform, fetch).genera()).keys()].map((g) => g.toLowerCase()));
+    for (const shorter of shorterReadings(q, (w) => genera.has(w.toLowerCase()))) {
       const s = await searchAnswer(platform, fetch, shorter, n, miss, c, at);
       if ('stop' in s) return s.stop;
       if (!s.narrow && s.hits.length && !s.relaxed && !nearAnswer(shorter, s.hits)) { a = { ...s, relaxed: { query: shorter } }; break; }

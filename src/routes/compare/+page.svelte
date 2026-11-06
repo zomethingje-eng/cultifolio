@@ -1,5 +1,6 @@
 <script lang="ts">
   import NotChecked from '$lib/ui/NotChecked.svelte';
+  import { AS_CULTIGEN, cultigenOf } from '$core/cultigen';
   /**
    * Species side by side: the same figures in the same order for each, with a
    * climograph per column, and the sheet's one-line rows beneath. Nothing is
@@ -211,7 +212,7 @@
           {#if c.hero && shownImg[c.d.key] !== 'fail'}<a class="cred" href={c.hero.page ?? c.hero.url} rel="noopener">{creditOf(c.hero)}</a>{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <!-- The first two regions and how many more, as the species page's line under the name says them (round eighty-two; the independent review's 20). -->
-          <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (c.d.distribution.native.length > 2 ? ` +${c.d.distribution.native.length - 2}` : '') : ''}</div>
+          <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (c.d.distribution.native.length > 2 ? ` +${c.d.distribution.native.length - 2}` : '') + (cultigenOf((c.d.distribution as { kew?: { area?: string } }).kew?.area) ? AS_CULTIGEN : '') : ''}</div>
           {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Remove {c.d.name.scientific} from the comparison">Remove</a>{/if}
           {#if c.d.climate.status === 'refused'}<div class="small muted hnote"><NotChecked what="Climate" why={climateWhy(c.d)} /></div>{:else if !c.ok}<div class="small muted hnote">{climateWord(c.d)}</div>{/if}
         </div>

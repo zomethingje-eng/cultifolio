@@ -1,4 +1,4 @@
-import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
+import { BY_ID, type JsonFetcher, type FetchResult, type SourceResult } from '../fetch';
 import * as gbif from './gbif';
 import { spellingKey } from '../epithet';
 import { genitivesAgree } from '../own-names';
@@ -145,7 +145,7 @@ async function entityOf(f: JsonFetcher, id: string): Promise<FetchResult<Entity 
 async function ipniNames(f: JsonFetcher, ids: readonly string[]): Promise<Array<{ id: string; name: string; authors: string; isonymOf: string[] }>> {
   const out: Array<{ id: string; name: string; authors: string; isonymOf: string[] }> = [];
   for (const id of ids) {
-    const r = await f<{ name?: string; authors?: string; isonymOf?: Array<{ id?: string }> }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`);
+    const r = await f<{ name?: string; authors?: string; isonymOf?: Array<{ id?: string }> }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`, BY_ID);
     if (r.status === 'ok' && r.data.name) out.push({ id, name: r.data.name, authors: r.data.authors ?? '', isonymOf: (r.data.isonymOf ?? []).flatMap((x) => (x.id ? [x.id] : [])) });
   }
   return out;
@@ -200,7 +200,7 @@ type KeyReading = { proof?: string; against?: string; why: string[]; served: num
 async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, gbifKey?: number, authorship?: string): Promise<FetchResult<KeyReading>> {
   const out: KeyReading = { why: [], served: 0 };
   for (const k of keys.slice(0, LABEL_KEYS)) {
-    const r = await f<{ canonicalName?: string; scientificName?: string; authorship?: string; kingdom?: string; rank?: string; acceptedKey?: number; accepted?: string; speciesKey?: number }>(`https://api.gbif.org/v1/species/${k}`);
+    const r = await f<{ canonicalName?: string; scientificName?: string; authorship?: string; kingdom?: string; rank?: string; acceptedKey?: number; accepted?: string; speciesKey?: number }>(`https://api.gbif.org/v1/species/${k}`, BY_ID);
     if (r.status === 'none') { out.why.push(`${k}, which GBIF no longer serves`); continue; }
     if (r.status !== 'ok') return r;
     out.served++;
@@ -338,8 +338,9 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     return r;
   };
   /** The item by Kew's identifiers (round eighty, A): of `keyed` (the items carrying the GBIF key), else of a search. */
+  const carriesKew = (e: Entity, k: Kew) => ipnisOf(e).some((i) => k.ids.includes(i)) || strings(e, P.powo).map((x) => x.replace(/^urn:lsid:ipni\.org:names:/, '')).some((i) => k.ids.includes(i));
   const byKewIds = async (keyed: string[], k: Kew): Promise<CrossResult> => {
-    const carries = (e: Entity) => ipnisOf(e).some((i) => k.ids.includes(i)) || strings(e, P.powo).map((x) => x.replace(/^urn:lsid:ipni\.org:names:/, '')).some((i) => k.ids.includes(i));
+    const carries = (e: Entity) => carriesKew(e, k);
     if (keyed.length) {
       const read: Array<{ id: string; e: Entity }> = [];
       for (const id of keyed) { const e = await entityOf(f, id); if (e.status !== 'ok') return e; if (e.data && isTaxonItem(e.data) && carries(e.data)) read.push({ id, e: e.data }); }
@@ -402,6 +403,18 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       if (e.status !== 'ok') return e;
       // Said, as every "none" of this route is (round eighty-two, F; review 1's 7): the one item Wikidata's search gave is gone.
       if (!e.data) return { status: 'none', detail: `the one item that carries its GBIF key, ${hits[0].title}, is not served by Wikidata` };
+      // A page Kew's name heads, whose GBIF key's item is GBIF's name's (another taxon name, none of Kew's identifiers for
+      // the heading): Kew's name's own item, when exactly one taxon item carries Kew's IPNI or POWO identifier for it
+      // (round eighty-six; review-d D11: 86 of 87 renamed pages linked GBIF's name's item, Huernia hallii Q42559868,
+      // Ceropegia hallii, where Q5397594, Huernia hallii, is Kew's). Otherwise the key's item, as before.
+      const own = (n: string) => n.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (opts.kewPage && !strings(e.data, P.taxonName).some((n) => own(n) === own(scientificName))) {
+        const k = await kewOf();
+        if (k.status === 'ok' && k.data.ids.length && !carriesKew(e.data, k.data)) {
+          const r = await byKewIds([], k.data);
+          if (r.status === 'ok') return { ...r, detail: `${r.detail}, not ${hits[0].title}, which carries its GBIF key under another name (GBIF's)` };
+        }
+      }
       return { status: 'ok', data: crossOf(hits[0].title, e.data) };
     }
     // Round eighty (A; Datura innoxia lost its item, IPNI, POWO and WFO to two items labelled with its name): a page with a

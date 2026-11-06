@@ -119,12 +119,13 @@ function world(page: Page, asked: string[], o: { drop?: string[] } = {}): JsonFe
       }
       return ok({ entities });
     }
-    if ((m = /^https:\/\/en\.wikipedia\.org\/api\/rest_v1\/page\/summary\/(.+)$/.exec(u))) {
-      const asked = m[1].replace(/_/g, ' ');
+    // The article's lead by the action API (round eighty-six; it was the REST summary): one title a request here.
+    if ((m = /^https:\/\/en\.wikipedia\.org\/w\/api\.php\?action=query&.*prop=extracts.*&titles=([^&|]+)$/.exec(u))) {
+      const asked = decodeURIComponent(m[1]);
       const title = WD.enwiki.redirects[asked] ?? asked;
       const exists = title in WD.enwiki.titles ? !!WD.enwiki.titles[title] : Object.values(WD.items).some((i) => i.enwiki === title);
-      if (!exists) return ok({ type: 'https://mediawiki.org/wiki/HyperSwitch/errors/not_found' });
-      return ok({ title, type: 'standard', extract: `${title} is a plant. (Fixture text.)`, content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${title.replace(/ /g, '_')}` } }, revision: '1' });
+      if (!exists) return ok({ batchcomplete: true, query: { pages: [{ title: asked, missing: true }] } });
+      return ok({ batchcomplete: true, query: { ...(title !== asked ? { redirects: [{ from: asked, to: title }] } : {}), pages: [{ title, extract: `${title} is a plant. (Fixture text.)`, revisions: [{ revid: 1 }] }] } });
     }
     if ((m = /^https:\/\/api\.inaturalist\.org\/v1\/taxa\/([\d,]+)$/.exec(u))) return ok({ results: m[1].split(',').map(Number).flatMap((id) => (INAT_TAXA[id] ? [{ id, name: INAT_TAXA[id].name, rank: 'species', is_active: INAT_TAXA[id].active, current_synonymous_taxon_ids: INAT_TAXA[id].current ? [INAT_TAXA[id].current] : null }] : [])) });
     if ((m = /^https:\/\/api\.inaturalist\.org\/v1\/taxa\?q=([^&]+)/.exec(u))) return ok({ results: (INAT_SEARCH[m[1]] ?? []).map((t) => ({ ...t, rank: 'species', is_active: true })) });

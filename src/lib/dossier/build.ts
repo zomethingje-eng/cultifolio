@@ -6,6 +6,7 @@
  * The builder never publishes a dossier if the taxonomy step failed; every
  * other section degrades independently and says so.
  */
+import { cultigenClimateWhy, cultigenOf } from '../core/cultigen';
 import { fromWikidata, WD_NAMES } from './wikidata-names';
 import { gbifThumb } from './md5';
 import { dedupePhotos } from './dedupe';
@@ -27,7 +28,8 @@ import { sameTypeLabel, sameTypeWhy, type SameTypeName } from './kew-rows';
 import { titleKey, sameTypeArticleWords } from './summary-proof';
 import { hybridLinks } from '$core/hybrids';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
-import { grownBox, SHAPE_BUFFER_DEG, type RegionTester, type Admission } from './tdwg-shapes';
+import { grownBox, SHAPE_BUFFER_DEG, type RegionTester, type Admission, type AdmissionBy } from './tdwg-shapes';
+import { recordWords } from './admission-policy';
 import { ownNames, isOwnName, canonicalOf } from './own-names';
 import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
@@ -35,12 +37,19 @@ import type { KewInfra } from './kew-infra';
 import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
 import { gbifPage, type PageId } from '../core/page-id';
+import { countryOf, placeWords } from '../core/place-words';
 import { extraWhy, type ExtraKey } from './extra-keys';
 import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean';
 
+/**
+ * What the envelope may read beside the grid (round eighty-six; the Howea finding): whether a native region's drawn land (its
+ * shape or a minor island) lies in a cell's box, so a cell the elevation layer reads as sea, on an island narrower than its
+ * 60″ pixels, is read all the same.
+ */
+export interface EnvelopeOptions { drawnLand?: (box: { s: number; w: number; n: number; e: number }) => boolean }
 export interface ClimateProvider {
   /** The envelope across every in-range record's grid cell: what a species page carries. */
-  envelope(points: ReadonlyArray<readonly [number, number, Admission?]>): Promise<Climate>;
+  envelope(points: ReadonlyArray<readonly [number, number, Admission?]>, opts?: EnvelopeOptions): Promise<Climate>;
   /** One point's cell (a bench, a garden): median and percentiles coincide. */
   at(lat: number, lon: number): Promise<Climate>;
 }
@@ -121,6 +130,12 @@ export interface BuildOptions {
    */
   extraKeys?: readonly ExtraKey[];
   /**
+   * Round eighty-six (review D's D6; the build reads them only with `--infra-keys`): the keys of varieties and subspecies
+   * GBIF files under this page's key that Kew's synonymy places in another page, which reads them (`ExtraKey.from`), with
+   * the keys under them: this page leaves their records out, and its record says so (`words`).
+   */
+  givenAway?: { keys: ReadonlySet<number>; words: string };
+  /**
    * The botanic gardens, herbaria and zoos of scripts/institutions.txt (round seventy-nine, Q; `clean.ts`): a record
    * within the radius of one is left out of the map, the marker and the climate, and counted. The corpus script always
    * gives it; without it no record is tested and the record of the occurrence source says so.
@@ -132,6 +147,11 @@ export interface BuildOptions {
    * the boxes alone are read, as before.
    */
   regions?: RegionTester;
+  /**
+   * The dry run (round eighty-six; `--dry-run`): the tester of the rule before, and where each record's two reasons are
+   * counted. Nothing is changed by it.
+   */
+  rangeAudit?: { regions: RegionTester; tally: RangeAudit['tally'] };
   /** The default points (round eighty, A; `default-points.ts`, `scripts/default-points.txt`): a record at one is left out. */
   defaults?: ReadonlySet<string>;
   /** The page's own Kew entry for a GBIF key (the list's plant_name_id; round eighty, A): such a page is matched on Wikidata by its identifiers alone. */
@@ -150,7 +170,7 @@ export const defaultWords = (n: number) => `${n} record${n === 1 ? '' : 's'} at 
  * the record of the occurrences says of it: how many of the native regions were tested by their shapes and how many by
  * their boxes. Undefined without the shapes (a test, the Worker): the boxes, as before.
  */
-export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number, country?: string | null) => boolean; admit: (lat: number, lon: number, country?: string | null) => Admission | null; words: string; rule?: string } | undefined {
+export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, regions?: RegionTester): { test: (lat: number, lon: number, country?: string | null, state?: string | null) => boolean; admit: (lat: number, lon: number, country?: string | null, state?: string | null) => Admission | null; admitBy: (lat: number, lon: number, country?: string | null, state?: string | null) => { how: Admission; by?: AdmissionBy } | null; words: string; rule?: string } | undefined {
   if (!regions) return undefined;
   const coded = native.filter((r) => r.code || r.box);
   const shaped = coded.filter((r) => r.code && regions.hasShape(r.code)).length;
@@ -160,18 +180,41 @@ export function rangeTest(native: ReadonlyArray<{ code?: string; box?: Box }>, r
   const rule = regions.rule ? `; shapes rule ${regions.rule}` : '';
   const words = shaped === coded.length ? `records tested against the native regions' shapes, ${all} (${regions.source}${rule})` : shaped ? `records tested against ${shaped} of the ${coded.length} native regions' shapes (${regions.source}${rule}) and the other ${coded.length - shaped} regions' bounding boxes, each with a margin of ${SHAPE_BUFFER_DEG}°, ${all}` : `records tested against the native regions' bounding boxes with a margin of ${SHAPE_BUFFER_DEG}°, ${all} (no region of this range has a shape here${rule})`;
   // Round eighty-five (the owner's decision 1): the border rule, by the record's stated country, and why each record is in.
+  // Round eighty-six (review D4): and by its stated state or province, across a border the drawing cannot place closer.
   const codes = coded.flatMap((r) => (r.code ? [r.code] : []));
   const bare = coded.flatMap((r) => (!r.code && r.box ? [r.box] : []));
-  const admit = (lat: number, lon: number, country?: string | null): Admission | null => {
-    const got = codes.length ? regions.admit(lat, lon, codes, country) : null;
-    if (got) return got.how;
+  const admitBy = (lat: number, lon: number, country?: string | null, state?: string | null): { how: Admission; by?: AdmissionBy } | null => {
+    const got = codes.length ? regions.admit(lat, lon, codes, country, state) : null;
+    if (got) return got.by ? { how: got.how, by: got.by } : { how: got.how };
     // A region the range names by its box alone (no code): the box, then its margin, on no region's land.
-    if (!bare.length || regions.landOf(lat, lon).length) return bare.some((b) => inBox(lat, lon, b)) ? 'strict' : null;
-    return bare.some((b) => inBox(lat, lon, b)) ? 'strict' : bare.some((b) => inBox(lat, lon, grownBox(b, SHAPE_BUFFER_DEG))) ? 'buffer' : null;
+    if (!bare.length || regions.landOf(lat, lon).length) return bare.some((b) => inBox(lat, lon, b)) ? { how: 'strict' } : null;
+    return bare.some((b) => inBox(lat, lon, b)) ? { how: 'strict' } : bare.some((b) => inBox(lat, lon, grownBox(b, SHAPE_BUFFER_DEG))) ? { how: 'buffer' } : null;
   };
-  const border = regions.rule && regions.rule >= 'r85' ? '; a record within the margin or off a coast counted only on no other region\'s land and in the region\'s own country' : '';
-  return { test: (lat, lon, country) => admit(lat, lon, country) !== null, admit, words: words + border, ...(regions.rule ? { rule: regions.rule } : {}) };
+  const admit = (lat: number, lon: number, country?: string | null, state?: string | null): Admission | null => admitBy(lat, lon, country, state)?.how ?? null;
+  // The words follow the policy the tester admits by (round eighty-six; `admission-policy.ts`), and a file's own rule before.
+  const border = regions.rule && regions.rule >= 'r85' ? `; ${recordWords(regions.rule >= 'r86' ? regions.policy : { ...regions.policy, rule: regions.rule })}` : '';
+  return { test: (lat, lon, country, state) => admit(lat, lon, country, state) !== null, admit, admitBy, words: words + border, ...(regions.rule ? { rule: regions.rule } : {}) };
 }
+/**
+ * The envelope's test of drawn land in a cell (round eighty-six; the Howea finding): the page's native regions' shapes and
+ * minor islands, where the build has the shapes.
+ */
+export function drawnLandOf(native: ReadonlyArray<{ code?: string }>, regions?: RegionTester): EnvelopeOptions | undefined {
+  const codes = native.flatMap((r) => (r.code ? [r.code] : []));
+  return regions?.landIn && codes.length ? { drawnLand: (b) => regions.landIn(b, codes) } : undefined;
+}
+
+/**
+ * The climate's reason where Kew gives the range only as a region wider than TDWG's level-3 units (round eighty-six; the
+ * plan's B16): Agave calodonta's and Begonia rhizocaulis's "Mexico", four Brazilian pages' "Brazil", Trichotosia
+ * barbarossa's "Malesia" (each a level-2 region of TDWG's scheme, not a country as such) and Caladium praetermissum's
+ * continent. It said "stated at country level only", untrue of Malesia and of a continent.
+ */
+export function wideRangeWords(native: ReadonlyArray<{ code?: string; name: string }>): string {
+  const wide = native.filter((r) => !r.code).map((r) => r.name).filter(Boolean);
+  return `native range given by Kew only as ${wide.length ? wide.join(', ') : 'a region wider than its level-3 units'}, with no level-3 region to test records against, so no record is placed in the range`;
+}
+
 /**
  * The climate's reason when in-range records exist and none is placed well enough to read it (round eighty-four, A6f): the
  * records counted as records (Dionysia iranica's four, at two places, read "2 in-range records"), and the placing said as
@@ -199,15 +242,8 @@ function mergeNotes(before: Upstream | undefined, r: { status: Upstream['status'
   return { ...r, detail: [before.detail, r.detail].filter(Boolean).join('; ') };
 }
 
-const countryNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
-const countryName = (iso?: string): string | undefined => {
-  if (!iso || !/^[A-Z]{2}$/.test(iso)) return undefined;
-  try {
-    return countryNames?.of(iso) ?? iso;
-  } catch {
-    return iso;
-  }
-};
+// A country in a reader's words, not CLDR's display form ("Congo - Kinshasa"): round eighty-six, `$core/place-words`.
+const countryName = (iso?: string): string | undefined => countryOf(iso);
 
 /**
  * GBIF media rows as dossier photographs, at most 24. iNaturalist's open-data bucket serves sizes by name; anything else
@@ -441,11 +477,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const { doubtful, native, introduced, reported, extinct, boxes } = regionsOf(dist.status === 'ok' ? dist.data.rows : [], !!fromWcvp);
   const verified = fromWcvp && native.length > 0;
   const ambiguous = dist.status === 'ok' ? dist.data.ambiguous : undefined;
-  const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate) ? dist.data.kew : undefined;
+  const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate || dist.data.kew.area) ? dist.data.kew : undefined;
 
   /* ---- 3. Occurrences, licence-filtered, corroborated against the range ---- */
   // Region by region where GBIF holds more than the pages read (round eighty-five; decision 5).
-  const own = await gbif.occurrences(f, key, 3, boxes);
+  const asked = await gbif.occurrences(f, key, 3, boxes);
+  // The records another page reads by Kew's synonymy (`givenAway`; round eighty-six, D6) are left out of this one's, record
+  // by record, by the key GBIF identifies each as.
+  const given = o.givenAway && asked.status === 'ok' ? asked.data.filter((r) => r.taxonKey != null && o.givenAway!.keys.has(r.taxonKey)).length : 0;
+  const own: typeof asked = given && asked.status === 'ok' ? (asked.data.length > given ? { ...asked, data: asked.data.filter((r) => !(r.taxonKey != null && o.givenAway!.keys.has(r.taxonKey))) } : { status: 'none' }) : asked;
   // The other keys' records with the page key's (round seventy-three), one record once; any key not answering is the
   // occurrence source not answering, and the build before's records stand (`gbif.occurrences` refused).
   const extra = await extraOccurrences(f, own, extraList, boxes);
@@ -458,12 +498,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     // The download's day, not the build's (round seventy-two, B1): the records are as GBIF held them when it made the download.
     const day = rows.find((r) => r.downloadDay)?.downloadDay;
     const base = own.status !== 'ok' ? `no record under GBIF's key ${key}` : doi ? `GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}` : 'GBIF occurrence search API';
-    upstream['gbif.occurrences'].detail = [base, ...extra.keys.map(extraKeyWords)].join('; ');
+    upstream['gbif.occurrences'].detail = [base, ...extra.keys.map(extraKeyWords), ...(given ? [`${given} record${given === 1 ? '' : 's'} ${o.givenAway!.words}`] : [])].join('; ');
     // A file's day only where every record set came from it.
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
   const inside = rangeTest(native, o.regions);
-  const recs = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.admit, o.defaults);
+  // The dry run (round eighty-six): every record's reason by the rule before too, counted, never written.
+  const before = o.rangeAudit ? rangeTest(native, o.rangeAudit.regions) : undefined;
+  const audit: RangeAudit | undefined = o.rangeAudit && before ? { before: before.admit, tally: o.rangeAudit.tally } : undefined;
+  const recs = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.admitBy, o.defaults, audit);
   const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = recs;
   if (occ.status === 'ok' && nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(nDefault)].filter(Boolean).join('; ');
   if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
@@ -482,12 +525,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // and the builder carries the previous build's range and climate where it has them (round sixty-seven; triage-66 N4).
   else if (occ.status === 'skipped') climate = { status: 'pending', detail: 'the occurrence source was not asked when this page was built' };
   else if (dist.status === 'skipped') climate = { status: 'pending', detail: 'the distribution source was not asked when this page was built, so the range could not be verified' };
+  // A plant Kew lists only as a cultigen has no wild habitat (round eighty-six; review D's D1): its region is where the crop
+  // comes from, its records are gardens and fields, and no habitat climate is read from them.
+  else if (cultigenOf(kew?.area)) climate = { status: 'none', detail: cultigenClimateWhy(cultigenOf(kew?.area)!) };
   // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
   else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
   else if (dist.status === 'ambiguous') climate = { status: 'none', detail: `native range not verified: ${dist.detail}` };
   else if (dist.status === 'ok' && dist.data.held) climate = { status: 'none', detail: 'native range not verified: Kew holds this name with no native range, so records cannot be told from cultivation and no habitat climate is derived' };
-  else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
-  else if (forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(forClimate), o.regions);
+  else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : wideRangeWords(native) };
+  else if (forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(forClimate, drawnLandOf(native, o.regions)), o.regions);
   else if (allPts.length) climate = { status: 'none', detail: noPlacedWords(nInRangeRecords, allPts.length) };
   // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
   // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
@@ -653,7 +699,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (kewAsked) upstream.wikipedia = { ...upstream.wikipedia, detail: [upstream.wikipedia.detail, kewAskedWords(kewAsked, scientific)].filter(Boolean).join('; ') };
   }
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}) };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}), from: w.data.from };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }
@@ -778,8 +824,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // sixty-nine; triage-68 K5, S-B2, R46-16).
   if (skip('gbif.media')) skipped('gbif.media');
   else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
-    const m = await extraMedia(f, await gbif.media(f, key), extraList);
+    const own = await gbif.media(f, key);
+    const m = await extraMedia(f, own, extraList);
     mark('gbif.media', m);
+    // Photographs read from a download's files keep its day, not the build's (round eighty-six; review D's D5: the credits
+    // said "read from GBIF on 2026-11-01", the walk's day, for photographs read from the download of 2026-10-21).
+    if (own.asOf && (m.status === 'ok' || m.status === 'none')) upstream['gbif.media'] = { ...upstream['gbif.media'], asOf: own.asOf, detail: [(own as { detail?: string }).detail, m.status === 'ok' ? m.detail : undefined].filter(Boolean).join('; ') || undefined };
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
   if (skip('commons')) skipped('commons');
@@ -885,7 +935,16 @@ export function placedForClimate(r: Pick<gbif.GbifOccurrence, 'decimalLatitude' 
  * out, one record a three-decimal coordinate, each tested against the range's boxes, the open ones kept for the map, the
  * precise ones for the climate; then the map marker. Pure: the climate is read by the caller from `forClimate`.
  */
-export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex, inside?: (lat: number, lon: number, country?: string | null) => Admission | boolean | null, defaults?: ReadonlySet<string>) {
+/**
+ * The dry run's audit of the range test (round eighty-six; outside review B's 6, review D4): each in-range or discarded
+ * record's reason by the rule before (`before`) and by this one, weighted by the records at its coordinate, and whether it
+ * states a country and a state, so `--dry-run` says what the new rule would change without writing anything.
+ */
+export interface RangeAudit {
+  before: (lat: number, lon: number, country?: string | null, state?: string | null) => Admission | null;
+  tally: (before: Admission | null, after: Admission | null, n: number, rec: { country: boolean; state: boolean; by?: AdmissionBy }) => void;
+}
+export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonly Box[], verified: boolean, places?: PlaceIndex, inside?: (lat: number, lon: number, country?: string | null, state?: string | null) => Admission | { how: Admission; by?: AdmissionBy } | boolean | null, defaults?: ReadonlySet<string>, audit?: RangeAudit) {
   const open: OccPoint[] = [];
   /** Why each open record is in range (round eighty-five; `Admission`), by its place in `open`. */
   const openHow: Admission[] = [];
@@ -952,7 +1011,10 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
       // By the regions' shapes where the build has them (round eighty, A; `tdwg-shapes.ts`), else their boxes.
       // Round eighty-five (the owner's decision 1): the border rule reads the record's stated country, and says why it is in.
-      const got = boxes.length ? (inside ? inside(lat, lon, r.countryCode ?? null) : boxes.some((b) => inBox(lat, lon, b))) : true;
+      // Round eighty-six (review D4): and its stated state or province, which decides a border inside one country.
+      const said = boxes.length ? (inside ? inside(lat, lon, r.countryCode ?? null, r.stateProvince ?? null) : boxes.some((b) => inBox(lat, lon, b))) : true;
+      const got: Admission | true | false | null = said && typeof said === 'object' ? said.how : said;
+      if (audit && boxes.length && inside) audit.tally(audit.before(lat, lon, r.countryCode ?? null, r.stateProvince ?? null), got === true ? 'strict' : got || null, nAt.get(`${lat},${lon}`) ?? 1, { country: !!r.countryCode, state: !!r.stateProvince, ...(said && typeof said === 'object' && said.by ? { by: said.by } : {}) });
       if (!got) {
         nOutside++;
         continue;
@@ -1024,8 +1086,8 @@ export function withPlace(c: Climate, regions?: RegionTester): Climate {
   const p = regions.placeOf(c.at.lat, c.at.lon);
   if (!p) return c;
   const [name, iso] = p.split('|');
-  const country = countryName(iso);
-  return { ...c, place: country && country !== name ? `${name}, ${country}` : name };
+  // In a reader's words, and a disputed province alone (round eighty-six; `placeWords`): "Congo - Kinshasa" was CLDR's display form.
+  return { ...c, place: placeWords(name, iso) };
 }
 
 /**

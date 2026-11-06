@@ -209,7 +209,7 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
       c.restored++;
       c.restoredLines.push(`${d.name.scientific}: ${r.detail ?? r.data.title}`);
     }
-    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title, ...(r.data.cut ? { cut: true as const } : {}), ...(r.data.revision ? { revision: r.data.revision, read: new Date().toISOString().slice(0, 10) } : {}) };
+    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title, ...(r.data.cut ? { cut: true as const } : {}), ...(r.data.revision ? { revision: r.data.revision, read: new Date().toISOString().slice(0, 10) } : {}), from: r.data.from };
     d.ids.wikipedia = r.data.title;
     d.links.wikipedia = r.data.url;
     d.upstream.wikipedia = { status: 'ok', at: now(), ...(r.detail ? { detail: r.detail } : {}) };

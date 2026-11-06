@@ -51,7 +51,8 @@ describe('the day\'s answers', () => {
     const src = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(src).toMatch(/const CACHE_ROOT = 'cache\/upstream';/);
     expect(src).toMatch(/if \(d !== day\) rmSync\(/);
-    expect(src).toMatch(/if \(process\.argv\.includes\('--no-cache'\)\) return f;/);
+    // Round eighty-six: a dry run keeps no answer either (it writes nothing, the cache's files included).
+    expect(src).toMatch(/if \(process\.argv\.includes\('--no-cache'\) \|\| dryRun\) return f;/);
     // Every upstream a fill or a build asks goes through it; NASA POWER keeps its own cache of cells.
     expect(src.match(/makeFetcher\(\)/g)).toHaveLength(2); // the climate provider's, and the one inside upstream()
     expect(readFileSync('.gitignore', 'utf8')).toMatch(/^\/cache\/$/m);

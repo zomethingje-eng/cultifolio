@@ -269,7 +269,7 @@ a.tap, button.tap { display: inline-block; padding: 8px 2px; margin: -8px -2px; 
 h1.sci { font-family: var(--serif); font-style: italic; font-size: 2rem; line-height: 1.14; font-weight: 600; letter-spacing: -0.015em; overflow-wrap: anywhere; }
 .azrow .nm, .tile .nm { overflow-wrap: anywhere; }
 h1.sci i { font-style: italic; }
-h1.sci .auth { font-family: var(--ui); font-style: normal; font-size: var(--fs-md); color: var(--ink3); font-weight: 400; letter-spacing: 0; white-space: nowrap; }
+h1.sci .auth { font-family: var(--ui); font-style: normal; font-size: var(--fs-md); color: var(--ink3); font-weight: 400; letter-spacing: 0; } /* wraps within itself at 320 px (round eighty-six; P4) */
 h1.q, h3.q { font-family: var(--serif); font-size: 1.875rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; margin: 0 0 14px; }
 .vern { font-size: var(--fs-md); color: var(--ink2); margin: 5px 0 0; }
 h2.sec { font-size: var(--fs-xs); letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: var(--section-gap) 0 8px; font-family: var(--ui); scroll-margin-top: 108px; /* under the top bar and the sticky section row */ }
@@ -357,8 +357,11 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .searchbar:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .searchbar:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .toollab { font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; font-size: var(--fs-xs); color: var(--ink3); }
-.seg { display: inline-flex; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; box-shadow: var(--sh); background: var(--card); max-width: 100%; }
-.seg > a, .seg > button { border: 0; background: none; padding: 7px 13px; cursor: pointer; color: var(--ink2); font: inherit; font-size: var(--fs-sm); font-weight: 600; border-right: 1px solid var(--rule); white-space: nowrap; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--field-edge); border-radius: 1.25rem; overflow: hidden; box-shadow: var(--sh); background: var(--card); max-width: 100%; }
+/* A segment's words wrap inside it when the group meets the window's edge, instead of running under the group's clipped
+   edge (round eighty-six; outside review B's 3, and at 320 px with 200% text the about pages' "Formats" and the front
+   page's "Family" ran out of sight). At ordinary sizes there is room and nothing wraps. */
+.seg > a, .seg > button { border: 0; background: none; padding: 7px 13px; cursor: pointer; color: var(--ink2); font: inherit; font-size: var(--fs-sm); font-weight: 600; border-right: 1px solid var(--rule); white-space: normal; text-align: center; flex: 0 1 auto; }
 .seg > :last-child { border-right: 0; }
 .seg > a:hover, .seg > button:hover { color: var(--ink); text-decoration: none; }
 /* The selected segment keeps its colours under :hover too: a phone keeps the tapped button hovered after the tap, and the hover rule above (more specific) painted its text ink on an ink ground (round fifty-four, 1). */

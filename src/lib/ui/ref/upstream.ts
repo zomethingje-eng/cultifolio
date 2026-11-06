@@ -22,6 +22,19 @@ export const UPSTREAM_WORD: Record<string, string> = {
   ambiguous: 'not taken: two items answered'
 };
 
+/**
+ * A register row's detail, its state said once, by the pill (round eighty-five: a detail opening with the pill's words
+ * loses them, "not asked not asked: two Wikidata items …"). And a skipped row's closing ", so GBIF's records were not
+ * asked" goes too (round eighty-six; review S's S15): after the pill "not asked" it said the state twice, and on GBIF's
+ * species record, synonyms, common names and media it spoke of records on a row that is not about them. What is left is
+ * the reason.
+ */
+export function registerDetail(status: string, text: string): string {
+  const w = (UPSTREAM_WORD[status] ?? status).split(':')[0];
+  const t = text.startsWith(`${w}: `) ? text.slice(w.length + 2) : text;
+  return status === 'skipped' ? t.replace(/,? so (?:GBIF's records|they|it) (?:were|was) not asked(?: for (?:this one|this page|it))?(?=[.;]|$)/g, '') : t;
+}
+
 /** Each recorded source in plain words, for Provenance's rows (the id stays beside it for anyone checking the file). */
 export const UPSTREAM_NAME: Record<string, string> = {
   'gbif.match': 'GBIF name match',

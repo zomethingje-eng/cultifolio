@@ -45,7 +45,7 @@
  *   - Wikidata's entities are read without `maxlag`: the parameter asks an editing bot to wait for the query service,
  *     which a read does not use, and it left most of a fill not checked (round seventy-c's 232).
  */
-import type { JsonFetcher, SourceResult } from './fetch';
+import { BY_ID, type JsonFetcher, type SourceResult } from './fetch';
 import { mwGet, mwError } from './sources/wikimedia';
 import { spellingKey } from './epithet';
 import { plainlyAnother, authorKey } from './authors';
@@ -371,7 +371,7 @@ export async function gbifName(f: JsonFetcher, name: string): Promise<SourceResu
   if (below) {
     // Under a subspecies or variety: the autonym (Ceropegia zebrina subsp. zebrina, under which GBIF holds Huernia
     // zebrina) is the species' own type, so is the species; another (Drosera montana var. tomentosa) is part of it.
-    const u = await f<{ canonicalName?: string }>(`https://api.gbif.org/v1/species/${accepted}`);
+    const u = await f<{ canonicalName?: string }>(`https://api.gbif.org/v1/species/${accepted}`, BY_ID);
     if (u.status !== 'ok' && u.status !== 'none') return u;
     const w = (u.status === 'ok' ? u.data.canonicalName ?? '' : '').split(/\s+/);
     if (w.length >= 3 && w[w.length - 1] === w[1]) below = false;
@@ -435,7 +435,7 @@ export async function gatherFacts(f: JsonFetcher, title: string, who: Who, pre: 
   if (facts.ipni === undefined && ids.length && authorKey(who.authorship) && !foreignBinomial(title, who, facts.gbif, facts.kewTitle) && !proofByItem(title, who, { ...facts, ipni: null })) {
     const recs: IpniRecord[] = [];
     for (const id of ids.slice(0, 2)) {
-      const r = await f<{ name?: string; authors?: string }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`);
+      const r = await f<{ name?: string; authors?: string }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`, BY_ID);
       if (r.status === 'none') continue;
       if (r.status !== 'ok') return unanswered(r, 'IPNI');
       if (r.data.name) recs.push({ id, name: r.data.name, authors: r.data.authors ?? '' });

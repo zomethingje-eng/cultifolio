@@ -121,7 +121,13 @@ export const Summary = v.object({
    * and the day it was read (YYYY-MM-DD). Absent in a summary read before; `--fill summary-revisions` records them.
    */
   revision: v.optional(v.number()),
-  read: v.optional(v.string())
+  read: v.optional(v.string()),
+  /**
+   * `lead` (round eighty-six; outside review B's 5): the text is the article's opening paragraph, read from the action
+   * API's plain-text lead with its revision in the same request (`readLeads`). Absent on a summary read from Wikipedia's
+   * REST summary service before, which leaves out words in brackets; the page says which (`summarySaid`).
+   */
+  from: v.optional(v.literal('lead'))
 });
 
 /** A genus's own page: its Wikipedia lead, quoted like a species' summary, written by `--fill genus` to s/v<N>/g/<slug>.json. */
@@ -149,7 +155,7 @@ export const Distribution = v.object({
   /** Regions where WCVP records the plant as doubtfully present: listed apart, never a range box (round seventy-two, B5). */
   doubtful: v.optional(v.array(Region)),
   /** Kew's own one-line descriptions from WCVP: the life form and the climate class. Quoted, not derived. */
-  kew: v.optional(v.object({ lifeform: v.optional(v.string()), climate: v.optional(v.string()) })),
+  kew: v.optional(v.object({ lifeform: v.optional(v.string()), climate: v.optional(v.string()), area: v.optional(v.string()) })),
   /** WCVP lists the name more than once and authorship did not decide: why no range is attached. */
   ambiguous: v.optional(v.string()),
   source: v.string(),

@@ -21,7 +21,7 @@ describe('the browser specs wait for a state (A23)', () => {
     const bare = sleeps.filter(({ l }) => !/(\/\/|\/\*) a negative|the app's own (rule|timer)|the browser's own timer/.test(l));
     expect(bare.map(({ at }) => at)).toEqual([]);
   });
-  it('they are few: six, each named in its reason', () => {
-    expect(sleeps.length).toBeLessThanOrEqual(6);
+  it('they are few: eight, each named in its reason (round eighty-six added two negatives: no thumbnail asked while the lead is held)', () => {
+    expect(sleeps.length).toBeLessThanOrEqual(8);
   });
 });

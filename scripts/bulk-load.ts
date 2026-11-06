@@ -112,6 +112,21 @@ export type DownloadPart = { file: string; records: string; media?: string; doi?
  * parts download.json lists (`parts`, each its own zip: a request split by `bulk-fetch.ts --parts`), else `occurrence.zip`.
  * Null when there is none.
  */
+/**
+ * The download GBIF's photographs are read from, by its own record alone (round eighty-six; review D's D5): the images'
+ * download (`media.zip`, `media-download.json`) when the records' download carries none, else the records' download.
+ * Its DOI and the day GBIF made it (`downloadDay`); null when neither file says. Reads no archive.
+ */
+export function mediaDownloadOf(dir: string): { doi?: string; day?: string; file: string } | null {
+  const read = (p: string) => { try { return JSON.parse(readFileSync(p, 'utf8')) as { doi?: string; key?: string; created?: string; fetched?: string; media?: string; parts?: Array<{ doi?: string; key?: string; created?: string; fetched?: string; media?: string }> }; } catch { return null; } };
+  const m = existsSync(`${dir}/download.json`) ? read(`${dir}/download.json`) : null;
+  const first = m?.parts?.[0] ?? m;
+  if (first?.media) return { doi: first.doi, day: downloadDay(first), file: `${dir}/download.json` };
+  const mm = existsSync(`${dir}/media.zip`) && existsSync(`${dir}/media-download.json`) ? read(`${dir}/media-download.json`) : null;
+  if (mm) return { doi: mm.doi, day: downloadDay(mm), file: `${dir}/media-download.json` };
+  return null;
+}
+
 export function downloadParts(dir: string): DownloadPart[] | null {
   const csv = `${dir}/occurrence.csv`, zip = `${dir}/occurrence.zip`, meta = `${dir}/download.json`;
   if (existsSync(csv)) return [{ file: csv, records: csv, plain: true }];
@@ -205,7 +220,7 @@ const notBackboneKey = (raw: string | undefined) => !!raw && !/^\d+$/.test(raw.t
  * occurrence.csv is read too, for the small case. The same records give the same sample and the same photographs by
  * either form: the reader reads each column by its name, in any order and either case.
  */
-export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string } | null> {
+export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string; mediaDay?: string } | null> {
   // A names file with nothing in the download (a handful of extras) should not cost a pass over 28 M rows.
   if (wanted && wanted.size === 0) {
     console.log('  none of these species are in the occurrence download: occurrences will come from the API');
@@ -260,6 +275,9 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   let media: MediaIndex | null = null;
   let photos = 'none';
   let mediaDoi: string | undefined;
+  // The day GBIF made the download the photographs come from (round eighty-six; review D's D5): their credits were read
+  // from it, so the record says "as of" that day, never the build's.
+  let mediaDay: string | undefined;
   const withMedia = parts.filter((p) => p.media);
   const mediaZip = `${dir}/media.zip`, mediaMeta = `${dir}/media-download.json`;
   if (withMedia.length) {
@@ -268,6 +286,7 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
       media = new MediaIndex(idx.withMedia, idx.mediaRank);
       photos = 'multimedia.txt';
       mediaDoi = parts[0].doi;
+      mediaDay = downloadDay(parts[0]);
       for (const p of withMedia) await readMedia(p, p.media!, media);
     }
   } else if (existsSync(mediaZip)) {
@@ -289,10 +308,11 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
       media = new MediaIndex(idx.withMedia, idx.mediaRank);
       photos = 'media.zip';
       mediaDoi = mmeta.doi;
+      mediaDay = downloadDay(mmeta);
       await readMedia(mp, mm.media, media);
     }
   }
-  return { occ: idx, media, format, photos, mediaDoi };
+  return { occ: idx, media, format, photos, mediaDoi, mediaDay };
 }
 
 async function readMedia(p: DownloadPart, member: string, media: MediaIndex): Promise<void> {

@@ -1,0 +1,30 @@
+# Round eighty-six, the data steps of the sources agent and the ranges agent in one order (review D's D1, D5, D11, D12;
+# outside review B's 5 and 6; the plan's B2 to B7). Dry runs first, then the owner's review stop, then the writes.
+# The walk derives every page again offline under this round's code, so it applies the cultigen rule (D1, read from Kew's
+# area text) and the GBIF photographs' download day (D5) to every page itself: --fill cultigens and --fill gbif-media-day
+# are not needed after it (the cultigens dry run stays, as the count). The walk carries each page's summary, identifiers
+# and iNaturalist taxon from the dossier on disk, so the online steps come after it: a page built online after the walk
+# began is not derived again by it, and a fill run before it would only be carried.
+#   copy scripts\tdwg3-shapes.json shapes-r85.json            (before this round's code is extracted; the ranges dry run reads it)
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r86.txt
+# The owner's two decisions (San Pedro's records, review D's D6; Wikidata's English names for keyed pages, review S's S2)
+# are not in this plan: their dry runs are typed by hand, and their writes only after the owner decides.
+backup
+dossier --dry-run --offline --grid climate --bulk bulk --shapes-before shapes-r85.json
+dossier --fill cultigens --bulk bulk --dry-run
+dossier --fill summary-leads --dry-run
+dossier --list-kew-inat
+review Read the totals of dry-run-ranges.txt (the range rule: records and climates lost and gained per page), and this plan's three lines: "… pages read: N would be said as cultigens, M of them losing the habitat climate they showed" (57 and 31 expected by review D), "… summaries read: … would change (… by brackets alone, … by other parentheticals, … otherwise)", and "… of them would take it now, Kew's name read without its rank word" with its pages. If a count is far from what the round's notes expect, stop and paste the end of corpus-step.log back.
+dossier --walk --offline --grid climate --bulk bulk
+dossier --list-renamed --again
+# One online --keys build of three lists, so the download is read once (an hour): the pages B6 gives an iNaturalist
+# taxon, every renamed page (D11: Kew's name's own Wikidata item), and Monsonia lheritieri (D12). A list that is not there
+# names no page, and the others are built.
+dossier --keys rebuild-kew-inat.txt,rebuild-renamed.txt,scripts/rebuild-r86-d12.txt --grid climate --bulk bulk
+dossier --fill summary-leads
+dossier --fill genus --force
+dossier --index
+dossier --check-ranges
+review Read the walk's and the --keys build's last lines (and drops.txt if one was written), the two fills' last lines (summaries, genus leads), and the check: 0 faults, eight "fixed:", one "held open: Xeronema". If anything reads "NOT FIXED", stop and paste the end of corpus-step.log back. Then, before --go-on: npx tsx scripts/dev/r86-wide-origins.ts static\s\v3\index.json (the ranges agent's), and read what it says.
+upload
+live-check

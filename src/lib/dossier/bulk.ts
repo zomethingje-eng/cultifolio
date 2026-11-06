@@ -17,7 +17,7 @@
  * dossier records the same upstream names, so a reader cannot tell which
  * path built it, and neither can the tests.
  */
-import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
+import { BY_ID, type JsonFetcher, type FetchResult, type FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription, SynonymOf } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
@@ -49,6 +49,8 @@ export interface WcvpName {
   family?: string;
   lifeform?: string;
   climate?: string;
+  /** Kew's geographic_area, its own words for the range (round eighty-six; review D2): quoted, never read as a range. */
+  area?: string;
 }
 
 export interface WcvpDist {
@@ -60,7 +62,15 @@ export interface WcvpDist {
   doubtful: boolean;
   /** The level-2 region, for a row Kew gives no level-3 area (Agave calodonta's "Mexico"; round seventy-two, B8). */
   region?: string;
+  /**
+   * The level-1 continent, for a row Kew gives neither (Caladium praetermissum's "SOUTHERN AMERICA"; round eighty-six, the
+   * plan's B16: its region had no name, and the index gave it the origin "").
+   */
+  continent?: string;
 }
+
+/** A WCVP continent as TDWG names it ("SOUTHERN AMERICA" is "Southern America"; round eighty-six, B16), or "". */
+export const continentName = (c?: string): string => (c ?? '').toLowerCase().replace(/\b[a-z]/g, (x) => x.toUpperCase()).replace(/-([a-z])/g, (_, x: string) => `-${x.toUpperCase()}`);
 
 /** Split one pipe-delimited WCVP line by a header. Quotes are not used in these files. */
 export function wcvpRow(header: string[], line: string): Record<string, string> {
@@ -74,13 +84,13 @@ const families = new Map<string, string>();
 const family = (f?: string) => { if (!f) return undefined; let v = families.get(f); if (!v) families.set(f, (v = ownText(f))); return v; };
 export const parseWcvpName = (h: string[], line: string): WcvpName => {
   const r = wcvpRow(h, line);
-  return { id: r.plant_name_id, name: r.taxon_name, status: r.taxon_status, acceptedId: r.accepted_plant_name_id || r.plant_name_id, rank: r.taxon_rank, authors: r.taxon_authors || undefined, family: family(r.family), lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined };
+  return { id: r.plant_name_id, name: r.taxon_name, status: r.taxon_status, acceptedId: r.accepted_plant_name_id || r.plant_name_id, rank: r.taxon_rank, authors: r.taxon_authors || undefined, family: family(r.family), lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined, ...(r.geographic_area?.trim() ? { area: ownText(r.geographic_area.trim()) } : {}) };
 };
 
 
 export const parseWcvpDist = (h: string[], line: string): WcvpDist => {
   const r = wcvpRow(h, line);
-  return { id: r.plant_name_id, l3: r.area_code_l3, area: r.area, introduced: r.introduced === '1', extinct: r.extinct === '1', doubtful: r.location_doubtful === '1', ...(r.region ? { region: r.region } : {}) };
+  return { id: r.plant_name_id, l3: r.area_code_l3, area: r.area, introduced: r.introduced === '1', extinct: r.extinct === '1', doubtful: r.location_doubtful === '1', ...(r.region ? { region: r.region } : {}), ...(!r.area && !r.region && r.continent ? { continent: r.continent } : {}) };
 };
 
 /**
@@ -389,8 +399,8 @@ export class WcvpIndex {
     // record is tested against it; a row with no level-3 area names its level-2 region (Agave calodonta's "Mexico", B8).
     const rows = this.dist.get(entry.id) ?? [];
     return {
-      rows: rows.map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area || d.region || '', establishmentMeans: d.doubtful ? 'DOUBTFUL' : d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
-      kew: { lifeform: entry.lifeform, climate: entry.climate },
+      rows: rows.map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area || d.region || continentName(d.continent), establishmentMeans: d.doubtful ? 'DOUBTFUL' : d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
+      kew: { lifeform: entry.lifeform, climate: entry.climate, ...(entry.area ? { area: entry.area } : {}) },
       entry
     };
   }
@@ -513,7 +523,7 @@ export const SAMPLE_CELL_DEG = 0.05;
  * seventy-nine) names a column by the query's alias in lower case (`gbifid`, `decimallatitude`), so a header is read
  * case-blind against these names and both downloads give the reader the same row.
  */
-export const OCC_TERMS = ['gbifID', 'decimalLatitude', 'decimalLongitude', 'coordinateUncertaintyInMeters', 'coordinatePrecision', 'year', 'countryCode', 'basisOfRecord', 'license', 'datasetKey', 'establishmentMeans', 'degreeOfEstablishment', 'mediaType', 'speciesKey', 'taxonKey', 'acceptedTaxonKey'] as const;
+export const OCC_TERMS = ['gbifID', 'decimalLatitude', 'decimalLongitude', 'coordinateUncertaintyInMeters', 'coordinatePrecision', 'year', 'countryCode', 'stateProvince', 'basisOfRecord', 'license', 'datasetKey', 'establishmentMeans', 'degreeOfEstablishment', 'mediaType', 'speciesKey', 'taxonKey', 'acceptedTaxonKey'] as const;
 const TERM_OF = new Map<string, string>(OCC_TERMS.map((t) => [t.toLowerCase(), t]));
 
 /**
@@ -535,6 +545,9 @@ export const SQL_SELECT: ReadonlyArray<readonly [expression: string, alias: stri
   ['coordinateprecision', 'coordinateprecision'],
   ['"year"', 'year'],
   ['countrycode', 'countrycode'],
+  // Round eighty-six (review D4): the state or province the record states, which decides a border inside one country. A
+  // download asked before carries none, and its records name no state.
+  ['stateprovince', 'stateprovince'],
   ['basisofrecord', 'basisofrecord'],
   ['license', 'license'],
   ['datasetkey', 'datasetkey'],
@@ -568,6 +581,8 @@ export function parseOccRow(h: string[], line: string): GbifOccurrence & { speci
     coordinatePrecision: Number.isFinite(prec) && prec > 0 ? prec : undefined,
     year: g.year ? Number(g.year) : undefined,
     countryCode: g.countryCode || undefined,
+    // Round eighty-six (review D4): a DWCA's occurrence.txt carries it; trimmed, and none when blank.
+    ...(g.stateProvince?.trim() ? { stateProvince: g.stateProvince.trim() } : {}),
     basisOfRecord: g.basisOfRecord || undefined,
     license: g.license || undefined,
     datasetKey: g.datasetKey || undefined,
@@ -643,8 +658,9 @@ class Strings {
 
 /**
  * One key's kept rows (round eighty, X): row i is eight doubles at f[i * 10], hash, gbifID, latitude, longitude, year,
- * uncertainty, precision and the record's taxon key, then four 32-bit numbers at u[i * 20 + 16], the country, the dataset,
- * the cultivation flags, and the decimals + 1, the part + 1, the basis and the licence a byte each.
+ * uncertainty, precision and the record's taxon key, then four 32-bit numbers at u[i * 20 + 16], the country and the
+ * cultivation flags 16 bits each, the dataset, the state or province (round eighty-six; review D4: so a row stays 80 bytes,
+ * the two small fields share one number), and the decimals + 1, the part + 1, the basis and the licence a byte each.
  */
 class Rows {
   f: Float64Array;
@@ -670,9 +686,11 @@ class Rows {
 export class OccIndex {
   private by = new Map<number, Rows>();
   private worst = new Map<number, number>(); // per species, the largest hash still inside the cap (Infinity until full)
-  private cc = new Strings('countryCode');
+  private cc = new Strings('countryCode', 0xffff);
   private ds = new Strings('datasetKey');
-  private est = new Strings('establishmentMeans');
+  private est = new Strings('establishmentMeans', 0xffff);
+  /** Round eighty-six (review D4): the state or province each record states. */
+  private st = new Strings('stateProvince');
   private basis = new Strings('basisOfRecord', 255);
   private lic = new Strings('license', 255);
   /** The download's DOI, when known: every record served carries it so the dossier can cite it. */
@@ -737,7 +755,7 @@ export class OccIndex {
       rows.f[f + 4] = o.year ?? 0; rows.f[f + 5] = o.coordinateUncertaintyInMeters ?? 0; rows.f[f + 6] = o.coordinatePrecision ?? 0; rows.f[f + 7] = o.taxonKey ?? 0;
       const dec = (o.coordDecimals ?? -1) + 1, part = this.part + 1;
       if (dec > 255 || part > 255) throw new Error(`a record with ${o.coordDecimals} decimals in its coordinates, or of part ${this.part + 1}: more than the sample can hold`);
-      rows.u[u] = this.cc.id(o.countryCode); rows.u[u + 1] = this.ds.id(o.datasetKey); rows.u[u + 2] = this.est.id(o.establishmentMeans);
+      rows.u[u] = this.cc.id(o.countryCode) | (this.est.id(o.establishmentMeans) << 16); rows.u[u + 1] = this.ds.id(o.datasetKey); rows.u[u + 2] = this.st.id(o.stateProvince);
       rows.u[u + 3] = dec | (part << 8) | (this.basis.id(o.basisOfRecord) << 16) | (this.lic.id(o.license) << 24);
       if (rows.n > this.cap * 1.25) this.trim(k, rows);
     }
@@ -821,11 +839,12 @@ export class OccIndex {
         decimalLatitude: rows.f[f + 2],
         decimalLongitude: rows.f[f + 3],
         year: rows.f[f + 4] || undefined,
-        countryCode: this.cc.at(rows.u[u]) || undefined,
+        countryCode: this.cc.at(rows.u[u] & 0xffff) || undefined,
+        ...(rows.u[u + 2] ? { stateProvince: this.st.at(rows.u[u + 2]) } : {}),
         basisOfRecord: this.basis.at((packed >>> 16) & 255) || undefined,
         license: this.lic.at(packed >>> 24) || undefined,
         datasetKey: this.ds.at(rows.u[u + 1]) || undefined,
-        establishmentMeans: this.est.at(rows.u[u + 2]) || undefined,
+        establishmentMeans: this.est.at(rows.u[u] >>> 16) || undefined,
         coordinateUncertaintyInMeters: rows.f[f + 5] || undefined,
         coordDecimals: dec >= 0 ? dec : undefined,
         coordinatePrecision: rows.f[f + 6] || undefined,
@@ -958,6 +977,8 @@ export interface BulkSources {
    * name's, as before.
    */
   entryOf?: (key: number) => string | undefined;
+  /** The download the photographs' files are (round eighty-six; review D's D5): each media answer says it, so the record keeps its day. */
+  mediaFrom?: { doi?: string; day?: string };
 }
 
 /**
@@ -991,16 +1012,17 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       const key = Number(m[1]);
       let sp = names.get(key);
       if (!sp) {
-        const r = await base<GbifSpecies>(url.replace(/\/distributions.*$/, ''));
+        const r = await base<GbifSpecies>(url.replace(/\/distributions.*$/, ''), BY_ID);
         if (r.status === 'ok') names.set(key, (sp = { name: r.data.canonicalName ?? r.data.scientificName, authorship: r.data.authorship, family: r.data.family }));
       }
       const got = sp ? src.wcvp.distributions(sp.name, sp.authorship, sp.family) : null;
       // The page's own Kew entry, where the name reaches another entry or none (round eighty, A): its range by its id.
       const own = src.entryOf?.(key);
-      // A name that reaches the entry itself, or an entry below it (Orbea maculata subsp. rangeana for the list's Orbea
-      // maculata: the narrower range is the page's), keeps the name's answer.
-      const below = (g: WcvpRange, id: string) => g.entry.id === id || (() => { const e = src.wcvp!.entryName(id); return !!e && wcvpKey(g.entry.name).startsWith(`${wcvpKey(e)} `); })();
-      const byEntry = own && !(got && got !== 'ambiguous' && below(got, own)) ? src.wcvp.rangeById(own, sp?.name, sp?.authorship, sp?.family) : null;
+      // A name that reaches the entry itself keeps the name's answer. Round eighty kept a name's answer for an entry below
+      // the page's too ("the narrower range is the page's"); since round eighty-five a page is headed by its Kew entry, so an
+      // entry below it is another taxon's range (round eighty-six; review D10: Stapelia hirsuta, headed by the species,
+      // showed var. hirsuta's Cape Provinces, reached by GBIF's Ceropegia pulvinata, where Kew's species is CPP and NAM).
+      const byEntry = own && !(got && got !== 'ambiguous' && got.entry.id === own) ? src.wcvp.rangeById(own, sp?.name, sp?.authorship, sp?.family) : null;
       if (byEntry) {
         stats.wcvp++;
         const syn = { ...(byEntry.synonymOf ? { synonymOf: byEntry.synonymOf } : {}), ...(byEntry.rangeVia ? { rangeVia: byEntry.rangeVia } : {}), ...(src.wcvp.fileDay ? { kewFile: src.wcvp.fileDay } : {}) };
@@ -1055,6 +1077,10 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
           // GBIF may have attached to the key from the other author's name, and the record says why.
           stats.through++;
           const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+          // An offline re-derivation does not ask GBIF (round eighty-six; review D's D12: Monsonia lheritieri's range row
+          // became "not asked" and its climate "pending", where round eighty-four said truly that Kew holds the name only
+          // under another author). Kew's answer is the file's, and stands; only the national checklists were not asked.
+          if (r.status === 'skipped') return { status: 'ok', data: { results: [], otherAuthor, unasked: r.detail } } as unknown as FetchResult<T>;
           return (r.status === 'ok' ? { status: 'ok', data: { ...r.data, results: (r.data.results ?? []).filter((d) => !isWcvpRow(d)), otherAuthor } } : r) as unknown as FetchResult<T>;
         }
         const n = syn.status === 'ok' ? (syn.rows ?? []).length : 0;
@@ -1064,14 +1090,17 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       if (noKew) {
         stats.through++;
         const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+        // Offline, as above (round eighty-six; D12): Kew's file answered; the national checklists were not asked.
+        if (r.status === 'skipped') return { status: 'ok', data: { results: [], noKew, unasked: r.detail } } as unknown as FetchResult<T>;
         return (r.status === 'ok' || r.status === 'none' ? { status: 'ok', data: { ...(r.status === 'ok' ? r.data : { results: [] }), noKew } } : r) as unknown as FetchResult<T>;
       }
     } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1])) && (!src.covered || src.covered.has(Number(m[1])))) {
       const key = Number(m[1]);
       const page = src.media.page(key);
+      const from = { ...(src.mediaFrom?.doi ? { downloadDoi: src.mediaFrom.doi } : {}), ...(src.mediaFrom?.day ? { downloadDay: src.mediaFrom.day } : {}) };
       if (page) {
         stats.media++;
-        return { status: 'ok', data: page as unknown as T };
+        return { status: 'ok', data: { ...page, ...from } as unknown as T };
       }
       // A download with a multimedia member is asked for the whole list of names, so for any species built with it,
       // nothing in the files is the answer: no observation photographs with coordinates. Falling through to the network
@@ -1079,7 +1108,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       // thirty on 235 species; a first fix asked only for species with an occurrence set, and 1,407 have none (round
       // thirty-two, 3; round thirty-three).
       stats.media++;
-      return { status: 'ok', data: { results: [], endOfRecords: true, count: 0 } as unknown as T };
+      return { status: 'ok', data: { results: [], endOfRecords: true, count: 0, ...from } as unknown as T };
     } else if (src.occ && (m = RE_OCC.exec(url))) {
       const key = Number(m[1]);
       const rows = src.occ.get(key);

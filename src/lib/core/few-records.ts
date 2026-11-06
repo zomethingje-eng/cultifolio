@@ -26,6 +26,8 @@
  * cells, so the least a marked page has is three records in three cells: Iris zagrica, Haemanthus pumilio's four cells
  * and Peperomia graveolens's four records, the review's examples, are each marked.
  */
+import { shownPlace } from './place-words';
+
 export const FEW_RECORDS = 12;
 export const FEW_CELLS = 5;
 
@@ -36,12 +38,21 @@ export function fewRecords(c: { status: string; records?: number | null; cells?:
   return c.records < FEW_RECORDS || c.cells < FEW_CELLS ? { records: c.records, cells: c.cells, ...(c.place ? { place: c.place } : {}) } : null;
 }
 
-/** The mark's sentence, with the counts: what the figures rest on, and the line, never advice. */
-export function fewRecordsSentence(f: { records: number; cells: number; place?: string }): string {
+/**
+ * The mark's sentence, with the counts: what the figures rest on, and the line, never advice. Round eighty-six (review D2):
+ * with the typical spot, Kew's own words for where the plant grows (`kewArea`, WCVP's geographic_area), where Kew gives
+ * them, so a spot Kew's area does not name is seen as such: the Poor Knights lily's spot is in Auckland, and Kew gives its
+ * area as "New Zealand (Poor Knights Is., Hen I.)". The site does not judge whether the spot lies in Kew's area: Kew's
+ * words name islands and districts no shape here draws.
+ */
+export function fewRecordsSentence(f: { records: number; cells: number; place?: string }, kewArea?: string | null): string {
   const rec = `${f.records} record${f.records === 1 ? '' : 's'}`;
   const cel = `${f.cells} grid cell${f.cells === 1 ? '' : 's'}`;
   // Round eighty-five (A5): where its cold figures are read, so a grower can see it is one place (Schlumbergera truncata's,
   // São Paulo, though the plant is of Rio de Janeiro's mountains).
-  const at = f.place ? ` The typical spot, where the cold figures are read, is in ${f.place}.` : '';
+  // Round eighty-six (the plan's A13; W14): the place's source said, as every figure's is, and its country in a reader's
+  // words, a disputed province's left unsaid (`shownPlace`).
+  const area = kewArea?.trim() ? `; Kew gives its area as “${kewArea.trim()}” (WCVP)` : '';
+  const at = f.place ? ` The typical spot, where the cold figures are read, is in ${shownPlace(f.place)} (Natural Earth's provinces)${area}.` : '';
   return `From few records: this habitat climate is read from ${rec} in ${cel}; a page says so under ${FEW_RECORDS} records or ${FEW_CELLS} cells, and shows the figures as read.${at}`;
 }

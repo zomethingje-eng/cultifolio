@@ -8,7 +8,7 @@ import type { JsonFetcher } from '$dossier/fetch';
 
 export type Item = { sitelink?: string; P171?: string[]; P566?: string[]; P1672?: string[]; P1582?: string[]; P225?: string[]; P105?: string[]; P961?: string[] };
 export type World = {
-  /** Wikipedia's REST summary: the title asked → the title it lands on, and the lead. */
+  /** Wikipedia's article: the title asked → the title it lands on, and the lead (the action API's since round eighty-six). */
   wiki?: Record<string, { title: string; extract?: string }>;
   items?: Record<string, Item>;
   /** Kew's WCVP through GBIF: a genus → its accepted species, named or counted (absent: Kew holds no accepted genus of the name). */
@@ -42,6 +42,19 @@ export function world(w: World): { f: JsonFetcher; asked: string[] } {
     if (w.refuse?.test(url)) return { status: 'refused', detail: 'HTTP 429' };
     const ip = /www\.ipni\.org\/api\/1\/n\/(.+)$/.exec(url);
     if (ip) { const r = w.ipni?.[decodeURIComponent(ip[1])]; return r ? { status: 'ok', data: r } : { status: 'none' }; }
+    // The article's lead by the action API (round eighty-six: the summary's request since then), each title as the REST summary below.
+    if (url.includes('en.wikipedia.org/w/api.php') && url.includes('prop=extracts')) {
+      const titles = (new URL(url).searchParams.get('titles') ?? '').split('|');
+      const redirects: Array<{ from: string; to: string }> = [];
+      const pages: unknown[] = [];
+      for (const t of titles) {
+        const a = w.wiki?.[t];
+        if (!a) { pages.push({ title: t, missing: true }); continue; }
+        if (a.title !== t) redirects.push({ from: t, to: a.title });
+        pages.push({ title: a.title, extract: a.extract ?? `${a.title}: the lead.`, revisions: [{ revid: 1000 }] });
+      }
+      return { status: 'ok', data: { batchcomplete: true, query: { ...(redirects.length ? { redirects } : {}), pages } } };
+    }
     if (url.includes('/page/summary/')) {
       const t = decodeURIComponent(url.split('/page/summary/')[1] ?? '').replace(/_/g, ' ');
       const a = w.wiki?.[t];

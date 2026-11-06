@@ -24,6 +24,7 @@ import * as inat from '$dossier/sources/inat';
 import * as buildMod from '$dossier/build';
 import * as rederive from '$dossier/rederive';
 import { buildKewDossier, type KewSpecies } from '$dossier/build-kew';
+import { restAsLead } from '$dossier/fetch';
 import { kewItemUrl, entityUrl, summaryUrl } from '$dossier/batch';
 import { welwitschia } from '../../fixtures/upstream';
 
@@ -148,7 +149,7 @@ describe('a build that skips iNaturalist says why, and keeps the id the page had
   const kewFetcher = (claims: Record<string, unknown[]>) => fixtureFetcher({
     [kewItemUrl({ ipni: cypress.ipni, powo: cypress.powo })]: sparql,
     [entityUrl('Q50843040')]: entity(claims),
-    [summaryUrl('Hesperocyparis lusitanica')]: { type: 'standard', title: 'Hesperocyparis lusitanica', extract: 'A conifer.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Hesperocyparis_lusitanica' } } },
+    [summaryUrl('Hesperocyparis lusitanica')]: restAsLead('Hesperocyparis lusitanica', { type: 'standard', title: 'Hesperocyparis lusitanica', extract: 'A conifer.', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Hesperocyparis_lusitanica' } } }),
     're:^https://commons\\.wikimedia\\.org/': null
   });
 

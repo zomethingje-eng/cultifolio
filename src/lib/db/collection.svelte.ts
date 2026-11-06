@@ -38,7 +38,7 @@ import { byNumberNewest } from './number-order';
 import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, FIELD_TYPES, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
-import { nextAccession, plantNumberProblem, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
+import { nextAccession, plantNumberProblem, isScheme, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type MetaCondition, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
 import { askToKeep } from '$lib/ui/keep-ask';
@@ -51,7 +51,6 @@ export const PIXEL_SWEEP_MS = 5000;
 
 export { NUMBERING_SETTING };
 
-const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'object' && ((s as NumberingScheme).mode === 'year' || (s as NumberingScheme).mode === 'prefix') && typeof (s as NumberingScheme).width === 'number';
 
 /** A short, deterministic tag for a string: two 32-bit FNV-1a hashes in base 36 (up to 14 characters, [a-z0-9]). */
 

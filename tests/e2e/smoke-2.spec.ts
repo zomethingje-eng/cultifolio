@@ -32,7 +32,8 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('h2#s-photos + .notice')).toContainText('GBIF media refused when this page was built. Not a statement that none exist.');
   await expect(page.locator('.hero')).toHaveCount(0); // no grey box where a photograph would be (round sixty)
   // the one mark for a refusal: a dashed "not checked" pill, its reason on tap (improvements, 5)
-  const tok = page.locator('.idcard .nc', { hasText: 'Photographs not checked' });
+  // Round eighty-six (review S's S15): the mark names the source that did not answer, Commons having answered with none.
+  const tok = page.locator('.idcard .nc', { hasText: 'GBIF media not checked' });
   await expect(tok).toBeVisible();
   await expect(tok.locator('.why')).toBeHidden();
   await tok.locator('summary').click();

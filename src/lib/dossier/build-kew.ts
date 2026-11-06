@@ -32,6 +32,7 @@
  * of the records read is `occurrences.keys` (`recordsUnchecked` in `$core/no-gbif`). GBIF's photographs are still not
  * asked for it.
  */
+import { cultigenClimateWhy, cultigenOf } from '../core/cultigen';
 import type { JsonFetcher, FetchResult, SourceResult } from './fetch';
 import type { GbifDistribution } from './sources/gbif';
 import * as inat from './sources/inat';
@@ -42,10 +43,10 @@ import { slugify } from '$core/names';
 import { kewPage } from '$core/page-id';
 import { NO_GBIF_WHY, NO_GBIF_CLIMATE, noKeyWhy, uncheckedClimate, type Unread } from '$core/no-gbif';
 import { viaSource, type RangeVia } from './range-via';
-import { ownNames, isOwnName, type OwnNames } from './own-names';
+import { ownNames, isOwnName, canonicalOf, type OwnNames } from './own-names';
 import { canonicalOfKew, sameTypeLabel, type SameTypeName } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, admissionRecord, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, admissionRecord, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
@@ -69,6 +70,8 @@ export interface KewSpecies {
   powo?: string;
   lifeform?: string;
   climate?: string;
+  /** Kew's geographic_area, its own words for the range (round eighty-six; review D2): quoted on the page. */
+  area?: string;
   /** Kew's other names for the species: every row filed under it, misapplied rows left out; `homotypic` where Kew says so. */
   synonyms: ReadonlyArray<{ name: string; authors: string; status: string; rank?: string; homotypic?: boolean }>;
   /** Its range, in the shape `WcvpIndex.rangeOf` gives (none when Kew states none). */
@@ -106,6 +109,8 @@ export interface KewBuildOptions {
   defaults?: ReadonlySet<string>;
   /** The regions' shapes (round eighty, A), as for a page with a GBIF key. */
   regions?: import('./tdwg-shapes').RegionTester;
+  /** The dry run's audit (round eighty-six), as for a page with a GBIF key. */
+  rangeAudit?: import('./build').BuildOptions['rangeAudit'];
   /** The reference's genera, in lower case (`generaOf`): a Wikidata name that is one of them alone is refused (round eighty). */
   genera?: ReadonlySet<string>;
   /**
@@ -142,9 +147,17 @@ export function unreadOf(line: NoKeyLine, pageOf?: (gbifKey: number) => string |
 /** "Abelia parvifolia Hemsl.": the entry as a record cites it. */
 export const kewLabel = (k: Pick<KewSpecies, 'name' | 'authors'>) => `${k.name}${k.authors ? ` ${k.authors}` : ''}`;
 
-/** The species' own names for iNaturalist and Commons: its name and Kew's names for it, a name another species of the reference holds left out. */
+/**
+ * The species' own names for iNaturalist and Commons: its name and Kew's names for it, a name another species of the
+ * reference holds left out. Each is read as `ownNames` compares names, a canonical name without its rank word
+ * (`canonicalOf`), as iNaturalist writes a taxon's name: Kew's "Trichocereus macrogonus var. pachanoi" is iNaturalist's
+ * "Trichocereus macrogonus pachanoi" (round eighty-six; the plan's B6). Read with the rank word, it matched nothing, and
+ * San Pedro, Kew's Echinopsis pachanoi, took no iNaturalist taxon ("not taken: iNaturalist files Echinopsis pachanoi as
+ * Trichocereus macrogonus pachanoi, which is neither this species' name nor one of Kew's names for it").
+ */
 export function kewOwnNames(k: Pick<KewSpecies, 'name' | 'synonyms'>, heldElsewhere?: (name: string) => boolean): OwnNames {
-  return ownNames({ scientific: canonicalOfKew(k.name), synonyms: k.synonyms.map((s) => ({ name: canonicalOfKew(s.name), status: s.status })), heldElsewhere });
+  const plain = (n: string) => canonicalOf(canonicalOfKew(n)) ?? canonicalOfKew(n);
+  return ownNames({ scientific: plain(k.name), synonyms: k.synonyms.map((s) => ({ name: plain(s.name), status: s.status })), heldElsewhere });
 }
 
 /**
@@ -242,7 +255,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   const { doubtful, native, introduced, reported, extinct, boxes } = regionsOf(k.range, true);
   const via: RangeVia = { kind: 'own', entry: label, name: k.name, ...(k.file ? { file: k.file } : {}) };
   upstream['wcvp.distribution'] = k.range.length ? { status: 'ok', at: now(), ...file } : { status: 'none', at: now(), detail: `Kew's entry ${label} states no range`, ...file };
-  const kewDesc = k.lifeform || k.climate ? { ...(k.lifeform ? { lifeform: k.lifeform } : {}), ...(k.climate ? { climate: k.climate } : {}) } : undefined;
+  const kewDesc = k.lifeform || k.climate || k.area ? { ...(k.lifeform ? { lifeform: k.lifeform } : {}), ...(k.climate ? { climate: k.climate } : {}), ...(k.area ? { area: k.area } : {}) } : undefined;
 
   /* ---- 3, 4. GBIF's records, the marker and the climate: only under the keys Kew's synonymy gives it ---- */
   const verified = native.length > 0;
@@ -264,7 +277,9 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     }
     // By the regions' shapes where the build has them (round eighty, A).
     const inside = rangeTest(native, o.regions);
-    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places, inside?.admit, o.defaults);
+    // The dry run (round eighty-six): every record's reason by the rule before too, counted, never written.
+    const before = o.rangeAudit ? rangeTest(native, o.rangeAudit.regions) : undefined;
+    const r = readRecords(occ.status === 'ok' ? occ.data : [], boxes, verified, o.places, inside?.admitBy, o.defaults, o.rangeAudit && before ? { before: before.admit, tally: o.rangeAudit.tally } : undefined);
     if (occ.status === 'ok' && r.nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(r.nDefault)].filter(Boolean).join('; ');
     if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
     if (occ.status === 'ok') {
@@ -289,8 +304,10 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     // As a page with a GBIF key reads it (`buildDossier`), its range Kew's own.
     if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `the occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built` };
     else if (occ.status === 'skipped') climate = { status: 'pending', detail: 'the occurrence source was not asked when this page was built' };
-    else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
-    else if (r.forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(r.forClimate), o.regions);
+    // A cultigen has no wild habitat (round eighty-six; review D's D1), as for a page with a GBIF key: read from Kew's area text.
+    else if (cultigenOf(k.area)) climate = { status: 'none', detail: cultigenClimateWhy(cultigenOf(k.area)!) };
+    else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : wideRangeWords(native) };
+    else if (r.forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(r.forClimate, drawnLandOf(native, o.regions)), o.regions);
     else if (r.allPts.length) climate = { status: 'none', detail: noPlacedWords(r.nInRangeRecords, r.allPts.length) };
     else climate = { status: 'none', detail: 'no georeferenced record inside the range' };
     // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
@@ -339,7 +356,7 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
-    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}) };
+    summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title, ...(w.data.cut ? { cut: true as const } : {}), ...(w.data.revision ? { revision: w.data.revision, read: now().slice(0, 10) } : {}), from: w.data.from };
     ids.wikipedia = w.data.title;
     links.wikipedia = w.data.url;
   }

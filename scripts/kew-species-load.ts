@@ -46,7 +46,7 @@ export async function loadKewSpecies(dir: string, ids: Iterable<string>): Promis
     if (want.has(id) && r.taxon_status === 'Accepted' && r.taxon_rank === 'Species') {
       const n = parseWcvpName(h, line);
       idx.addName(n, () => true);
-      rows.set(id, { id, name: r.taxon_name, authors: r.taxon_authors, family: r.family || undefined, genus: r.genus || undefined, ipni: r.ipni_id || undefined, powo: r.powo_id || undefined, lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined, synonyms: [], range: [], file: idx.fileDay });
+      rows.set(id, { id, name: r.taxon_name, authors: r.taxon_authors, family: r.family || undefined, genus: r.genus || undefined, ipni: r.ipni_id || undefined, powo: r.powo_id || undefined, lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined, ...(n.area ? { area: n.area } : {}), synonyms: [], range: [], file: idx.fileDay });
     } else if (acc && acc !== id && want.has(acc) && r.taxon_status !== 'Misapplied') {
       (under.get(acc) ?? under.set(acc, []).get(acc)!).push({ name: r.taxon_name, authors: r.taxon_authors, status: r.taxon_status, rank: r.taxon_rank, ...(r.homotypic_synonym ? { homotypic: true } : {}) });
     }
@@ -58,7 +58,7 @@ export async function loadKewSpecies(dir: string, ids: Iterable<string>): Promis
     if (rows.has(d.id)) idx.addDist(d);
   });
   for (const [id, k] of rows) {
-    const entry = { id, name: k.name, status: 'Accepted', acceptedId: id, rank: 'Species', authors: k.authors || undefined, family: k.family, lifeform: k.lifeform, climate: k.climate };
+    const entry = { id, name: k.name, status: 'Accepted', acceptedId: id, rank: 'Species', authors: k.authors || undefined, family: k.family, lifeform: k.lifeform, climate: k.climate, ...(k.area ? { area: k.area } : {}) };
     rows.set(id, { ...k, synonyms: under.get(id) ?? [], range: idx.rangeOf(entry)?.rows ?? [] });
   }
   return { species: rows, missing: [...want].filter((id) => !rows.has(id)), file: idx.fileDay };

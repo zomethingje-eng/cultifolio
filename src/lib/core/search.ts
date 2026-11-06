@@ -511,7 +511,14 @@ export function relaxedQuery(q: string): string | null {
  * author, a cultivar: the retry reads those). The search route asks them in order and keeps the first that answers, and
  * the answer says which letters it read ("Showing results for …").
  */
-export function shorterReadings(q: string): string[] {
+/*
+ * Round eighty-six (review S's S2): a query of two words or more is read from fewer letters only when its first word is a
+ * genus of the reference (`isGenus`, where the caller knows them): "false roselle" was read as "false rose" and answered
+ * Selaginella lepidophylla, the false rose of Jericho, and the picker asked "Did you mean Selaginella lepidophylla?" for
+ * the African rosemallow's English name. A phrase with no word of a scientific name is a common name, not a name being
+ * typed; "lithops lesleyi" still reads as "lithops lesl".
+ */
+export function shorterReadings(q: string, isGenus?: (word: string) => boolean): string[] {
   // Not a nothogenus typed with its sign ("x Gasteraloe", "× Gasteraloe"; round eighty-five, review-s S6): a hybrid genus
   // the reference does not hold is not a typing error, and its first letters answered Solidago and Salvia.
   if (/^\s*(?:×|x\s)/i.test(q)) return [];
@@ -519,6 +526,7 @@ export function shorterReadings(q: string): string[] {
   if (!ws.length || ws.length > 3 || RANK_MARKERS.has(ws[ws.length - 1]) || wholeReading(q) || ws.some((w) => SENTENCE_WORDS.has(w) || RETRY_SMALL.has(w))) return [];
   const last = ws[ws.length - 1];
   if (last.length < 5) return [];
+  if (ws.length >= 2 && isGenus && !isGenus(ws[0])) return [];
   const lens = [...new Set([last.length - 1, last.length - 2, last.length - 3, 4])].filter((n) => n >= 4 && n < last.length);
   return lens.map((n) => [...ws.slice(0, -1), last.slice(0, n)].join(' '));
 }

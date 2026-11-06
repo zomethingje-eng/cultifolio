@@ -152,6 +152,13 @@ export interface ExtraKey {
   merged?: string;
   /** The keys GBIF files under this one whose records are not read: names Kew holds as another plant, pro parte synonyms, and what GBIF files under those. */
   except?: number[];
+  /**
+   * Round eighty-six (review D's D6; `infraFromHolder`): the reference page's GBIF key under which GBIF files this key, a
+   * variety or subspecies Kew's synonymy places in this page's plant. That page leaves out the records of this key and of
+   * `with`, the keys GBIF files under it that this page reads too; this page reads them.
+   */
+  from?: number;
+  with?: number[];
 }
 /** A key that the rule did not take for a page, and why: listed for the report, never read. */
 export interface Refused { page: number; pageId?: string; key: number; label: string; why: string }
@@ -177,7 +184,7 @@ const statusWord = (r: KewRow) => (r.status === 'Accepted' ? 'accepted' : r.stat
  * (a page merged away is not one), `holders` maps a key to the reference pages GBIF files under it, `merged` a merged
  * page's key to its old address and `into` to the page it joins.
  */
-export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map()): { keys: ExtraKey[]; refused: Refused[] } {
+export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map(), opts: { infraFromHolder?: boolean } = {}): { keys: ExtraKey[]; refused: Refused[] } {
   const keys: ExtraKey[] = [], refused: Refused[] = [];
   if (!page.entry) return { keys, refused };
   const plant = plantOf(page.entry, idx);
@@ -213,7 +220,13 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     if (page.key != null && up.includes(page.key)) return null; // GBIF already files its records under the page's key
     if (proParte(u)) return { why: `GBIF holds it as a pro parte synonym (of ${u.parent ?? 'another key'}): partly another taxon's name, so no one plant's` };
     const at = up.find((k) => k !== page.key && reference.has(k));
-    if (at !== undefined) return { why: at === u.key ? 'it is another page of this reference' : `GBIF files it under key ${at}, another page of this reference` };
+    // Round eighty-six (review D's D6; the owner decides on its count): a variety or subspecies GBIF files under another
+    // page's key, which Kew's synonymy places in this page's plant (by the type rule below), is this page's key, and that
+    // page leaves its records out (`from`): San Pedro's Trichocereus macrogonus var. pachanoi (11093098), GBIF's key under
+    // Echinopsis macrogona (3952140), Kew's homotypic synonym of Echinopsis pachanoi. Matched by identifier, as every extra
+    // key is; never a species, never a key that is itself a page.
+    const fromHolder = opts.infraFromHolder && at !== undefined && at !== u.key && u.rank !== 'SPECIES' && up.slice(1).filter((k) => reference.has(k)).length === 1 ? at : undefined;
+    if (at !== undefined && fromHolder === undefined) return { why: at === u.key ? 'it is another page of this reference' : `GBIF files it under key ${at}, another page of this reference` };
     const holds = (holders.get(u.key) ?? []).filter((k) => k !== page.key);
     if (holds.length) return { why: `GBIF files another page of this reference under it (${holds.join(', ')})` };
     // The key of a page merged into this one (`into`, scripts/merged-pages.txt) is read whatever its type: the merge is the
@@ -236,7 +249,8 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     const row = mine[0];
     const how = 'how' in read && read.how !== 'author' ? read.how : plant.has(row.id) ? (row.id === page.entry ? 'entry' : 'below') : 'filed';
     const filedUnder = plant.has(row.id) ? '' : ` under ${entry ? label(entry) : page.entry}`;
-    return { ...pageOf, key: u.key, label: u.label, status: u.status, kew: row.id, kewLabel: `${label(row)} (${statusWord(row)}${filedUnder})`, how, ...(merged.has(u.key) ? { merged: merged.get(u.key) } : {}), ...(except.length ? { except } : {}) };
+    const along = fromHolder !== undefined ? below.map((c) => c.key).filter((k) => !out.has(k)).sort((a, b) => a - b) : [];
+    return { ...pageOf, key: u.key, label: u.label, status: u.status, kew: row.id, kewLabel: `${label(row)} (${statusWord(row)}${filedUnder})`, how, ...(merged.has(u.key) ? { merged: merged.get(u.key) } : {}), ...(except.length ? { except } : {}), ...(fromHolder !== undefined ? { from: fromHolder, ...(along.length ? { with: along } : {}) } : {}) };
   }
 }
 
@@ -369,7 +383,8 @@ export function extraWhy(x: Pick<ExtraKey, 'kewLabel' | 'how'>): string {
 
 /** `scripts/extra-keys.txt`: a line a key, tab-separated: page key, key, GBIF's name, GBIF's status, Kew's row, Kew's reading, how, the merged page's old slug or "-", the keys left out (comma-separated) or "-". */
 export function formatExtraKeys(keys: readonly ExtraKey[], head: string[] = []): string {
-  return [...head.map((h) => `# ${h}`), ...keys.map((k) => [k.pageId ?? k.page, k.key, k.label, k.status, k.kew, k.kewLabel, k.how, k.merged ?? '-', k.except?.length ? k.except.join(',') : '-'].join('\t'))].join('\n') + '\n';
+  // Round eighty-six (D6): a key taken from a holder adds two columns, the holder's key and the keys that come with it.
+  return [...head.map((h) => `# ${h}`), ...keys.map((k) => [k.pageId ?? k.page, k.key, k.label, k.status, k.kew, k.kewLabel, k.how, k.merged ?? '-', k.except?.length ? k.except.join(',') : '-', ...(k.from !== undefined ? [k.from, k.with?.length ? k.with.join(',') : '-'] : [])].join('\t'))].join('\n') + '\n';
 }
 export function parseExtraKeys(text: string): ExtraKey[] {
   const out: ExtraKey[] = [];
@@ -381,7 +396,9 @@ export function parseExtraKeys(text: string): ExtraKey[] {
     const page = pageId ? 0 : Number(c[0]), key = Number(c[1]);
     if (!Number.isInteger(page) || !Number.isInteger(key) || c.length < 7) continue;
     const except = c[8] && c[8] !== '-' ? c[8].split(',').map(Number).filter((x) => Number.isInteger(x)) : [];
-    out.push({ page, ...(pageId ? { pageId } : {}), key, label: c[2], status: c[3], kew: c[4], kewLabel: c[5], how: c[6], ...(c[7] && c[7] !== '-' ? { merged: c[7] } : {}), ...(except.length ? { except } : {}) });
+    const from = c[9] && /^\d+$/.test(c[9]) ? Number(c[9]) : undefined;
+    const along = c[10] && c[10] !== '-' ? c[10].split(',').map(Number).filter((x) => Number.isInteger(x)) : [];
+    out.push({ page, ...(pageId ? { pageId } : {}), key, label: c[2], status: c[3], kew: c[4], kewLabel: c[5], how: c[6], ...(c[7] && c[7] !== '-' ? { merged: c[7] } : {}), ...(except.length ? { except } : {}), ...(from !== undefined ? { from, ...(along.length ? { with: along } : {}) } : {}) });
   }
   return out;
 }

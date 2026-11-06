@@ -585,3 +585,43 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
   }
   return done({ narrow: true });
 }
+
+/* ---------------- Kew's older names as an address ---------------- */
+
+/** A name as Kew's older names are compared (round eighty-six): its words as the search reads them, rank words left out. */
+export const kewNameWords = (name: string) => words(name).filter((w) => !RANK_MARKERS.has(w));
+const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((w, i) => w === b[i]);
+/**
+ * The species whose Kew older names (`kew` in the index) hold this name as written, from its genus's `@` file and the
+ * show blocks, in the index's order (round eighty-six; review-c C1, review-d D3): `/species/anacampseros-schmidtii` is
+ * Anacampseros dinteri's, under which Kew's file holds the name, and GBIF's match is asked only for a name Kew's older
+ * names here do not hold. A genus with no `@` key holds none; a file the directory names that cannot be read throws, as
+ * every read of the reader does (the caller's 503), never "none".
+ */
+export async function kewHoldersFromFiles<T>(r: SearchReader<T>, name: string): Promise<T[]> {
+  const want = kewNameWords(name);
+  if (want.length < 2) return [];
+  const key = `@${want[0]}`;
+  const d = await r.dir(searchDirOf(key, r.dirs));
+  const e = Object.hasOwn(d, key) ? d[key] : undefined;
+  if (!e || e.length !== 2) return [];
+  const ats: number[] = [];
+  for (const [i, doc] of JSON.parse(await r.node(e[1])) as NodeFile) if ((doc[8] ?? []).some((n) => sameWords(kewNameWords(n), want))) ats.push(i);
+  if (!ats.length) return [];
+  ats.sort((a, b) => a - b);
+  const blocks = [...new Set(ats.map((i) => Math.floor(i / SHOW_BLOCK)))];
+  const got = new Map(await Promise.all(blocks.map(async (b) => [b, await r.show(b)] as const)));
+  return ats.map((i) => got.get(Math.floor(i / SHOW_BLOCK))![i % SHOW_BLOCK]).filter((x): x is T => x != null);
+}
+const kewByIndex = new WeakMap<readonly unknown[], Map<string, unknown[]>>();
+/** `kewHoldersFromFiles` over an index held whole (a corpus built before the key files, or the fixture's). */
+export function kewHoldersOfIndex<T extends { kew?: readonly string[] }>(index: readonly T[], name: string): T[] {
+  let m = kewByIndex.get(index) as Map<string, T[]> | undefined;
+  if (!m) {
+    m = new Map();
+    for (const e of index) for (const n of new Set((e.kew ?? []).map((x) => kewNameWords(x).join(' ')))) { if (n.split(' ').length < 2) continue; const xs = m.get(n); if (xs) xs.push(e); else m.set(n, [e]); }
+    kewByIndex.set(index, m as Map<string, unknown[]>);
+  }
+  const want = kewNameWords(name);
+  return want.length < 2 ? [] : [...(m.get(want.join(' ')) ?? [])];
+}

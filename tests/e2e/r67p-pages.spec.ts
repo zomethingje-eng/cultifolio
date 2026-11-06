@@ -95,7 +95,8 @@ test('r67p P7: a species page whose photographs fail keeps the strip\'s squares,
   await page.setViewportSize({ width: 390, height: 664 });
   // How many photographs the server put in the strip: a failure can land before the page is ready.
   const html = await (await page.request.get('/species/copiapoa-cinerea')).text();
-  const n = (/class="thumbstrip[^]*?<\/a>/.exec(html)?.[0].match(/<img /g) ?? []).length;
+  // Counted by its squares: each also holds an <img> in a <noscript> since round eighty-six (the strip waits for the lead).
+  const n = (/class="thumbstrip[^]*?<\/a>/.exec(html)?.[0].match(/<span class="tb[ "]/g) ?? []).length;
   expect(n, 'the fixture species shows a strip').toBeGreaterThan(0);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const strip = page.locator('.thumbstrip img');

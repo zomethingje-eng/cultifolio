@@ -17,7 +17,7 @@
  * for one (a plant's page reads its species from the sheet buckets).
  */
 import { build, files, version } from '$service-worker';
-import { pruneOnActivate, sweepPrevious, capCache, isSpeciesEntry, carryList, saveCarry, carryOver, SPECIES_KEEP, CORPUS_KEEP } from '$core/sw-keep';
+import { pruneOnActivate, sweepPrevious, capCache, isSpeciesEntry, carryList, saveCarry, carryOver, keepFiles, SPECIES_KEEP, CORPUS_KEEP } from '$core/sw-keep';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -63,7 +63,12 @@ const OFFLINE_BUILD = typeof __OFFLINE_BUILD__ !== 'undefined' && Array.isArray(
  */
 declare const __SPECIES_BUILD__: string[] | null;
 const SPECIES_BUILD: string[] = typeof __SPECIES_BUILD__ !== 'undefined' && Array.isArray(__SPECIES_BUILD__) ? __SPECIES_BUILD__ : [];
-const OFFLINE_FILES = new Set(['/favicon.svg', '/manifest.webmanifest', '/icon-192.png']);
+// And the two coastlines every species page's maps draw on (round eighty-six; review C's C4): a page carried over an
+// update, or read online and not scrolled to its maps (which since round eighty-six are fetched only near the viewport),
+// opened offline with two empty maps. 127 kB sent, once a build, after the first page has loaded (the layout registers the
+// worker then), and from the browser's own cache when it holds them (`/maps/*` is kept a day). The region files are a
+// page's own: kept with the page (`keep-maps` below, and `carryOver`).
+const OFFLINE_FILES = new Set(['/favicon.svg', '/manifest.webmanifest', '/icon-192.png', '/maps/land110.svg', '/maps/land50.svg']);
 const PRECACHE = [...build.filter((p) => !isLazyFont(p) && (!OFFLINE_BUILD || OFFLINE_BUILD.has(p))), ...[...FILES].filter((f) => OFFLINE_FILES.has(f)), ...SHELLS, '/'];
 
 self.addEventListener('install', (e) => {
@@ -90,6 +95,13 @@ self.addEventListener('message', (e) => {
   // Which build this worker serves, for a page deciding whether a takeover changes anything it shows (round sixty-four;
   // the Firefox run, where a second worker of the very build the page ran took over and the page reloaded under the grower).
   else if (e.data === 'version') e.ports[0]?.postMessage(version);
+  // A species page, once loaded, hands over the files its maps draw from, to be kept for offline: since round eighty-six
+  // (outside review B's 4) a map's files are fetched only when it nears the viewport, so a page read and not scrolled to
+  // its maps would otherwise open offline without them. Only this build's map files are fetched (`keepFiles`).
+  else if (e.data && typeof e.data === 'object' && (e.data as { type?: unknown }).type === 'keep-maps') {
+    const files = (e.data as { files?: unknown }).files;
+    if (Array.isArray(files)) e.waitUntil(caches.open(CACHE).then((c) => keepFiles(c, files, (u) => fetch(u), location.origin, (p) => FILES.has(p))).catch(() => { /* kept the next time the page is read */ }));
+  }
 });
 
 self.addEventListener('activate', (e) => {
@@ -149,7 +161,7 @@ function carryOnce(e: FetchEvent) {
   const now = Date.now();
   if (now - lastCarry < 60_000) return;
   lastCarry = now;
-  carrying = carryOver(caches, CACHE, (u) => fetch(u), location.origin, SPECIES_BUILD)
+  carrying = carryOver(caches, CACHE, (u) => fetch(u), location.origin, SPECIES_BUILD, (p) => FILES.has(p))
     .then((r) => { if (!r.left) carryMaybe = false; }, (err) => console.warn('service worker: the species pages read before the update were not read again this time', err))
     .finally(() => { carrying = null; });
   try {

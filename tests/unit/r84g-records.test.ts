@@ -22,7 +22,7 @@ import { TDWG3 } from '../../src/lib/dossier/tdwg';
 
 const t = regionTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile);
 const native = (codes: string[]) => codes.map((code) => ({ code, box: TDWG3[code] }));
-type Rec = { key: number; decimalLatitude: number; decimalLongitude: number; basisOfRecord: string; license: string; datasetKey: string; coordinateUncertaintyInMeters?: number };
+type Rec = { key: number; decimalLatitude: number; decimalLongitude: number; basisOfRecord: string; license: string; datasetKey: string; coordinateUncertaintyInMeters?: number; countryCode?: string };
 let k = 0;
 const rec = (lat: number, lon: number, license = 'CC_BY_4_0', unc: number | null = 30): Rec => ({ key: ++k, decimalLatitude: lat, decimalLongitude: lon, basisOfRecord: 'HUMAN_OBSERVATION', license, datasetKey: 'd', ...(unc == null ? {} : { coordinateUncertaintyInMeters: unc }) });
 const read = (codes: string[], recs: Rec[]) => {
@@ -63,7 +63,9 @@ describe('D2 and A2: the regions once tested by their boxes', () => {
     expect(out.open.map((p) => p[0])).toEqual([42.15]);
   });
   it('Indigofera taiwaniana: the Kenting records, south of the box Taiwan had, are in its range', () => {
-    const { test, out } = read(['TAI'], [rec(21.9267, 120.7239, 'CC_BY_4_0', 1000), rec(21.95, 120.78), rec(24.5, 121.2)]);
+    // Kenting's records state Taiwan's TW, as GBIF's do: round eighty-six's margin takes only a record that states the region's country.
+    const tw = (r: Rec): Rec => ({ ...r, countryCode: 'TW' });
+    const { test, out } = read(['TAI'], [tw(rec(21.9267, 120.7239, 'CC_BY_4_0', 1000)), tw(rec(21.95, 120.78)), tw(rec(24.5, 121.2))]);
     expect(out.nOutside).toBe(0);
     expect(out.forClimate.length).toBe(3);
     expect(test.words).not.toMatch(/bounding box/);

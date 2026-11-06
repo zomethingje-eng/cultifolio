@@ -41,7 +41,7 @@
 </script>
 
 <section class="hline" aria-labelledby="hline-t">
-  <p class="hhead"><span id="hline-t">Habitat in short</span>{#if few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={href}>Figures ›</a></p>
+  <p class="hhead" class:withfew={!!few}><span id="hline-t">Habitat<span class="ins">{' '}in short</span></span>{#if few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={href}>Figures ›</a></p>
   <dl>
     {#if extremes}
       <div><dt>Cold floor</dt><dd><b>{temp(extremes.minP01, units, 1)}</b> <span>1 night in 100 colder <i>NASA POWER</i></span></dd></div>
@@ -63,14 +63,24 @@
   }
   .hhead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0 0 2px; font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .hhead > * { white-space: nowrap; }
+  /* The head on one line at 320 px with the few-records mark too (round eighty-six; review P's P2, P3): "Habitat in short",
+     the mark and "Figures ›" were 300 px of a 256 px line, and "Figures ›" wrapped under the mark, which cost the first
+     screen a line and put the two links' finger margins over each other. Under 360 px, with the mark, the head says
+     "Habitat" and "in short" only to a screen reader. */
+  @media (max-width: 359.98px) {
+    .hhead.withfew .ins { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  }
   .hhead a.figs { margin-left: auto; letter-spacing: 0.02em; text-transform: none; font-weight: 600; font-size: var(--fs-sm); }
   .few { padding: 0 7px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.02em; text-transform: none; }
   a.few { text-decoration: none; }
   /* "Figures ›" and the few-records mark are controls on their own line: each takes a finger's 44 by 44 px, as an invisible
-     margin so the line keeps its height (round eighty-five; P4, outside review B's 4: "Figures ›" was 51 by 19 px). The two
-     sit at either end of the line, so the margins do not meet. */
+     margin so the line keeps its height (round eighty-five; P4, outside review B's 4: "Figures ›" was 51 by 19 px). Side by
+     side the margins do not meet, each as wide as its link. Where the line still wraps (large text), the lines are set far
+     enough apart that the margins of one line do not reach into the next: at 320 px a tap on the lower half of "from 3
+     records" opened "Figures" (round eighty-six; review P's P3). */
   .hhead a { position: relative; }
   @media (pointer: coarse) {
+    .hhead { row-gap: max(2px, calc(var(--tap) - 1.6em)); }
     .hhead a::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: var(--tap); transform: translate(-50%, -50%); }
   }
   dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; margin: 0; }

@@ -1,0 +1,229 @@
+{
+"key": "k2337299",
+"name": {
+"scientific": "Lophophora williamsii",
+"vernacular": [
+{
+"name": "Elefantfodkaktus",
+"lang": "dan",
+"source": "Catalogue of Life"
+},
+{
+"name": "Hikuri",
+"lang": "",
+"source": "Catalogue of Life"
+},
+{
+"name": "Indian-dope",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "Peyote",
+"lang": "",
+"source": "Catalogue of Life"
+},
+{
+"name": "Peyote",
+"lang": "spa",
+"source": "Integrated Taxonomic Information System (ITIS)",
+"preferred": true,
+"sources": 2,
+"alsoFrom": [
+"The IUCN Red List of Threatened Species"
+]
+},
+{
+"name": "Peyotl",
+"lang": "",
+"source": "Catalogue of Life"
+},
+{
+"name": "cacto-peiote",
+"lang": "por",
+"source": "Flora e Funga do Brasil - Lista Oficial"
+},
+{
+"name": "cacto-peyote",
+"lang": "por",
+"source": "Flora e Funga do Brasil - Lista Oficial"
+},
+{
+"name": "cactus pudding",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "devil's-root",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "diabolic-root",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "divine cactus",
+"lang": "",
+"source": "NCBI Taxonomy"
+},
+{
+"name": "divine cactus",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "dry-whiskey",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "dumpling cactus",
+"lang": "eng",
+"source": "Catalogue of Life",
+"sources": 2,
+"alsoFrom": [
+"GRIN Taxonomy"
+]
+},
+{
+"name": "lofofora Williamsova",
+"lang": "ces",
+"source": "Catalogue of Life"
+},
+{
+"name": "mescal buttons",
+"lang": "",
+"source": "NCBI Taxonomy"
+},
+{
+"name": "mescal-button",
+"lang": "eng",
+"source": "Catalogue of Life",
+"sources": 2,
+"alsoFrom": [
+"GRIN Taxonomy"
+]
+},
+{
+"name": "mescal-buttons",
+"lang": "eng",
+"source": "Catalogue of Life",
+"sources": 2,
+"alsoFrom": [
+"GRIN Taxonomy"
+]
+},
+{
+"name": "peiote",
+"lang": "por",
+"source": "Flora e Funga do Brasil - Lista Oficial"
+},
+{
+"name": "peyote",
+"lang": "",
+"source": "NCBI Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Integrated Taxonomic Information System (ITIS)"
+]
+},
+{
+"name": "peyote",
+"lang": "spa",
+"source": "GRIN Taxonomy"
+},
+{
+"name": "peyote",
+"lang": "por",
+"source": "Flora e Funga do Brasil - Lista Oficial"
+},
+{
+"name": "peyoti",
+"lang": "por",
+"source": "Flora e Funga do Brasil - Lista Oficial"
+},
+{
+"name": "peyotl",
+"lang": "spa",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Flora e Funga do Brasil - Lista Oficial"
+]
+},
+{
+"name": "rusomeskaliinikaktus",
+"lang": "fin",
+"source": "Catalogue of Life"
+},
+{
+"name": "turnip cactus",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "whiskey cactus",
+"lang": "eng",
+"source": "GRIN Taxonomy",
+"sources": 2,
+"alsoFrom": [
+"Catalogue of Life"
+]
+},
+{
+"name": "white-mule",
+"lang": "eng",
+"source": "Catalogue of Life",
+"sources": 2,
+"alsoFrom": [
+"GRIN Taxonomy"
+]
+},
+{
+"name": "xosdíszhot'é",
+"lang": "",
+"source": "Catalogue of Life"
+},
+{
+"name": "ウバタマ（烏羽玉）",
+"lang": "jpn",
+"source": "Catalogue of Life"
+},
+{
+"name": "ペヨーテ",
+"lang": "jpn",
+"source": "Catalogue of Life"
+}
+]
+}
+}

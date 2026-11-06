@@ -52,7 +52,7 @@ test('r80u offline 1: with the network gone, Compare and the other pages that ar
   await ctx.close();
 });
 
-test('r80u offline 2: the install fetches what offline use needs, not the share image, the large icons, the maps or the WOFF fallbacks @phone', async ({ browser }) => {
+test('r80u offline 2: the install fetches what offline use needs, not the share image, the large icons, the region map files or the WOFF fallbacks @phone', async ({ browser }) => {
   const { ctx, page } = await fresh(browser);
   await page.goto('/plants'); await ready(page);
   const before = net.seen.length;
@@ -65,10 +65,12 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   const files = [...new Set(all)];
   const report = `${files.length} files (${all.length} requests): ${files.join(' ')}`;
   for (const not of ['/og.png', '/icon-512.png', '/icon-maskable-512.png']) expect(files, report).not.toContain(not);
-  expect(files.filter((u) => u.startsWith('/maps/')), report).toEqual([]);
+  // Round eighty-six (review C's C4): the two coastlines every species page's maps draw on, and no region's file.
+  expect(files.filter((u) => u.startsWith('/maps/')).sort(), report).toEqual(['/maps/land110.svg', '/maps/land50.svg']);
   expect(files.filter((u) => /\.woff$/.test(u)), report).toEqual([]);
   // The base's install was 170 files; this one leaves out the species, about and compare pages' own scripts besides.
-  expect(files.length, report).toBeLessThan(155);
+  // Round eighty-six adds the two coastlines (above): WebKit on the owner's PC counted 156.
+  expect(files.length, report).toBeLessThan(158);
   await ctx.close();
 });
 

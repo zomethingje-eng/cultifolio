@@ -107,14 +107,20 @@ const INFRA = /^(subsp|ssp|var|subvar|f|fo|forma|nothosubsp|nothovar)\.?$/;
  * kept by that rule and named no proof). The rule is `summaryTitleFits` (sources/wikipedia.ts), read here without the
  * build's network code; a test pins the two together. Null when the title is the page's name or is not an older name.
  */
-export function summaryOlderName(title: string, name: { scientific: string; synonyms?: string[] }): string | null {
+export function summaryOlderName(title: string, name: { scientific: string; synonyms?: string[]; gbif?: { scientific?: string } | null }): string | null {
   const t = key(title);
   if (t === key(name.scientific)) return null;
+  // GBIF's own name for the page's key, where Kew's name heads the page, is said as that, never as an older name (round
+  // eighty-six; review-p P12, review-w W1: Sabdariffa acetosella's "Hibiscus acetosella" was called one of its older
+  // names on the page whose verdict line says GBIF's backbone accepts it).
+  const g = name.gbif?.scientific;
+  const gbifNamed = !!g && key(g.replace(/×\s*/g, '')) === t.replace(/×\s*/g, '');
   const hit = (name.synonyms ?? []).some((s) => {
     const w = s.replace(/×\s*/g, '').split(/\s+/);
     if (INFRA.test(w[2] ?? '')) return false;
     return key(w.slice(0, 2).join(' ')) === t;
   });
+  if (hit && gbifNamed) return `its title is GBIF's name for ${name.scientific} (GBIF Backbone), which is the proof that the article is this species'`;
   return hit ? 'its title is one of this species\' older names (GBIF Backbone), which is the proof that the article is this species\'' : null;
 }
 

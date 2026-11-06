@@ -22,7 +22,7 @@ import { commonsTileOf } from './photo-size';
 import { ownNames as ownNamesRule } from './own-names';
 import { authorsAgree, parentheticalAuthor, exAuthor, publishingAuthor } from './authors';
 import { splitCommonsCredit } from './photo-credit';
-import type { JsonFetcher, FetchResult } from './fetch';
+import { BY_ID, type JsonFetcher, type FetchResult } from './fetch';
 
 /**
  * The names the reference holds, accepted and older, by genus (round seventy; REVIEW-TRIAGE-69 C1, S-C5, IND-4): what
@@ -980,7 +980,7 @@ export async function askSlip(f: JsonFetcher, name: string, own: SlipOwn): Promi
   const m = g.status === 'ok' ? g.data : null;
   let accepted: GbifNameMatch | null = null;
   if (m && m.matchType === 'EXACT' && m.acceptedUsageKey && m.acceptedUsageKey !== own.key && m.speciesKey !== own.key) {
-    const a = await f<{ key?: number; scientificName?: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; rank?: string }>(`https://api.gbif.org/v1/species/${m.acceptedUsageKey}`);
+    const a = await f<{ key?: number; scientificName?: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; rank?: string }>(`https://api.gbif.org/v1/species/${m.acceptedUsageKey}`, BY_ID);
     if (a.status !== 'ok' && a.status !== 'none') return a;
     if (a.status === 'ok') accepted = { usageKey: a.data.key, scientificName: a.data.scientificName, canonicalName: a.data.canonicalName, authorship: a.data.authorship, status: a.data.taxonomicStatus, rank: a.data.rank };
   }

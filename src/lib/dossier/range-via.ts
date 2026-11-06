@@ -122,6 +122,13 @@ export function outsideOnly(outside: number | null | undefined): { tone: 'warn' 
   return { tone: 'warn', text: `No georeferenced record lies inside the stated native range, and all ${outside} georeferenced records read lie outside it: the range and the records disagree. They are not used, and no map marker or climate is derived from them.` };
 }
 
+/**
+ * The sentence after the in-range count, for the records outside the range (round eighty-six; the plan's A13). It read "12
+ * records outside the WCVP native range not used", a range not used to the eye, and WCVP where `outsideOnly` says "the
+ * stated native range".
+ */
+export const outsideUnused = (n: number): string => `${n === 1 ? 'One record lies' : `${n.toLocaleString('en-US')} records lie`} outside the stated native range, and ${n === 1 ? 'is' : 'are'} not used.`;
+
 /** The builder's log clause for the same (B10): said for any page whose every record lies outside, one or more. */
 export const outsideLog = (outside: number) => (outside === 1 ? ' — the one record lies outside the range' : ` — range disagrees with records: all ${outside} outside it`);
 
@@ -131,3 +138,17 @@ export const outsideLog = (outside: number) => (outside === 1 ? ' — the one re
  */
 export const HOMONYM_CHECKED = /homonym key checked:/;
 export const homonymChecked = (label: string) => `homonym key checked: GBIF holds no one usage of ${label} under another key, so the key is left as it is`;
+
+/**
+ * A range Kew gives only as a region wider than TDWG's level-3 units (round eighty-six; the plan's B16): Agave calodonta's
+ * and Begonia rhizocaulis's "Mexico", a level-2 region of TDWG's scheme, with Kew's own words for it ("Mexico (?)"). Null
+ * where the range names a level-3 region, or is no range of Kew's (a national checklist's countries are said as such).
+ */
+export function wideRange(dist: { native: ReadonlyArray<{ code?: string; name: string }>; boxes: ReadonlyArray<unknown>; source: string; kew?: { area?: string } | null }): { names: string[]; area?: string } | null {
+  if (!dist.native.length || dist.boxes.length || !/^WCVP\b/.test(dist.source)) return null;
+  const names = dist.native.filter((r) => !r.code && r.name).map((r) => r.name);
+  if (!names.length) return null;
+  return { names, ...(dist.kew?.area ? { area: dist.kew.area } : {}) };
+}
+/** Its words: "Kew gives the native range only as Mexico (in its words, “Mexico (?)”), wider than any region records are tested against". */
+export const wideRangeSaid = (w: { names: string[]; area?: string }): string => `Kew gives the native range only as ${w.names.join(', ')}${w.area ? ` (in its words, “${w.area}”)` : ''}, wider than any region records are tested against`;
