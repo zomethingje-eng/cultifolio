@@ -49,7 +49,8 @@ describe('a species the download was not asked for is asked of GBIF', () => {
     // Round eighty (A): and the page's own Kew entry for a key (`entryOf`).
     // Round eighty-six (review D's D5): and the download the photographs come from (`mediaFrom`).
     expect(src).toMatch(/bulkFetcher\(f, \{ wcvp: wcvp \?\? undefined, occ: loaded\?\.occ, media: loaded\?\.media \?\? undefined, apiPath, covered, entryOf(?:, \.\.\.\(loaded\?\.media \? \{ mediaFrom: [^}]+\} \} : \{\}\))? \}\)/);
-    expect(src).toMatch(/loadOccurrences\(bulkDir, 2000, wanted\)/);
+    // Round eighty-six (final review M1): and the keys that come with a key read from another page's species (`withUnder`).
+    expect(src).toMatch(/loadOccurrences\(bulkDir, 2000, wanted(?:, withUnder)?\)/);
   });
 });
 

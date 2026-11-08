@@ -12,8 +12,9 @@ app cannot derive is left out and said to be missing, never filled in. Read
 **Running it.**
 
     npm install
-    npm run build && npm run preview     # wrangler dev on :8787, with a local R2 and KV
-    npm test                             # vitest (unit) then Playwright (e2e) against the preview
+    npm run build && npm run preview     # wrangler dev on :4173, with a local R2 and KV
+    npm test                             # unit tests (vitest)
+    npm run e2e                          # Playwright, against the preview server
 
 The e2e suite drives real browsers through the fixture corpus in
 `fixtures/dossiers/`; it needs no network. A real corpus is built with

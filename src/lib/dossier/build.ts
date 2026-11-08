@@ -132,7 +132,9 @@ export interface BuildOptions {
   /**
    * Round eighty-six (review D's D6; the build reads them only with `--infra-keys`): the keys of varieties and subspecies
    * GBIF files under this page's key that Kew's synonymy places in another page, which reads them (`ExtraKey.from`), with
-   * the keys under them: this page leaves their records out, and its record says so (`words`).
+   * the keys under them: this page leaves their records out, and its record says so (`words`); and their photographs,
+   * GBIF's API's and the download's alike, by the key GBIF identifies each photograph's record as (round eighty-six, final
+   * review S1: `withoutGivenMedia`).
    */
   givenAway?: { keys: ReadonlySet<number>; words: string };
   /**
@@ -258,6 +260,27 @@ export function photosFromMedia(rows: OccMedia[]): Photo[] {
     const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : gbifThumb(im.id.split(':')[0], im.url);
     return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'author not stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page, ...(im.specimen ? { specimen: true } : {}) };
   });
+}
+
+/** GBIF's media answer for a key, as `gbif.media` gives it (the download's day with it). */
+type MediaAnswer = Awaited<ReturnType<typeof gbif.media>>;
+/**
+ * GBIF's photographs of the records another page reads by Kew's synonymy (`givenAway`; round eighty-six, D6), left out of
+ * this page's as their records are, by the key GBIF identifies each photograph's record as (round eighty-six, final review
+ * S1: Echinopsis macrogona's records of Trichocereus macrogonus var. pachanoi went to Echinopsis pachanoi's page, and 36 of
+ * its 81 open photographs stayed, var. pachanoi's). A photograph whose record states no key is kept, as such a record is.
+ * The page that reads those records shows no GBIF photograph (a page without a GBIF key does not: `build-kew.ts`), so the
+ * photographs are only left out, and `words` says so for the record; with none left the answer is "none" (all were read).
+ */
+export function withoutGivenMedia(m: MediaAnswer, given?: { keys: ReadonlySet<number> }): { m: MediaAnswer; n: number; words?: string } {
+  if (!given?.keys.size || m.status !== 'ok') return { m, n: 0 };
+  const out = m.data.filter((x) => x.taxonKey != null && given.keys.has(x.taxonKey));
+  if (!out.length) return { m, n: 0 };
+  const keys = [...new Set(out.map((x) => x.taxonKey!))].sort((a, b) => a - b);
+  const words = `${out.length} photograph${out.length === 1 ? '' : 's'} of records GBIF identifies as ${keys.length === 1 ? 'key' : 'keys'} ${keys.join(', ')} left out, as their records are: Kew's synonymy gives those keys to another page`;
+  const rest = m.data.filter((x) => !(x.taxonKey != null && given.keys.has(x.taxonKey)));
+  const asOf = m.asOf ? { asOf: m.asOf } : {};
+  return { m: rest.length ? { ...m, data: rest } : { status: 'none', ...(m.detail ? { detail: m.detail } : {}), ...asOf }, n: out.length, words };
 }
 
 /**
@@ -824,12 +847,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // sixty-nine; triage-68 K5, S-B2, R46-16).
   if (skip('gbif.media')) skipped('gbif.media');
   else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
-    const own = await gbif.media(f, key);
+    // The photographs of records another page reads left out, as the records are (round eighty-six, final review S1).
+    const given = withoutGivenMedia(await gbif.media(f, key), o.givenAway);
+    const own = given.m;
     const m = await extraMedia(f, own, extraList);
     mark('gbif.media', m);
     // Photographs read from a download's files keep its day, not the build's (round eighty-six; review D's D5: the credits
     // said "read from GBIF on 2026-11-01", the walk's day, for photographs read from the download of 2026-10-21).
-    if (own.asOf && (m.status === 'ok' || m.status === 'none')) upstream['gbif.media'] = { ...upstream['gbif.media'], asOf: own.asOf, detail: [(own as { detail?: string }).detail, m.status === 'ok' ? m.detail : undefined].filter(Boolean).join('; ') || undefined };
+    if (own.asOf && (m.status === 'ok' || m.status === 'none')) upstream['gbif.media'] = { ...upstream['gbif.media'], asOf: own.asOf, detail: [...new Set([(own as { detail?: string }).detail, m.status === 'ok' ? m.detail : undefined].filter(Boolean))].join('; ') || undefined }; // once, when the page has no other keys and `m` is `own` (the walk's record)
+    if (given.words && (m.status === 'ok' || m.status === 'none')) upstream['gbif.media'] = { ...upstream['gbif.media'], detail: [upstream['gbif.media'].detail, given.words].filter(Boolean).join('; ') };
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
   if (skip('commons')) skipped('commons');

@@ -84,6 +84,9 @@ test('r85k-p 4: a plant carrying the add form\'s answer says it at once; an edit
   await press(page, page.getByRole('menuitem', { name: 'Edit' }));
   await page.locator('#ed-name').fill('Copiapoa humilis');
   await page.locator('#ed-name').press('Tab');
+  // Checked as the add form checks a name (round eighty-six, the final review's U4): the search answers nothing here, and
+  // once the check has concluded the line says Save keeps the name as typed.
+  await expect(page.locator('.editform .picker .hint', { hasText: /press “Save” to keep exactly what you typed/ })).toBeVisible({ timeout: 15_000 });
   await press(page, page.locator('form .actions.wide button[type=submit]'));
   await expect(page.locator('h1.sci')).toContainText('Copiapoa humilis');
   await expect(page.locator('#found-by')).toHaveCount(0);

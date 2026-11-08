@@ -12,8 +12,14 @@ What is in scope, and what the design promises:
 - Vault keys are 30 symbols (~147 bits) drawn without bias; ids and tokens
   are derived with HKDF-SHA-256; blobs are AES-256-GCM with the vault id and
   purpose as associated data. The scheme is documented at `/about/formats`.
-- The app collects nothing about you. There are no accounts and no
-  analytics. A change that adds either is a bug.
+- The server keeps nothing about you but short-lived counters of requests,
+  bytes stored and new vaults, keyed by your address or its network (an IPv4
+  address and its /24, an IPv6 /64 and its /48). Once half a day's new-vault
+  places are taken, it also records the networks that took the most of them,
+  and it keeps beside each new vault the network it was counted to. All of
+  these are dropped within two days, and none holds a page, a name or a
+  record (`/about/how`, "What the server keeps"). There are no accounts and
+  no analytics. A change that adds either is a bug.
 
 Out of scope: the third-party data sources the corpus is built from, and
 rate limits on the public APIs it reads.

@@ -177,7 +177,7 @@ import { walkList, checkPage, caseLine, reasonWords, NAMED_CASES, cellTester, ty
 import { POLICY_R85 } from '../src/lib/dossier/admission-policy';
 import { pageChange, changeLine, tallyInto, DryRunTotals, type DryPage, type RangeTally } from '../src/lib/dossier/range-dry-run';
 import { carriesCore } from '../src/lib/dossier/carry-core';
-import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
+import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, withoutGivenMedia, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
@@ -229,6 +229,7 @@ import { loadKewRows } from './kew-rows-load';
 import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated, mediaDownloadOf } from './bulk-load';
 import { mediaDay, type MediaDayCounts, type MediaDayPage } from '../src/lib/dossier/media-day';
+import { genusAnswer, genusPassedBy } from '../src/lib/dossier/genus-fill';
 import { applyCultigen, entryOfPage, type CultigenCounts, type CultigenPage } from '../src/lib/dossier/cultigen-fill';
 import { cultigenOf } from '../src/lib/core/cultigen';
 import { wcvpRow } from '../src/lib/dossier/bulk';
@@ -248,7 +249,7 @@ import { offlineFetcher, carryRederivedRows, carriedOrigin, keptInatId, carryIna
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
 import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, wikidataRetryList, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 import { proofByName } from '../src/lib/dossier/summary-proof';
-import { parseExtraKeys, formatExtraKeys, byPage, byPageId, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
+import { parseExtraKeys, formatExtraKeys, byPage, byPageId, withKeysUnder, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
 import { listExtraKeys } from './extra-keys-list';
 import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/clean';
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
@@ -781,20 +782,21 @@ const KEW_EXTRA_KEYS = (() => { const i = args.indexOf('--kew-extra-keys'); retu
 // With the lines of scripts/extra-keys.txt that name a page without a GBIF key (round eighty, A: a page merged into one, as
 // `mergeKeys` writes them), one line a key, the line of a merge first, so its old address is read.
 /**
- * `--infra-keys <file>` (round eighty-six; review D's D6, the owner's to decide on the count): the keys of varieties and
- * subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key
- * (`scripts/kew-extra-keys.ts --infra-from-holder` writes them). Read only when named: each is that page's key, and the
- * page GBIF files it under leaves its records out (`givenAway`). First with `--keys … --dry-run`.
+ * `--infra-keys <file>` (round eighty-six; review D's D6): the keys of varieties and subspecies GBIF files under another
+ * page's key that Kew's synonymy places, same type, in a page without a GBIF key (`scripts/kew-extra-keys.ts
+ * --infra-from-holder` writes them). Each is that page's key, and the page GBIF files it under leaves its records out
+ * (`givenAway`). The owner adopted the rule after its dry run (7 November 2026: 429 keys on 338 pages; 170 pages gain a
+ * habitat climate, 2 lose theirs), so `scripts/extra-keys-infra.txt` is read by default, as the other key files are.
  */
-const INFRA_KEYS = (() => { const i = args.indexOf('--infra-keys'); return i >= 0 ? args[i + 1] : undefined; })();
-const infraKeys: ExtraKey[] = INFRA_KEYS ? (existsSync(INFRA_KEYS) ? parseExtraKeys(readFileSync(INFRA_KEYS, 'utf8')).filter((k) => k.from !== undefined && k.pageId) : (() => { console.error(`--infra-keys ${INFRA_KEYS}: no such file`); process.exit(2); })()) : [];
+const INFRA_KEYS = (() => { const i = args.indexOf('--infra-keys'); return i >= 0 ? args[i + 1] : 'scripts/extra-keys-infra.txt'; })();
+const infraKeys: ExtraKey[] = fixtures ? [] : existsSync(INFRA_KEYS) ? parseExtraKeys(readFileSync(INFRA_KEYS, 'utf8')).filter((k) => k.from !== undefined && k.pageId) : args.includes('--infra-keys') ? (() => { console.error(`--infra-keys ${INFRA_KEYS}: no such file`); process.exit(2); })() : [];
 const kewExtra: Map<string, ExtraKey[]> = fixtures ? new Map() : byPageId(oneLineAKey([...(existsSync(KEW_EXTRA_KEYS) ? parseExtraKeys(readFileSync(KEW_EXTRA_KEYS, 'utf8')) : []), ...withMergeKeys(existsSync(EXTRA_KEYS) ? parseExtraKeys(readFileSync(EXTRA_KEYS, 'utf8')) : []).filter((k) => k.pageId), ...infraKeys]));
 /** By the holder's GBIF key, the keys its page leaves out and the words its record says them with (D6). */
 const givenAwayOf = new Map<number, { keys: Set<number>; words: string }>();
 for (const k of infraKeys) {
   const g = givenAwayOf.get(k.from!) ?? { keys: new Set<number>(), words: '' };
   for (const x of [k.key, ...(k.with ?? [])]) g.keys.add(x);
-  g.words = [g.words, `of GBIF's key ${k.key}, ${k.label}${k.with?.length ? `, and of the ${k.with.length} key${k.with.length === 1 ? '' : 's'} GBIF files under it,` : ''} left out: Kew's file holds it as ${k.kewLabel.replace(/^.*\(synonym under /, '').replace(/\)$/, '')}, whose page (${k.pageId}) reads them`].filter(Boolean).join('; ');
+  g.words = [g.words, `of GBIF's key ${k.key}, ${k.label}${k.with?.length ? `, and of the ${k.with.length} key${k.with.length === 1 ? '' : 's'} GBIF files under it,` : ''} left out: Kew's file holds it as ${k.kewLabel.replace(/^.*\((?:synonym|invalid) under /, '').replace(/\)$/, '')}, whose page (${k.pageId}) reads them`].filter(Boolean).join('; ');
   givenAwayOf.set(k.from!, g);
 }
 /**
@@ -854,36 +856,28 @@ async function fillGenera(): Promise<void> {
   const dir = `${outDir}/s/v${DOSSIER_V}/g`;
   mkdirSync(dir, { recursive: true });
   const f = upstream();
-  let ok = 0, none = 0, refused = 0, kept = 0;
-  console.log(`${genera.length} genera in the index; asking Wikipedia for each without a record…`);
+  let ok = 0, none = 0, refused = 0, kept = 0, standing = 0;
+  console.log(`${genera.length} genera in the index; asking Wikipedia for each${force ? '' : ' without a record'}…`);
   for (const [i, g] of genera.entries()) {
     const slug = slugify(g);
     const p = `${dir}/${slug}.json`;
-    if (existsSync(p) && !force) {
-      try {
-        const prev = JSON.parse(readFileSync(p, 'utf8')) as { status?: string };
-        if (prev.status === 'ok' || prev.status === 'none') {
-          kept++;
-          continue;
-        }
-      } catch {
-        /* rewritten below */
-      }
+    const prev = existsSync(p) ? readFileSync(p, 'utf8') : undefined;
+    if (genusPassedBy(prev, force)) {
+      kept++;
+      continue;
     }
-    const r = await wm.summary(f, g);
-    const rec = r.status === 'ok'
-      ? { genus: g, slug, status: 'ok' as const, summary: { text: r.data.text, source: 'wikipedia' as const, url: r.data.url, licence: 'CC BY-SA 4.0' as const, title: r.data.title, ...(r.data.cut ? { cut: true as const } : {}), ...(r.data.revision ? { revision: r.data.revision, read: new Date().toISOString().slice(0, 10) } : {}), from: r.data.from }, at: new Date().toISOString() }
-      : r.status === 'none'
-        ? { genus: g, slug, status: 'none' as const, at: new Date().toISOString() }
-        : { genus: g, slug, status: 'refused' as const, detail: `${r.status}: ${r.detail}`, at: new Date().toISOString() };
-    writeAtomic(p, JSON.stringify(rec, null, 1)); // an uploaded file of the corpus: whole or not at all (round eighty-five; A19)
-    if (rec.status === 'ok') ok++;
-    else if (rec.status === 'none') none++;
+    // A request not answered leaves an earlier lead or "no article" as it was, and is counted (round eighty-six, final
+    // review S3: `--force` wrote "refused" over a genus's lead on a 429; `genus-fill.ts`).
+    const a = genusAnswer(g, slug, prev, await wm.summary(f, g), new Date());
+    if (a.write) writeAtomic(p, JSON.stringify(a.write, null, 1)); // an uploaded file of the corpus: whole or not at all (round eighty-five; A19)
+    if (a.outcome === 'ok') ok++;
+    else if (a.outcome === 'none') none++;
     else refused++;
+    if (a.keptOnFailure) standing++;
     if ((i + 1) % 50 === 0) process.stdout.write(`\r  ${i + 1} of ${genera.length}…   `);
   }
   if (refused) unfinished();
-  console.log(`\n  ${ok} genera with a lead, ${none} with no article, ${refused} refused, ${kept} kept from before → ${dir}/`);
+  console.log(`\n  ${ok} genera with a lead, ${none} with no article, ${refused} refused or not answered${refused ? ` (${standing} of them keep the lead or "no article" read before, ${refused - standing} written "refused"; run --fill genus again: it asks those with neither)` : ''}, ${kept} kept from before → ${dir}/`);
 }
 
 /**
@@ -1458,7 +1452,7 @@ function pruneUncredited(): void {
  * API request a species; round sixty-eight). Then the index is written, as the other fills do.
  */
 async function fillOpenGbifPhotos(): Promise<void> {
-  const c = await fillOpenGbifAll(diskStore(), upstream(), (n) => { if (n.asked % 100 === 0) process.stdout.write(`\r  ${n.asked} asked, ${n.filled} given photographs…   `); });
+  const c = await fillOpenGbifAll(diskStore(), upstream(), (n) => { if (n.asked % 100 === 0) process.stdout.write(`\r  ${n.asked} asked, ${n.filled} given photographs…   `); }, (k) => givenAwayOf.get(k));
   if (c.failed) unfinished();
   console.log(`\r  ${c.asked} dossiers had no photograph: ${c.filled} were given ${c.photos} from GBIF's openly licensed records, ${c.none} have none there, ${c.failed} not answered (asked again by a later fill)${c.before ? `; ${c.before} passed by, an earlier fill having found none` : ''}.`);
   writeIndexFromDisk();
@@ -2059,7 +2053,19 @@ async function fillGbifPhotos(): Promise<void> {
     if (d.occurrences?.keys?.length) { other++; continue; }
     // A page without a GBIF key (round seventy-nine) has nothing in the download: its record says why.
     if (d.ids.gbif == null) continue;
-    const m = await gbif.media(f, d.ids.gbif);
+    // The photographs of records another page reads by Kew's synonymy left out, as a build leaves them (round eighty-six,
+    // final review S1; `withoutGivenMedia`).
+    const given = withoutGivenMedia(await gbif.media(f, d.ids.gbif), givenAwayOf.get(d.ids.gbif));
+    const m = given.m;
+    const row = (status: 'ok' | 'none') => ({ status, at: new Date().toISOString(), detail: [`${gbif.mediaFileWords(doi, loaded.mediaDay)} (multimedia.txt${loaded.photos === 'media.zip' ? " of the images' download" : ''})`, given.words].filter(Boolean).join('; '), ...(loaded.mediaDay ? { asOf: loaded.mediaDay } : {}) });
+    if (m.status !== 'ok' && given.n) {
+      // Every photograph the download gave was another page's: the GBIF set goes, and the record says why.
+      d.photos = d.photos.filter((p) => p.src !== 'gbif');
+      d.upstream['gbif.media'] = row('none');
+      writeAtomic(path, JSON.stringify(d));
+      filled++;
+      continue;
+    }
     if (m.status !== 'ok') {
       none++;
       continue; // nothing in the download for this species: what the dossier has stands, whatever source gave it
@@ -2067,7 +2073,7 @@ async function fillGbifPhotos(): Promise<void> {
     const fresh = photosFromMedia(m.data);
     d.photos = mergeGbifPhotos(d.photos, fresh);
     // The download's day, not the fill's (round eighty-six; review D's D5): the credits were read from the download.
-    d.upstream['gbif.media'] = { status: 'ok', at: new Date().toISOString(), detail: `${gbif.mediaFileWords(doi, loaded.mediaDay)} (multimedia.txt${loaded.photos === 'media.zip' ? " of the images' download" : ''})`, ...(loaded.mediaDay ? { asOf: loaded.mediaDay } : {}) };
+    d.upstream['gbif.media'] = row('ok');
     // Six or more wild photographs from the download: the iNaturalist wild set need not be asked for.
     if (fresh.length >= 6 && !['ok', 'none'].includes(d.upstream['inat.photos.wild']?.status ?? '')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${fresh.length} wild photographs already from the GBIF download` };
     writeAtomic(path, JSON.stringify(d));
@@ -2876,7 +2882,11 @@ async function main() {
       if (wanted) for (const p of unique) for (const x of extraKeys.get(p.key ?? -1) ?? []) wanted.add(x.key);
       // And those Kew's synonymy gives the pages without a GBIF key (round seventy-nine).
       if (wanted) for (const id of kewWanted.keys()) for (const x of kewExtra.get(`k${id}`) ?? []) wanted.add(x.key);
-      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera], fixtures ? undefined : scanDossiers().map((e) => e.name)), loadOccurrences(bulkDir, 2000, wanted)]);
+      // The keys that come with a key read from another page's species (D6's `with`), read under that key, as GBIF's search
+      // by it answers with them (round eighty-six, final review M1: a DOUBTFUL one is its own taxon and accepted key, and
+      // the download held its records under neither the variety's key nor any key the receiving page reads).
+      const withUnder = withKeysUnder(infraKeys);
+      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera], fixtures ? undefined : scanDossiers().map((e) => e.name)), loadOccurrences(bulkDir, 2000, wanted, withUnder)]);
       if (renew) {
         renewBefore = loaded?.occ.day;
         console.log(renewBefore ? `  --renew: every page built before ${renewBefore}, the day GBIF made the download, is built again; a page built since is kept` : '  --renew: no download read, or none whose day is known, so no page is built again for it');
@@ -2929,11 +2939,18 @@ async function main() {
     }
   }
   const report: string[] = [];
+  // Pages counted, not lines: a dry run's second, indented line of a page (its figures before and after) is not a page,
+  // and counted as one the owner's first dry run read "[49223/48375]" at the letter S (round eighty-six).
+  let pagesSaid = 0;
   const say = (line: string) => {
     report.push(line);
-    console.log(`[${report.length}/${jobs.length}] ${line}`);
+    if (!line.startsWith('    ')) pagesSaid++;
+    console.log(`[${pagesSaid}/${jobs.length}] ${line}`);
   };
-  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${offline ? ' (offline: re-deriving range, records, marker and climate from the files and the grid; the name block, photos, summary and literature carried from the previous build; no upstream asked except occurrences for species the download left to the API path)' : rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}…`);
+  // The log is the record (round eighty-six, final review S1): with the download's photographs (`mediaFromFiles`), a
+  // re-derivation reads GBIF's photographs again from its multimedia file, and carries only the others.
+  const carriedPhotos = mediaFromFiles ? "photos other than GBIF's (GBIF's read again from the download's multimedia file)" : 'photos';
+  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${offline ? ` (offline: re-deriving range, records, marker and climate from the files and the grid; the name block, ${carriedPhotos}, summary and literature carried from the previous build; no upstream asked except occurrences for species the download left to the API path)` : rederive ? ` (re-deriving range, records, centre and climate; ${carriedPhotos}, summary and literature carried from the previous build)` : skip.length ? ` (skipping ${skip.join(', ')})` : ''}…`);
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   // By GBIF key (round seventy-eight): the build asks, and judges GBIF's and iNaturalist's answers, by GBIF key.

@@ -18,7 +18,7 @@
  *
  * The parts are text with the heading or GBIF's name in italics, so the page renders them without HTML.
  */
-import { canonicalSynonym } from '$core/names';
+import { canonicalSynonym, ranksClash } from '$core/names';
 
 export type Part = { t: string; i?: true; /** a link to another page of the reference (round eighty-six) */ href?: string };
 
@@ -52,6 +52,8 @@ export type WasIn = {
   kewAcceptedElsewhere?: readonly string[] | null;
   /** The one page of the reference whose Kew older names hold the name, when there is exactly one. */
   kewHolder?: { slug: string; name: string } | null;
+  /** Whether a page holds it was not checked: the search file it is read from could not be read (round eighty-six, the final review's U5). */
+  kewHolderUnchecked?: boolean;
 };
 
 /** Words alone: no case, no hybrid sign, no rank marker, one space. */
@@ -76,9 +78,10 @@ export function onlySpelling(a: string, b: string): boolean {
   return x.slice(1).every((w, i) => distance(w, y[i + 1]) <= 2);
 }
 
-const has = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => plainWords(x) === plainWords(name));
+// Never a name of another rank: "Aloe bus var. cus" is not Kew's Aloe bus subsp. cus (round eighty-six, final review U2).
+const has = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => plainWords(x) === plainWords(name) && !ranksClash(x, name));
 /** The same, for names stored with their authors ("Anacampseros schmidtii (Berger) Poelln."): the name's words alone. */
-const hasNamed = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => { const c = canonicalSynonym(x); return !!c && plainWords(c) === plainWords(name); });
+const hasNamed = (list: readonly string[] | null | undefined, name: string) => !!list && list.some((x) => { const c = canonicalSynonym(x); return !!c && plainWords(c) === plainWords(name) && !ranksClash(c, name); });
 
 /**
  * What Kew's World Checklist holds of a name the record says it places in another plant (round eighty-six; review-c
@@ -87,8 +90,10 @@ const hasNamed = (list: readonly string[] | null | undefined, name: string) => !
  */
 function kewElsewhereTail(w: WasIn, H: Part): Part[] {
   if (w.kewHolder) return [{ t: " Kew's World Checklist holds it as a synonym of " }, { t: w.kewHolder.name, i: true, href: `/species/${w.kewHolder.slug}` }, { t: ', which has its own page here, not of ' }, H, { t: '.' }];
-  if (hasNamed(w.kewAcceptedElsewhere, w.was)) return [{ t: " Kew's World Checklist accepts it as a species of its own, apart from " }, H, { t: ', and no page of the reference holds it.' }];
-  return [{ t: " Kew's World Checklist holds it for another plant than " }, H, { t: ', which heads this page.' }];
+  // Not checked is never said as none (rule 2): which page here holds the name is read from the search's files.
+  const unchecked: Part[] = w.kewHolderUnchecked ? [{ t: " Whether a page of the reference holds it was not checked: the reference's search files could not be read just now." }] : [];
+  if (hasNamed(w.kewAcceptedElsewhere, w.was)) return [{ t: " Kew's World Checklist accepts it as a species of its own, apart from " }, H, { t: w.kewHolderUnchecked ? '.' : ', and no page of the reference holds it.' }, ...unchecked];
+  return [{ t: " Kew's World Checklist holds it for another plant than " }, H, { t: ', which heads this page.' }, ...unchecked];
 }
 
 /** The line after the bold old name, as parts; the page renders `<b>{was}</b> ` and then these. */

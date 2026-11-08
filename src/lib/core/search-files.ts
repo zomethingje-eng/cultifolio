@@ -48,6 +48,7 @@
  * `search/blocks.json`.
  */
 import { words, entryWords, type Wordy } from './postings';
+import { rankOfWord } from './names';
 import { prepare, search, hasExact, readingHits, rankedWords, wholeReading, wholeHits, cultivarShape, typedOf, searchGenera, readStart, RANK_MARKERS, type Searchable, type Prepared } from './search';
 
 /** A key with more entries than this is heavy: its file would be the size of a large part of the reference. */
@@ -588,8 +589,15 @@ async function searchFromFilesOnce<T>(r: SearchReader<T>, q: string, n: number, 
 
 /* ---------------- Kew's older names as an address ---------------- */
 
-/** A name as Kew's older names are compared (round eighty-six): its words as the search reads them, rank words left out. */
-export const kewNameWords = (name: string) => words(name).filter((w) => !RANK_MARKERS.has(w));
+/**
+ * A name as Kew's older names are compared (round eighty-six): its words as the search reads them, the hybrid sign left
+ * out and each rank word written as the canonical form writes it (`rankOfWord`). Until the final review (U2) the rank
+ * words were left out too, and /species/aloe-bus-var-cus, aloe-bus-f-cus and aloe-bus-cus all led to the page whose Kew
+ * names hold Aloe bus subsp. cus, a guess (rule 3): a variety, a form and a name with no rank are not that subspecies.
+ */
+export const kewNameWords = (name: string) => words(name).filter((w) => w !== 'x').map((w) => rankOfWord(w) ?? w);
+/** The words of a name that are not rank words: two at least before it is a name Kew's older names can hold. */
+const namedWords = (ws: readonly string[]) => ws.filter((w) => !rankOfWord(w.replace(/\.$/, ''))).length;
 const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((w, i) => w === b[i]);
 /**
  * The species whose Kew older names (`kew` in the index) hold this name as written, from its genus's `@` file and the
@@ -600,7 +608,7 @@ const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b
  */
 export async function kewHoldersFromFiles<T>(r: SearchReader<T>, name: string): Promise<T[]> {
   const want = kewNameWords(name);
-  if (want.length < 2) return [];
+  if (namedWords(want) < 2) return [];
   const key = `@${want[0]}`;
   const d = await r.dir(searchDirOf(key, r.dirs));
   const e = Object.hasOwn(d, key) ? d[key] : undefined;
@@ -619,9 +627,9 @@ export function kewHoldersOfIndex<T extends { kew?: readonly string[] }>(index: 
   let m = kewByIndex.get(index) as Map<string, T[]> | undefined;
   if (!m) {
     m = new Map();
-    for (const e of index) for (const n of new Set((e.kew ?? []).map((x) => kewNameWords(x).join(' ')))) { if (n.split(' ').length < 2) continue; const xs = m.get(n); if (xs) xs.push(e); else m.set(n, [e]); }
+    for (const e of index) for (const ws of new Map((e.kew ?? []).map((x) => { const w = kewNameWords(x); return [w.join(' '), w] as const; })).values()) { if (namedWords(ws) < 2) continue; const n = ws.join(' '); const xs = m.get(n); if (xs) xs.push(e); else m.set(n, [e]); }
     kewByIndex.set(index, m as Map<string, unknown[]>);
   }
   const want = kewNameWords(name);
-  return want.length < 2 ? [] : [...(m.get(want.join(' ')) ?? [])];
+  return namedWords(want) < 2 ? [] : [...(m.get(want.join(' ')) ?? [])];
 }

@@ -3,7 +3,7 @@
  * dev server when no R2 bucket is bound. Coordinates and counts are invented
  * to be plausible; nothing here is a fact about the species.
  */
-import { GBIF } from '../src/lib/dossier/sources/gbif';
+import { GBIF, WCVP_DATASET } from '../src/lib/dossier/sources/gbif';
 import { INAT } from '../src/lib/dossier/sources/inat';
 import type { KewRow } from '../src/lib/dossier/kew-names';
 
@@ -79,6 +79,10 @@ export function welwitschia(): Record<string, unknown> {
       results: [...pts(180, -21.5, 14.6, 1.2, BY, 11), ...pts(30, -16.2, 12.3, 0.6, CC0, 12), ...pts(80, -22.6, 17.1, 0.3, NC, 13), ...pts(10, -33.9, 18.4, 0.1, BY, 14)]
     },
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&mediaType`]: { count: 0, endOfRecords: true, results: [] },
+    // GBIF's copy of Kew's checklist, asked for Kew's identifiers when the page is Kew's (k339841) and its item states no
+    // taxon name: answered "no row", so the GBIF key's item stands. Unanswered here it was refused, which the round
+    // eighty-six final review (S2) made the step's answer: not checked, where before it fell through to the key's item.
+    [`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=Welwitschia%20mirabilis`]: null,
     'https://www.wikidata.org/w/api.php?action=query&format=json&list=search': { query: { search: [{ title: 'Q159760' }] } }, // found by GBIF key (P846)
     'https://www.wikidata.org/w/api.php?action=wbsearchentities': { search: [{ id: 'Q159760', label: 'Welwitschia mirabilis' }] },
     'https://www.wikidata.org/w/api.php?action=wbgetentities': {
@@ -107,6 +111,8 @@ export function copiapoa(): Record<string, unknown> {
     // 52 open records in habitat, 300 restricted records 400 km south (roadsides, gardens) — the README's clean case.
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&hasCoordinate`]: { count: 352, endOfRecords: true, results: [...pts(52, -24.9, -70.4, 0.4, BY, 21), ...pts(300, -28.6, -70.8, 0.5, NC, 22)] },
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&mediaType`]: { count: 0, endOfRecords: true, results: [] },
+    // As Welwitschia's: Kew's checklist at GBIF answers "no row", so the GBIF key's item stands (round eighty-six, final review S2).
+    [`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=Copiapoa%20cinerea`]: null,
     'https://www.wikidata.org/w/api.php?action=query&format=json&list=search': { query: { search: [{ title: 'Q5168360' }] } },
     'https://www.wikidata.org/w/api.php?action=wbsearchentities': { search: [{ id: 'Q5168360', label: 'Copiapoa cinerea' }] },
     'https://www.wikidata.org/w/api.php?action=wbgetentities': { entities: { Q5168360: { claims: { P3151: [{ mainsnak: { datavalue: { value: '135254' } } }] }, sitelinks: { enwiki: { title: 'Copiapoa cinerea' } } } } },

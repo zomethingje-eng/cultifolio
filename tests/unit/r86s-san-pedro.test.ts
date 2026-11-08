@@ -6,7 +6,7 @@
  * a variety or subspecies GBIF files under another page's key, which Kew's synonymy places in a page without a GBIF key
  * (by the type rule every extra key is read by), is that page's key, matched by identifier; the page GBIF files it under
  * leaves its records out, record by record (`givenAway`). It is listed only by `scripts/kew-extra-keys.ts
- * --infra-from-holder` (to `extra-keys-infra.txt`), read by the build only with `--infra-keys`, and a build's `--dry-run`
+ * --infra-from-holder` (to `extra-keys-infra.txt`), read by the build by default (another file with `--infra-keys`), and a build's `--dry-run`
  * says, page by page, how many records and which climate figures would change, writing nothing.
  *
  * The rows: Kew's wcvp_names.csv of 2026-06-04 (2783547 Echinopsis pachanoi, 2999002 Trichocereus macrogonus var.
@@ -100,8 +100,8 @@ describe('a build\'s --dry-run says what would change, page by page', () => {
     const mod = await import('$dossier/dry-line').catch(() => null);
     expect(mod).not.toBeNull();
     const months = (low: number) => Array.from({ length: 12 }, (_, i) => ({ tmin: low + i, tmax: 20 + i, precipMm: 50 }));
-    const prev = { key: 'k2783497', name: { scientific: 'Echinopsis macrogona' }, occurrences: { nOpenInRange: 282, nRestrictedInRange: 35 }, climate: { status: 'ok', records: 282, cells: 120, place: 'Cusco, Peru', months: months(4.8), annualRain: 778 } };
-    const now = { ...prev, occurrences: { nOpenInRange: 148, nRestrictedInRange: 21 }, climate: { status: 'ok', records: 148, cells: 70, place: 'Cusco, Peru', months: months(3.2), annualRain: 702 } };
+    const prev = { key: 'k2783497', name: { scientific: 'Echinopsis macrogona' }, occurrences: { nOpenInRange: 282, nRestrictedInRange: 35 }, climate: { status: 'ok', records: 282, cells: 120, place: 'Cusco, Peru', months: months(4.8), annualRain: { p10: 640, p90: 900, p50: 778 } } };
+    const now = { ...prev, occurrences: { nOpenInRange: 148, nRestrictedInRange: 21 }, climate: { status: 'ok', records: 148, cells: 70, place: 'Cusco, Peru', months: months(3.2), annualRain: { p10: 580, p90: 820, p50: 702 } } };
     expect(mod!.dryLine(prev, now)).toBe("Echinopsis macrogona [k2783497]: records 282 open + 35 restricted in range → 148 open + 21 restricted in range; climate 282 records in 120 cells, typical spot Cusco, Peru, coldest month's mean low 4.8 °C, warmest month's mean high 31 °C, rain 778 mm a year → 148 records in 70 cells, typical spot Cusco, Peru, coldest month's mean low 3.2 °C, warmest month's mean high 31 °C, rain 702 mm a year");
     expect(mod!.dryLine(prev, prev)).toMatch(/^Echinopsis macrogona \[k2783497\]: unchanged/);
   });

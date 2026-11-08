@@ -62,6 +62,12 @@ describe('1. one admission policy', () => {
     const how = aboutText('how');
     const w = policyWords(ADMISSION_POLICY);
     for (const [k, s] of Object.entries(w)) expect(how, k).toContain(s);
+    // Round eighty-six (final review): a record on a native minor island needs no country, so the summary says so; the
+    // coast reach takes only a record stating the region's country, so the glossary says so.
+    expect(w.summary).toContain("unless it lies on one of Natural Earth's minor islands placed in that region and states no other country");
+    expect(w.summary).toContain('where it names a state or province the shapes can match to one of the two regions, by that state');
+    expect(w.glossCoast).toContain("Only for a record that states that region's country.");
+    expect(how).not.toContain('only by its stated country and, where it names one, its state'); // base
   });
 });
 
@@ -117,6 +123,9 @@ describe('1. review D4: within the drawing\'s tolerance across a border, by the 
     // Naming neither (a record with no state): the line cannot tell within its tolerance, so it counts.
     const r = recs[0];
     expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', null)?.by).toBe('border');
+    // A state the shapes cannot match to either side (an old province's name) is read as none, as /about/how says (final review M2).
+    expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', 'Natal')?.by).toBe('border');
+    expect(policyWords(ADMISSION_POLICY).border).toContain('A record that names no state or province the shapes can match to either region counts');
     expect(stateKey('Free State Province')).toBe(stateKey('Free State'));
     expect(stateKey('Kwazulu Natal')).toBe(stateKey('KwaZulu-Natal'));
   });

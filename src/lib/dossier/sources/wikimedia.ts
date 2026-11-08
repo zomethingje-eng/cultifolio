@@ -410,9 +410,16 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       const own = (n: string) => n.replace(/×\s*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
       if (opts.kewPage && !strings(e.data, P.taxonName).some((n) => own(n) === own(scientificName))) {
         const k = await kewOf();
+        // Asked and not answered is not checked (round eighty-six, final review S2: a 429 on Kew's identifiers, or on the
+        // search by them, fell through to the GBIF key's item as `ok` with no detail, Q42559868 for Huernia hallii, the
+        // item D11 replaces). GBIF not answering is GBIF's (`by`), Wikidata's is the step's: either way the build keeps
+        // the previous identifiers and the row says the source did not answer. Kew holding no identifier for the name,
+        // or the search finding none or two, still leaves the key's item, as before.
+        if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
         if (k.status === 'ok' && k.data.ids.length && !carriesKew(e.data, k.data)) {
           const r = await byKewIds([], k.data);
           if (r.status === 'ok') return { ...r, detail: `${r.detail}, not ${hits[0].title}, which carries its GBIF key under another name (GBIF's)` };
+          if (r.status !== 'none' && r.status !== 'ambiguous') return r;
         }
       }
       return { status: 'ok', data: crossOf(hits[0].title, e.data) };

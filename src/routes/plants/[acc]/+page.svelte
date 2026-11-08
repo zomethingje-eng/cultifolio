@@ -27,7 +27,7 @@
   import { readSearch } from '$lib/import/check';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { entriesFor, sheetForNameOr, gbifNamedOf, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
+  import { entriesFor, sheetForNameOr, gbifNamedOr, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
   import { unreachedClause } from '$lib/ui/reach-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
@@ -147,7 +147,7 @@
    * own page asks the reference by hash group, never by name, so the name goes to the catalogue's search only on that
    * press, as the search box sends it. `older` is the page found, with a way to file the plant under it.
    */
-  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null; via?: string; /** the name is GBIF's name for the page's key (round eighty-six; review-w W1) */ gbif?: boolean } | null>(null);
+  let olderLook = $state<{ for: string; state: 'asking' | 'none' | 'unreached' } | { for: string; state: 'older'; name: string; slug: string | null; key: number | null; via?: string; /** the name is GBIF's name for the page's key (round eighty-six; review-w W1) */ gbif?: boolean; /** which it is was not reached (the final review's U3) */ filed?: boolean } | null>(null);
   async function lookOlder() {
     if (!a) return;
     const name = speciesOf(a.taxonName);
@@ -158,12 +158,16 @@
     const r = readSearch(name, true, got);
     // GBIF's name for the page's key, said as that (round eighty-six; review-w W1): by the row (`gname`), or by the copy
     // of the page's sheet the build files under the name.
-    const g = r.s === 'near' && r.why === 'older name' && !r.gbif ? await gbifNamedOf(name) : null;
+    // A copy group not reached leaves it unknown whether the name is GBIF's or an older one: said as "The reference files
+    // it under", never as an older name it may not be (round eighty-six, the final review's U3).
+    const g0 = r.s === 'near' && r.why === 'older name' && !r.gbif ? await gbifNamedOr(name) : null;
     if (olderLook?.for !== a?.taxonName) return;
+    const filed = isUnreached(g0);
+    const g = isUnreached(g0) ? null : g0;
     const gbif = r.s === 'near' && r.why === 'older name' && (!!r.gbif || (!!g && g.slug === r.slug));
     // A name below the one typed held as an older name is said as that (round eighty-five; review-w W2): "Trichocereus
     // pachanoi" was told it is no older name, though Echinopsis macrogona holds its form f. peruvianus.
-    olderLook = r.s === 'near' && (r.why === 'older name' || r.why === 'infra') ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key, ...(r.why === 'infra' && r.via ? { via: r.via } : {}), ...(gbif ? { gbif: true } : {}) } : { for: a.taxonName, state: 'none' };
+    olderLook = r.s === 'near' && (r.why === 'older name' || r.why === 'infra') ? { for: a.taxonName, state: 'older', name: r.suggestion, slug: r.slug ?? null, key: r.key, ...(r.why === 'infra' && r.via ? { via: r.via } : {}), ...(gbif ? { gbif: true } : filed && r.why === 'older name' ? { filed: true } : {}) } : { for: a.taxonName, state: 'none' };
   }
   $effect(() => { void a?.taxonName; untrack(() => { if (olderLook && olderLook.for !== a?.taxonName) olderLook = null; }); });
   /** Files the plant under the page its name is an older name of, as Edit would, the old name kept as received and in the log. */
@@ -177,7 +181,7 @@
     const newFull = `${taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     refiling = true;
     try {
-      const why = foundBy?.how === 'gbif' || (!foundBy && olderLook?.state === 'older' && olderLook.gbif) ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : "the reference's name; the old one is an older name of it";
+      const why = foundBy?.how === 'gbif' || (!foundBy && olderLook?.state === 'older' && olderLook.gbif) ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : foundBy?.how === 'filed' || (!foundBy && olderLook?.state === 'older' && olderLook.filed) ? "the reference's name; the reference files the old one under it" : "the reference's name; the old one is an older name of it";
       await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull, ...(a.olderOf ? { olderOf: null } : {}) }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (${why})`, auto: true }]);
       olderLook = null;
       toast.show(`Now filed under ${taxonName}; the old name is kept as received.`);
@@ -191,7 +195,7 @@
    * page, and the plant's record carries it (`olderOf`). Read by hash group, as any plant's species is: the server never
    * learns which. Null for a plant whose name is its page's.
    */
-  type FoundBy = { how: 'gbif' | 'merged' | 'older'; name: string; key: number | null };
+  type FoundBy = { how: 'gbif' | 'merged' | 'older' | 'filed'; name: string; key: number | null };
   let foundBy = $state<FoundBy | null>(null);
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
@@ -228,9 +232,11 @@
           got = o;
           // GBIF's name for that page's own key is said as that, by the copy the build files under the name (round
           // eighty-six; review-w W1: the same name typed said "GBIF's name", imported said "An older name of").
-          const g = await gbifNamedOf(name);
+          // A copy group not reached leaves the kind unknown: said as "Filed under", never as an older name it may not be
+          // (round eighty-six, the final review: U3 on the plant's own page).
+          const g = await gbifNamedOr(name);
           if (seq !== asked) return;
-          by = { how: g && g.slug === o.slug ? 'gbif' : 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null };
+          by = { how: isUnreached(g) ? 'filed' : g && g.slug === o.slug ? 'gbif' : 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null };
         }
       }
       foundBy = by;
@@ -482,11 +488,20 @@
   let editing = $state(false);
   /** The species' key while editing: kept when the name is untouched, cleared by typing, set again by picking a suggestion. */
   let edKey = $state<number | null>(null);
+  /**
+   * A name typed in the edit is checked under the Save press, as the add form's is (round eighty-six, the final review's
+   * U4; plants/new's C2): a Save before the name check had concluded filed the picker's key as it stood, none.
+   * `edArmed`: the picker's line has said what the next Save keeps, so it keeps it.
+   */
+  let edChecking = $state(false);
+  let edArmed = $state(false);
+  let edPicker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean>; olderAnswer: () => string | null } | null>(null);
   let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', waterDays: '', locationId: null as string | null });
   function startEdit() {
     if (!a) return;
     edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
+    edArmed = false;
     f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', waterDays: a.waterDays != null ? String(a.waterDays) : '', locationId: a.locationId ?? null };
     fOpen = { ...f };
     edWaterMsg = '';
@@ -531,6 +546,22 @@
     const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
     edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its space.` : '';
     if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
+    // A name this edit typed, as the add form checks it (plants/new's `save`), before anything is made or written: a name
+    // nothing resolved is kept on the Save after the picker's line has said so, and an older name of a page is asked
+    // about once. A name left as it opened is not asked again, nor a cross, nor a name with "cf." or "aff.".
+    const nameTyped = !!f.taxonName.trim() && f.taxonName !== fOpen.taxonName;
+    const pTyped = parseName(f.taxonName.trim());
+    if (nameTyped && f.nameKind !== 'hybrid' && pTyped.kind !== 'hybrid' && !pTyped.qualifier) {
+      edChecking = true;
+      try {
+        if (!edArmed && (edPicker ? !(await edPicker.check()) : !edKey)) { edArmed = true; return; }
+        if (!edArmed && (await edPicker?.olderFirst())) { edArmed = true; return; }
+      } finally {
+        edChecking = false;
+      }
+    }
+    // The page the picker's line named, when the name is filed as typed after it (`olderOf`, as the add form carries it).
+    const olderNamed = nameTyped ? (edPicker?.olderAnswer() ?? null) : null;
     // This form's own picker only (round sixty-seven; triage-66 R12); a place that could not be made says why there, and nothing is saved.
     try { await settlePlaces('ed-loc'); } catch { return; }
     if (!a) return;
@@ -566,7 +597,7 @@
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
     // A page the add form found for the old name is not the new name's (round eighty-five; `olderOf`).
-    const all: Record<string, unknown> = { taxonName, taxonKey, ...(taxonName !== a.taxonName && a.olderOf ? { olderOf: null } : {}), cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
+    const all: Record<string, unknown> = { taxonName, taxonKey, ...(taxonName !== a.taxonName && olderNamed ? { olderOf: olderNamed } : taxonName !== a.taxonName && a.olderOf ? { olderOf: null } : {}), cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
     // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place, and each other field on its own.
     const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
     const write = new Set<string>();
@@ -790,8 +821,8 @@
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
         <!-- A page found for the plant by its key or by the form's answer, said as how (round eighty-five; review-c C4, review-s S2, outside review A16a). -->
-        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}GBIF's name for{:else if foundBy.how === 'merged'}Its page was merged into{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
-        {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else if olderLook.gbif}GBIF's name for{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
+        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}GBIF's name for{:else if foundBy.how === 'merged'}Its page was merged into{:else if foundBy.how === 'filed'}The reference files it under{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
+        {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else if olderLook.gbif}GBIF's name for{:else if olderLook.filed}The reference files it under{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
         {:else if asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{#if parseName(a.taxonName).epithet && !parseName(a.taxonName).qualifier}{#if olderLook?.state === 'asking'}{' '}<span class="muted" role="status">looking among older names…</span>{:else if olderLook?.state === 'none'}<span id="older-name-none" role="status">, nor is it an older name of one</span>{:else if olderLook?.state === 'unreached'}<span id="older-name-unreached" role="status">; the reference's search did not answer, so older names were not checked. <button class="linkish tap" type="button" onclick={lookOlder}>Try again</button></span>{:else}{' '}<button class="linkish tap" type="button" id="look-older" onclick={lookOlder} title="Sends this name to the reference's search, as the search box does">Is it an older name?</button>{/if}{/if}{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}
@@ -825,7 +856,7 @@
 
   {#if editing}
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
-      <label class="wide"><span>Species</span><SpeciesPicker reserve addLabel="Save" bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
+      <label class="wide"><span>Species</span><SpeciesPicker reserve addLabel="Save" bind:value={f.taxonName} bind:taxonKey={edKey} bind:armed={edArmed} pressing={edChecking} bind:this={edPicker} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
       <!-- "this version of the app", not "this build", here and under Provenance (round fifty-eight; the accessibility review). -->
       <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar (of the species, or of the genus when no species is named)</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
@@ -841,7 +872,7 @@
       <!-- The plant's own watering rhythm, over its place's: blank follows the place, and the placeholder says what that is (round fifty-eight; the grower review). -->
       <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its space' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
       <div class="wide"><span class="lbl">Space</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Space" /></div>
-      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>Save</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>{edChecking ? 'Checking the name…' : 'Save'}</button></div>
     </form>
   {/if}
 

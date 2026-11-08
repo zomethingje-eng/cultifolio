@@ -10,7 +10,7 @@
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   import { leadShape } from '$lib/ui/ref/lead-shape';
-  import { afterLead } from '$lib/ui/ref/after-lead';
+  import { afterLead, idleAfterLead } from '$lib/ui/ref/after-lead';
   import { summaryRevision, summaryRoute, summaryWhat } from '$lib/ui/ref/credit-days';
   import { AS_CULTIGEN, cultigenOf } from '$core/cultigen';
   import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT, shownAttribution } from '$lib/ui/ref/head';
@@ -50,7 +50,7 @@
   import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
   import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
   import { worldSvg, regionSvg, type LabelAt } from '$lib/map/still';
-  import { drawNear, keepForOffline } from '$lib/map/near';
+  import { drawNear, drawAll, keepForOffline } from '$lib/map/near';
   import { fewRecords, fewRecordsSentence } from '$core/few-records';
   import { rangeCaption, UNITS_NOTE } from '$lib/ui/ref/range-words';
   import { readerWords, describedBy } from '$lib/ui/ref/words';
@@ -131,7 +131,7 @@
   const viaNote = $derived(rangeNote(d.distribution as never, d.name));
   const viaKind = $derived((d.distribution as { via?: { kind?: string } }).via?.kind ?? null);
   /** The `?was=` line's words, by whose record holds the name (round eighty-five; `was-words.ts`). */
-  const wasParts = $derived(data.was ? wasLine({ was: data.was, heading: d.name.scientific, gbifName: d.name.gbif?.scientific ?? null, viaKind, gbifSynonyms: d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x), kewSynonyms: d.name.kew?.synonyms ?? null, variety: !!data.wasVariety, ofOlder: !!data.wasOfOlder, below: !!data.wasBelow, gbifless, kewElsewhere: d.name.kew?.elsewhere ?? null, kewAcceptedElsewhere: d.name.kew?.acceptedElsewhere ?? null, kewHolder: data.wasKew?.holder ?? null }) : []);
+  const wasParts = $derived(data.was ? wasLine({ was: data.was, heading: d.name.scientific, gbifName: d.name.gbif?.scientific ?? null, viaKind, gbifSynonyms: d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x), kewSynonyms: d.name.kew?.synonyms ?? null, variety: !!data.wasVariety, ofOlder: !!data.wasOfOlder, below: !!data.wasBelow, gbifless, kewElsewhere: d.name.kew?.elsewhere ?? null, kewAcceptedElsewhere: d.name.kew?.acceptedElsewhere ?? null, kewHolder: data.wasKew?.holder ?? null, kewHolderUnchecked: !!data.wasKew?.unchecked }) : []);
   /** GBIF's own name, on a page Kew's name heads: said as GBIF's accepted name, not listed as a GBIF synonym (W1). */
   const gbifOwn = $derived(gbifNameLine(d.name.scientific, d.name.gbif, viaKind));
   // GBIF's accepted name for the key, on a page Kew's name heads, is said on its own line, not among GBIF's synonyms (W1).
@@ -341,6 +341,23 @@
     void stripPhotos; // a new page's strip waits for its own lead
     stripGo = false;
     return afterLead(hero && !heroFailed ? leadImg : null, () => (stripGo = true));
+  });
+  // Every map of the row drawn (`maprow`, above), and every photograph of the page asked for, once the lead photograph
+  // has come and the browser is idle (round eighty-six, the final review's U1; `idleAfterLead`): Chromium's print waits
+  // for neither a map file nor a lazy photograph asked for in `beforeprint`, and a sheet printed from the top printed the
+  // close-up as sea and the gallery as empty squares. Nearing the viewport still draws a map sooner, and `beforeprint`
+  // is the last resort. The gallery shows six tiles at most until "Show all" (500 px each, a phone lead's size), and they
+  // wait for the lead, the page's largest paint, as the strip does; the related species' tiles are iNaturalist's "small".
+  $effect(() => {
+    void worldMap;
+    void regionMap;
+    void stripPhotos; // a new page's maps and photographs wait for its own lead
+    const row = maprow;
+    if (!row) return;
+    return idleAfterLead(hero && !heroFailed ? leadImg : null, () => {
+      drawAll(row);
+      for (const im of document.querySelectorAll<HTMLImageElement>('article.species img[loading="lazy"]')) im.loading = 'eager';
+    });
   });
   const myTaxon = $derived(collection.ready ? collection.taxon(d.slug) : undefined);
   let editingMy = $state(false);

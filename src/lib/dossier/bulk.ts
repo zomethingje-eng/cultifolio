@@ -712,8 +712,22 @@ export class OccIndex {
   private mediaBy = new Map<number, Array<[h: number, key: number]>>();
   /** gbifID → its rank in its owner's media sample (open records first, then by id-hash), for MediaIndex's order. */
   readonly mediaRank = new Map<number, number>();
+  /**
+   * gbifID → the key GBIF identifies the record as (its taxonKey), for the records in a media sample whose taxonKey is not
+   * their owner's key: a page leaves out the photographs of records another page reads by Kew's synonymy, by that key, as
+   * it leaves out their records (round eighty-six, final review S1; `withoutGivenMedia`). Only those that differ are held.
+   */
+  readonly mediaTaxon = new Map<number, number>();
   static readonly MEDIA_PER_SPECIES = 40;
-  constructor(private cap = 2000, private wanted?: Set<number>) {}
+  /**
+   * `under` (round eighty-six, final review M1): a key GBIF files under another, by that other key: a record of the first
+   * is the second's too, as GBIF's occurrence search by the second key answers with it. Given for the keys that come with
+   * a key a page reads from another page's species (`ExtraKey.with`, D6): the download indexes a record under its species,
+   * taxon and accepted key only, so a DOUBTFUL key under the variety (its own taxon and accepted key) never reached the
+   * variety's page, which the API path gives it (Salix lucida subsp. lasiandra's 7225949, about 2,306 records, for
+   * Salix lasiandra's page k2918186). Read only where the other key is wanted, as every key is.
+   */
+  constructor(private cap = 2000, private wanted?: Set<number>, private under?: ReadonlyMap<number, readonly number[]>) {}
   private isWanted(k: number): boolean {
     return !this.wanted || this.wanted.has(k);
   }
@@ -722,7 +736,7 @@ export class OccIndex {
    * is a uniform sample of the download rather than the first forty in file order (which favours whichever dataset sorts
    * first). A small sorted array per owner; a newcomer that beats the worst evicts it.
    */
-  private admitMedia(owner: number, key: number, h: number): void {
+  private admitMedia(owner: number, key: number, h: number, taxonKey?: number): void {
     const arr = this.mediaBy.get(owner) ?? [];
     const full = arr.length >= OccIndex.MEDIA_PER_SPECIES;
     if (full && h >= arr[arr.length - 1][0]) return;
@@ -732,7 +746,8 @@ export class OccIndex {
     arr.splice(i, 0, [h, key]);
     this.withMedia.set(key, owner);
     this.mediaRank.set(key, h);
-    if (full) { const out = arr.pop()![1]; this.withMedia.delete(out); this.mediaRank.delete(out); }
+    if (taxonKey && taxonKey !== owner) this.mediaTaxon.set(key, taxonKey);
+    if (full) { const out = arr.pop()![1]; this.withMedia.delete(out); this.mediaRank.delete(out); this.mediaTaxon.delete(out); }
     this.mediaBy.set(owner, arr);
   }
   /** The download's parts (round seventy-nine): records added from here on are of a part with this DOI and day. */
@@ -743,7 +758,8 @@ export class OccIndex {
   add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number }): void {
     const h = idHash(o.key);
     this.addMedia(o);
-    for (const k of new Set([o.speciesKey, o.taxonKey, o.acceptedTaxonKey])) {
+    const also = this.under ? [...(o.taxonKey ? this.under.get(o.taxonKey) ?? [] : []), ...(o.acceptedTaxonKey ? this.under.get(o.acceptedTaxonKey) ?? [] : [])] : [];
+    for (const k of new Set([o.speciesKey, o.taxonKey, o.acceptedTaxonKey, ...also])) {
       if (!k) continue;
       if (!this.isWanted(k)) continue;
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
@@ -775,7 +791,7 @@ export class OccIndex {
     // Anisocampium niponicum 24 to 8; 177 of its 949 photographed records are open).
     const h = idHash(o.key);
     const rank = !o.license || isOpen(licenceTag(o.license)) ? h : 1 + h;
-    if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank);
+    if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank, o.taxonKey);
   }
   /** The rows in the order `order` gives, the first `n` of them, into a buffer of `room` rows (at least `n`). */
   private reorder(rows: Rows, order: number[], n: number, room: number): void {
@@ -905,7 +921,8 @@ export class MediaIndex {
   private by = new Map<number, Array<{ gbifID: number; m: MediaRow; rank: number; seq: number }>>();
   private seq = 0;
   static readonly CAP = 30;
-  constructor(private ownerOf: Map<number, number>, private rankOf?: Map<number, number>) {}
+  /** `taxonOf`: a record's taxonKey where it is not its owner's key (`OccIndex.mediaTaxon`); else the owner's key is its taxonKey. */
+  constructor(private ownerOf: Map<number, number>, private rankOf?: Map<number, number>, private taxonOf?: Map<number, number>) {}
   add(m: MediaRow): void {
     const k = this.ownerOf.get(m.gbifID);
     if (!k) return;
@@ -933,7 +950,10 @@ export class MediaIndex {
     if (!rows) return undefined;
     const byRec = new Map<number, GbifOccurrence>();
     for (const { gbifID, m } of rows) {
-      const o = byRec.get(gbifID) ?? { key: gbifID, basisOfRecord: 'HUMAN_OBSERVATION', media: [] };
+      // The key GBIF identifies the record as, as the API's answer carries it (round eighty-six, final review S1), when the
+      // index was given them: the photographs of a key another page reads are then left out as the API path leaves them.
+      const taxonKey = this.taxonOf ? this.taxonOf.get(gbifID) ?? key : undefined;
+      const o = byRec.get(gbifID) ?? { key: gbifID, basisOfRecord: 'HUMAN_OBSERVATION', media: [], ...(taxonKey ? { taxonKey } : {}) };
       o.media!.push({ type: 'StillImage', identifier: m.identifier, license: m.license, rightsHolder: m.rightsHolder, creator: m.creator, references: m.references });
       byRec.set(gbifID, o);
     }

@@ -44,17 +44,17 @@ if (!r) { console.error(`no backbone export at ${backbone}`); process.exit(2); }
 /*
  * `--infra-from-holder` (round eighty-six; review D's D6, the owner to decide on the count): the keys a variety or subspecies
  * GBIF files under another page's key would give a page without a GBIF key, when Kew's synonymy places it in that page's
- * plant (`extraKeysFor`'s `infraFromHolder`). Written alone to `extra-keys-infra.txt` in the project folder, each said with
+ * plant (`extraKeysFor`'s `infraFromHolder`). Written alone to `scripts/extra-keys-infra.txt`, each said with
  * the page that would leave its records out; nothing else is written. The build reads them only when told
  * (`--infra-keys extra-keys-infra.txt`), first with `--dry-run`.
  */
 if (infra) {
-  const out = arg('--out') ?? 'extra-keys-infra.txt';
+  const out = arg('--out') ?? 'scripts/extra-keys-infra.txt'; // read by default by the build since the owner adopted the rule (round eighty-six)
   const taken = r.keys.filter((k) => k.from !== undefined);
   const byKeyName = new Map(list.flatMap((e) => (e.gbifKey != null ? [[e.gbifKey, `${e.name}${e.kewId ? ` (k${e.kewId})` : ''}`] as const] : [])));
   const nameOf = new Map(list.map((e) => [e.pageId, e.name] as const));
   writeFileSync(out, formatExtraKeys(taken, [
-    "Round eighty-six (review D's D6): the keys of varieties and subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder). Read by the build only with --infra-keys <this file>; the page named in the last but one column leaves their records out.",
+    "Round eighty-six (review D's D6): the keys of varieties and subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder). Read by the build by default (another file with --infra-keys <file>); the page named in the last but one column leaves their records and photographs out.",
     `Made ${new Date().toISOString().slice(0, 10)} from ${listFile} and GBIF's backbone export (${backbone.replace(/^.*[\\/]/, '')}): ${taken.length} keys on ${new Set(taken.map((k) => k.pageId)).size} pages.`,
     "page id, key, GBIF's name, GBIF's status, Kew's row, Kew's reading, how, -, the keys under it not read (or -), the page key GBIF files it under, the keys under it read with it (or -)"
   ]));

@@ -220,7 +220,7 @@ const notBackboneKey = (raw: string | undefined) => !!raw && !/^\d+$/.test(raw.t
  * occurrence.csv is read too, for the small case. The same records give the same sample and the same photographs by
  * either form: the reader reads each column by its name, in any order and either case.
  */
-export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string; mediaDay?: string } | null> {
+export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>, under?: ReadonlyMap<number, readonly number[]>): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string; mediaDay?: string } | null> {
   // A names file with nothing in the download (a handful of extras) should not cost a pass over 28 M rows.
   if (wanted && wanted.size === 0) {
     console.log('  none of these species are in the occurrence download: occurrences will come from the API');
@@ -228,7 +228,8 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   }
   const parts = downloadParts(dir);
   if (!parts) return null;
-  const idx = new OccIndex(cap, wanted);
+  // A key's records under the key GBIF files it under too, where the build says (round eighty-six, final review M1).
+  const idx = new OccIndex(cap, wanted, under);
   idx.doi = parts[0].doi;
   idx.day = downloadDay(parts[0]);
   let format: 'dwca' | 'sql' | 'csv' = 'csv';
@@ -283,7 +284,7 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   if (withMedia.length) {
     if (existsSync(mediaZip)) console.log(`  ${mediaZip} is not read: the download carries its own photographs (multimedia.txt)`);
     if (idx.withMedia.size) {
-      media = new MediaIndex(idx.withMedia, idx.mediaRank);
+      media = new MediaIndex(idx.withMedia, idx.mediaRank, idx.mediaTaxon);
       photos = 'multimedia.txt';
       mediaDoi = parts[0].doi;
       mediaDay = downloadDay(parts[0]);
@@ -305,7 +306,7 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
     });
     console.log(`  ${marked} records with images read; ${idx.withMedia.size} marked for their photographs`);
     if (idx.withMedia.size) {
-      media = new MediaIndex(idx.withMedia, idx.mediaRank);
+      media = new MediaIndex(idx.withMedia, idx.mediaRank, idx.mediaTaxon);
       photos = 'media.zip';
       mediaDoi = mmeta.doi;
       mediaDay = downloadDay(mmeta);

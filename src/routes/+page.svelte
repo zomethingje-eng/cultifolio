@@ -7,7 +7,7 @@
   import { accNo } from '$lib/db/types';
   import type { PageId } from '$core/page-id';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOf, type Found, type SearchRegion } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOr, isUnreached, type Found, type SearchRegion } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
@@ -698,7 +698,7 @@
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { /** the page a missing name's plants say it is an older name of, or GBIF's name for (round eighty-six; review-w W2) */ olderOf?: { name: string; gbif: boolean }; slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
+  type Tile = { /** the page a missing name's plants say it is an older name of, or GBIF's name for (round eighty-six; review-w W2); `gbif` null while not known (the final review's U3) */ olderOf?: { name: string; gbif: boolean | null }; slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
@@ -708,7 +708,7 @@
       const found = bySlug?.get(s.slug) as Tile | undefined;
       // A hybrid's name with its sign, where the index entry has it without (an index made before round eighty-one).
       const e = found && s.name.includes('×') && !found.name.includes('×') && withoutSign(s.name) === withoutSign(found.name) ? { ...found, name: s.name } : found;
-      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug, ...(bySlug && s.olderOf ? { olderOf: { name: s.olderOf, gbif: gbifNamed.get(s.slug) === s.olderOf } } : {}) };
+      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug, ...(bySlug && s.olderOf ? { olderOf: { name: s.olderOf, gbif: gbifKind(s.slug, s.olderOf) } } : {}) };
       // From the whole index (after a search) the entry carries its photograph; an own tile shows it only when switched on.
       return e.thumb && !prefs.referencePhotos ? { ...e, thumb: undefined, alt: undefined, thumbOff: true } : e;
     };
@@ -719,15 +719,21 @@
    * those that are GBIF's name for that page's key, by the copy of its sheet the build files under the name, read by hash
    * group as a plant's page reads it (round eighty-six; review-w W1, W2): the tile then says "GBIF's name for", as the
    * plant's page does. Asked once a name.
+   *
+   * Until the answer is read, and when the group is not reached, the kind is not known, and the tile says only that the
+   * reference files the name under that page, as the species page's line does (`wasLine`): "an older name of" there was
+   * the false wording W1 took away for GBIF's name (round eighty-six, the final review's U3: Ceropegia alstonii, offline).
    */
-  let gbifNamed = $state(new Map<string, string | null>());
+  let gbifNamed = $state(new Map<string, string | false | 'asking' | 'unreached'>());
+  /** GBIF's name for the page (true), an older name of it (false), or not known (null). */
+  const gbifKind = (slug: string, olderOf: string): boolean | null => { const g = gbifNamed.get(slug); return g === olderOf ? true : g === false ? false : null; };
   $effect(() => {
     if (!ownEntries) return;
     for (const s of mine.values()) {
-      if (!s.olderOf || ownEntries.has(s.slug) || untrack(() => gbifNamed.has(s.slug))) continue;
-      gbifNamed.set(s.slug, null);
+      if (!s.olderOf || ownEntries.has(s.slug) || untrack(() => gbifNamed.has(s.slug) && gbifNamed.get(s.slug) !== 'unreached')) continue;
+      gbifNamed.set(s.slug, 'asking');
       const slug = s.slug, want = s.olderOf;
-      void gbifNamedOf(s.name).then((g) => { if (g && g.name === want) gbifNamed = new Map(gbifNamed).set(slug, g.name); });
+      void gbifNamedOr(s.name).then((g) => { gbifNamed = new Map(gbifNamed).set(slug, isUnreached(g) ? 'unreached' : g && g.name === want ? g.name : false); }, () => { gbifNamed = new Map(gbifNamed).set(slug, 'unreached'); });
     }
   });
   const grownN = $derived(mineTiles.grow.length);
@@ -846,7 +852,7 @@
       <div class="fam" class:common={!!commonOr(c) && commonOr(c) !== c.family}>{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing && c.olderOf ? `${c.olderOf.gbif ? "GBIF's name for" : 'an older name of'} ${c.olderOf.name}` : ''}</div><!-- a name with no page and no word of one: the caption says "no page under this name", and nothing more is known (round eighty-six; review-w W2: "not in the reference" was said of older names) -->
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing && c.olderOf ? (c.olderOf.gbif === null ? `the reference files it under ${c.olderOf.name}` : `${c.olderOf.gbif ? "GBIF's name for" : 'an older name of'} ${c.olderOf.name}`) : ''}</div><!-- a name with no page and no word of one: the caption says "no page under this name", and nothing more is known (round eighty-six; review-w W2: "not in the reference" was said of older names) -->
     </div>
   </a>
 {/snippet}

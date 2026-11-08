@@ -1,5 +1,5 @@
 import { ownSynonyms } from '$core/shown-names';
-import { error, redirect } from '@sveltejs/kit';
+import { error, redirect, isHttpError } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer, kewHolders } from '$lib/server/dossiers';
 import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, placedElsewhere, type SynonymAnswer } from '$lib/server/synonyms';
 import { lookupOf, addressOf, mergedHolder, type Lookup } from '$lib/server/lookup';
@@ -7,7 +7,7 @@ import { plainName, synonymKey, type Card } from '$dossier/lookups';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 import { WHOLE_GENERA } from '$lib/ui/ref/whole-genera';
 import { limited, clientIp } from '$lib/server/sync';
-import { genusOf, slugify, canonicalSynonym } from '$core/names';
+import { genusOf, slugify, canonicalSynonym, ranksClash } from '$core/names';
 import { isPageId, type PageId } from '$core/page-id';
 import { hybridOf, signedName, withKewLinks } from '$core/hybrids';
 import { unitsFor } from '$lib/server/units';
@@ -183,10 +183,6 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const signed = signedName(key, d.name.scientific);
   const kewNo = withKewLinks(key, d.ids, d.links as Record<string, string>);
   const shown: Omit<typeof d, 'occurrences'> & { occurrences: typeof occurrences } = { ...d, name: signed === d.name.scientific ? d.name : { ...d.name, scientific: signed }, ids: kewNo.ids, links: kewNo.links as typeof d.links, occurrences };
-  // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
-  // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
-  // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
-  setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
   const card = (e: Pick<Card, 'key' | 'slug' | 'name' | 'family' | 'common' | 'thumb' | 'credit' | 'open' | 'climate'>) => ({ key: e.key, slug: e.slug, name: signedName(e.key, e.name), family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
@@ -207,7 +203,9 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const plain = plainName;
   // Kew's names for the plant too (`name.kew.synonyms`), now that an address under one of them leads here (round
   // eighty-six; review-c C1: Anacampseros schmidtii is A. dinteri's by Kew's file).
-  const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x), ...(d.name.kew?.synonyms ?? [])].map(plain);
+  // A name of another rank than the one asked is not the name asked (round eighty-six, final review U2): `?was=Aloe bus
+  // var. cus` is not held by a page whose names hold Aloe bus subsp. cus, though the two are alike without their ranks.
+  const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x), ...(d.name.kew?.synonyms ?? [])].filter((x) => !was || !ranksClash(x, was)).map(plain);
   const ownNames = new Set(listed);
   // The binomial of a listed variety counts too: the backbone files "Trichocereus pachanoi" under a variety of
   // T. macrogonus, and the address `trichocereus-pachanoi` reached the page with no line saying why (round thirty-five, R1-12).
@@ -229,15 +227,23 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // GBIF's answer, which a data centre that had not answered the redirect did not hold, and the page then said nothing of
   // why the grower was there (round eighty-six; review-c C3).
   const listedHere = ownNames.has(wasPlain) || asVariety || ofOlder;
-  const infraNames = new Set((d.name.infra ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x).map(plain));
+  const infraNames = new Set((d.name.infra ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && !ranksClash(x, was!)).map(plain));
   const wasBelow = wellFormed && !listedHere && infraNames.has(wasPlain);
   const shownWas = wellFormed && (listedHere || wasBelow) ? was : null;
   // A name the record says Kew's file places in another plant (`name.kew.elsewhere`): the line says so, and names that
   // plant's page where exactly one page here holds the name among Kew's older names (round eighty-six; review-c C1:
   // "… does not list this name among its synonyms" was said of Anacampseros schmidtii, which Kew files under A. dinteri).
   const away = shownWas ? placedElsewhere(d.name, [shownWas]) : null;
-  const kewHeld = away ? (await kewHolders(platform, fetch, shownWas!, c)).filter((e) => e.key !== key) : [];
-  const wasKew = away ? { accepted: away.accepted, holder: kewHeld.length === 1 ? { slug: kewHeld[0].slug, name: kewHeld[0].name } : null } : null;
+  // The genus's `@` search file not read (a 503 from the key reader): the page is still shown, its line saying the holder
+  // was not checked, and kept by no one, so the next visit reads it again (round eighty-six, the final review's U5: the
+  // whole page answered 503).
+  const kewHeld = away ? await kewHolders(platform, fetch, shownWas!, c).then((xs) => xs.filter((e) => e.key !== key), (e: unknown) => { if (isHttpError(e, 503)) return null; throw e; }) : [];
+  const wasKew = away ? { accepted: away.accepted, holder: kewHeld?.length === 1 ? { slug: kewHeld[0].slug, name: kewHeld[0].name } : null, ...(kewHeld ? {} : { unchecked: true as const }) } : null;
+  // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
+  // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
+  // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
+  // Set here, once what the page says is known (round eighty-six, U5: it was set at the dossier's read).
+  setHeaders({ 'cache-control': kewHeld ? 'private, max-age=60' : 'no-store', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // A name another species here is accepted under names no one species here, as a shared older name does (round
   // seventy-one; S-F3: `?was=Annona%20muricata` on Annona montana, which holds Vellozo's homonym, said the backbone
   // accepted this species as Annona muricata, the soursop's name).

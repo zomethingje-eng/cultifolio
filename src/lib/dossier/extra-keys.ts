@@ -408,6 +408,16 @@ export function byPageId(keys: readonly ExtraKey[]): Map<string, ExtraKey[]> {
   for (const k of keys) if (k.pageId) m.set(k.pageId, [...(m.get(k.pageId) ?? []), k]);
   return m;
 }
+/**
+ * The keys that come with a key read from another page's species (`with`, D6), by the key they come with (round
+ * eighty-six, final review M1): the download reads a record of one under that key too (`OccIndex`'s `under`), as GBIF's
+ * search by that key answers with it. Lines without `with` give none.
+ */
+export function withKeysUnder(keys: readonly ExtraKey[]): Map<number, number[]> {
+  const m = new Map<number, number[]>();
+  for (const k of keys) for (const w of k.with ?? []) if (!(m.get(w) ?? []).includes(k.key)) m.set(w, [...(m.get(w) ?? []), k.key]);
+  return m;
+}
 /** The list by page key. */
 export function byPage(keys: readonly ExtraKey[]): Map<number, ExtraKey[]> {
   const m = new Map<number, ExtraKey[]>();

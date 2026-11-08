@@ -265,3 +265,18 @@ export function canonicalSynonym(s: string): string | null {
 }
 /** A rank word below the species as the canonical form writes it ("ssp." as "subsp.", "fo." and "forma" as "f."). */
 const INFRA_RANK: Record<string, string> = { var: 'var.', subsp: 'subsp.', ssp: 'subsp.', f: 'f.', fo: 'f.', forma: 'f.', subvar: 'subvar.', subf: 'subf.', nothosubsp: 'nothosubsp.', nothovar: 'nothovar.', nothof: 'nothof.', convar: 'convar.', prol: 'proles', proles: 'proles', lusus: 'lusus', race: 'race', grex: 'grex' };
+/**
+ * A word of a name, folded and without its full stop, as the rank it names in the canonical form ("ssp" and "subspecies"
+ * as "subsp.", "v" and "variety" as "var.", "fo" and "forma" as "f."); undefined for a word that names no rank (round
+ * eighty-six, final review U2: `canonicalSynonym`'s table, with the spellings growers write that the search reads as
+ * ranks too).
+ */
+export const rankOfWord = (w: string): string | undefined => (Object.hasOwn(INFRA_RANK, w) ? INFRA_RANK[w] : w === 'v' || w === 'variety' ? 'var.' : w === 'subspecies' ? 'subsp.' : undefined);
+/** The rank words of a name, in the canonical form's spelling, in order: "Aloe bus ssp. cus" holds ["subsp."]. */
+export const rankWordsOf = (name: string): string[] => name.normalize('NFD').toLowerCase().split(/[^a-z]+/).map(rankOfWord).filter((r): r is string => !!r);
+/**
+ * Two names that each say a rank, and not the same one: "Aloe bus var. cus" and "Aloe bus subsp. cus" (round eighty-six,
+ * final review U2). The two are compared without their rank words elsewhere, since GBIF's canonical form writes a variety
+ * without "var." (round thirty-four); a name with no rank word is not said to clash.
+ */
+export const ranksClash = (a: string, b: string): boolean => { const x = rankWordsOf(a), y = rankWordsOf(b); return !!x.length && !!y.length && x.join(' ') !== y.join(' '); };

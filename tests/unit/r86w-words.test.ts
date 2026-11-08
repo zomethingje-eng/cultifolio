@@ -30,7 +30,8 @@ import { cardFilesFor, olderFilesFor, rowFilesFor } from '$dossier/lookups';
 import { canonicalSynonym } from '$core/names';
 import { keptNames, englishNames } from '$dossier/index-entry';
 import { prepare, search } from '$core/search';
-import { summary } from '$dossier/sources/wikipedia';
+import { summary, LEAD_TITLES } from '$dossier/sources/wikipedia';
+import { readLeadsAll, type RevisionCounts } from '$dossier/revision-fill';
 import { heroOf } from '$dossier/dedupe';
 import { rangeCaption } from '$lib/ui/ref/range-words';
 import { outsideUnused } from '$dossier/range-via';
@@ -116,8 +117,15 @@ describe("outside review B's 5: the summary is the article's opening paragraph (
     expect(sum.text).toContain("with the article's revision it was read at");
     expect(aboutText('how')).not.toMatch(/quoted as written|as that service shortens it/); // base: the service's shortening
     expect(said('how', "The summary is the article's opening paragraph").text).toContain('its brackets kept');
-    expect(said('how', "The paragraph and the article's revision are read in one request").text).toContain('twenty articles a request');
+    // Round eighty-six (final review): a build asks one title a request; only the fill of stored summaries asks twenty.
+    expect(said('how', "The paragraph and the article's revision are read in one request").text).not.toContain('twenty');
+    const req = said('how', 'A build asks for one article a request').text;
+    expect(req).toContain('the fill that reads stored summaries again asks for twenty');
+    expect(LEAD_TITLES).toBe(20);
+    expect(aboutText('how')).not.toContain('twenty articles a request'); // base: said of the build too
     expect(said('how', 'A summary read before November 2026 is the text of Wikipedia').text).toContain('its credit names the service');
+    expect(said('how', 'A fill reads each such summary again').text).toContain('under the title it was quoted from');
+    expect(said('how', 'Where Wikipedia now moves that title to another article').text).toContain('holds no article under it or gives no revision, the fill leaves the summary as it was');
     const asked: string[] = [];
     // The article's opening paragraph for Aloe vera, as TextExtracts gives it in plain text: its words in brackets kept,
     // the pronunciation's emptied bracket closed up; the revision read in the same request.
@@ -129,6 +137,14 @@ describe("outside review B's 5: the summary is the article's opening paragraph (
     expect(r.status === 'ok' && r.data.text).toBe('Aloe vera is a succulent plant species of the genus Aloe (family Asphodelaceae). It is widely distributed.');
     expect(r.status === 'ok' && r.data.revision).toBe(123);
     expect(r.status === 'ok' && r.data.from).toBe('lead');
+  });
+  it('the fill leaves a summary whose title Wikipedia now moves, as the page says (final review)', async () => {
+    const page = { key: 'k1', name: { scientific: 'Aloe vera' }, summary: { text: 'Aloe vera is a plant.', url: 'https://en.wikipedia.org/wiki/Aloe_vera', title: 'Aloe vera' } };
+    const f = (async () => ({ status: 'ok', data: { query: { redirects: [{ from: 'Aloe vera', to: 'Aloe' }], pages: [{ title: 'Aloe', extract: 'Aloe is a genus.', revisions: [{ revid: 9 }] }] } } })) as never;
+    const c: RevisionCounts = { read: 0, same: 0, refreshed: 0, left: 0, unanswered: 0, lines: [] };
+    await readLeadsAll(f, [page], '2026-11-07', c, () => {});
+    expect(c.left).toBe(1);
+    expect(page.summary).toEqual({ text: 'Aloe vera is a plant.', url: 'https://en.wikipedia.org/wiki/Aloe_vera', title: 'Aloe vera' });
   });
 });
 

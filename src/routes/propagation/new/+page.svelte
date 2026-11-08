@@ -98,8 +98,16 @@
     kind = kindOf(a);
     parentage = a.parentage ?? null;
   }
+  /**
+   * The name checked under the press, as the add form's is (round eighty-six, the final review's U4; plants/new's C2): a
+   * press before the name check had concluded filed the batch with the picker's key as it stood, none. `nameArmed`: the
+   * picker's line has said what the next press keeps, so it keeps it.
+   */
+  let checking = $state(false);
+  let nameArmed = $state(false);
+  let picker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean> } | null>(null);
   /** Why Start batch cannot be pressed, in words, next to it: a greyed button said nothing (round fifty-eight; the grower review). A missing count is not one of these: it is refused with a sentence on the press. */
-  const startBlocked = $derived(busy ? 'Saving the batch…' : !name.trim() ? 'Name the species first.' : '');
+  const startBlocked = $derived(checking ? 'Checking the name against the reference…' : busy ? 'Saving the batch…' : !name.trim() ? 'Name the species first.' : '');
   const nextNo = $derived(collection.ready ? collection.nextSowingNumber(Number(sown.slice(0, 4)) || undefined) : '…');
 
   $effect(() => {
@@ -177,7 +185,7 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!name.trim() || busy) return;
+    if (!name.trim() || busy || checking) return;
     const n = numberOrNull(count) == null ? null : Math.floor(numberOrNull(count)!); // whole seeds or cuttings: 2.5 is 2, a cleared box is missing (round fifteen, 10)
     if (n == null || !Number.isFinite(n) || n < 1) {
       countMissing = true;
@@ -197,6 +205,19 @@
     if (heatMsg) {
       document.getElementById('s-heat')?.focus();
       return;
+    }
+    // As the add form does (plants/new's `save`): a name nothing resolved is kept on the press after the picker's line has
+    // said so, and an older name of a page is asked about once; a key a pick or the reference gave stands. The parent's
+    // own name, as its record files it with its key or none, is not asked again.
+    const parentsName = m.veg && !!parent && name === parent.taxonName;
+    if (!parentsName) {
+      checking = true;
+      try {
+        if (kind !== 'hybrid' && !nameArmed && !parseName(name).qualifier && (picker ? !(await picker.check()) : !taxonKey)) { nameArmed = true; return; }
+        if (!nameArmed && !parseName(name).qualifier && (await picker?.olderFirst())) { nameArmed = true; return; }
+      } finally {
+        checking = false;
+      }
     }
     busy = true;
     try {
@@ -273,7 +294,7 @@
   {/if}
 
   <!-- `reserve`: the name check's words arrive in room kept for them, so "Start batch" below does not move under a press (round seventy; P's need 2, as the add form since round sixty-seven, triage-66 P10). -->
-  <label class="field"><span id="s-species-lab">Species</span><SpeciesPicker reserve addLabel="Start batch" labelledby="s-species-lab" describedby="s-species-help" bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
+  <label class="field"><span id="s-species-lab">Species</span><SpeciesPicker reserve addLabel="Start batch" labelledby="s-species-lab" describedby="s-species-help" bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:armed={nameArmed} pressing={checking} bind:this={picker} />
     <span class="faint small" id="s-species-help">A species, a cultivar (<i>Monstera deliciosa</i> 'Thai Constellation'), or a hybrid: write the cross (<i>Paphiopedilum rothschildianum</i> × <i>philippinense</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="s-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
@@ -318,7 +339,7 @@
   <div class="actions sticky" bind:this={actsEl}>
     {#if startBlocked}<span class="why small" id="s-start-why" role="status">{startBlocked}</span>{/if}
     <a class="btn" href="/propagation">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy} aria-describedby={startBlocked ? 's-start-why' : undefined}>Start batch</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy || checking} aria-describedby={startBlocked ? 's-start-why' : undefined}>{checking ? 'Checking the name…' : 'Start batch'}</button>
   </div>
 </form>
 

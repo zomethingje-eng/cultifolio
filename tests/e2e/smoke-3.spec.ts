@@ -448,6 +448,8 @@ test('editing a plant to another species replaces its habitat figures and links 
   await more(page, 'Edit');
   await page.fill('#ed-name', 'Aloe polyphylla');
   await page.locator('#ed-name').blur();
+  // Checked as the add form checks a name (round eighty-six, the final review's U4): the line says Save keeps it as typed.
+  await expect(page.locator('.editform .picker .hint', { hasText: /press “Save” to keep exactly what you typed/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('No species page');
   await expect(page.getByRole('link', { name: 'Species page' })).toHaveCount(0);

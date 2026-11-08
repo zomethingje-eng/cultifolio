@@ -359,9 +359,14 @@ export async function sheetForNameOr(name: string, key: number | null | undefine
  * such copy, or the group was not reached. Nothing of the page's is taken for a plant of another key by it: it words a line.
  */
 export async function gbifNamedOf(name: string): Promise<{ slug: string; name: string } | null> {
+  const g = await gbifNamedOr(name);
+  return isUnreached(g) ? null : g;
+}
+/** `gbifNamedOf`, with the group not reached said apart from "no such copy" (round eighty-six, the final review's U3). */
+export async function gbifNamedOr(name: string): Promise<{ slug: string; name: string } | null | Unreached> {
   const slug = speciesSlug(name);
   const m = await sheetsOr([slug]);
-  if (isUnreached(m)) return null;
+  if (isUnreached(m)) return m;
   const s = m.get(slug) as (Sheet & { via?: string; page?: string }) | undefined;
   return s?.via === 'gbif' && typeof s.page === 'string' ? { slug: s.page, name: s.name.scientific } : null;
 }

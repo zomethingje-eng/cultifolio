@@ -77,7 +77,7 @@ export type FillCounts = { asked: number; filled: number; photos: number; none: 
  * `--fill gbif-open` over every dossier (round sixty-eight): those with no photograph are asked once; one an earlier fill
  * asked and found none for is passed by, so a fill stopped part way resumes where it was.
  */
-export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void): Promise<FillCounts> {
+export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void, givenOf?: (gbifKey: number) => { keys: ReadonlySet<number> } | undefined): Promise<FillCounts> {
   const c: FillCounts = { asked: 0, filled: 0, photos: 0, none: 0, failed: 0, before: 0 };
   for (const file of store.files()) {
     const d = store.read<Pick<Dossier, 'key' | 'ids' | 'photos' | 'upstream'>>(file);
@@ -86,7 +86,7 @@ export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progr
     // A page without a GBIF key (round seventy-nine): GBIF's records are not asked for it, and its record says why.
     if (d.ids?.gbif == null) continue;
     c.asked++;
-    const r = await fillOpenGbif(d, f);
+    const r = await fillOpenGbif(d, f, undefined, givenOf?.(d.ids.gbif));
     if ('failed' in r) { c.failed++; continue; }
     if ('none' in r) c.none++;
     else if (r.added) { c.filled++; c.photos += r.added; }

@@ -6,7 +6,9 @@
  * three screens above the maps, and on a throttled phone they shared the line with the lead photograph: B measured the
  * photograph, the page's largest paint, at 5.6 to 5.8 s, and 0.9 s sooner with the map files blocked. So the page writes
  * them in `data-href` (`defer`), and this turns each into `href` when its map is within a screen of the viewport, or for
- * every map before a print. The maps' room is kept whatever they hold (`.map`'s aspect ratio, theme.css), so nothing
+ * every map before a print. The page also draws every map once its lead photograph has come and the browser is idle
+ * (`drawAll` under `idleAfterLead`; the final review's U1): Chromium's print does not wait for a file named in
+ * `beforeprint`, and printed the close-up as sea, so `beforeprint` is only the last resort. The maps' room is kept whatever they hold (`.map`'s aspect ratio, theme.css), so nothing
  * moves when they draw, and the range is said in words beside them either way.
  *
  * Offline: the service worker holds the two coastlines from its install, and a page read online hands it the region files

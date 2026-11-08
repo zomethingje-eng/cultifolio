@@ -213,6 +213,9 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
   await page.fill('#s-ref', 'lot 77');
   await page.selectOption('#s-prov', 'wild');
   await page.fill('#s-medium', 'pumice and loam');
+  // The name the reference does not hold here (no upstream) is checked as the add form checks it (round eighty-six, the
+  // final review's U4): once the check has concluded the line says the press keeps it as typed, and one press does.
+  await expect(page.locator('.picker .hint', { hasText: /press “Start batch” to keep exactly what you typed/ })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-001$/);
   await expect(page.locator('h1')).toContainText('Ariocarpus fissuratus');
