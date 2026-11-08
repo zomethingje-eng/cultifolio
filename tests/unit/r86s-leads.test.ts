@@ -16,7 +16,7 @@
  * `leadChange`, `readLeadsAll` and `summaryWhat` did not exist, and the fill re-read one REST summary a request.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { JsonFetcher, FetchResult } from '$dossier/fetch';
 import * as wp from '$dossier/sources/wikipedia';
 import * as fill from '$dossier/revision-fill';
@@ -136,7 +136,9 @@ describe('B7: --fill summary-leads and its dry run', () => {
     expect(tomato.summary).toEqual(TOMATO.summary);
   });
 
-  it('the live record is the one the test holds (guard)', () => {
+  // Read only where the walk's copy of the record is (the sandbox the round was built in); elsewhere it is skipped, never
+  // failed: the owner's run read C:\tmp\claude-0\… on 8 November (round eighty-six, the second stop).
+  it.skipIf(!existsSync('/tmp/claude-0/rev86r/D-s/dos/k2932342.json'))('the live record is the one the test holds (guard)', () => {
     const d = dossier('k2932342');
     expect(d.summary).toEqual(TOMATO.summary);
     expect(d.summary.text).not.toContain('(');

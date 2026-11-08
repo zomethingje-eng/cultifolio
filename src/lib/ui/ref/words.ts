@@ -20,8 +20,14 @@ export function readerWords(t: string | undefined): string | undefined {
     .replace(REPO_PATH_AFTER, ', as the reference lists them')
     .replace(BUILD_FLAG, '')
     .replace(OPENALEX_PROMISE, OPENALEX_NOW)
-    .replace(TWO_ITEMS, (_, a, b, so) => `two Wikidata items carry Kew's identifier for this plant (${a}, ${b})${so ? ', so neither was taken' : ''}`);
+    .replace(TWO_ITEMS, (_, a, b, so) => `two Wikidata items carry Kew's identifier for this plant (${a}, ${b})${so ? ', so neither was taken' : ''}`)
+    .split('; ')
+    .filter((part, i, all) => all.indexOf(part) === i)
+    .join('; ');
 }
+// A part said twice is said once (round eighty-six, the walk's record): a page built from a download without other keys
+// wrote its GBIF photographs' source twice, "from the GBIF download …, of 2026-10-21; from the GBIF download …, of
+// 2026-10-21", on about two pages in three; the build now writes it once, and a page built before reads it once.
 
 /** Wikidata's two items for one plant, as the build wrote it ("two items carry Kew's IPNI identifier 676585-1, POWO 676585-1 (Q14952100, Q95967444), so no item was taken"; A16d). */
 const TWO_ITEMS = /two items carry Kew's IPNI identifier [^()]*?\((Q\d+), (Q\d+)\)(, so no item was taken)?/g;
