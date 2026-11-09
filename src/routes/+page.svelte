@@ -26,7 +26,46 @@
   import { site } from '$lib/ui/site.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { addLeavesExample, enterExample, notEnteredWords, type NotEntered } from '$lib/ui/grow/example.svelte';
+  import { units } from '$lib/ui/units.svelte';
+  import { temp } from '$core/units';
+  import { dayWords } from '$lib/ui/ref/lead-figure';
+  import { kindToSay, olderWords, type OlderKind } from '$lib/ui/ref/older-kind';
+  import { changedLately } from '$lib/changes/rounds';
+  import PinnedViews from '$lib/browse/PinnedViews.svelte';
   let { data } = $props();
+  /**
+   * What changed lately (round eighty-seven): the newest lines of the rounds' records, as /changes gives them, from the
+   * changelog's own module (`changedLately`, $lib/changes/rounds), never lines written here.
+   */
+  const lately = changedLately(4);
+  /** The browse pages and the changes page, linked where they are in the build; the catalogue's groupings until then. */
+  const ROUTES = import.meta.glob(['/src/routes/region/+page.svelte', '/src/routes/family/+page.svelte', '/src/routes/genus/+page.svelte', '/src/routes/browse/+page.svelte', '/src/routes/changes/+page.svelte']);
+  const has = (r: string) => `/src/routes${r}/+page.svelte` in ROUTES;
+  /**
+   * The Browse table (round eighty-seven; the review of stage 1, B1 and B2): the browse pages where the corpus has their
+   * table (`data.groups`), each with the count its own page lists, in plain words; there was "By region: on a map, 3
+   * regions", where /region has no map (the map is stage 2) and lists 14 on the fixture, the 3 being the old catalogue's
+   * origin groups. Where the corpus has no table (`data.catalogueGroups`), every browse page is a 503, and the rows are the
+   * catalogue's own groupings with their counts. "Grown by someone" says "not counted" where the reference counts none.
+   */
+  const browseRows = $derived.by(() => {
+    const g = data.groups, cg = data.catalogueGroups;
+    if (g && has('/region')) return [
+      { label: 'By region', note: "TDWG's botanical countries, continent by continent", n: g.regions, href: '/region' },
+      { label: 'By family', note: 'every family the reference holds', n: g.families, href: '/family' },
+      { label: 'By genus', note: 'A to Z, the genera of two species or more', n: g.genera, href: '/genus' },
+      // The browse page's own filter (round eighty-seven, C1): the species iNaturalist holds observations of in cultivation.
+      // Not counted at all is said, with no number (never 0); counted for some, how many are not.
+      ...(has('/browse') ? [{ label: 'Grown by someone', note: g.grownUncounted ? 'iNaturalist records in cultivation: not counted in this build' : g.grownNotCounted ? `iNaturalist records in cultivation; ${fmtN(g.grownNotCounted)} species not counted` : 'iNaturalist records in cultivation', n: g.grown, href: '/browse?grown=1' }] : [])
+    ];
+    if (cg) return [
+      { label: 'By region of origin', note: "the catalogue's groups of origins", n: cg.origins, href: '/?by=origin' },
+      { label: 'By family', note: "the catalogue's families", n: cg.families, href: '/?by=family' },
+      { label: 'By genus', note: "the catalogue's genera", n: cg.genera, href: '/?by=genus' }
+    ];
+    return [];
+  });
+  const lead = $derived(data.lead ?? null);
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
   /**
@@ -164,6 +203,8 @@
     // its tiles are brought into view, the row under the pinned bar (round sixty; visitor 11).
     else if (data.open) void tick().then(() => revealRow(data.open));
   });
+  /** The top bar's height: 44 px until round eighty-seven, 52 to 57 px since (its rule of ink, the search); measured. */
+  const barH = () => document.getElementById('topbar')?.getBoundingClientRect().height ?? 44;
   /** Bring an opened row's first tiles into view when they would start under the bottom bar or below the fold. */
   function revealRow(id: string | null) {
     if (!id) return;
@@ -176,7 +217,7 @@
   function placeRow(id: string) {
     const el = document.getElementById(`g-${id}`);
     if (!el) return;
-    const under = 44 + Math.max(document.querySelector<HTMLElement>('.stickyhead')?.offsetHeight ?? 0, document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0) + 4;
+    const under = barH() + Math.max(document.querySelector<HTMLElement>('.stickyhead')?.offsetHeight ?? 0, document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0) + 4;
     const top = el.getBoundingClientRect().top;
     window.scrollTo({ top: top + window.scrollY - under });
     const short = el.getBoundingClientRect().top - under;
@@ -209,7 +250,7 @@
    */
   let fetchingBefore: Promise<boolean> | null = null;
   /** Where the pinned bar ends: what is above it is out of sight. */
-  const pinnedEdge = () => 44 + (document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0);
+  const pinnedEdge = () => barH() + (document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0);
   /** The first loaded row's top, on screen. */
   const anchorTop = () => document.querySelector<HTMLElement>('.rows .grow')?.getBoundingClientRect().top ?? Infinity;
   function growBefore(): Promise<boolean> {
@@ -299,7 +340,7 @@
       // the heading under the row; the author's phone, M.)
       const pinned = document.querySelector<HTMLElement>('.stickyhead .toolrow');
       const head = document.querySelector<HTMLElement>('.stickyhead');
-      const under = 44 + Math.max(head?.offsetHeight ?? 0, pinned?.offsetHeight ?? 0) + 4;
+      const under = barH() + Math.max(head?.offsetHeight ?? 0, pinned?.offsetHeight ?? 0) + 4;
       window.scrollTo({ top: h.getBoundingClientRect().top + window.scrollY - under });
       // A letter near the end (W, Z) has fewer rows below it than a screen holds, so the page could not scroll far enough
       // and the browser clamped at the footer with the heading just above the fold (the author's phone, round forty-nine).
@@ -319,7 +360,7 @@
   function showLetters() {
     if (!lettersEl) return;
     const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
-    const under = 44 + (bar?.offsetHeight ?? 0) + 8;
+    const under = barH() + (bar?.offsetHeight ?? 0) + 8;
     const chips = lettersEl; // the chips are in the toolbar now (round sixty)
     // An instant move, not a smooth one: a smooth scroll upward crosses the sentinel above the rows, the chunk it fetches
     // lands mid-animation, and Safari stops the animation where it is, part of the way (the author's phone, round forty-nine).
@@ -688,6 +729,8 @@
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   /** The welcome line is drawn: a visitor's page, not dismissed, no search typed. */
   const showWelcome = $derived(visitor && !welcomeHidden && !searchMode);
+  /** The lead leads a visitor's page, with nothing typed (round eighty-seven): the head and the pitch are its, then. */
+  const leading = $derived(visitor && !!lead && !searchMode);
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
   const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with a habitat climate; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
@@ -698,17 +741,17 @@
   const grownNames = $derived(new Set(data.grown?.names ?? []));
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { /** the page a missing name's plants say it is an older name of, or GBIF's name for (round eighty-six; review-w W2); `gbif` null while not known (the final review's U3) */ olderOf?: { name: string; gbif: boolean | null }; slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
+  type Tile = { /** the page a missing name's plants say it is an older name of, or GBIF's name for (round eighty-six; review-w W2); `kind` null while not known (the final review's U3), the reference's answer first and the plant's record where the reference is not reached (round eighty-seven, `kindToSay`) */ olderOf?: { name: string; kind: OlderKind | null }; slug: string; key?: PageId; /** the page's GBIF key, which a grower's plants are matched by (round seventy-eight) */ gbif?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean; /** plants filed under their genus: the genus's tile, whose link is its row of the catalogue (round eighty-one, H) */ genus?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
-    const toTile = (s: { slug: string; name: string; genus?: boolean; olderOf?: string }): Tile => {
+    const toTile = (s: { slug: string; name: string; genus?: boolean; olderOf?: string; olderKind?: string }): Tile => {
       // A genus is no species of the index: its tile links its row, which `/species/<genus>` opens (round eighty-one, H).
       if (s.genus) return { slug: s.slug, name: s.name, genus: true };
       const found = bySlug?.get(s.slug) as Tile | undefined;
       // A hybrid's name with its sign, where the index entry has it without (an index made before round eighty-one).
       const e = found && s.name.includes('×') && !found.name.includes('×') && withoutSign(s.name) === withoutSign(found.name) ? { ...found, name: s.name } : found;
-      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug, ...(bySlug && s.olderOf ? { olderOf: { name: s.olderOf, gbif: gbifKind(s.slug, s.olderOf) } } : {}) };
+      if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug, ...(bySlug && s.olderOf ? { olderOf: { name: s.olderOf, kind: kindToSay(s.olderKind, gbifKind(s.slug, s.olderOf)) } } : {}) };
       // From the whole index (after a search) the entry carries its photograph; an own tile shows it only when switched on.
       return e.thumb && !prefs.referencePhotos ? { ...e, thumb: undefined, alt: undefined, thumbOff: true } : e;
     };
@@ -789,7 +832,13 @@
     <meta property="og:image:alt" content={OG_ALT} />
     <meta name="twitter:card" content="summary_large_image" />
   {/if}
-  {#if visitor && data.featured.length}
+  {#if visitor && lead?.photo && !searchMode}
+    <!-- The lead's photograph is a visitor's largest first-screen paint since round eighty-seven, and the strip starts
+         past a desktop's first screen (1,091 px at 1280): the lead's is preloaded at high priority, and the strip's first
+         tile is not, where it once took the bandwidth from the photograph the page leads with (the review of stage 1, S6). -->
+    <link rel="preload" as="image" href={lead.photo.src} fetchpriority="high" />
+    {#each photoHosts([lead.photo.src]) as h (h)}<link rel="preconnect" href={h} />{/each}
+  {:else if visitor && data.featured.length}
     <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
          hosts of the first three are preconnected, so the handshakes start with the stylesheet (round forty-two, 1). A grower's own
          page replaces the strip after the collection opens; the one small file this costs them is cached by then. -->
@@ -843,16 +892,18 @@
 {#snippet tile(c: Tile)}
   {@const own = owned.get(c.slug) ?? (c.gbif != null ? owned.get(`key:${c.gbif}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
-    {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `${own.length} plants`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
     {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="no page under this name" /></div>{:else if c.genus}<div class="im"><Placeholder name={c.name} caption="genus" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <!-- A genus's tile has no photograph to wait for: it is its row of the catalogue, said so, never "loading…" for good (round eighty-five; review-w W8). -->
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
+      <!-- The grower's plant of it, or "following", as a line under the name, not a chip over the photograph (round
+           eighty-seven; the review of stage 2's pages, 8). -->
+      {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `${own.length} plants`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
       <!-- An English name is set as a name, the family in small capitals: one style for two kinds of words read as one (the merge, round eighty-five; review-w W11). -->
       <div class="fam" class:common={!!commonOr(c) && commonOr(c) !== c.family}>{commonOr(c) ?? ''}</div>
       {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
-      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing && c.olderOf ? (c.olderOf.gbif === null ? `the reference files it under ${c.olderOf.name}` : `${c.olderOf.gbif ? "GBIF's name for" : 'an older name of'} ${c.olderOf.name}`) : ''}</div><!-- a name with no page and no word of one: the caption says "no page under this name", and nothing more is known (round eighty-six; review-w W2: "not in the reference" was said of older names) -->
+      <div class="fig" title={c.climate ? climateWord(c.climate, keyless(c)) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.genus ? 'genus: its row of the catalogue' : c.missing && c.olderOf ? olderWords(c.olderOf.name, c.olderOf.kind) : ''}</div><!-- a name with no page and no word of one: the caption says "no page under this name", and nothing more is known (round eighty-six; review-w W2: "not in the reference" was said of older names) -->
     </div>
   </a>
 {/snippet}
@@ -899,7 +950,7 @@
        Its placeholder fits a phone's box; the field number is named in its label (round sixty-two; the grower review's 7). -->
   <div class="stickyhead">
   <div class="toolrow" bind:this={toolrowEl}>
-    <input class="searchbar" type="search" placeholder="Search your plants by number or name…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search your plants by number, name or field number, and species (on this device)" use:focusOnDesktop />
+    <input class="searchbar" type="search" placeholder="Search your plants by number or name…" id="search" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search your plants by number, name or field number, and species (on this device)" use:focusOnDesktop />
     {#if searchMode}
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
     {:else}
@@ -945,6 +996,8 @@
         {#each mineTiles.follow as c (c.slug)}{@render tile(c)}{/each}
       </div>
     {/if}
+    <!-- The grower's pinned views, with what changed in each since (round eighty-seven, C6; the browse agent's section). -->
+    <PinnedViews />
     {#if mineTiles.grow.length + mineTiles.follow.length < 6 && data.featured.length}
       {@render featured(true)}
     {/if}
@@ -952,6 +1005,56 @@
   {/if}
 {:else}
   <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
+  {#if leading && lead}
+    <!-- The lead (round eighty-seven; plan D1, the owner's look): one figure from the reference and its trail, each part
+         read from the species' record (`leadOf`), the day's species chosen by the strip's rule. -->
+    <section class="lead" aria-labelledby="lead-h">
+      <div class="leadtext">
+        <p class="sechead leadkick">A figure from the reference, and where it came from</p>
+        <h1 id="lead-h">The coldest night on record where <SpeciesName name={lead.name} /> grows wild: <span class="leadfig">{temp(lead.coldC, units.current, 1).replace(/^-/, '−')}</span>.</h1>
+        <!-- A phone's first screen held the figure and its photograph alone, and nothing on it said what the site is (the
+             review of stage 1, S7; the owner's decision): on a phone, one sentence of what this is, from the facts line's own
+             live counts, under the figure and over the photograph. A desktop's first screen has the facts line itself. -->
+        <p class="leadwhat">{fmtN(data.total)} plant species, named as Kew names them, with their wild records and, for {fmtN(data.withClimate)}, the climate where they grow. Free, with no account and no tracking.</p>
+        <table class="trail">
+          <tbody>
+            <tr><th scope="row">Records</th><td><span class="num">{fmtN(lead.records)}</span> wild record{lead.records === 1 ? '' : 's'} in <span class="num">{fmtN(lead.cells)}</span> grid cell{lead.cells === 1 ? '' : 's'}, inside Kew's native range{#if lead.regions.length}{' '}({lead.regions.join(', ')}){/if}</td></tr>
+            <tr><th scope="row">From</th><td>{#if lead.from.download}{#if lead.from.href}<a href={lead.from.href} rel="noopener">GBIF occurrence download</a>{:else}GBIF occurrence download{/if}{#if lead.from.day}{' '}of {dayWords(lead.from.day)}{/if}{:else}GBIF's occurrence search{#if lead.from.day}, asked {dayWords(lead.from.day)}{/if}{/if}</td></tr>
+            <tr><th scope="row">Temperatures</th><td>NASA POWER, daily, over {lead.years} years, at the grid cell of a typical record{#if lead.place}{' '}({lead.place}){/if}{#if lead.lapseM}, corrected for {fmtN(Math.abs(lead.lapseM))} m of elevation{/if}</td></tr>
+            <tr><th scope="row">Counted only</th><td>records inside Kew's native range and placed to within 10 km; <a href="/about/how#records">the rules</a></td></tr>
+          </tbody>
+        </table>
+        <p class="leadmore"><a href="/species/{lead.slug}">The whole page for <SpeciesName name={lead.name} /></a> <span class="muted2">(a different species each day, from pages with a habitat climate and an open photograph)</span></p>
+      </div>
+      {#if lead.photo}
+        <figure class="leadph">
+          <a href={lead.photo.href} rel="noopener" tabindex="-1" aria-hidden="true"><img src={lead.photo.src} alt="" width="300" height="300" fetchpriority="high" /></a>
+          <figcaption>{lead.photo.who}{lead.photo.lic ? `, ${lead.photo.lic}` : ''}, via {lead.photo.via}{#if lead.photo.read}, credit read {dayWords(lead.photo.read)}{/if}</figcaption>
+        </figure>
+      {/if}
+    </section>
+    <section class="factsline" aria-label="What this is">
+      <p>{fmtN(data.total)} plant species, named as Kew's World Checklist names them, with wild records from GBIF and iNaturalist, and for {fmtN(data.withClimate)} of them the climate where they grow. Free, with no account, no adverts and no tracking. Your own plants stay on your device unless you turn on sync, which is encrypted before it leaves.</p>
+    </section>
+    <section class="browselate">
+      <div>
+        <h2 class="sechead">Browse</h2>
+        <table class="browse plain">
+          <tbody>
+            {#each browseRows as b (b.label)}<tr><td><a href={b.href}>{b.label}</a></td><td class="note">{b.note}</td><td class="n">{b.n != null ? fmtN(b.n) : ''}</td></tr>{/each}
+          </tbody>
+        </table>
+      </div>
+      {#if lately.length}
+        <div>
+          <h2 class="sechead">Changed lately</h2>
+          {#each lately as c, i (i)}<div class="lateline"><span class="d">{dayWords(c.date)}</span><span>{c.text}</span></div>{/each}
+          <p class="latemore">{#if has('/changes')}<a href="/changes">Every round's record</a>{:else}<a href="https://github.com/zomethingje-eng/cultifolio/tree/main/docs">Every round's record</a>{/if}</p>
+        </div>
+      {/if}
+    </section>
+  {/if}
+  {#if !leading}
   <div class="headwrap" class:searching={searchMode} class:withwelcome={showWelcome}>
   <!-- To a visitor the head says what this is in three short lines, not a 62-word sentence that read as a disclaimer, and then
        shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
@@ -972,6 +1075,7 @@
     </ul>
   {/if}
   </div>
+  {/if}
 
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
   {#if showWelcome}
@@ -1010,7 +1114,7 @@
       <!-- round fifty-eight; the accessibility review: the same toggle group as on the grower's view -->
       <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="all" onchange={(v) => { if (v === 'mine') stopBrowsing(); }} />
     {/if}
-    <input class="searchbar" type="search" placeholder="Search species, genus, family or origin…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
+    <input class="searchbar" type="search" placeholder="Search species, genus, family or origin…" id="search" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
     {#if searchMode}
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
@@ -1121,7 +1225,7 @@
   .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: var(--tap); min-width: var(--tap); text-decoration: none; } /* 44 px under a finger (round sixty; visitor 17) */
   /* The visitor's three lines, then the product itself (round sixty; visitor 1). */
   .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 60rem; } /* each line whole at 1024 px in the desktop's 15 px text (round eighty-two) */
-  .pitch li::marker { color: var(--accent); }
+  .pitch li::marker { color: var(--mut); }
   /* On a phone the introduction is its first line alone, one sentence, so the search, the grouping and a whole catalogue
      row are on the first screen; what the other two lines say is on the about page (round sixty-two; outside
      review A10, B1). */
@@ -1146,7 +1250,7 @@
      N13), and two cut the author ("Photo: CC BY, Sandy…" on the owner's iPhone; round seventy-six, rule 4). The tiles of a
      row share its height, so the row stays even. */
   .ftile .fcred, .tile .cred { display: block; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
-  .ftile .fcred { padding: 0 9px 8px; margin-top: -4px; }
+  .ftile .fcred { padding: 0 0 8px; margin-top: -4px; }
   .ftile .fcred.gone { visibility: hidden; }
   .tile .cred { margin-top: 2px; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
@@ -1192,22 +1296,23 @@
   .strip { display: grid; grid-auto-flow: column; grid-auto-columns: max(112px, 7rem); gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
   .ftile:first-child { grid-column: span 2; }
   .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 2 / 1; }
-  .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
-  .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
+  .ftile { scroll-snap-align: start; display: block; overflow: hidden; background: transparent; color: inherit; text-decoration: none; }
+  .ftile:hover { text-decoration: none; color: inherit; }
+  .ftile:hover .fnm { text-decoration: underline; text-underline-offset: 2px; }
   /* `height: auto`, or the img's height attribute (240) beats the aspect ratio: a loaded photograph drew 240 px tall in a
      112 px tile, and the live strip was 320 px high (round sixty-two; outside review A10, B1: the fixture's photographs
      never load, so no test saw it). */
-  .ftile img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .ftile img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); border-radius: 2px; }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
-  .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ftile .fcom { display: block; padding: 1px 9px 8px; font-size: var(--fs-xs); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fnm { display: block; padding: 6px 0 0; font-family: var(--ui); font-style: normal; font-size: var(--fs-md); font-weight: 400; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fcom { display: block; padding: 1px 0 8px; font-size: var(--fs-xs); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .fnm:last-child { padding-bottom: 8px; }
   /* On a desktop the photographs are 3 : 2, not square: the strip was 257 px high, and the search and a whole row now fit a first screen of 768 px (round sixty-two; the outside triage's 2). */
-  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: var(--fs-md); white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: var(--fs-sm); } .ftile:first-child { grid-column: auto; } .ftile img, .ftile .fph, .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 3 / 2; } }
+  @media (min-width: 701px) { .ftile .fnm { padding: 8px 0 0; font-size: var(--fs-md); white-space: normal; } .ftile .fcom { padding: 2px 0 10px; font-size: var(--fs-sm); } .ftile:first-child { grid-column: auto; } .ftile img, .ftile .fph, .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 3 / 2; } }
   @media (min-width: 701px) { .strip { grid-auto-columns: minmax(0, 1fr); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row; overflow: visible; } .ftile:nth-child(n + 7) { display: none; } }
   @media (min-width: 1000px) { .strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .muted { color: var(--ink3); }
-  .grouptitle { font-size: var(--fs-xl); margin: 22px 0 8px; }
+  .grouptitle { font-size: var(--fs-head); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mut); margin: 22px 0 8px; }
   .skeleton { margin-top: 22px; }
   .sk { background: var(--sunk); border-radius: var(--r); }
   .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
@@ -1218,7 +1323,7 @@
      no strip). The block is `display: contents` so the row's containing block is the page and it stays pinned through the
      whole list (round forty-eight, 1). The A–Z button brings the chips and the index back. */
   .stickyhead { display: contents; }
-  .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 10px 0 0; padding: 4px 0 8px; border-bottom: 1px solid var(--rule); }
+  .stickyhead .toolrow { position: sticky; top: var(--bar-h, 53px); z-index: 40; background: var(--bg); margin: 10px 0 0; padding: 4px 0 8px; border-bottom: 1px solid var(--rule); }
   @media (max-height: 30em) { .stickyhead .toolrow { position: static; } } /* in em: 960 px at 200% text (round sixty-two; the accessibility review, 1) */
   .rows { overflow-anchor: none; }
   .azbtn { display: inline-flex; margin-left: auto; }
@@ -1243,40 +1348,97 @@
      176 px, between the chips and the first row (round sixty-two; outside review B1). */
   @media (max-width: 640px) { .letters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .letters::-webkit-scrollbar { display: none; } .letters a { flex: none; } }
   .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 16px; font-size: var(--fs-md); color: var(--ink2); }
-  .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: var(--tap); min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
+  .letters a { font-family: var(--ui); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: var(--tap); min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
   /* The letter whose rows are on their way (round eighty-five; A16h): marked at once, and pulsing while they come. */
   .letters a.busy { background: var(--accent-soft, var(--sunk)); color: var(--accent); animation: letterbusy 0.9s ease-in-out infinite alternate; }
   @keyframes letterbusy { from { opacity: 1; } to { opacity: 0.45; } }
   @media (prefers-reduced-motion: reduce) { .letters a.busy { animation: none; } }
   .letters .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .letter { font-family: var(--mono); font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
+  .letter { font-family: var(--ui); font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */
-  .rows { display: flex; flex-direction: column; gap: 6px; }
+  .rows { display: flex; flex-direction: column; gap: 0; }
   /* Neither sentinel is a scroll anchor: anchored on the foot's, a page whose rows went in above it kept the foot in view
      and asked for the next chunk, without end (round eighty; the phone review's 1). */
   .more { display: flex; justify-content: center; padding: 18px 0 6px; overflow-anchor: none; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
-  .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
-  .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
-  .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
+  .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: transparent; border-radius: 0; border-top: 1px solid var(--rule2); padding: 8px 4px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
+  .grow:hover { text-decoration: none; color: inherit; background: var(--sunk); }
+  .grow:hover .gname { text-decoration: underline; text-underline-offset: 2px; }
+  .grow.open { background: var(--sunk); border-top-color: var(--ink); }
   .grow .gthumb.mono, .grow .gthumb:empty { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: var(--fs-2xl); color: var(--ink3); }
-  .grow .gthumb { width: 56px; height: 56px; border-radius: var(--r); overflow: hidden; background: var(--sunk); }
+  .grow .gthumb { width: 56px; height: 56px; border-radius: 2px; overflow: hidden; background: var(--sunk); }
   .grow .gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: var(--r-sm); overflow: hidden; background: var(--map-sea); }
   .grow .gmap :global(.map) { border-radius: 0; aspect-ratio: 2 / 1; }
   .grow .gtx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
   /* A long family name ("Welwitschiaceae") breaks rather than push the page sideways at 320 px and 200% text (round
      sixty-two, second pass; the self-review's N10, a11y 9: /?by=family was 323 px wide). */
-  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: var(--fs-base); color: var(--ink); max-width: 100%; overflow-wrap: anywhere; }
-  .grow .gname.sci { font-family: var(--serif); font-style: italic; font-size: var(--fs-lg); }
+  .grow .gname { font-family: var(--ui); font-weight: 600; font-size: var(--fs-base); color: var(--ink); max-width: 100%; overflow-wrap: anywhere; }
+  .grow .gname.sci { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: var(--fs-lg); }
   .grow .d { font-size: var(--fs-md); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-  .grow .st { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); flex-basis: 100%; }
-  .grow .chev { font-family: var(--mono); font-size: var(--fs-xl); color: var(--ink3); text-align: center; }
+  .grow .st { font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); color: var(--ink3); flex-basis: 100%; }
+  .grow .chev { font-family: var(--ui); font-size: var(--fs-xl); color: var(--ink3); text-align: center; }
   .hgrid.opened { margin: 8px 0 18px; animation: fold 0.2s ease-out; transform-origin: top; }
   @keyframes fold { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 700px) { .grow { grid-template-columns: 48px minmax(0, 1fr) 24px; gap: 10px; } .grow .gthumb { width: 48px; height: 48px; } .grow .gmap { width: 48px; } }
   /* The number's chip sits over the top of the tile: a placeholder under it starts below the chip, so the chip no longer
      covers the genus letter (round eighty; the phone review's 9). */
-  .tile:has(.ownchip) .im :global(.ph) { padding-top: 30px; }
-  .ownchip.following { background: var(--card); color: var(--ink2); border: 1px solid var(--rule); box-shadow: var(--sh); }
+  .ownchip.following { color: var(--mut); font-family: var(--ui); }
+
+  /* The lead (round eighty-seven; plan D1): the figure in a sentence, its trail as a table, the photograph beside it. */
+  .lead { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; padding: 40px 0 28px; border-bottom: 1px solid var(--rule); }
+  .lead h1 { margin: 10px 0 0; font-weight: 400; font-size: 2.375rem; line-height: 1.2; text-wrap: pretty; }
+  .lead h1 .sciname { font-weight: 400; }
+  .leadfig { font-variant-numeric: var(--figs); font-weight: 500; white-space: nowrap; }
+  .leadkick { margin: 0; }
+  .leadwhat { display: none; }
+  .trail { margin-top: 18px; border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+  .trail tr { border-top: 1px solid var(--rule); }
+  .trail tr:last-child { border-bottom: 1px solid var(--rule); }
+  .trail th { text-align: left; font-weight: 400; color: var(--mut); width: 150px; padding: 7px 12px 7px 0; vertical-align: top; }
+  .trail td { padding: 7px 0; }
+  .leadmore { margin: 12px 0 0; font-size: 0.875rem; }
+  .muted2 { color: var(--mut); }
+  .leadph { margin: 0; }
+  .leadph img { width: 300px; height: 300px; object-fit: cover; border-radius: 2px; background: var(--sunk); }
+  .leadph figcaption { margin-top: 6px; font-size: 0.75rem; color: var(--mut); overflow-wrap: anywhere; }
+  .factsline { padding: 24px 0; border-bottom: 1px solid var(--rule); }
+  .factsline p { margin: 0; font-size: 1.0625rem; max-width: 70ch; }
+  .browselate { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: 24px 0; border-bottom: 1px solid var(--rule); }
+  .browselate h2 { margin: 0 0 8px; }
+  .browse { border-collapse: collapse; width: 100%; font-size: var(--fs-base); }
+  .browse td { padding: 8px 0; border-top: 1px solid var(--rule2); }
+  .browse .note { color: var(--mut); padding-left: 12px; }
+  .browse .n { text-align: right; font-variant-numeric: var(--figs); }
+  .lateline { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--rule2); font-size: 0.875rem; }
+  .lateline .d { color: var(--mut); font-variant-numeric: var(--figs); }
+  .latemore { margin: 8px 0 0; font-size: 0.8125rem; }
+  @media (max-width: 860px) {
+    /* One column, the photograph under the sentence and over its trail (LookFrontPhone). */
+    .lead { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding-top: 22px; }
+    .leadtext { display: contents; }
+    .leadkick { order: 1; font-size: 0.75rem; }
+    .lead h1 { order: 2; font-size: 1.6875rem; line-height: 1.25; margin-top: 8px; }
+    .leadph { order: 3; margin-top: 16px; }
+    .trail { order: 4; margin-top: 14px; }
+    .leadmore { order: 5; }
+    .leadph img { width: 100%; height: 200px; }
+    .browselate { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  }
+  /* A phone: the trail's rows stacked, its label over its value (LookFrontPhone). */
+  @media (max-width: 640px) {
+    .trail, .trail tbody, .trail tr, .trail th, .trail td { display: block; width: auto; }
+    .trail tr { padding: 8px 0; }
+    .trail th { font-size: 0.75rem; padding: 0; }
+    .trail td { padding: 0; }
+    .lateline { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .lateline .d { font-size: 0.75rem; }
+    .factsline p { font-size: 1rem; }
+    /* What this is, on the first screen (S7): under the figure, over a shorter photograph. */
+    .leadwhat { display: block; order: 3; margin: 10px 0 0; font-size: 0.9375rem; line-height: 1.4; color: var(--ink2); }
+    .leadph { order: 4; margin-top: 14px; }
+    .trail { order: 5; }
+    .leadmore { order: 6; }
+    .leadph img { height: 160px; }
+  }
 </style>

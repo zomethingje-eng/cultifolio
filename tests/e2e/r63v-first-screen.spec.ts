@@ -52,6 +52,8 @@ const measure = (page: Page) => page.evaluate(() => {
     strips: [...document.querySelectorAll<HTMLElement>('section.featured')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().top),
     stripBottom: document.querySelector('section.featured')!.getBoundingClientRect().bottom,
     searchTop: b('.toolrow .searchbar').top,
+    leadBottom: b('section.lead h1').bottom,
+    searchButton: b('#topbar .searchicon').bottom,
     inPage: document.querySelectorAll('section.featured').length
   };
 });
@@ -63,10 +65,10 @@ for (const [width, height] of [[390, 664], [375, 548], [360, 640]] as const) {
     // owner chose the strip at the top instead, so the row now comes after a short scroll. The search is still on the
     // first screen on the owner's iPhone (390 × 664) and a common Android phone (360 × 640); on an iPhone SE (375 × 548) its
     // top is, and its foot a short flick under the tab bar.
-    test(`r63v V4: at ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}, the strip and then the search are on the first screen, with no row between them`, { tag: '@phone-only' }, async ({ browser, baseURL }) => {
+    test(`r63v V4: at ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}, the lead and the top bar's search are on the first screen, and the strip comes before the search with no row between them`, { tag: '@phone-only' }, async ({ browser, baseURL }) => {
       const { ctx, page } = await liveHome(browser, baseURL, width, height, welcomed);
       const m = await measure(page);
-      console.log(`r63v V4 ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}: strip ${Math.round(m.strips[0])}–${Math.round(m.stripBottom)}, search ${Math.round(m.searchTop)}–${Math.round(m.search)}, chips ${Math.round(m.chips)}, row ${Math.round(m.rowTop)}, tab bar ${Math.round(m.tab)}`);
+      console.log(`r63v V4 ${width} × ${height}, welcome ${welcomed ? 'dismissed' : 'shown'}: lead to ${Math.round(m.leadBottom)}, strip ${Math.round(m.strips[0])}–${Math.round(m.stripBottom)}, search ${Math.round(m.searchTop)}–${Math.round(m.search)}, chips ${Math.round(m.chips)}, row ${Math.round(m.rowTop)}, tab bar ${Math.round(m.tab)}`);
       expect(m.scrollY).toBe(0);
       expect(m.welcome).toBe(!welcomed);
       // One strip, drawn once, above the search; the first row after the search.
@@ -74,10 +76,13 @@ for (const [width, height] of [[390, 664], [375, 548], [360, 640]] as const) {
       expect(m.strips.length).toBe(1);
       expect(m.stripBottom).toBeLessThanOrEqual(m.searchTop);
       expect(m.rowTop).toBeGreaterThan(m.search);
-      // The search reached at once: its top on the first screen everywhere, the whole box on the larger two phones.
-      expect(m.searchTop, `search top against the tab bar at ${m.tab}`).toBeLessThan(m.tab);
-      if (height >= 640) expect(m.search, `search bottom against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
-      else expect(m.search - m.tab, 'the search under the tab bar by more than a flick').toBeLessThanOrEqual(60);
+      // Round eighty-seven (plan D1, DESIGN-87: the owner's front page leads with one figure and its trail): the first
+      // screen is the lead's sentence, whole, and the search is reached at once from the top bar's search button, which
+      // takes the cursor to the catalogue's box; the strip, the box and the rows follow the lead, Browse and the welcome.
+      expect(m.leadBottom, `the lead's sentence against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
+      expect(m.searchButton, `the top bar's search against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
+      await page.locator('#topbar .searchicon').click();
+      await expect(page.locator('.toolrow .searchbar')).toBeFocused();
       // Its photographs come in: the same twelve tiles, at the top.
       await expect(page.locator('section.featured:visible .ftile')).toHaveCount(12);
       await ctx.close();
@@ -87,6 +92,8 @@ for (const [width, height] of [[390, 664], [375, 548], [360, 640]] as const) {
 
 test('r63v V4: on a phone a chip click moves no row', { tag: '@phone-only' }, async ({ browser, baseURL }) => {
   const { ctx, page } = await liveHome(browser, baseURL, 390, 664, false);
+  // Where a reader is when they press a chip: since round eighty-seven the chips follow the lead and the strip.
+  await page.locator('.chiprow').scrollIntoViewIfNeeded();
   const before = await measure(page);
   await page.locator('.chiprow a', { hasText: 'Climate known' }).click();
   await page.waitForURL(/chip=climate/);

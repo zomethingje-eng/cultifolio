@@ -29,14 +29,16 @@
 </details>
 
 <style>
-  .prov { margin-top: 2.5rem; padding: 0.8rem 1rem; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); }
+  /* Between two thin rules, flush with the page, its "open" in plain words (round eighty-seven's look; the review of stage
+     2's pages, 8). */
+  .prov { margin-top: 2.5rem; padding: 0.8rem 0; background: none; border-radius: 0; box-shadow: none; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
   /* A flex summary loses the browser's own triangle: it draws the page's "›" as every other disclosure does, turned when open,
      and says "open" on the right, so the card reads as one that opens (round eighty-four; W7). */
   summary { cursor: pointer; display: flex; gap: 0.8rem; align-items: baseline; flex-wrap: wrap; list-style: none; }
   summary::-webkit-details-marker { display: none; }
   summary::before { content: '›'; content: '›' / ''; display: inline-block; transition: transform 0.15s; color: var(--accent); font-weight: 700; font-size: var(--fs-lg); line-height: 1; }
   .prov[open] > summary::before { transform: rotate(90deg); }
-  summary .op { margin-left: auto; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  summary .op { margin-left: auto; font-size: var(--fs-sm); letter-spacing: 0; text-transform: none; color: var(--link, var(--accent)); font-weight: 400; }
   .prov[open] > summary .op { display: none; }
   summary:hover .k { color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }

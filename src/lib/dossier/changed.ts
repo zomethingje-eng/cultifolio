@@ -69,12 +69,14 @@ const photoSubstance = (p: unknown) => {
 /**
  * The name block without Kew's row for the page's entry (`name.kew.accepted`, round eighty-four): stored on every page
  * Kew's file reads, and shown only where it heads the page, when the heading itself changes. Written the first time, it
- * moves no page's day.
+ * moves no page's day. Nor Kew's authors of each older name (`name.kew.by`, round eighty-seven; review D's D13): the
+ * index reads them for its `homBy`, and no species page shows them, so the walk that first writes them on every page
+ * with Kew's names moves none of those pages' days (the derived agent's report, checked at the integration).
  */
 const nameSubstance = (n: unknown) => {
   const kew = n && typeof n === 'object' ? (n as Obj).kew : undefined;
-  if (!kew || typeof kew !== 'object' || !('accepted' in kew)) return n;
-  const { accepted: _, ...rest } = kew as Obj;
+  if (!kew || typeof kew !== 'object' || !('accepted' in kew || 'by' in kew)) return n;
+  const { accepted: _, by: _by, ...rest } = kew as Obj;
   return { ...(n as Obj), kew: rest };
 };
 /** The dossier's substance as one string: everything its page shows, without the build's dates and notes. */
@@ -82,7 +84,9 @@ export function substanceOf(d: object): string {
   const o: Obj = {};
   for (const [k, v] of Object.entries(d as Obj)) {
     if (LEFT_OUT.has(k)) continue;
-    o[k] = k === 'name' ? nameSubstance(v) : k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : k === 'photos' && Array.isArray(v) ? v.map(photoSubstance) : v;
+    // The records' count by dataset through GBIF's API (round eighty-seven, `occurrences.api`) is for the derived dataset,
+    // not shown on the page: left out, so writing it moves no page's day.
+    o[k] = k === 'name' ? nameSubstance(v) : k === 'occurrences' && v && typeof v === 'object' && 'api' in (v as Obj) ? (({ api: _, ...rest }) => rest)(v as Obj) : k === 'upstream' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Obj).map(([s, u]) => [s, (u as { status?: unknown } | null)?.status ?? null])) : k === 'photos' && Array.isArray(v) ? v.map(photoSubstance) : v;
   }
   return JSON.stringify(canon(o));
 }

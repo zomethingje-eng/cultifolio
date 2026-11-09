@@ -30,8 +30,12 @@ describe('the build copies the app\'s own files and not the corpus (round eighty
   it('the app\'s own files are all there, and .assetsignore still keeps s/ out of the deploy', () => {
     for (const f of ['favicon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'manifest.webmanifest', 'og.png', 'maps/land110.svg', 'maps/land50.svg']) expect(existsSync(join('static/app', f)), f).toBe(true);
     expect(readFileSync('static/app/.assetsignore', 'utf8').split(/\r?\n/)).toContain('s/');
-    // Nothing of the app's is left in static/ itself, which now holds only the corpus folder (gitignored) and app/.
-    expect(readdirSync('static').filter((f) => f !== 's' && f !== 'app')).toEqual([]);
+    // Nothing of the app's is left in static/ itself, which now holds only the corpus folder (gitignored) and app/, and since
+    // round eighty-seven fonts/: the font files and their licences (DESIGN-87), which the stylesheet imports and Vite builds
+    // into hashed files under _app/; the folder itself is not the assets folder, so the build copies nothing of it as is.
+    expect(readdirSync('static').filter((f) => f !== 's' && f !== 'app' && f !== 'fonts')).toEqual([]);
+    expect(readdirSync('static/fonts').sort()).toEqual(['source-code-pro', 'source-sans-3', 'source-serif-4']);
+    for (const f of ['source-code-pro', 'source-sans-3', 'source-serif-4']) expect(existsSync(join('static/fonts', f, 'OFL.txt')), f).toBe(true);
   });
 
   it('vite dev serves the corpus on disk at /s/, read-only and inside static/s/ alone', async () => {

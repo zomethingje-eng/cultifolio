@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // the adds below lead out of the example first (round sixty-nine; triage-68 X7; S-C4)
   /**
@@ -19,6 +20,27 @@
     return low === heading.toLowerCase() || DEFAULTS.includes(low) ? (page.status === 404 ? '' : 'Something went wrong.') : stop(m);
   });
   const onSpecies = $derived(page.url.pathname.startsWith('/species/'));
+  /**
+   * A real plant on the not-found page (round eighty-seven; plan D7): the first species the front page shows today, with
+   * its lead photograph, its author, licence and the day its credit was read, asked of /about/data/today once the page
+   * runs (an error page has no load of its own). Not on the pages about your own plants, which ask no outside host for a
+   * photograph unless you switch that on, and send this site nothing they do not list (/about/how#privacy); not for an
+   * address that could not be read, which is a moment's failure, not a missing page. A photograph that does not load
+   * takes its credit with it.
+   */
+  type Today = { slug: string; name: string; common: string | null; photo: { src: string; page: string; credit: string; read: string; captive: boolean | null } | null };
+  let plant = $state<Today | null>(null);
+  let photoFailed = $state(false);
+  const own = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost|offline)(\/|$)/.test(page.url.pathname));
+  onMount(() => {
+    if (page.status !== 404 || unreadable || own || onSpecies) return;
+    const ask = new AbortController();
+    void fetch('/about/data/today', { signal: ask.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<{ today?: Today | null }>) : null))
+      .then((j) => { if (j?.today?.photo) plant = j.today; })
+      .catch(() => { /* no plant: the page holds its search and links alone */ });
+    return () => ask.abort();
+  });
 </script>
 <svelte:head><title>{unreadable ? 'Could not be read' : page.status === 404 ? 'Not found' : 'Something went wrong'} · Cultifolio</title></svelte:head>
 <div class="err">
@@ -49,17 +71,41 @@
     {/if}
     <!-- The search the other 404 has, so a misspelt address is one step from the page it meant (round sixty; visitor 14). -->
     <form class="find" action="/" method="get" role="search"><label for="nf-q">Search the species</label><input id="nf-q" class="searchbar" name="q" type="search" value={sp?.name ?? ''} placeholder="A name, a genus, a family or a region" /><button class="btn" type="submit">Search</button></form>
+    {@render browse()}
   {:else if page.status === 404}
     <!-- Any other address: what was asked for, and a way back in, not a dead end (round fifty-eight; the address said, round sixty-one, visitor 18). -->
     {#if !message}<p>No page at <code>{page.url.pathname}</code>.</p>{/if}
     <form class="find" action="/" method="get" role="search"><label for="nf-q">Search the species</label><input id="nf-q" class="searchbar" name="q" type="search" placeholder="A name, a genus, a family or a region" /><button class="btn" type="submit">Search</button></form>
-    <p><a href="/">The front page</a> · <a href="/plants">My plants</a> · <a href="/about/how">How it is made</a></p>
+    {@render browse()}
+    <p><a href="/">The front page</a> · <a href="/plants">My plants</a> · <a href="/about">About</a></p>
+    {#if plant?.photo && !photoFailed}
+      <!-- One species, by the front page's own rule: its lead photograph, credited in full (rule 4). -->
+      <figure class="today" aria-labelledby="today-name">
+        <a href="/species/{plant.slug}" class="plain"><img src={plant.photo.src} alt="{plant.name}{plant.photo.captive ? ', in cultivation' : ''}" width="500" height="375" loading="lazy" onerror={() => (photoFailed = true)} /></a>
+        <figcaption>
+          <p id="today-name"><a href="/species/{plant.slug}"><i>{plant.name}</i></a>{plant.common ? `, ${plant.common}` : ''}: the first species the front page shows today, by <a href="/about/how#feature">its rule</a>.</p>
+          <p class="credit">Photograph: <a href={plant.photo.page} rel="noopener">{plant.photo.credit}</a>{plant.photo.captive ? ', in cultivation' : ''}. {plant.photo.read}.</p>
+        </figcaption>
+      </figure>
+    {/if}
   {/if}
 </div>
+
+{#snippet browse()}
+  <!-- The browse pages, for an address that named a place, a genus or a family (round eighty-seven; plan D7), only where
+       the corpus has their table (`page.error.browse`, the server's; the review of stage 1, B2): without it each is a 503,
+       and the line is left out rather than linking pages that cannot answer. -->
+  {#if page.error?.browse === true}<p class="browse">Browse the species by <a href="/region">region</a>, <a href="/genus">genus</a> or <a href="/family">family</a>.</p>{/if}
+{/snippet}
 <style>
   .err { max-width: 60ch; padding-block: 2rem; }
   .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
   .find label { flex-basis: 100%; font-weight: 600; }
   /* The site's search bar, not the browser's default box; it shrinks with the column rather than pushing the page sideways at a large text size (round fifty-nine). */
   .find .searchbar { flex: 1 1 14rem; min-width: 0; min-height: var(--tap); }
+  .today { margin: 24px 0 0; padding-top: 14px; border-top: 1px solid var(--rule); }
+  /* The photograph's box is held at its shape before it loads, so the caption does not move when it arrives. */
+  .today img { display: block; width: 100%; max-width: 500px; height: auto; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 4px; background: var(--rule2, var(--rule)); }
+  .today figcaption p { margin: 8px 0 0; }
+  .today .credit { font-size: var(--fs-md); color: var(--ink2); overflow-wrap: anywhere; }
 </style>

@@ -256,7 +256,7 @@ describe('7. NOTICE names every source the build reads, and none it does not (A2
   });
   it('no OpenAlex, which no page now lists, and the page says no page lists papers', () => {
     expect(notice).not.toMatch(/OpenAlex/);
-    expect(aboutText('how')).toContain('No page lists papers.');
+    expect(aboutText('how')).toContain('No species page lists published papers.');
   });
   it('/about/how\'s table names the checklists and the islands too', () => {
     const table = raw(FILE.how).slice(raw(FILE.how).indexOf('<table class="src">'), raw(FILE.how).indexOf('</table>'));

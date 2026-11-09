@@ -16,7 +16,11 @@ export const DISCLOSURES: Disclosure[] = [
   ...[0, 1, 2, 3].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'more', at: 'how', sel: `details.more >> nth=${n}` })),
   ...[0, 1, 2, 3, 4, 5].map((n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full', at: 'how', sel: `details.full:not(.in-full) >> nth=${n}` })),
   // Each section's rules or format in full, one tap away (round eighty-five, A; S11): 34 on /about/how, 13 on /about/formats.
-  ...Array.from({ length: 34 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
+  // Round eighty-seven, stage 2: six more on /about/how (where the name was published; extinction risk, CITES and
+  // chromosomes; flowering by month; climate class; hardiness of the habitat; at home, aim for): 40.
+  // Round eighty-seven, stage 3: one more under the lineage (t2), and five more under "Your collection" (t3: a plant's
+  // growing season, papers, labels, the sheet and the report, the app lock); t1's rules sit in existing sections: 46.
+  ...Array.from({ length: 46 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
   ...Array.from({ length: 13 }, (_, n) => ({ file: 'src/routes/about/formats/+page.svelte', cls: 'full in-full', at: 'formats', sel: `details.full.in-full >> nth=${n}` })),
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=0' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why howmade', at: 'species', sel: 'details.why.howmade' },
@@ -29,6 +33,7 @@ export const DISCLOSURES: Disclosure[] = [
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why unchecked-why', at: 'species-unchecked', sel: '#records-unchecked details.unchecked-why' },
   { file: 'src/routes/plants/new/+page.svelte', cls: 'namehelp', at: 'add', sel: 'details.namehelp' },
   { file: 'src/routes/plants/new/+page.svelte', cls: 'moredetails', at: 'add', sel: 'details.moredetails' },
+  { file: 'src/routes/plants/new/+page.svelte', cls: 'ownmother', at: 'add', sel: 'details.ownmother' }, // "Taken from one of my plants" (round eighty-seven, t2)
   { file: 'src/routes/plants/new/+page.svelte', cls: 'own', at: 'add', sel: 'details.own' },
   { file: 'src/routes/plants/import/+page.svelte', cls: 'full', at: 'import', sel: '#imp-csv-paste-box' },
   { file: 'src/routes/plants/[acc]/+page.svelte', cls: 'hab', at: 'plant', sel: '#habitat' },

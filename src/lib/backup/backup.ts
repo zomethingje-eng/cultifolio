@@ -8,9 +8,13 @@ import * as v from 'valibot';
 import { materialise, apply, live, known, readChanges, changeError, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, KEPT_NUMBERS, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
+import { isAttachmentRecord } from '$lib/attach/attach';
+import { PLANT_COLUMNS, plantCtx, plantNoOf } from './plant-columns';
 import { isPastStamp } from '$core/hlc';
 import { isRecordedTime } from '$core/when';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, photoPath, thumbPath } from './format';
+import { PIN_PREFIX } from '$lib/browse/pins';
+import { linkId, crossOf } from '$lib/db/lineage';
 
 /** Why a photo's bytes cannot be stored, or null: both files must be JPEGs (the app only ever writes JPEGs) and small enough to sync. */
 export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | null {
@@ -229,6 +233,37 @@ export const MAX_SMALL_ENTRY_BYTES = 4 * 1024 * 1024;
 /** What a damaged or foreign zip is called, in place of fflate's "invalid zip data" (round fifty-eight; the grower review). */
 export const UNREADABLE_ZIP = 'That file is not a readable zip: it may be damaged or not a Cultifolio backup. Nothing on this device was changed.';
 
+/**
+ * The stored entries named, as views of the zip's own bytes (`subarray`, no copy), read from its central directory and
+ * each entry's local header; or null when the zip is not one this can walk alone (a zip64 field, an entry compressed or
+ * of two sizes, a header out of place, a name missing), and the caller has fflate copy them (round eighty-seven, the
+ * stage 3 fixes; S2). The entries' names and sizes have been checked by fflate's own walk of the same directory first.
+ */
+export function storedViews(bytes: Uint8Array, want: ReadonlySet<string>): Map<string, Uint8Array> | null {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const u32 = (i: number) => dv.getUint32(i, true), u16 = (i: number) => dv.getUint16(i, true);
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 22 - 65535); i--) if (u32(i) === 0x06054b50) { end = i; break; }
+  if (end < 0) return null;
+  const n = u16(end + 10), dir = u32(end + 16);
+  if (n === 0xffff || dir === 0xffffffff) return null;
+  const out = new Map<string, Uint8Array>();
+  const names = new TextDecoder();
+  let p = dir;
+  for (let k = 0; k < n; k++) {
+    if (p + 46 > bytes.length || u32(p) !== 0x02014b50) return null;
+    const method = u16(p + 10), size = u32(p + 20), original = u32(p + 24), nl = u16(p + 28), xl = u16(p + 30), cl = u16(p + 32), local = u32(p + 42);
+    const name = names.decode(bytes.subarray(p + 46, p + 46 + nl));
+    p += 46 + nl + xl + cl;
+    if (!want.has(name)) continue;
+    if (method !== 0 || size !== original || size === 0xffffffff || local === 0xffffffff || local + 30 > bytes.length || u32(local) !== 0x04034b50) return null;
+    const start = local + 30 + u16(local + 26) + u16(local + 28);
+    if (start + size > bytes.length) return null;
+    out.set(name, bytes.subarray(start, start + size));
+  }
+  return out.size === want.size ? out : null;
+}
+
 /** Parse a backup from bytes: the zip a backup is. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is not a Cultifolio backup (a .cultifolio.zip).');
@@ -247,6 +282,11 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   // (round thirty-five, R1-6, R2-4).
   let declared = 0;
   const seen = new Set<string>();
+  // The photographs (and the papers, stored as photographs) are stored entries, read as views of the file's own bytes
+  // (`storedViews`), not copied: fflate's unzipSync copies every entry it returns, so a 500 MB backup held the file and a
+  // second 500 MB of copies at once, past what a phone gives a tab (round eighty-seven, the stage 3 fixes; S2). The checks
+  // below see them still; fflate is asked for the other entries only.
+  const stored = new Set<string>();
   let files: ReturnType<typeof unzipSync>;
   try {
     files = unzipSync(bytes, {
@@ -269,9 +309,16 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
         if (f.compression === 0 && f.size !== f.originalSize) throw new Error(`That zip stores ${f.name} with two different sizes; it is not a Cultifolio backup.`);
         declared += Math.max(f.size, f.originalSize);
         if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
+        if (f.name.startsWith('photos/')) { stored.add(f.name); return false; }
         return true;
       }
     });
+    if (stored.size) {
+      // A zip this reader cannot walk by itself (one written with zip64 fields) gives its photographs by fflate, copied, as before.
+      const views = storedViews(bytes, stored);
+      if (views) for (const [k, v] of views) files[k] = v as (typeof files)[string];
+      else Object.assign(files, unzipSync(bytes, { filter: (f) => stored.has(f.name) }));
+    }
   } catch (e) {
     // fflate's own failures ("invalid zip data", "unexpected EOF") carry a numeric code; the refusals above are ours and
     // already say what is wrong. The file is only read here, so nothing on the device has changed (round fifty-eight; the grower review).
@@ -366,6 +413,8 @@ export function previewMerge(current: Change[], incoming: Change[]) {
     if (!b) {
       added++;
       if (r._deleted) addedDeleted++;
+      // An attachment is a photo record with no picture, whole as it is (round eighty-seven, t3; $lib/attach/attach): a paper, not a record waiting.
+      else if (isAttachmentRecord(r)) { if (ownerLive(r)) addedByKind.attachment = (addedByKind.attachment ?? 0) + 1; else { addedOnRemoved++; addedOnRemovedByKind.attachment = (addedOnRemovedByKind.attachment ?? 0) + 1; } }
       else if (!isComplete(r)) {
         addedWaiting++;
         const what = r.kind === 'accession' ? accNo(r as unknown as Accession) : r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : (r.name ?? r.id);
@@ -376,7 +425,9 @@ export function previewMerge(current: Change[], incoming: Change[]) {
         addedOnRemovedByKind[r.kind] = (addedOnRemovedByKind[r.kind] ?? 0) + 1;
       }
       // The numbers a Replace kept are counted apart from the numbering scheme, the other setting record (round eighty-four; B5).
-      else { const k = r.kind === 'setting' && r.id.startsWith(KEPT_NUMBERS) ? KEPT_NUMBERS : r.kind; addedByKind[k] = (addedByKind[k] ?? 0) + 1; }
+      // So are pinned views, setting records too since round eighty-seven, which the preview called "the numbering
+      // scheme" (the review of stage 2's pages, 1): counted under `PIN_PREFIX`, and said as pinned views.
+      else { const k = r.kind === 'setting' && r.id.startsWith(KEPT_NUMBERS) ? KEPT_NUMBERS : r.kind === 'setting' && r.id.startsWith(PIN_PREFIX) ? PIN_PREFIX : r.kind; addedByKind[k] = (addedByKind[k] ?? 0) + 1; }
     } else if (b !== r._t) changed++;
   }
   // Numbers the merge would leave shared: a plant here and a plant in the file under one number. Nothing renumbers on
@@ -440,14 +491,14 @@ const csvSheet = (head: string[], rows: string[]) => '\ufeff' + [head.join(','),
 
 /** The plants as a flat sheet: one row each, the fields a person would want in a spreadsheet. */
 export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, Record_>): string {
-  const loc = (id: string | null | undefined) => locPath(state, id);
-  // The record's identity last: two plants under one number (two devices gave it out offline) are two rows that a reader
-  // and an import can tell apart (round sixty; the data review's 12).
-  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes', 'id'];
+  // One column a field, from one table (round eighty-seven, t3; plan F11: $lib/backup/plant-columns): the record's
+  // identity last, so two plants under one number (two devices gave it out offline) are two rows that a reader and an
+  // import can tell apart (round sixty; the data review's 12).
+  const ctx = plantCtx(state, (id) => locPath(state, id));
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
-    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : null, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes, a.id].map(csvCell).join(','));
-  return csvSheet(head, rows);
+    .map((a) => PLANT_COLUMNS.map((c) => csvCell(c.cell(a, ctx))).join(','));
+  return csvSheet(PLANT_COLUMNS.map((c) => c.head), rows);
 }
 
 /**
@@ -458,7 +509,8 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
 export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string, Record_>): string {
   // Measurements are written as the label and the unit ("height 42 mm"), not the stored key in bare millimetres, which a
   // reader in inches misread; an entry on a removed record says so in its own column (round fifty-one, 5).
-  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app', 'record removed', 'record id'];
+  // A cross's pollen parent and a graft's scion and stock plants, by their numbers (round eighty-seven, F4).
+  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app', 'record removed', 'pollen parent', 'scion from', 'stock', 'record id'];
   const rows = [...events]
     .sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id))
     .map((e) => {
@@ -468,14 +520,16 @@ export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string
       const name = acc?.taxonName ?? sow?.taxonName ?? null;
       const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k) ?? (k === 'pot' ? { label: 'Pot size', unit: 'mm' } : undefined); /* a repot's pot, in mm (round fifty-eight) */ return `${(m?.label ?? k).toLowerCase()} ${v}${m?.unit ? ` ${m.unit}` : ''}`; }).join('; ') : null;
       const removed = (acc ?? sow)?._deleted ? 'yes' : null;
-      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed, e.acc].map(csvCell).join(',');
+      const own = e.t === 'pollinate' || e.t === 'graft'; // the fields are read on their own kinds of line only, as the pages read them
+      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed, own && e.t === 'pollinate' ? plantNoOf(state, e.pollen, e.acc) : null, own && e.t === 'graft' ? plantNoOf(state, e.scion, e.acc) : null, own && e.t === 'graft' ? plantNoOf(state, e.stock, e.acc) : null, e.acc].map(csvCell).join(',');
     });
   return csvSheet(head, rows);
 }
 
 /** The propagation batches as a sheet, with the figures the batch page shows: what went in, the latest count, what was potted and lost (round twenty-eight, 9). */
 export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, Record_>): string {
-  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes', 'id'];
+  // The cross the seed came from (seed parent × pollen parent, by number, and its day) and a graft batch's stock plant (round eighty-seven, F4).
+  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes', 'cross', 'stock plant', 'id'];
   const events = new Map<string, Array<{ t: string; n: number }>>();
   for (const r of state.values()) if (r.kind === 'event' && !r._deleted && isComplete(r) && typeof r.acc === 'string') { let l = events.get(r.acc); if (!l) events.set(r.acc, (l = [])); l.push({ t: String(r.t), n: typeof r.n === 'number' ? r.n : 0 }); }
   const rows = [...sowings]
@@ -484,7 +538,11 @@ export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, 
       const ev = events.get(s.id) ?? [];
       const germ = ev.filter((e) => e.t === 'germinate');
       const parent = s.parentAcc ? (state.get(`accession:${s.parentAcc}`) as unknown as Accession | undefined) : undefined;
-      return [sowNo(s), s.taxonName, s.cultivar, kindOf(s), s.parentage, s.method, parent ? accNo(parent) : s.parentAcc, s.sown, s.count, germ.length ? Math.max(...germ.map((e) => e.n)) : null, ev.filter((e) => e.t === 'potup').reduce((n, e) => n + e.n, 0) || null, ev.filter((e) => e.t === 'loss').reduce((n, e) => n + e.n, 0) || null, s.sourceFrom, s.sourceRef, s.fieldNumber, s.provenance, s.medium, s.container, s.treatment, s.bottomHeatC, s.covered ? 'yes' : null, locPath(state, s.locationId), s.status, s.notes, s.id].map(csvCell).join(',');
+      const cid = linkId(s.cross);
+      const cl = cid ? state.get(`event:${cid}`) : undefined;
+      const c = cl && !cl._deleted && isComplete(cl) ? crossOf({ ...(cl as unknown as PlantEvent), id: cid! }) : null;
+      const cross = c ? `${plantNoOf(state, c.seed)} × ${plantNoOf(state, c.pollen)}${c.d ? `, ${c.d}` : ''}` : null;
+      return [sowNo(s), s.taxonName, s.cultivar, kindOf(s), s.parentage, s.method, parent ? accNo(parent) : s.parentAcc, s.sown, s.count, germ.length ? Math.max(...germ.map((e) => e.n)) : null, ev.filter((e) => e.t === 'potup').reduce((n, e) => n + e.n, 0) || null, ev.filter((e) => e.t === 'loss').reduce((n, e) => n + e.n, 0) || null, s.sourceFrom, s.sourceRef, s.fieldNumber, s.provenance, s.medium, s.container, s.treatment, s.bottomHeatC, s.covered ? 'yes' : null, locPath(state, s.locationId), s.status, s.notes, cross, s.method === 'graft' ? plantNoOf(state, s.stockAcc) : null, s.id].map(csvCell).join(',');
     });
   return csvSheet(head, rows);
 }

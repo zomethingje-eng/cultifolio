@@ -4,13 +4,22 @@
  * "=SUM(A1:A3)". The one thing undone is the apostrophe the backup's own sheet puts before a cell that a spreadsheet
  * would take for a formula ("'-5 °C"), so the plants.csv a backup writes reads back as it was.
  */
+import { OWN_HEADS, RESTATED_HEADS } from '$lib/backup/plant-columns';
+
+/**
+ * The identity and provenance fields a row can fill (round eighty-seven, t1; $core/identity): the plants sheet's own
+ * columns, named as ITF2 names them where it has a field (prot, prohis, cnam, cdat, vlev, vnam, vdat, vhist), and a
+ * garden's or a grower's sheet that names them in words.
+ */
+export const IDENT_FIELDS = ['provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'idHistory', 'exChain', 'clone', 'deacc', 'deaccOn', 'deaccNote'] as const;
+export type IdentField = (typeof IDENT_FIELDS)[number];
 
 /**
  * The fields a row can fill. The first ten are the ones a grower's own sheet usually has; the rest are the backup's own
  * columns, so its sheet round-trips. Genus and Qty since round sixty-one (the grower review, 3): a sheet with the genus
  * and the species in two columns is very common, and "Qty 3" is three plants.
  */
-export const FIELDS = ['number', 'name', 'genus', 'qty', 'cultivar', 'place', 'acquired', 'source', 'fieldNumber', 'notes', 'price', 'kind', 'parentage', 'nameAsReceived', 'provenance', 'status', 'lot', 'form'] as const;
+export const FIELDS = ['number', 'name', 'genus', 'qty', 'cultivar', 'place', 'acquired', 'source', 'fieldNumber', 'notes', 'price', 'kind', 'parentage', 'nameAsReceived', 'provenance', 'status', 'lot', 'form', ...IDENT_FIELDS, 'mother', 'motherHow'] as const;
 export type Field = (typeof FIELDS)[number];
 
 export const FIELD_LABEL: Record<Field, string> = {
@@ -31,7 +40,22 @@ export const FIELD_LABEL: Record<Field, string> = {
   provenance: 'Provenance',
   status: 'Status',
   lot: 'Lot or reference',
-  form: 'Form'
+  form: 'Form',
+  provType: 'Provenance type (ITF2 prot)',
+  propHistory: 'Propagation history (ITF2 prohis)',
+  collector: 'Collector (ITF2 cnam)',
+  collected: 'Collection date (ITF2 cdat)',
+  idLevel: 'Identification level (ITF2 vlev)',
+  idBy: 'Identified by (ITF2 vnam)',
+  idOn: 'Identified on (ITF2 vdat)',
+  idHistory: 'Earlier names (ITF2 vhist)',
+  exChain: 'Earlier holders (ex)',
+  clone: 'Clone',
+  deacc: 'No longer held: why',
+  deaccOn: 'No longer held: since',
+  deaccNote: 'No longer held: note',
+  mother: 'Taken from (a plant number)',
+  motherHow: 'Taken as (offset, cutting…)'
 };
 
 /** Header words, folded (lower case, letters and digits only), for each field. The backup's own headers come first. */
@@ -44,7 +68,7 @@ const HEADS: Record<Field, string[]> = {
   place: ['location', 'place', 'space', 'where', 'bench', 'position', 'site'],
   acquired: ['acquired', 'dateacquired', 'acquireddate', 'date', 'purchased', 'datepurchased', 'bought', 'datebought', 'received', 'datereceived', 'obtained', 'dateacq', 'acqdate', 'acq', 'dateobtained'],
   source: ['from', 'source', 'supplier', 'nursery', 'seller', 'vendor', 'boughtfrom', 'origin'],
-  fieldNumber: ['fieldnumber', 'fieldno', 'fieldnr', 'fn', 'collectionnumber', 'collectorsnumber', 'field'],
+  fieldNumber: ['fieldnumber', 'fieldno', 'fieldnr', 'fn', 'collectionnumber', 'collectorsnumber', 'field', 'cid'],
   notes: ['notes', 'note', 'comments', 'comment', 'remarks', 'remark', 'description'],
   price: ['price', 'cost', 'paid', 'pricepaid'],
   kind: ['kind'],
@@ -53,11 +77,38 @@ const HEADS: Record<Field, string[]> = {
   provenance: ['provenance'],
   status: ['status'],
   lot: ['lotorreference', 'lot', 'reference', 'ref'],
-  form: ['form']
+  form: ['form'],
+  provType: ['prot', 'provenancetype'],
+  propHistory: ['prohis', 'propagationhistory'],
+  collector: ['cnam', 'collector', 'collectors', 'collectedby', 'collectorsname', 'collectorname'],
+  collected: ['cdat', 'collected', 'collectiondate', 'datecollected', 'collectedon'],
+  idLevel: ['vlev', 'verificationlevel', 'identificationlevel', 'idlevel'],
+  idBy: ['vnam', 'verifier', 'verifiersname', 'identifiedby', 'determinedby', 'idby'],
+  idOn: ['vdat', 'verificationdate', 'identifiedon', 'dateidentified', 'determinedon'],
+  idHistory: ['vhist', 'verificationhistory', 'earliernames'],
+  exChain: ['ex', 'exchain', 'earlierholders'],
+  clone: ['clone', 'clonename'],
+  deacc: ['nolongerheld', 'deaccession', 'deaccessioned', 'deaccessionreason'],
+  deaccOn: ['nolongerheldon', 'deaccessiondate', 'deaccessionedon'],
+  deaccNote: ['nolongerheldnote', 'deaccessionnote'],
+  // The backup's "taken from" and "taken as" (round eighty-seven, F4): the plant a plant was taken from, by its number, and how.
+  mother: ['takenfrom', 'mother', 'motherplant'],
+  motherHow: ['takenas']
 };
-/** The backup's own columns that no field takes: the batch a plant came from and its record id. Said, not put in the notes. */
-const OWN_LINKS = ['sowing', 'id'];
 const fold = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+/**
+ * The plants sheet's columns that restate what other columns hold (round eighty-seven, t1): the accession an item's
+ * number names, ITF2's accession status, its qualifier and rank (both in the name), and the field number's code and its
+ * number (the field number column holds it whole), each marked `restated` in $lib/backup/plant-columns. Read back, they are listed apart and not put in the notes, as the
+ * sheet's own links are; a sheet with ITF2's cid alone takes it as the field number.
+ */
+const RESTATED = RESTATED_HEADS.map((h) => fold(h)); // itemof, accsta, cid, fieldcode, idql, rkql
+/**
+ * The backup's own columns that no field takes: the batch a plant came from, its record id, and the columns the plants
+ * sheet writes that the import does not read back (its GBIF key, its growing season, its photographs and papers: round
+ * eighty-seven, t3, `OWN_HEADS`). Said, not put in the notes.
+ */
+const OWN_LINKS = OWN_HEADS.map((h) => fold(h));
 
 /** The field a header cell names, or null. */
 export function fieldOfHeader(cell: string): Field | null {
@@ -173,19 +224,21 @@ export function readRow(row: string[], m: Mapping): Partial<Record<Field, string
  * default added to each plant's notes as "Locality: Totoral, Chile" (round sixty-one; the grower review, 3). The
  * backup's own record id and batch number are listed apart: they are links inside the collection that wrote the sheet.
  */
-export function unmappedColumns(rows: string[][], m: Mapping, header: boolean): { extra: Array<{ i: number; name: string }>; own: string[] } {
+export function unmappedColumns(rows: string[][], m: Mapping, header: boolean): { extra: Array<{ i: number; name: string }>; own: string[]; restated: string[] } {
   const width = Math.max(0, ...rows.slice(0, 200).map((r) => r.length));
   const used = new Set(Object.values(m).filter((x): x is number => typeof x === 'number'));
   const extra: Array<{ i: number; name: string }> = [];
   const own: string[] = [];
+  const restated: string[] = [];
   for (let i = 0; i < width; i++) {
     if (used.has(i)) continue;
     const head = header ? cellText(rows[0]?.[i]) : '';
     if (!rows.slice(header ? 1 : 0).some((r) => cellText(r[i]) !== '')) continue; // an empty column holds nothing to keep
     if (header && OWN_LINKS.includes(fold(head))) { own.push(head); continue; }
+    if (header && RESTATED.includes(fold(head))) { restated.push(head); continue; }
     extra.push({ i, name: head || `Column ${i + 1}` });
   }
-  return { extra, own };
+  return { extra, own, restated };
 }
 
 /**

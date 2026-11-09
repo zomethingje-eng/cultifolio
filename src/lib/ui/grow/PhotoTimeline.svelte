@@ -55,7 +55,7 @@
   .th { position: relative; display: block; width: 72px; height: 72px; padding: 0; border: 2px solid transparent; border-radius: var(--r); overflow: hidden; background: var(--sunk); cursor: pointer; }
   .th.on { border-color: var(--accent); }
   .th :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .th .d { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 3px; background: rgba(0, 0, 0, 0.55); color: #fff; font-family: var(--mono); font-size: 11px; text-align: center; }
+  .th .d { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 3px; background: rgba(0, 0, 0, 0.55); color: #fff; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: 11px; text-align: center; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .pair figure { margin: 0; }
   .pair :global(img) { width: 100%; height: auto; max-height: 60vh; object-fit: contain; background: var(--sunk); border-radius: var(--r); display: block; }

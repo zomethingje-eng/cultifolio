@@ -20,7 +20,7 @@
  *
  * Names: matched to Kew's checklist (bulk/wcvp_names.csv, `npm run bulk -- wcvp`) offline under rule 3, iNaturalist's
  * names also by its taxon framework sourced to POWO (decision 5), GBIF's keys by the backbone's name and author
- * (bulk/backbone/simple.txt.gz, from https://hosted-datasets.gbif.org/datasets/backbone/current/simple.txt.gz).
+ * (bulk/backbone/simple.txt.gz, from https://hosted-datasets.gbif.org/datasets/backbone/2023-08-28/simple.txt.gz).
  *
  * Writes, beside the list: scripts/excluded-datasets.txt, scripts/counted-datasets.txt and scripts/undecided-datasets.txt
  * (every dataset, by side, with the rule's reason), scripts/species-refused.txt (every name or key refused, with its

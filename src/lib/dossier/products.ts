@@ -20,6 +20,9 @@ import type { GrownRule } from './catalogue';
 import { catalogueOf, rowsOnly, catalogueFile, BYS, CHIPS } from './catalogue';
 import { buildCardFiles, buildOlderFiles, buildRowFiles, generaOfIndex, featuredFile, SITEMAP_CHUNK } from './lookups';
 import { sitemapUrls, sitemapDays } from '$lib/server/sitemap';
+import { browseTableOf, browseCountsOf, BROWSE_FILE, BROWSE_COUNTS_FILE } from '$lib/browse/table';
+import { entranceCountsOf } from '$lib/browse/counts';
+import { prepared } from '$lib/browse/engine';
 
 export interface Products {
   manifest: Manifest;
@@ -116,6 +119,13 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   put('older-genera.json', JSON.stringify(olderGeneraOf(index)));
   // The front page's strip from the popular genera (round eighty-four, the owner's decision 4), where the build reads their files.
   put('featured.json', JSON.stringify(featuredFile(index, o.grown)));
+  // The browse pages' table (round eighty-seven, C1): written in the same pass as the index, so its places are the index's.
+  // A Worker under a manifest that names it reads it; under one that does not, it derives the table from an index it holds.
+  const browse = browseTableOf(index);
+  put(BROWSE_FILE, JSON.stringify(browse));
+  // Its count for the front page's Browse table, so that page reads a few bytes, not the table (the integration).
+  // With the regions, families and genera /region, /family and /genus list (round eighty-seven, the review's B1).
+  put(BROWSE_COUNTS_FILE, JSON.stringify({ ...browseCountsOf(browse), ...entranceCountsOf(prepared(browse)) }));
   const urls = sitemapUrls(index), days = sitemapDays(index);
   for (let n = 1; (n - 1) * SITEMAP_CHUNK < urls.length; n++) put(`sitemap/${n}.json`, JSON.stringify({ urls: urls.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK), days: days.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK) }));
   // The id names everything in the directory, not the index alone: a dossier change that leaves its index entry as it was

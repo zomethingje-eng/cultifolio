@@ -1,15 +1,14 @@
 <script lang="ts">
   import { backLayer } from '$lib/ui/back-layer.svelte';
-  import '@fontsource-variable/public-sans';
-  import '@fontsource-variable/newsreader';
-  // The two faces every page paints with, preloaded so the title and the body do not reflow when they arrive.
-  import publicSansLatin from '@fontsource-variable/public-sans/files/public-sans-latin-wght-normal.woff2?url';
-  import newsreaderLatin from '@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2?url';
-  import '@fontsource/dm-mono';
+  // The one face every page paints its text in, preloaded so the body does not reflow when it arrives: Source Sans 3's
+  // roman, Latin subset (round eighty-seven, the owner's type). The italic, the serif's italic (the names) and the
+  // monospace are asked for by the sheet when a page sets text in them; their faces are declared in theme.css.
+  import sourceSansLatin from '../../static/fonts/source-sans-3/source-sans-3-latin-wght-normal.woff2?url';
   import '$lib/ui/theme.css';
   import { page, updated } from '$app/state';
   import { crumb } from '$lib/ui/crumb.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import SiteSearch from '$lib/browse/SiteSearch.svelte';
   import { sync } from '$lib/sync/engine.svelte';
   import { today } from '$lib/ui/day.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -31,6 +30,8 @@
   import { addLeavesExample, example, notEnteredWords, openExample } from '$lib/ui/grow/example.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import ToastBar from '$lib/ui/ToastBar.svelte';
+  import LockScreen from '$lib/ui/LockScreen.svelte'; // the app lock (round eighty-seven, t3; plan F12)
+  import { lock, lockExempt } from '$lib/ui/lock.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { METRIC } from '$core/units';
@@ -51,7 +52,7 @@
   let menuOpen = $state(false);
   let menuBtn = $state<HTMLButtonElement | null>(null);
   const menu = [
-    { href: '/', label: 'Species' },
+    { href: '/', label: 'Reference' },
     { href: '/plants', label: 'My plants' },
     { href: '/places', label: 'My spaces' },
     { href: '/propagation', label: 'Propagation' },
@@ -63,6 +64,7 @@
     { href: '/backup', label: 'Backup' },
     { href: '/sync', label: 'Sync' },
     null,
+    { href: '/about', label: 'About' },
     { href: '/about/how', label: 'How it is made' },
     { href: '/about/formats', label: 'Formats' },
     { href: 'https://github.com/zomethingje-eng/cultifolio', label: 'Source' }
@@ -82,6 +84,24 @@
   }
   // A page the back-forward cache brings back into a tab whose mode changed loads afresh (the fix pass; R1, 3).
   onMount(() => freshOnRestore());
+  onMount(() => lock.load());
+  /** Behind the lock screen: every page but the about pages, which say what the lock is and how to come back without the passcode (round eighty-seven, t3). */
+  const locked = $derived(lock.locked && !lockExempt(page.url.pathname));
+  // The footer is made inert by its element, not by an attribute in its tag, which the about pages' tests read as written.
+  $effect(() => { void collection.ready; void frame.holding; document.querySelector('footer.credits')?.toggleAttribute('inert', locked); });
+  // The page under the lock still sets its own title, and a plant's page is titled by its number and species, which the
+  // tab strip and the app switcher show over the lock (round eighty-seven, the stage 3 fixes; M5). While locked the title
+  // is the lock's, set again whenever the page sets its own; the page's own comes back on unlocking.
+  $effect(() => {
+    if (!locked) return;
+    const LOCKED = 'Locked · Cultifolio';
+    let wanted = document.title === LOCKED ? null : document.title;
+    const hold = () => { if (document.title !== LOCKED) { wanted = document.title; document.title = LOCKED; } };
+    hold();
+    const watch = new MutationObserver(hold);
+    watch.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => { watch.disconnect(); if (wanted && document.title === LOCKED) document.title = wanted; };
+  });
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
   const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
@@ -119,10 +139,10 @@
   });
   const closeMenu = () => {
     menuOpen = false;
-    menuBtn?.focus();
+    (openedBy ?? menuBtn)?.focus();
   };
   // Back closes the menu and stays on the page; a link in it replaces the menu's entry (round eighty-one; the phone review's 8).
-  const menuLayer = backLayer('menu', () => menuOpen, () => { const inside = !!menuEl?.contains(document.activeElement); menuOpen = false; if (inside) menuBtn?.focus(); });
+  const menuLayer = backLayer('menu', () => menuOpen, () => { const inside = !!menuEl?.contains(document.activeElement); menuOpen = false; if (inside) (openedBy ?? menuBtn)?.focus(); });
   // Open: focus goes to the first item and Tab stays inside until Escape or a choice; closed: it returns to the mark.
   let menuEl = $state<HTMLElement | null>(null);
   $effect(() => {
@@ -237,6 +257,10 @@
   onMount(() => keepOnFirstPlant(collection, () => readSetting('cultifolio.persistAfterFirst', 'device') === '1'));
   // The server's placeholder for a page drawn only here ("Opening your plants…", app.html) goes once the app is drawn;
   // CSS already hides it then, and this is for a browser without :has() (round sixty; the accessibility review, 7).
+  // The shell (app.html's #shell) is what a page drawn on the device (your collection's) shows before its scripts run,
+  // and what stays if they do not; removed once the layout has drawn. Since round eighty-seven's review fix (M6) it is the
+  // look's top bar: the word on the page's ground over a rule in the ink, 52 px tall (56 on a desktop), the theme's tokens
+  // with their light values where the sheet has not come; and the head's theme colours are the look's ground.
   onMount(() => document.getElementById('shell')?.remove());
   // The bars' heights, for the page's scroll padding: anchors and Tab land clear of them at any text size (round sixty; the visitor review, 5).
   onMount(() => {
@@ -350,19 +374,73 @@
     if (!workerOn) document.documentElement.dataset.worker = 'deferred';
   });
   /**
-   * The phone's tabs: the same five for everyone, with or without a collection, in or out of the example (round
-   * sixty-three, V1). A visitor's own four (Species, Compare, My plants, About) hid what the app does until a first plant
-   * was added, and the set changed under the owner as his phone held no collection; an empty My spaces, Propagation or
-   * Today offers the example collection on that page with a button (`ExampleOffer`; opt-in since round seventy-four). Compare and About are in the menu and the
-   * footer on every page, and Compare in its pill.
+   * The places a reader goes, in the bar on a desktop and the tab bar on a phone (round eighty-seven; the owner's look of
+   * 7 November, DESIGN-87): Reference, My plants, Today and About, the same for everyone, with or without a collection, in
+   * or out of the example (round sixty-three, V1, kept). The phone's fourth is More, the menu, which holds everything else
+   * (My spaces, Propagation, Compare, Labels, Settings, Backup, Sync, the about pages); a desktop has the menu at the
+   * bar's end. Round sixty-three's five tabs gave My spaces and Propagation a tab each; they are one tap further now, in
+   * the menu, and their own pages are as they were. "My plants" is lit on a space's and a batch's pages too: they are the
+   * grower's collection, as /plants is.
    */
+  const REFERENCE = (p: string) => p === '/' || /^\/(species|browse|region|genus|family|compare)(\/|$)/.test(p);
+  const OWN = (p: string) => /^\/(plants|places|propagation|labels)(\/|$)/.test(p);
+  const TODAY = (p: string) => p.startsWith('/today') || p.startsWith('/frost');
   const tabs: Array<{ href: string; label: string; on: (p: string) => boolean }> = [
-    { href: '/', label: 'Species', on: (p) => p === '/' || p.startsWith('/species') },
-    { href: '/plants', label: 'Plants', on: (p) => p.startsWith('/plants') },
-    { href: '/places', label: 'My spaces', on: (p) => p.startsWith('/places') },
-    { href: '/propagation', label: 'Propagation', on: (p) => p.startsWith('/propagation') },
-    { href: '/today', label: 'Today', on: (p) => p.startsWith('/today') || p.startsWith('/frost') }
+    { href: '/', label: 'Reference', on: REFERENCE },
+    { href: '/plants', label: 'My plants', on: OWN },
+    { href: '/today', label: 'Today', on: TODAY }
   ];
+  const navs: Array<{ href: string; label: string; on: (p: string) => boolean }> = [...tabs, { href: '/about', label: 'About', on: (p) => p.startsWith('/about') || p.startsWith('/changes') }];
+  /**
+   * The about pages' Data and Changes (the pages of round eighty-seven's other half): linked once their pages are in the
+   * build, so a build without them never links to a page that is not there (the prerender stops at a link that is a 404).
+   */
+  const ROUTES = import.meta.glob(['/src/routes/about/data/+page.svelte', '/src/routes/changes/+page.svelte']);
+  const hasRoute = { data: '/src/routes/about/data/+page.svelte' in ROUTES, changes: '/src/routes/changes/+page.svelte' in ROUTES };
+  /*
+   * The top bar's search box is the browse pages' component (`SiteSearch`, the browse half of round eighty-seven), with its
+   * list of answers; with no script it is a plain form that opens the front page's search for what was typed.
+   */
+  /**
+   * Where the bar has no room for the box (a phone, a tablet: 960 px or less), the search is a button, and on a page with
+   * the box (every page but the front page) the button opens the box over the bar, its list under it; leaving the box,
+   * or its Cancel, closes it (round eighty-seven, the look's button and the browse box together). The front page's
+   * button leads to the page's own box, as before.
+   */
+  let searchOpen = $state(false);
+  const barBox = () => document.querySelector<HTMLInputElement>('#topbar .site-search input');
+  async function openBarSearch(): Promise<boolean> {
+    if (ownSearch || !barBox()) return false;
+    searchOpen = true;
+    await tick();
+    barBox()?.focus();
+    return true;
+  }
+  afterNavigate(() => { searchOpen = false; });
+  /** The menu's two buttons, the bar's on a desktop and the tab bar's More on a phone: focus goes back to the one pressed. */
+  let moreBtn = $state<HTMLButtonElement | null>(null);
+  let openedBy: HTMLButtonElement | null = null;
+  const toggleMenu = (b: HTMLButtonElement | null) => { openedBy = b; menuOpen = !menuOpen; };
+  /** The search the bar's box is: the page's own box on the front page, which holds the catalogue's (round eighty-seven). */
+  const ownSearch = $derived(page.url.pathname === '/');
+  /**
+   * "/" puts the cursor in the search box, from anywhere on a page, except while typing in a field (round eighty-seven;
+   * DESIGN-87): the front page's own box there, the bar's elsewhere. A key with a modifier is the browser's. Not while
+   * the menu or a dialog holds the focus (the photo viewer, any `aria-modal` one): it would take the cursor out of what
+   * keeps it, behind it (round eighty-seven, the review of stage 1, M3).
+   */
+  function slashKey(e: KeyboardEvent) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    if (menuOpen || document.querySelector('[aria-modal="true"], dialog[open]')) return;
+    const t = e.target as Element | null;
+    if (typing(t) || (t instanceof HTMLElement && !!t.closest('[contenteditable]'))) return;
+    const box = [...document.querySelectorAll<HTMLInputElement>('main .toolrow .searchbar, #topbar .site-search input')].find((x) => x.offsetParent !== null);
+    // The one handler of the key (the box itself has none): where the bar's box is behind its button, it opens there.
+    if (!box) { if (!ownSearch && barBox()) { e.preventDefault(); void openBarSearch(); } return; }
+    e.preventDefault();
+    box.focus();
+    box.select?.();
+  }
   $effect(() => {
     if (!collection.ready) return;
     // The hint is about the grower's own collection: the sample's twelve plants set it, and the visitor's other tabs drew a grower's tabs (round sixty-one; the records review, 17).
@@ -394,23 +472,25 @@
   <!-- In the server's HTML only: a page drawn on the device (the collection's pages) added them after its styles had already
        asked for the fonts, and the browser warned that the preloaded files went unused (round eighty; the phone review's 9). -->
   {#if !browser}
-    <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
-    <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
+    <link rel="preload" as="font" type="font/woff2" href={sourceSansLatin} crossorigin="anonymous" />
   {/if}
   <!-- No <title> here: every page sets its own, and this one won on the server, so every species page was served as
        "Cultifolio" to crawlers and link previews (round fifty-nine; the accessibility and words review). -->
 </svelte:head>
 
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && menuOpen) closeMenu(); }} />
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && menuOpen) closeMenu(); else slashKey(e); }} />
 
 <!-- The first thing focusable in the document, ahead of the top bar's eight or so stops; it sat after the bar and the
      menu, where a keyboard reached it last (round fifty-eight; the accessibility review). -->
 <a class="skip" href="#main">Skip to content</a>
 
+{#if locked}<LockScreen />{/if}
+
 <!-- The top bar is the page's banner; the crumb is a breadcrumb trail, an ordered list in its own nav (round fifty-eight; the accessibility review). -->
-<header id="topbar" data-cover="top">
-  <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
-  <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
+<!-- Round eighty-seven (the owner's look): the name of the site, the search, the four places and a rule of ink under them.
+     The menu, Back, the crumb, the example's mark, sync and "+" keep their places and their names. -->
+<header id="topbar" data-cover="top" inert={locked}>
+  <a class="wordmark" class:withback={!!back} href="/">Cultifolio</a>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
   <nav class="crumb" class:detail={parts.length > 1} aria-label="Breadcrumb">
     <ol>
@@ -420,11 +500,26 @@
     </ol>
   </nav>
   <ExampleChip />
-  <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
+  <!-- The search, on every page but the front page, whose own box searches the same catalogue and more (the grower's own
+       plants): the browse pages' box and its list of answers (round eighty-seven), a form that opens the front page's
+       search with no script. Where the bar has no room (960 px or less) it is a button that opens the box over the bar. -->
+  {#if !ownSearch}
+    <!-- Its keys are the box's own; the wrapper hears only an Escape the box left alone, and closes the opened bar. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="site-search" class:open={searchOpen} onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) searchOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape' && searchOpen && !e.defaultPrevented) barBox()?.blur(); }}><SiteSearch /></div>
+  {:else}
+    <!-- On the front page the bar's search is the way to the page's own box, which searches the catalogue and the grower's
+         plants: it takes the cursor there, so the search is on the first screen under the lead (round eighty-seven). -->
+    <a class="site-search site-search-box tobox" href="#search" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus({ preventScroll: true }); } }}><span class="ph">Search a plant, a genus, a region</span><kbd aria-hidden="true">/</kbd></a>
+  {/if}
+  <a class="iconbtn searchicon" href="/#search" aria-label="Search the reference" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus(); } else if (!ownSearch && barBox()) { e.preventDefault(); void openBarSearch(); } }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></a>
+  <!-- The places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
        current one says so to a screen reader, not only in colour (round fifty-eight; the accessibility review). -->
-  <nav class="seg topseg" aria-label="Main">
-    {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
+  <nav class="topseg plain" aria-label="Main">
+    {#each navs as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label}</a>{/each}
   </nav>
+  <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
+  <button class="menubtn" type="button" bind:this={menuBtn} aria-expanded={menuOpen} aria-controls="menu" onclick={() => toggleMenu(menuBtn)}>More<span class="sr"> menu</span></button>
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + (syncWords(sync.lastError)?.text ?? sync.lastError) : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3).
        It adds what the section is about, and says which (round fifty-eight; the grower review). -->
@@ -457,7 +552,7 @@
 
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
      server before any click, which the bucket lookups exist to avoid; a tap or click is a visit the grower chose (round thirteen, 2). -->
-<main class="wrap" id="main" tabindex="-1" bind:this={mainEl} data-sveltekit-preload-data={privateRoute ? 'off' : 'hover'}>
+<main class="wrap" id="main" tabindex="-1" inert={locked} bind:this={mainEl} data-sveltekit-preload-data={privateRoute ? 'off' : 'hover'}>
   <ToastBar />
   <InstallBar />
   <GrowLayer />
@@ -476,18 +571,22 @@
      the collection was open before the list was drawn, and the shift came back (round eighty-four; P2, A12, B4). -->
 {#if (!privateRoute || collection.ready) && (!frame.holding || !!collection.failed)}
 <footer class="credits">
-  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia; each figure and photograph names its own, with its licence.</p>
-  <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
-  <!-- Compare and About from every page, now that the phone's tabs are the grower's five for everyone (round sixty-three, V1). -->
-  <p><a href="/compare">Compare species</a> · <a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
+  <!-- The owner's words (round eighty-seven, approved 8 November), then the links; the sources every page draws on, each
+       figure and photograph naming its own (round fifty-eight). "No text about a species", as /about says it, where the
+       approved line said "no text on a species page": the pages' templates were written with Claude (/about/how#written). -->
+  <p class="made">Made by Jonathan, who grows cacti, succulents and rare bulbs and got tired of care advice that never said where it came from. Built with Claude; no text about a species is written by it.</p>
+  <p class="plain links1"><a href="/about">About</a>{#if hasRoute.data}{' · '}<a href="/about/data">Data</a>{/if}{#if hasRoute.changes}{' · '}<a href="/changes">Changes</a>{/if} · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a> · <a href="/about/how#privacy">Privacy</a></p>
+  <!-- Compare and How it is made from every page, now that the tab bar is four (round sixty-three, V1; round eighty-seven). -->
+  <p class="plain links2"><a href="/compare">Compare species</a> · <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a></p>
+  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, Kew's extinction risk predictions, CITES Appendices, ChromoDB, WFO Plant List, Biodiversity Heritage Library; each figure and photograph names its own, with its licence. No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
 </footer>
 {/if}
 
 <!-- When a label does not fit its column whole, the bar shows its icons, each tab named by its label: a label never breaks
      inside a word ("Spec/ies", "Prop/agati/on" at 320 px with 200% text). Measured on the bar's own resize and once the
      web font is in (round sixty-two; the outside review's A11). -->
-<nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)} {@attach (bar: HTMLElement) => {
-  const tight = () => [...bar.querySelectorAll<HTMLElement>('a > span')].some((s) => s.offsetParent !== null && s.scrollWidth > s.clientWidth + 1);
+<nav id="tabbar" aria-label="Tabs" inert={locked} class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)} {@attach (bar: HTMLElement) => {
+  const tight = () => [...bar.querySelectorAll<HTMLElement>('a > span:not(.sr), button > span:not(.sr)')].some((s) => s.offsetParent !== null && s.scrollWidth > s.clientWidth + 1);
   const fit = () => {
     // An attribute, not a class: the bar's class is Svelte's to set, and it changes as the bar hides. Taken off only when
     // there, so a fit that changes nothing invalidates no style.
@@ -505,22 +604,25 @@
   // after the browser's own layout of the frame, measures it.
   const ro = new ResizeObserver(fit);
   ro.observe(bar);
-  for (const a of bar.querySelectorAll('a')) ro.observe(a); // a label's own width changes as the web font comes in, not the bar's
+  for (const a of bar.querySelectorAll('a, button')) ro.observe(a); // a label's own width changes as the web font comes in, not the bar's
   void document.fonts?.ready.then(fit);
   return () => ro.disconnect();
 }}>
   {#each tabs as pl (pl.href)}
     <a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
-        {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
-        {:else if pl.label === 'My spaces'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
-        {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
+        {#if pl.label === 'Reference'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
+        {:else if pl.label === 'My plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
         {:else}<circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />{/if}
       </svg>
-      <span>{pl.label === 'Plants' ? 'My plants' : pl.label}</span>
+      <span>{pl.label}</span>
     </a>
   {/each}
+  <!-- More: the menu, everything the tab bar does not hold (round eighty-seven). Named "More menu", so its visible word is in its name. -->
+  <button class="moretab" class:on={menuOpen} type="button" bind:this={moreBtn} aria-expanded={menuOpen} aria-controls="menu" onclick={() => toggleMenu(moreBtn)}>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+    <span>More</span><span class="sr">{' menu'}</span>
+  </button>
 </nav>
 
 <style>
@@ -538,16 +640,24 @@
   .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
   .iconbtn.sync.err { color: var(--bad); }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. */
-  #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px max(16px, env(safe-area-inset-right)) 2px max(16px, env(safe-area-inset-left)); margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
+  /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. Round eighty-seven: a
+     rule of ink under it, the name of the site at its start, the search, the places; 56 px on a desktop, 52 on a phone. */
+  #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--ink); display: flex; align-items: center; gap: 8px; padding: 2px max(16px, env(safe-area-inset-right)) 2px max(16px, env(safe-area-inset-left)); margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 52px; }
+  /* Its content lines up with the page's column: the column's edge is (the body's width less the column) / 2 in from the
+     body's, and the bar reaches 16 px past the body on each side. */
+  @media (min-width: 701px) { #topbar { min-height: 56px; gap: 12px; padding-inline: max(16px, env(safe-area-inset-left), calc((100% - var(--maxw)) / 2 + 16px)); } }
+  .wordmark { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 1.0625rem; letter-spacing: 0.01em; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; min-height: max(40px, var(--tap)); padding-right: 4px; }
+  .wordmark:hover { text-decoration: none; color: var(--ink); }
+  /* On a phone a detail page's bar is Back and the page's name: the name of the site is the tab bar's Reference there. */
+  @media (max-width: 480px) { .wordmark.withback { display: none; } }
   /* Padded as the body is, by the safe area where there is one: in landscape on a notched iPhone the menu button sat under
      the notch and "Add a plant" under the rounded corner, the bar padded 16 px inside a 47 px margin (round eighty-one;
      the phone review's 7). */
-  .crumb { font-size: var(--fs-xs); line-height: max(40px, var(--tap)); letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-  /* A finger's hit area (40 px) around an 11 px word: the line box, not the glyph, is the target. */
-  .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
-  .crumb a:hover { color: var(--ink); text-decoration: none; }
-  .crumb .sep { opacity: 0.45; margin: 0 5px; }
+  .crumb { font-size: var(--fs-sm); line-height: max(40px, var(--tap)); color: var(--mut); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  /* A finger's hit area (40 px) around a short word: the line box, not the glyph, is the target. */
+  .crumb a { color: var(--mut); display: inline-block; padding: 0 2px; }
+  .crumb a:hover { color: var(--ink); text-decoration: underline; }
+  .crumb .sep { margin: 0 5px; color: var(--mut); }
   /* The trail as a list that reads as the one line it was (round fifty-eight; the accessibility review). Each part before
      the last is whole, and the last (the page's own name) takes what is left and ends in an ellipsis when cut: the
      section's link is a box the ellipsis cannot enter, so a narrow bar cut "SPECIES" to "SPECIE" with no mark, and at
@@ -557,82 +667,109 @@
   .crumb li:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   /* On a phone (480 px or less) a page's own name is the trail: Back leads to the part before it. */
   @media (max-width: 480px) {
+    .crumb { flex: 1 1 auto; }
+    /* A section's own page on a phone: the name of the site and the tab bar's lit tab say where the reader is; the trail is
+       read, not drawn, so the bar keeps its room at 200% text (round eighty-seven). */
+    .crumb:not(.detail) ol { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .crumb.detail li:not(:last-child) { display: none; }
     .crumb.detail li:last-child .sep { display: none; }
   }
-  /* Where the five places are in the bar (short and narrow: a phone in landscape, a laptop at 200%), they name the
-     section, Back leads up, and the page's heading names the page; what was left for the crumb at 640 x 400 was 50 px.
-     The trail is read, not drawn, and the nav still holds the bar's space. */
+  /* A page's own name, not the section's, is the trail on a desktop too (the bar names the section): the trail is read
+     whole by a screen reader and drawn in the room the search leaves. */
   @media (max-width: 700px) and (max-height: 480px) {
     .crumb ol { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   }
   .crumb li a { text-decoration: none; } /* not the prose link's underline, which the theme gives every link in a list item (round fifty-eight; the accessibility review) */
-  .crumb .last { color: var(--ink); }
-  #topbar .topseg { margin: 0 6px; flex: none; }
-  #topbar .topseg > a { padding: 5px 12px; font-size: var(--fs-md); }
-  /* Closer set where the bar is narrow: in landscape on a notched iPhone (750 px, 47 px insets) the five places and the
-     back button ran 27 px into the right inset, "Add a plant" under the rounded corner (round eighty-four; P3). */
-  @media (max-width: 960px) { #topbar .topseg { margin: 0 2px; } #topbar .topseg > a { padding: 5px 9px; font-size: var(--fs-sm); } }
+  .crumb .last { color: var(--ink2); }
+  .crumb .last :global(i) { font-family: var(--serif); }
+  /* The search: the browse pages' component when it is mounted (it takes `.site-search`), a plain form until then. */
+  .site-search { flex: 1 1 320px; max-width: 480px; min-width: 0; margin: 0 0 0 auto; }
+  .site-search.tobox { color: var(--mut); text-decoration: none; cursor: text; }
+  .site-search.tobox .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .site-search.tobox:hover { border-color: var(--ink); text-decoration: none; color: var(--mut); }
+  .iconbtn.searchicon { display: none; }
+  @media (max-width: 700px) { .site-search { display: none; } .iconbtn.searchicon { display: inline-flex; margin-left: auto; color: var(--ink); } }
+  /* A tablet's bar (701 to 960 px) has no room for the box beside the places and a page's name: the search is its button
+     there, and a detail page's bar is Back and the page's name, as a phone's is (round eighty-seven; W14, P7's crumb). */
+  @media (min-width: 701px) and (max-width: 960px) { .site-search { display: none; } .iconbtn.searchicon { display: inline-flex; margin-left: auto; color: var(--ink); } .wordmark.withback { display: none; } .crumb { flex: 1 1 auto; } }
+  /* The box opened by that button lies over the bar, the bar's own height, until it is left (round eighty-seven). */
+  @media (max-width: 960px) { .site-search.open { display: flex; align-items: center; position: absolute; inset: 0; z-index: 2; max-width: none; margin: 0; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); background: var(--bg); } }
+  /* The places as words, plain, the current one in ink and underlined (round eighty-seven). */
+  #topbar .topseg { display: flex; gap: 20px; flex: none; margin: 0 0 0 8px; font-size: var(--fs-md); }
+  #topbar .topseg > a { color: var(--link); text-decoration: none; display: inline-flex; align-items: center; min-height: max(36px, var(--tap)); padding: 0; white-space: nowrap; }
+  #topbar .topseg > a:hover { text-decoration: underline; text-underline-offset: 3px; color: var(--hov); }
+  #topbar .topseg > a.on { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
+  #topbar:not(:has(.site-search)) .topseg { margin-left: auto; }
+  /* Closer set where the bar is narrow (round eighty-four; P3). */
+  @media (max-width: 960px) { #topbar .topseg { gap: 14px; } }
   @media (max-width: 700px) { #topbar .topseg { display: none; } }
-  /* Short and narrow (a phone in landscape, a laptop at 200% zoom: 640 x 400) has no tab bar either, which steps away
-     under 480 px tall: the places are in the top bar there, or only the menu reached them (round eighty-four; A17). */
-  @media (max-width: 700px) and (max-height: 480px) { #topbar .topseg { display: inline-flex; } #topbar .topseg > a { padding: 5px 7px; } }
-  /* The smallest phone in landscape (568 x 320): the places closer still, and the crumb, which the places name, gives way. */
-  @media (max-width: 600px) and (max-height: 480px) { #topbar { gap: 4px; } #topbar .topseg > a { padding: 5px 5px; } }
+  /* Short and narrow (a phone in landscape, a laptop at 200% zoom: 640 x 400) has no tab bar, which steps away under
+     480 px tall: the places are in the top bar there (round eighty-four; A17). */
+  @media (max-width: 700px) and (max-height: 480px) { #topbar .topseg { display: inline-flex; gap: 10px; margin-left: auto; } .iconbtn.searchicon { margin-left: 0; } }
+  @media (max-width: 600px) and (max-height: 480px) { #topbar { gap: 4px; } #topbar .topseg { gap: 8px; } .wordmark { display: none; } }
+  .menubtn { flex: none; background: none; border: 0; padding: 0 2px; font: inherit; font-size: var(--fs-md); color: var(--link); cursor: pointer; min-height: max(36px, var(--tap)); }
+  .menubtn:hover { text-decoration: underline; text-underline-offset: 3px; color: var(--hov); }
+  .menubtn[aria-expanded='true'] { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
+  /* On a phone the tab bar's More is the menu; where the tab bar steps away (short windows), the bar's own. */
+  @media (max-width: 700px) and (min-height: 481px) { .menubtn { display: none; } }
   .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: max(40px, var(--tap)); min-height: max(40px, var(--tap)); display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
-  .iconbtn.brand { color: var(--accent); cursor: pointer; }
-  .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
   .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
-  #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
-  /* No taller than the window, and scrolled by a finger on it, not the page under it: a phone in landscape is over 700 px
-     wide and 342 to 380 px tall, and the 656 px drop-down put Labels, Settings, Backup, Sync and the about links below the
-     screen, out of reach (round eighty-one; the phone review's 6). */
-  #menu { max-height: calc(100vh - 48px - 8px - env(safe-area-inset-bottom)); max-height: calc(100dvh - 48px - 8px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+  /* The menu: a list of links under a rule, at the bar's right on a desktop; the phone's opens from the left edge. */
+  #menu { position: fixed; z-index: 65; top: 57px; right: max(12px, env(safe-area-inset-right)); width: 240px; background: var(--bg); border: 1px solid var(--ink); border-radius: var(--r); padding: 6px 0; display: flex; flex-direction: column; }
+  /* No taller than the window, and scrolled by a finger on it, not the page under it (round eighty-one; the phone review's 6). */
+  #menu { max-height: calc(100vh - 57px - 8px - env(safe-area-inset-bottom)); max-height: calc(100dvh - 57px - 8px - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
   /* A thumb's height, 44 px, as the touch token: the items were 41 px (round sixty-seven; triage-66 P6, R45-25). */
-  #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 44px; }
-  #menu a:hover { background: var(--sunk); text-decoration: none; }
+  #menu a { display: flex; align-items: center; padding: 6px 16px; color: var(--link); font-weight: 400; font-size: var(--fs-md); min-height: 44px; }
+  #menu a:hover { background: var(--sunk); text-decoration: underline; }
   /* A link's look for the one item that is a button (it switches the tab into the example before it loads). */
-  #menu .menuexample { display: block; width: 100%; text-align: start; padding: 10px 12px; border: 0; border-radius: var(--r); background: none; color: var(--accent); font: inherit; font-weight: 600; font-size: var(--fs-md); min-height: 44px; cursor: pointer; }
-  #menu .menuexample:hover { background: var(--sunk); }
-  #menu a.on { color: var(--accent); }
-  #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }
-  #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
-  @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; max-height: none; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
-  main { padding-block: 0 3rem; max-width: 980px; }
-  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); overflow-anchor: none; } /* never a scroll anchor: what goes in above it must not carry the view down with it (round eighty; the phone review's 1) */
-  @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }
+  #menu .menuexample { display: block; width: 100%; text-align: start; padding: 6px 16px; border: 0; background: none; color: var(--link); font: inherit; font-weight: 400; font-size: var(--fs-md); min-height: 44px; cursor: pointer; }
+  #menu .menuexample:hover { background: var(--sunk); text-decoration: underline; }
+  #menu a.on { color: var(--ink); font-weight: 600; }
+  #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 16px; }
+  #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 0; }
+  @media (max-width: 700px) { #menu { top: 0; left: 0; right: auto; bottom: 0; max-height: none; width: min(78vw, 300px); border-radius: 0; border-width: 0 1px 0 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
+  main { padding-block: 0 3rem; max-width: var(--maxw); }
+  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: var(--maxw); font-size: var(--fs-sm); line-height: 1.6; color: var(--mut); overflow-anchor: none; } /* never a scroll anchor: what goes in above it must not carry the view down with it (round eighty; the phone review's 1) */
+  footer.credits .made { font-size: 0.8125rem; max-width: 70ch; }
+  footer.credits p:last-child { margin-top: 10px; font-size: var(--fs-xs); }
+  @media (max-width: 700px) { footer.credits { padding-bottom: calc(64px + 2rem + env(safe-area-inset-bottom)); } }
   main:focus { outline: none; }
   /* Off the screen by its own height, whatever the text size: `top: -40px` left a strip of it showing at 200% text (round fifty-nine). */
   .skip { position: absolute; left: 16px; top: 0; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; min-height: var(--tap); border-radius: var(--r); font-weight: 600; font-size: var(--fs-md); transform: translateY(calc(-100% - 4px)); }
   .skip:focus { transform: translateY(8px); outline: 2px solid var(--accent); }
   footer.credits p { margin: 0 0 4px; }
-  footer.credits a { display: inline-block; padding: 12px 2px; margin: -12px 0; }
+  /* A finger's 44 px by padding that the margin takes back, so each link's hit area is its word and 10 px either side and
+     the words sit evenly between their dots: a 40 px minimum width centred the short words in wide boxes, and "Data" and
+     "Changes" stood further from their dots than the rest (the review of stage 2's pages, 8). The dots before Data and
+     Changes are written `{' · '}`: at the head of an `{#if}` the space before a dot was trimmed, "About· Data". */
+  footer.credits a { display: inline-block; padding: 12px 10px; margin: -12px -10px; color: var(--link); text-decoration: none; }
+  footer.credits a:hover { text-decoration: underline; text-underline-offset: 3px; }
   #tabbar { display: none; }
   @media (max-width: 700px) {
-    main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
+    main { padding-bottom: calc(64px + 2rem + env(safe-area-inset-bottom)); }
     /* As many equal columns as tabs shown, each allowed to shrink below its word: at 150 to 200% text "Today" went off
        the screen past a fixed bar nobody can scroll (round sixty; the accessibility review, 5). A word too long for its
-       column wraps under its icon rather than pushing the next tab out. */
-    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
-    #tabbar a { color: var(--ink2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; min-height: 56px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; text-align: center; line-height: 1.15; }
+       column wraps under its icon rather than pushing the next tab out. Round eighty-seven: four, on the paper, under a
+       rule of ink; the current one in ink and heavier. */
+    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--bg); border-top: 1px solid var(--ink); padding-bottom: env(safe-area-inset-bottom); }
+    #tabbar a, #tabbar .moretab { color: var(--ink2); font: inherit; font-size: 0.8125rem; font-weight: 400; min-height: 56px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; text-align: center; line-height: 1.15; background: none; border: 0; cursor: pointer; }
     /* Words whole: a label wraps between its words ("My / plants") and never inside one (round sixty-two; A11). */
-    #tabbar a span { max-width: 100%; overflow-wrap: normal; word-break: normal; hyphens: manual; }
+    #tabbar a span, #tabbar .moretab > span:not(.sr) { max-width: 100%; overflow-wrap: normal; word-break: normal; hyphens: manual; }
     #tabbar svg { flex: none; }
-    /* The smaller step: one size down, no tracking, no side padding; a label still wraps only between its words
-       (round sixty-two; the verification review's grower 1). */
-    #tabbar:global([data-small]) a { font-size: var(--fs-xs); letter-spacing: 0; padding-left: 0; padding-right: 0; }
+    /* The smaller step: one size down, no side padding; a label still wraps only between its words (round sixty-two). */
+    #tabbar:global([data-small]) a, #tabbar:global([data-small]) .moretab { font-size: var(--fs-xs); letter-spacing: 0; padding-left: 0; padding-right: 0; }
     /* A label that would not fit whole: every tab is its icon, larger, and the label stays its accessible name, read but
        not drawn (round sixty-two; A11). */
-    #tabbar:global([data-icons]) a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    #tabbar:global([data-icons]) a span, #tabbar:global([data-icons]) .moretab > span:not(.sr) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     #tabbar:global([data-icons]) svg { width: 26px; height: 26px; }
     #tabbar a:hover { text-decoration: none; }
-    #tabbar a.on { color: var(--accent); }
+    #tabbar a.on, #tabbar .moretab.on { color: var(--ink); font-weight: 600; }
     /* Out of the way while scrolling down, by its own height and the safe area under it (round fifty-eight; the grower review). */
     #tabbar { transition: transform 0.22s ease; }
     #tabbar.away { transform: translateY(100%); }
     /* Room at the end of the page for the compare pill above the tab bar (round fifty-eight; the grower review). */
-    :global(body:has(.cmppill)) footer.credits { padding-bottom: calc(56px + 2rem + 56px + env(safe-area-inset-bottom)); }
+    :global(body:has(.cmppill)) footer.credits { padding-bottom: calc(64px + 2rem + 56px + env(safe-area-inset-bottom)); }
   }
   @media (prefers-reduced-motion: reduce) { #tabbar { transition: none; } #tabbar.away { transform: none; } }
   /* Under 480 px tall the bottom bar would take a sixth of the screen: the places stay one tap away in the menu. */

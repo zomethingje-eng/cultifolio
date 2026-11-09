@@ -32,17 +32,20 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 768]] as const) 
     // past `page.route`, so they never loaded (round sixty-four; the all-engines run; r61w-pages blocks it for the same).
     test.use({ viewport: { width, height }, locale: 'en-GB', serviceWorkers: 'block' });
 
-    test('the search and a whole catalogue row are on the first screen, the chips with the rows', async ({ page }) => {
+    test('the lead and the search are on the first screen, and the chips with the rows', async ({ page }) => {
       await liveHome(page);
       const m = await page.evaluate(() => {
         const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
-        return { scrollY, h: innerHeight, search: b('.toolrow .searchbar').bottom, chips: b('.tools .chiprow').bottom, toolEnd: b('.toolrow').bottom, rowTop: b('.rows .grow').top, row: b('.rows .grow').bottom };
+        return { scrollY, h: innerHeight, lead: b('section.lead').bottom, barSearch: b('#topbar .site-search').bottom, chips: b('.tools .chiprow').bottom, toolEnd: b('.toolrow').bottom, rowTop: b('.rows .grow').top, row: b('.rows .grow').bottom };
       });
       expect(m.scrollY).toBe(0);
-      // On the base the search stood at y 1262 and the first row at 1478 at every one of these sizes.
-      expect(m.search, `search bottom ${m.search} of ${m.h}`).toBeLessThanOrEqual(m.h);
-      expect(m.chips).toBeLessThanOrEqual(m.h);
-      expect(m.row, `first row bottom ${m.row} of ${m.h}`).toBeLessThanOrEqual(m.h);
+      // Round eighty-seven (plan D1, DESIGN-87): the front page leads with one figure, its trail and its photograph, whole on
+      // the first screen; the search is the top bar's, which takes the cursor to the catalogue's box. On the base the search
+      // stood at y 1262 and the first row at 1478 at every one of these sizes; round sixty-two put both on the first screen.
+      expect(m.lead, `lead bottom ${m.lead} of ${m.h}`).toBeLessThanOrEqual(m.h);
+      expect(m.barSearch).toBeLessThanOrEqual(m.h);
+      await page.locator('#topbar .site-search').click();
+      await expect(page.locator('.toolrow .searchbar')).toBeFocused();
       expect(m.rowTop - m.toolEnd).toBeLessThan(110); // nothing but the letters between the chips and the rows
     });
   });

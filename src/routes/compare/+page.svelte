@@ -288,7 +288,7 @@
   .head img { visibility: hidden; }
   .head img.ready { visibility: visible; }
   .head .cred { display: block; padding: 4px 14px 0; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
-  .pinnames { position: sticky; top: 44px; z-index: 30; height: 0; overflow-x: clip; overflow-y: visible; pointer-events: none; } /* clipped sideways: unclipped, the moved row widened the page on a phone */
+  .pinnames { position: sticky; top: var(--bar-h, 53px); z-index: 30; height: 0; overflow-x: clip; overflow-y: visible; pointer-events: none; } /* clipped sideways: unclipped, the moved row widened the page on a phone */
   .pinnames .pinrow { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 12px; background: var(--bg); border-bottom: 1px solid var(--rule); padding: 6px 0; opacity: 0; transition: opacity 0.15s; }
   .pinnames.on .pinrow { opacity: 1; }
   .pinnames span { font-family: var(--serif); font-size: var(--fs-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; }
@@ -309,7 +309,7 @@
   @media (pointer: coarse) { .head .nm { min-height: var(--tap); } a.small[href*='#s-climate'] { display: inline-flex; align-items: center; min-height: var(--tap); } }
   .head .fam { padding: 3px 14px 0; font-size: var(--fs-sm); color: var(--ink2); }
   .head .hnote { padding: 6px 14px 0; }
-  .fig b { display: block; font-family: var(--mono); font-size: var(--fs-2xl); font-weight: 500; letter-spacing: -0.02em; }
+  .fig b { display: block; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-2xl); font-weight: 400; letter-spacing: 0; }
   .fig span { display: block; font-size: var(--fs-sm); color: var(--ink2); line-height: 1.45; margin-top: 3px; }
   .sheet p { margin: 0 0 6px; font-size: var(--fs-md); line-height: 1.5; }
   .sheet p:last-child { margin: 0; }
@@ -328,7 +328,7 @@
   .overlay { margin: 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 12px; }
   .overlay svg { width: 100%; max-width: 480px; height: auto; display: block; margin: 0 auto; } /* stretched to 960 its labels were 25 px (round fifty-nine) */
   .overlay .grid { stroke: var(--rule); stroke-width: 1; }
-  .overlay .tick { font-size: 12px; fill: var(--ink3); font-family: var(--mono); } /* user units: 11 px or more on a phone, where the chart is drawn about 1:1 */
+  .overlay .tick { font-size: 12px; fill: var(--ink3); font-family: var(--ui); font-variant-numeric: var(--figs); } /* user units: 11 px or more on a phone, where the chart is drawn about 1:1 */
   .overlay .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
   @media (max-width: 700px) {
     /* One scroller for the whole table, not one per row: a thumb drags the columns and every row follows, and the row labels stay put. */

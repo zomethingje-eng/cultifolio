@@ -2,10 +2,11 @@
   import { onMount } from 'svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
+  import AboutNav from '../AboutNav.svelte';
   import { COUNTS_ON, liveCounts, countText, type Counts } from '$lib/ui/about-counts';
   import { revealHash, printOpens } from '$lib/ui/about-fold';
   $effect(() => {
-    setCrumb([{ label: 'About', href: '/about/how' }, { label: 'How it is made' }]);
+    setCrumb([{ label: 'About', href: '/about' }, { label: 'How it is made' }]);
     return () => setCrumb([]);
   });
   // The counts of the reference the site serves now, read once the page runs; until then, and offline, those of a named day.
@@ -28,13 +29,14 @@
 
 <PageHead title="How it is made" kick="About" places={false} sub="Every figure on a species page has a source and a method; this page is the method. A number that cannot be derived is left out and said to be missing, never filled in." />
 
-<nav class="seg topseg" aria-label="About"><a class="on" href="/about/how" aria-current="page">How it is made</a><a href="/about/formats">Formats</a></nav>
+<!-- The about pages' one row of links (round eighty-seven): the owner's page, the method, the formats, the data, the changes. -->
+<AboutNav at="how" />
 
 <article class="prose">
   <section class="brief" aria-labelledby="brief-h">
     <h2 id="brief-h">In brief</h2>
     <ul>
-      <li>Each species page is built ahead of time from public data (GBIF, Kew's WCVP, CHELSA, ETOPO, NASA POWER, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia), and every figure names its source.</li>
+      <li>Each species page is built ahead of time from public data (GBIF, Kew's WCVP, CHELSA, ETOPO, NASA POWER, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, Kew's extinction risk predictions, CITES Appendices, ChromoDB, WFO Plant List, Biodiversity Heritage Library), and every figure names its source.</li>
       <li>Nothing about a species is written for its page by a person or by AI, apart from credited quotations (<a href="#written">who wrote the templates</a>).</li>
       <li>A source that did not answer is said as "not checked", and one the build or this site did not ask as "not asked", each with why; never as "none".</li>
       <li>Your own plants are kept in this browser. They leave it only through sync, encrypted with a key only you hold, or a backup you download. A name you type or import may be looked up in the catalogue, as <a href="#privacy">the privacy section</a> says.</li>
@@ -44,7 +46,7 @@
     </ul>
     <p class="counts" id="counts">The reference {held} <b>{countText(shown.species)}</b> species pages in <b>{countText(shown.genera)}</b> genera, and <b>{countText(shown.withClimate)}</b> of those pages have a habitat climate.</p>
     <nav class="toc" aria-label="On this page">
-      <a href="#sources">Sources</a> · <a href="#list">Which species</a> · <a href="#search">Search</a> · <a href="#written">Who writes</a> · <a href="#refusal">Refusals</a> · <a href="#records">Records</a> · <a href="#marker">Map marker</a> · <a href="#climate">Climate</a> · <a href="#extremes">Extremes</a> · <a href="#year">Seasons</a> · <a href="#floor">Cold floor</a> · <a href="#archetypes">Care groups</a> · <a href="#notes">The figures at the top</a> · <a href="#related">Similar climate</a> · <a href="#corpus">How it is stored</a> · <a href="#collection">Your collection</a> · <a href="#privacy">Privacy</a> · <a href="#glossary">Glossary</a> · <a href="#source">Source code</a>
+      <a href="#sources">Sources</a> · <a href="#list">Which species</a> · <a href="#search">Search</a> · <a href="#written">Who writes</a> · <a href="#refusal">Refusals</a> · <a href="#records">Records</a> · <a href="#marker">Map marker</a> · <a href="#climate">Climate</a> · <a href="#extremes">Extremes</a> · <a href="#year">Seasons</a> · <a href="#floor">Cold floor</a> · <a href="#archetypes">Care groups</a> · <a href="#notes">The figures at the top</a> · <a href="#at-home">At home</a> · <a href="#related">Similar climate</a> · <a href="#corpus">How it is stored</a> · <a href="#collection">Your collection</a> · <a href="#browse-own">Browse, with your collection</a> · <a href="#privacy">Privacy</a> · <a href="#glossary">Glossary</a> · <a href="#source">Source code</a>
     </nav>
   </section>
 
@@ -58,15 +60,20 @@
     <tbody>
       <tr><th scope="row">GBIF Backbone Taxonomy</th><td>The name's key, its older names (synonyms), family and order, and English names.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
       <tr><th scope="row">GBIF occurrence records</th><td>Wild records for the map, the marker and the habitat climate; and records of cultivated plants, counted once to make the species list.</td><td>Per record: <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>; CC BY-NC records are used but never published.</td></tr>
-      <tr><th scope="row">World Checklist of Vascular Plants (WCVP), RBG Kew</th><td>The accepted name and author, the native range, Kew's one-line description, and Kew's own words for the range, quoted.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
+      <tr><th scope="row">World Checklist of Vascular Plants (WCVP), RBG Kew</th><td>The accepted name and author, the native range, Kew's one-line description, Kew's own words for the range, quoted, where the name was published, and a hybrid's parents.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
       <tr><th scope="row">CHELSA V2.1</th><td>Monthly climate normals, 1981–2010.</td><td><a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a></td></tr>
       <tr><th scope="row">ETOPO 2022 (NOAA)</th><td>Elevation, and which grid cells are land.</td><td>Public domain</td></tr>
       <tr><th scope="row">NASA POWER</th><td>Daily temperatures, for the extremes and the cold floor.</td><td>Public domain</td></tr>
       <tr><th scope="row">Natural Earth</th><td>Coastlines for the maps, the states and provinces the regions' shapes are made from, and the minor islands too small to draw.</td><td>Public domain</td></tr>
-      <tr><th scope="row">iNaturalist</th><td>Photographs, the taxon a page links, and the counts of plants observed in cultivation that the species list and "Popular genera" were made from.</td><td>Per photograph: <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA</a></td></tr>
+      <tr><th scope="row">iNaturalist</th><td>Photographs, the taxon a page links, the counts of plants observed in cultivation that the species list and "Popular genera" were made from, and the counts of wild plants observed in flower, by month.</td><td>Per photograph: <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA</a></td></tr>
       <tr><th scope="row">Wikimedia Commons</th><td>Photographs where the others have too few.</td><td>Per file: <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0</a>, public domain, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA</a></td></tr>
-      <tr><th scope="row">Wikidata</th><td>Identifiers in other databases, the Wikipedia article's title, the list of botanic gardens, and English names for a page with no GBIF key.</td><td><a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a></td></tr>
+      <tr><th scope="row">Wikidata</th><td>Identifiers in other databases, linked under "Elsewhere", the Wikipedia article's title, the list of botanic gardens, and English names for a page with no GBIF key.</td><td><a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a></td></tr>
       <tr><th scope="row">Wikipedia</th><td>The quoted summary.</td><td><a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></td></tr>
+      <tr><th scope="row">Kew's extinction risk predictions (Bachman et al. 2024)</th><td>A model's probability that the species is threatened, with its 95% interval and the model's confidence: a prediction, not an assessment.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
+      <tr><th scope="row">CITES Appendices</th><td>Whether the plant is listed in Appendix I, II or III, and by which listing, read from the Appendices themselves.</td><td>The Convention's text, transcribed by hand and linked; nothing of Species+ is used</td></tr>
+      <tr><th scope="row">ChromoDB (IAPT/IOPB chromosome data)</th><td>Chromosome counts as published, each with its reference.</td><td><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></td></tr>
+      <tr><th scope="row">WFO Plant List</th><td>Whether World Flora Online accepts the page's name, holds it as a synonym, or does not hold it.</td><td><a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a></td></tr>
+      <tr><th scope="row">Biodiversity Heritage Library</th><td>A link to the page where a name was published, where its resolver gives one page for exactly Kew's citation.</td><td>A link only: nothing of BHL's is copied</td></tr>
       <tr><th scope="row">National checklists, through GBIF</th><td>A country-level range, only for a name Kew's checklist has no entry for, said as that.</td><td>Per checklist, as GBIF publishes it</td></tr>
     </tbody>
   </table>
@@ -74,7 +81,7 @@
   <p>Each licence above links its text. <a href="#notice">The full list of sources</a> is the source code's NOTICE. The frost watch's forecasts come from MET Norway (CC BY 4.0) and, in the US, the National Weather Service (public domain); they are asked for your site when you use the watch, and are no part of the reference.</p>
 
   <h3 id="names">The name</h3>
-  <p class="sum">A page is headed by the name Kew's World Checklist accepts for it, with Kew's author and Kew's family. GBIF's name for the same plant, where it differs, is listed as an older name, and a plant you recorded under it still finds the page. A name is matched to a source only where the match is certain.</p>
+  <p class="sum">A page is headed by the name Kew's World Checklist accepts for it, with Kew's author and Kew's family. GBIF's name for the same plant, where it differs, is listed under Names &amp; registers as GBIF's name, and a plant you recorded under it still finds the page. A name is matched to a source only where the match is certain.</p>
   <!-- Each fold is named by its section for a screen reader, which lists them by name: thirty-four folds all called "The rules in full" said one name over and over (round eighty-six; review W's W15). -->
   <details class="full in-full"><summary>The rules in full<span class="sr">: the name</span></summary>
   <ul class="rules">
@@ -90,6 +97,7 @@
     <li>Where a page holds a variety, subspecies or form of the name as an older name, and no page holds the name itself, that is said, with the name the page holds.</li>
     <li>The add form says a name is an older name of a page only when no page is headed by it and that page holds it as an older name, or the name's own page was merged into it. The same spelling by another author names another plant, so it is never called an older name.</li>
     <li>A name GBIF's name service gives the very key a page reads GBIF's records under is GBIF's name for that page, and the add form, the search, an imported plant's row and the plant's page all say so ("GBIF's name for Hoodia alstonii"), not that it is an older name.</li>
+    <li>The add form and an import record with the plant which of the two they found the name to be. The plant's page asks the reference again when it opens, and says what the record holds only where the reference is not reached. With neither, it says only that the reference files the name under that page.</li>
     <li>When the field is left, or Return is pressed in it, the form first finishes asking whether the reference holds the name. Only when it does not, or holds it as an older name or GBIF's name of a page, does the button read "Add as typed", and then one press files the plant as typed. A press while the question is still out waits for its answer.</li>
     <li>A name you keep as typed after the add form or an import named its page carries that page. The plant's page shows that species at once, found by its hash group.</li>
     <li>A page without a Kew entry of its own, a <code>g</code> page, is headed by GBIF's name. There were {countText(COUNTS_ON.gPages)} such pages on {COUNTS_ON.on}.</li>
@@ -99,6 +107,7 @@
     <li>A name the backbone holds as a synonym is followed to the species it accepts, and an accepted subspecies or variety one step further, to its species. The page says which name was asked for.</li>
     <li>A name other species of the reference hold too is said as that, never as a name the backbone accepts as this species.</li>
     <li>An older name of a species that is another species' accepted name here is shown with its author, as an older name of this species and not that species ("Annona muricata Vell." on Annona montana).</li>
+    <li id="wfo">Under Names and registers, one line says how the WFO Plant List (World Flora Online's release of June 2026, CC0) reads the page's name: accepted, a synonym of another name it names, held but not yet placed, or not held. WFO's row is found by the name's IPNI identifier. Where WFO holds the same name and authors under another identifier, or none, that row is taken and the line gives both identifiers. Of several rows, the one carrying Kew's own number for the name, or spelt as the page with its authors, is taken. A name WFO holds only under other authors is not decided, and the line says so. The line is WFO's reading, beside Kew's, and changes nothing on the page.</li>
   </ul>
   </details>
 
@@ -178,7 +187,10 @@
   <details class="full in-full"><summary>The rules in full<span class="sr">: hybrids</span></summary>
   <ul class="rules">
     <li>A hybrid's heading, title, tile and name in the search take Kew's name for its entry, with the sign, from <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/src/lib/core/hybrids.json">the list of hybrids</a>, made from the species list and Kew's file (486 hybrids, from Kew's file of 2026-06-04).</li>
-    <li>The page says the parents Kew's file states.</li>
+    <li>The page says the parents Kew's file states for the hybrid's entry (its hybrid formula), and links each to its page here where Kew's ids lead to one.</li>
+    <li>A parent is read by Kew's exact words, the genus written out only where Kew writes the hybrid's own genus by its initial ("A. glutinosa" under Alnus). Its words must name a row of Kew's file, and its page is the entry Kew accepts for that row.</li>
+    <li>Where the words name other authors' names as well as the one Kew accepts, the accepted one is the parent, and the page says how many others there are. Words that name no row, or rows of more than one plant, are listed with why and linked nowhere.</li>
+    <li>Each parent's habitat figures are shown beside the other's, each with its source, read from that parent's own page when the page is served: the coldest month's mean low, the warmest month's mean high and the year's rain (CHELSA), and the record low (NASA POWER). They are never combined into one climate for the hybrid.</li>
     <li>Names are compared without the sign, so GBIF's Lantana strigocamara is Kew's Lantana × strigocamara.</li>
     <li>Its address is the name without the sign. An address written with an "x" for it (<code>mentha-x-piperita</code>) moves there.</li>
     <li>A hybrid's POWO and IPNI links are its Kew entry's numbers wherever its record lacks either, and the page says so. Kew's copy at GBIF writes a hybrid's row with the sign, so the name without it never found that row.</li>
@@ -315,7 +327,7 @@
   </details>
 
   <h3 id="summary">The quoted summary</h3>
-  <p class="sum">The summary is the English Wikipedia article's opening paragraph, quoted word for word as plain text and credited, with the article's revision it was read at and the day it was read. It is quoted only where the article is shown to be about this plant. A summary read before November 2026 is Wikipedia's summary service's text, which leaves some words in brackets out; its credit says so until it is read again.</p>
+  <p class="sum">The summary is the English Wikipedia article's opening paragraph, quoted word for word as plain text and credited, with the article's revision it was read at and the day it was read. It is quoted only where the article is shown to be about this plant.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: the quoted summary</span></summary>
   <ul class="rules">
     <li>The summary is the article's opening paragraph: the first paragraph of the article's lead as <b>Wikipedia</b>'s API gives it in plain text (TextExtracts), word for word, its brackets kept. Where the plain text leaves a bracket empty, a pronunciation having been taken out, the empty bracket is closed up, and a label left with nothing after it ("US:") is taken out of a bracket that keeps words. It is kept visibly apart and credited, with a link where more followed. It is four sentences at most, within the first 1,500 characters.</li>
@@ -344,7 +356,7 @@
   </details>
 
   <h3 id="ids">Identifiers and links</h3>
-  <p class="sum">The links to POWO, IPNI, World Flora Online and iNaturalist come from Kew's file and from Wikidata. An identifier is linked only where it is shown to be this plant's.</p>
+  <p class="sum">The links to POWO, IPNI, World Flora Online and iNaturalist come from Kew's file and from Wikidata, and the links under "Elsewhere" from the page's own Wikidata item. An identifier is linked only where it is shown to be this plant's.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: identifiers and links</span></summary>
   <ul class="rules">
     <li>The species' identifiers in POWO, IPNI, World Flora Online and iNaturalist, and the title of its English Wikipedia article, come from <b>Wikidata</b>, from the item that carries the species' GBIF key.</li>
@@ -354,6 +366,10 @@
     <li>When Wikidata does not answer, the identifiers of the build that last read them are kept for at most 90 days. The page names that build and says beside its register links that they were not checked.</li>
     <li>Where that build's day is not known, they are kept for at most 90 days from the build that first kept them, and the page says so.</li>
     <li>Wikidata's items are read without waiting on its query service's lag, which no read of an item depends on, and a refusal or a busy answer is asked again after the wait it names, up to five times.</li>
+    <li>"Elsewhere" links the other registers and floras the page's own Wikidata item names: Tropicos, Catalogue of Life, Euro+Med, Species+ (CITES), the IUCN Red List, the Red List of South African Plants, NatureServe, Flora of North America, Flora of China, USDA PLANTS, Calflora, Reflora, Flora of Australia, APNI, FloraBase, VicFlora, NSW Flora, Missouri's Plant Finder, CalPhotos, BHL, EOL, ITIS and NCBI. Species+ is left out while the page's CITES line says "not asked".</li>
+    <li>Each is the item's own identifier, made a link by the address Wikidata gives its property (<a href="https://github.com/zomethingje-eng/cultifolio/blob/main/src/lib/dossier/elsewhere-links.ts">the list, with each property</a>). The page's own registers, GBIF, POWO, IPNI, WFO and iNaturalist, are linked once, by the build's identifiers; the item's are used only for one the page does not link.</li>
+    <li>The items are read fifty a request, and the page says the item and the day it was read. A preferred value is read first, and a deprecated one never. An item read for another item than the page's now is not shown.</li>
+    <li>Until its item has been read, the line says "not asked"; where Wikidata did not answer, "not checked", with the day. An item Wikidata no longer serves under the page's id, deleted or merged into another, gives no links, and the page says it was not answered.</li>
   </ul>
   </details>
   <details class="more"><summary>How the Wikidata item is chosen</summary>
@@ -383,6 +399,36 @@
   </ul>
   </details>
 
+  <h3 id="published">Where the name was published</h3>
+  <p class="sum">The page quotes where its name was published, as Kew's file gives it. It links BHL only where BHL's resolver gives one page for exactly that citation.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: where the name was published</span></summary>
+  <ul class="rules">
+    <li>The citation is where Kew's file says the page's Kew entry was published, its title, volume and page, and year, quoted as Kew's file writes them ("Kew Bull. 16: 181 (1962)"), credited to WCVP with the day of Kew's file.</li>
+    <li>BHL's resolver is asked only a citation it can be given whole: a title, a plain volume and page ("16: 181") or a page alone (": 293", a book), and one year ("(1962)"). Any other form, "5(9): 6" or "(1862 publ. 1863)", is not asked, and is shown as text.</li>
+    <li>BHL's page is linked only when BHL answers one citation whose address is one page, numbered as the citation's page, in the citation's volume, dated in its year, and in a title whose words Kew's abbreviation begins, in order. A journal Kew cites with words in parentheses, as Bot. Mag. (Tokyo), is not taken for the abbreviation without them. Otherwise the citation is shown as text. No page is guessed.</li>
+    <li>BHL is asked once a second at most, and 4,000 times a day. A citation it did not answer is asked again by the next run; one Kew's file changes is asked again.</li>
+  </ul>
+  </details>
+
+  <h3 id="risk-cites">Extinction risk, CITES and chromosomes</h3>
+  <p class="sum">Three lines come from files read whole by the build, offline. The risk and the chromosome counts are matched to the page by its IPNI identifier, and CITES by the exact name the Appendices print, or by a synonym Kew holds of it that is no other page's name, never by a likeness of names. Each names its source, the source's date, its licence and the day it was read.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: extinction risk, CITES and chromosomes</span></summary>
+  <ul class="rules">
+    <li id="risk">The extinction risk is Kew's model's (Bachman et al., New Phytologist, 2024), read from Kew's data of 1 February 2024. That is the probability the model gives that the species is threatened, its 95% interval, the class it predicts and whether it is confident of it. It covers flowering plants only.</li>
+    <li>It is said as a model's prediction, never as an assessment. The file's Red List categories are not read, and the page shows none. Where the file marks the species as assessed by the IUCN Red List, the page says so and links IUCN's page, by the IUCN identifier the species' Wikidata item gives.</li>
+    <li>The prediction is matched by the IPNI identifier of the page's name. The file's own numbers are an earlier form of Kew's, not those of the file the pages are built from.</li>
+    <li id="cites">The CITES status is read from the plant listings of the Appendices, as CITES publishes them, transcribed by hand with the page and address each was read from. Nothing is read from Species+ or the CITES Checklist, whose terms do not allow it. Species+ is only linked, by the identifier the species' Wikidata item gives.</li>
+    <li>A listing of the page's own name, or of a name it includes, is the page's. Failing that, a listing of a name Kew holds as a synonym of it, which the page names, unless that name is another page's own: then the listing is that plant's, and the page says so. A name the listing excepts (Aloe vera from Aloe spp.) is not listed.</li>
+    <li>Failing those, a listing of its genus (Ariocarpus spp.), then of its family (CACTACEAE spp.), with the listing's exceptions.</li>
+    <li>Not decided, and said so, where the page's names do not decide. That is where the Appendices' genus or family is narrower than Kew's (Kew's Didiereaceae holds Portulacaria, the listing does not), where only a synonym's genus is listed, or where the listing is of "succulent species only".</li>
+    <li>The page says the Appendix, the listing and its level, its annotation and parenthesis, the day the Appendices are in force from, and links the official Appendices. It gives no reading of what a listing requires.</li>
+    <li>The table is applied only once it has been checked, row by row, against the edition of the Appendices in force. Until then every page's CITES line says "not asked", never "not listed".</li>
+    <li id="chromosomes">Chromosome counts are ChromoDB's, from the IAPT/IOPB chromosome data series, version 3.1 of 8 November 2026. Each number is as published (2n, then n), with its reference linked to its DOI or stable address, and the name it was published under where that is another.</li>
+    <li>A count is the page's only when its record's identifier is the page's IPNI identifier and its accepted name, without its authors, is the page's name. Records under that identifier with the name spelt otherwise are not taken, and the line says it is not decided. Counts their authors retracted and numbers inferred from genome size are left out. A page shows at most twelve counts and says how many more there are.</li>
+    <li>Where a file was not there when the page was built, or could not be read whole, the line says "not asked", and why. A file read and holding nothing for the page says that, with the file's date.</li>
+  </ul>
+  </details>
+
   <h3 id="inat">The iNaturalist taxon</h3>
   <p class="sum">The iNaturalist taxon a page links is checked with iNaturalist before any photograph of it is asked for. It is taken only where it is shown to be this species.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: the iNaturalist taxon</span></summary>
@@ -405,8 +451,20 @@
   </ul>
   </details>
 
-  <h3 id="papers">Papers</h3>
-  <p class="sum">No page lists papers. The reference does not ask OpenAlex for them, and each page's record of its sources says OpenAlex was not asked, and why.</p>
+  <h3 id="flowering">Flowering by month</h3>
+  <p class="sum">A page shows how many of iNaturalist's research-grade observations of wild plants are marked as flowering, month by month. The months are the calendar's, as each plant was observed.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: flowering by month</span></summary>
+  <ul class="rules">
+    <li>The counts are iNaturalist's: research-grade observations, not captive or cultivated, annotated "Flowering", by the month they were observed in, for the page's iNaturalist taxon, its varieties and subspecies included. The page names the day they were read and links the same search on iNaturalist.</li>
+    <li>An observation not annotated is not counted, so the counts say when people saw the plant in flower and said so, not how long it flowers.</li>
+    <li>The months are never moved to your hemisphere: an observation is dated where the plant was seen. Where the habitat climate is read south of the equator, the page says so.</li>
+    <li>Under 12 observations, the strip is marked "from few records", as a habitat climate is, and shown as read. Twelve months of nothing is said as no observation annotated, never as a plant that does not flower.</li>
+    <li>Until a page has been read, it says "not asked"; where iNaturalist did not answer, "not checked", with the day. iNaturalist is asked one request a page, at most one every 2 seconds, within the reference's 4,000 requests a day to iNaturalist.</li>
+  </ul>
+  </details>
+
+  <h3 id="papers">Published papers</h3>
+  <p class="sum">No species page lists published papers. The reference does not ask OpenAlex for them, and each page's record of its sources says OpenAlex was not asked, and why.</p>
   </section>
 
   <!-- ─────────────────────────── The species list ─────────────────────────── -->
@@ -450,6 +508,10 @@
     <li>The front page's photographs are chosen by rule, not by hand, from the "Popular genera", most grown first.</li>
     <li>Of each such genus, one species with eight photographs or more and a habitat climate: the one most observed in cultivation on iNaturalist, then the most photographed. The first 48 genera that have one make the strip, and twelve of them are shown a day, in turn.</li>
     <li>The strip sits above the search, on a phone as on a desktop.</li>
+    <li>The figure at the top of the front page is the coldest night on record where the first of the day's photographed species whose page holds one grows wild. It is NASA POWER's lowest daily minimum over its years at the grid cell of a typical record. Beside it are the records and grid cells it rests on, where the records came from and on what day, and the rule they were counted by, each read from that species' page.</li>
+    <li>Its photograph is shown with its author, its licence and the day its credit was read. A species whose lead photograph's credit has no such day is passed over for the next, as one without the figure is.</li>
+    <li>Only the first three of the day are read. Where none of them holds one, and on a device that holds plants of its own, the front page shows no such figure.</li>
+    <li>The not-found page of an address that is neither a species address nor a page of your own collection shows the first species of the day's strip, with its lead photograph, its author and licence, and the day its credit was read.</li>
   </ul>
   </details>
   </section>
@@ -546,7 +608,7 @@
     <li>Wherever there is no room for the sentence, the mark is one dashed pill reading "not checked", or "not asked" for a source not asked, the same on every page, and tapping it says which source, and when.</li>
     <li>A source that refused is said to have refused. One that failed or was silent has not answered. A call this site held back, or a source a build did not ask, is "not asked".</li>
     <li>A source that answered with two records where the rule takes one (two Wikidata items, two iNaturalist taxa, two Kew entries) is said as "not taken: two items answered", and nothing is taken from it.</li>
-    <li>When a source refuses, the build keeps what it gave last time, and records the date it was carried from.</li>
+    <li>When a source refuses, the build keeps what it gave last time, and records the date it was carried from, and what that build recorded of it.</li>
     <li>What is carried is exact. The summary and the photographs are carried per source, so a refused iNaturalist does not discard the Commons photographs the same build got.</li>
     <li>The range, the records, the map marker and the climate are carried as one snapshot, never piecemeal: a range from one build with records from another would be a page no build made. They are carried only to a page whose GBIF key is the one the records were read under.</li>
     <li>A species page whose data cannot be read at the moment it is asked for says so, and no cache keeps that answer. It is never said to be absent.</li>
@@ -580,16 +642,16 @@
   </ul>
   </details>
   <h3 id="shapes">Inside the native range</h3>
-  <p class="sum">Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border, off a coast or on an island too small to draw counts only when it states that region's country, unless it lies on one of Natural Earth's minor islands placed in that region and states no other country. A record 0.02° or less inside a neighbouring region's shape counts for the native one only by its stated country and, where it names a state or province the shapes can match to one of the two regions, by that state.</p>
+  <p class="sum">Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border, off a coast or on an island too small to draw counts only when it states that region's country, unless it lies on one of Natural Earth's minor islands placed in that region and states no other country. A record 0.02° or less inside a neighbouring region's shape counts for the native one only by its stated country and, where it names a state or province of one of the two regions (by its name, its ISO 3166-2 code or an old name), by that state.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: inside the native range</span></summary>
   <ul class="rules">
     <li>Each record left is tested against the native range from Kew, and a record outside it is discarded. Restricted records are tested exactly as open ones are.</li>
     <li>A record is inside a native region when it lies in the region's shape.</li>
     <li>A record in no region's shape counts for a native region within the buffer of 0.05° beyond its edge (about 5.6 km), or off its coast within the coast reach. That is only when it states the country of the region it would count for.</li>
     <li>A record that states no country counts only where it lies inside a native shape, inside the box of a native region with no shape, or on a native minor island: no region is guessed for it.</li>
-    <li>The shapes are simplified to about 2 km (0.02°), so a border is drawn no closer than that. A record inside a neighbouring region's shape but within 0.02° of a native one counts for the native region when its stated country is that region's and not the neighbour's. Where both are of its country (the Free State and KwaZulu-Natal), the state or province the record names decides: it counts when that is the native region's, and not when it is the neighbour's. A record that names no state or province the shapes can match to either region counts, since within the drawing's own accuracy the line cannot tell. That includes a name the shapes do not hold, such as an old province's (Natal) or a postal code.</li>
+    <li>The shapes are simplified to about 2 km (0.02°), so a border is drawn no closer than that. A record inside a neighbouring region's shape but within 0.02° of a native one counts for the native region when its stated country is that region's and not the neighbour's. Where both are of its country (the Free State and KwaZulu-Natal), the state or province the record names decides: it counts when that is the native region's, and not when it is the neighbour's. A state is read by its name, by its ISO 3166-2 code (KZN, TX, CN-YN) or by an old province's name (Natal, Transvaal). A code is read where ISO's subdivision is matched to one of Natural Earth's provinces, by its name or by hand: 238 of ISO's subdivisions are not, among them every one of Kiribati's and Morocco's. An old province that held land on both sides decides nothing, and the drawing does: the record lies in the neighbour's shape, so it is the neighbour's. A record that names no state or province, or a third region's, counts, since within the drawing's own accuracy the line cannot tell. So does a record whose state neither the shapes' names nor those codes and old names can match: it is read as naming none.</li>
     <li>Any other record inside another region's shape is that region's, native or not. Aloe vera's record at Khor Fakkan lies in the Gulf States' shape and states the Emirates, so it does not count for Oman, though Oman's border is in reach.</li>
-    <li>These are the rules of shapes rule r86, which each page names. A page whose records were tested by r85 also let in, by the buffer and the coast reach, a record that stated no country, and none across a border.</li>
+    <li>These are the rules of shapes rule r87, which each page names: r86's, on the same shapes, with a record's stated state read by its ISO 3166-2 code and old provinces' names too. A page whose records were tested by r86 read a state by the shapes' names alone, so a record naming one by a code or an old province's name (Natal) counted, as one naming none. A page whose records were tested by r85 also let in, by the buffer and the coast reach, a record that stated no country, and none across a border.</li>
     <li>The shapes are Natural Earth's states and provinces (public domain), placed in Kew's regions by TDWG's own tables and simplified to about 2 km. TDWG's own outlines are not openly licensed, so they are not used.</li>
     <li>They follow TDWG's scheme exactly. Morocco's southern provinces are split at the Western Sahara line, Tarfaya to Morocco and the rest to Western Sahara, and Darjeeling is in the East Himalaya, as TDWG's EHM-DJ. Since rule r86, Gilgit-Baltistan and Azad Kashmir are in the West Himalaya, where TDWG's gazetteer files Gilgit and Baltistan (WHM-JK, Jammu-Kashmir), not in Pakistan.</li>
     <li>A region's countries are those GBIF states a record's, Svalbard's SJ, Bouvet Island's BV, the Caribbean Netherlands' BQ, Saint-Martin's MF and Clipperton Island's CP among them.</li>
@@ -648,6 +710,16 @@
     <li>Radiation is CHELSA's daily mean shortwave flux, taken to a daily total and converted to a daily light integral (DLI). PAR is taken as 45% of shortwave at 4.6 µmol per joule, so 1 MJ/m²/day is about 2.07 mol/m²/day, a unit a grower can compare with a window or a lamp.</li>
   </ul>
   </details>
+  <h3 id="koppen">Climate class</h3>
+  <p class="sum">The page gives the habitat's Köppen–Geiger class, worked out from the median year's months by the thresholds of Peel, Finlayson and McMahon (2007), each letter with the test that gave it.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: climate class</span></summary>
+  <ul class="rules">
+    <li>The thresholds are those of Table 1 of <a href="https://doi.org/10.5194/hess-11-1633-2007">Peel, Finlayson and McMahon (2007)</a>. The arid class B is tested first; summer is the warmer of October to March and April to September. Where both the dry-summer and the dry-winter test hold, the half with more rain is summer's rain, as the paper decides it.</li>
+    <li>The months read are the median year, each month's median across the range's cells. The class is that year's, not each cell's.</li>
+    <li>A warmest month of exactly 10 °C is on the paper's boundary between the polar class and the others, and the page gives no class there.</li>
+    <li>The same section names the months Walter and Lieth's climate diagrams draw as arid: those whose rain in millimetres is under twice the mean temperature in °C.</li>
+  </ul>
+  </details>
   <h3 id="few">From few records</h3>
   <p class="sum">A climate read from fewer than 12 records, or fewer than 5 grid cells, is marked "from few records", with both counts. It is shown as read.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: from few records</span></summary>
@@ -685,6 +757,16 @@
     <li>The 1-in-100 night is more than 1.5 °C warmer than that month's mean nightly low. Usually several of that month's nights fall below its mean, more than one in a hundred of the year's, so this is a check that the weather cell's nights and the habitat's months disagree.</li>
     <li>The margin of 1.5 °C is the height correction's own uncertainty. A gap within it is no disagreement, and the extremes are kept.</li><!-- decision 7; B2 -->
     <li>Neither of these two checks proves that either source is wrong. It says the two do not describe the same place well enough to put a cold floor beside the habitat's months. The figures set aside stay in the page's record of its sources, which says NASA POWER was read and its figures set aside.</li><!-- decision 7; B2 -->
+  </ul>
+  </details>
+  <h3 id="hardiness">Hardiness of the habitat</h3>
+  <p class="sum">From the typical spot's nights, the page works out the USDA hardiness zone and the RHS hardiness band of the habitat. They are the habitat's, read from where the plant grows wild, not a tested hardiness of the plant.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: hardiness of the habitat</span></summary>
+  <ul class="rules">
+    <li>USDA's zones are the 30-year mean of each year's lowest temperature, in 10 °F zones from −60 °F, each split into 5 °F halves, "a" the colder (<a href="https://planthardiness.ars.usda.gov/">USDA Plant Hardiness Zone Map</a>).</li>
+    <li>The app takes the lowest night of each calendar year from NASA POWER's daily series at the typical spot, corrected for height as the record low is. A year counts only with 347 of its days. It averages the years, turns the mean into °F (× 9 ÷ 5 + 32), and names the zone it falls in. The mean is of the years the series holds, up to 44 from 1981 to 2024, not USDA's 1991 to 2020, and the page says how many. Fewer than 20 complete years give no zone.</li>
+    <li>The RHS rates a plant H1a to H7 by the coldest it takes (<a href="https://www.rhs.org.uk/plants/trials-awards/award-of-garden-merit/rhs-hardiness-rating">RHS hardiness rating</a>). The page says which band the record low falls in. A figure on a band's edge is in the warmer band, but for 15.0 °C, which is H1b, since H1a is warmer than 15 °C.</li>
+    <li>A page whose extremes are set aside shows neither.</li>
   </ul>
   </details>
   </section>
@@ -779,6 +861,20 @@
   </details>
   </section>
 
+  <!-- ─────────────────────────── At home (round eighty-seven, stage 2) ─────────────────────────── -->
+  <section aria-labelledby="at-home">
+  <h2 id="at-home">At home, aim for</h2>
+  <p class="sum">A species page with a habitat climate gives a starting point for growing it: winter nights, summer days, grow light and humidity, each worked out from the page's own figures with its arithmetic beside it. It is not tested in cultivation.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: at home, aim for</span></summary>
+  <ul class="rules">
+    <li>Winter nights: the coldest month's mean nightly low, from the 10th to the 90th percentile across the range's cells, with the record low where the page shows one.</li>
+    <li>Summer days: the warmest month's mean daily high, the same way.</li>
+    <li>Grow light: the light that gives the year's mean daily light integral (DLI) in 14 hours, or 12 or 16 as the reader chooses: PPFD = DLI × 1,000,000 ÷ (hours × 3,600). The DLI is the open sky's; a plant among rocks or shrubs gets less.</li>
+    <li>Humidity: the lowest and highest of the twelve monthly relative humidities, only where the habitat figures hold one for every month. Otherwise the page says none is worked out.</li>
+  </ul>
+  </details>
+  </section>
+
   <!-- ─────────────────────────── Related ─────────────────────────── -->
   <section aria-labelledby="related">
   <h2 id="related">Similar habitat climate</h2>
@@ -800,9 +896,10 @@
   <details class="full in-full"><summary>The rules in full<span class="sr">: how the reference is stored</span></summary>
   <ul class="rules">
     <li>Beside the species files, the build works out once what the server would otherwise work out for every request: the index, each hash group's entries and figure sheets, the search's files, and the catalogue's rows for each grouping and chip.</li>
+    <li>The index carries each page's record low (<code>low</code>, °C to one decimal, where the page shows one) and the day it was first seen (<code>first</code>). A page's record keeps no first build of its own, so the first day is the earliest day the record still notes, or the day an earlier index gave. For the pages of the reference in November 2026 it is no earlier than the page's first build, and can be later: every day a record notes is a build's or a later reading's.</li>
     <li>The rows under "Popular genera" are worked out by the server from the genus rows' files and the counts' file, once for each reference.</li>
     <li>It writes the files every other name is looked up in. Each page's address, with what a page needs of each species (its tile, its older names, its nearest climates), sits in small files split by a hash of the address. Each other name the reference answers to sits in files of its own.</li>
-    <li>It writes the genera with their counts, the front page's photographed species, and the sitemap's addresses.</li>
+    <li>It writes the genera with their counts, the front page's photographed species, the browse pages' table with the counts the front page shows of it, and the sitemap's addresses.</li>
     <li>A manifest names every current file by its hash, and the server reads it first. A manifest whose files are not all there is not adopted, nor one whose genera do not count its species.</li>
     <li>The reference's id is a hash of every file's hash, so the same build is the same id.</li>
     <li>A species page, the front page, a species' data file, the sitemap and the search read only the few small files they need. The server never reads or holds the whole index.</li>
@@ -838,9 +935,140 @@
     <li>A plant number is at most 32 characters, with no more than 15 digits in a row. An import keeps a longer one in the plant's notes and gives the next free number.</li>
     <li>When you add a plant, start a batch or change a plant's name, the reference's own key for a name it heads is filed, whichever answer came first. One press of Add adds one plant.</li>
     <li>A pasted list knows a plant it added before by its line's words alone. Such lines are left out and said; one press adds them as new plants.</li>
+    <!-- Round eighty-seven (t1): identity and provenance (src/lib/core/identity.ts). -->
+    <li id="items">An offset, division or bulb split can be split off a plant as an item of its accession: a plant of its own under the accession's number and the next free letter, 2026-0012/A, then /B. A letter is never given twice.</li>
+    <li>Renumber on an item gives it the accession's next free letter. A plant renumbered, or brought back under a new number, takes its items to that number, each with a line. An item an older version renumbered to a bare number is a plant of its own.</li>
+    <li>An import links a plant numbered as an item to the line in the sheet that holds its accession's number. With no such line, it links it to your plant of that number only when the two have the same name, and otherwise adds it as a plant of its own and says why.</li>
+    <li>The plants of one accession share their name, identification and provenance, so a change to one is saved on each. Each keeps its own space, log and photographs.</li>
+    <li id="no-longer-held">A plant you no longer have is recorded as no longer held, with a reason (died, given away, lost, propagation failed, stolen, reaccessioned), a day and a note. Nothing is deleted: its page stays, with Restore, and it is listed under No longer held.</li>
+    <li>A plant marked growing is held, whatever reason an older version left on it, and its next edit clears that reason.</li>
+    <li>Recording a death records the plant as no longer held, died, on the death's day. Remove is for a record made by mistake, and a removed plant is listed under No longer held too, with Restore.</li>
+    <li id="itf2">Provenance can be given in the codes of ITF2, the International Transfer Format botanic gardens use: the provenance type (W, Z, G or U) and the propagation history. Where your own provenance word means the same in ITF2, the plant's page shows that code and says it was read from the word.</li>
+    <li>Wild-collected and F1 are read as W; cultivated seed and vegetative, which ITF2 splits into Z and G, are not read as a type. A pair of codes ITF2 does not allow together, or a code your provenance word contradicts, is refused with the reason.</li>
+    <li id="field-numbers">A field number is kept as typed, and read as the collector's code and number where it reads as one: SB 829 is SB and 829, KK1398 is KK and 1398.</li>
+    <li>A change of name keeps the name the plant had, the day it stopped and how it had been identified, under Earlier names. A qualifier in the name (cf., aff., nr.) is shown with what it means; sp. names the genus only.</li>
+    <li>A rename whose line ("Renamed from … to …") is in the plant's log but whose earlier name is not under Earlier names, as an older version wrote it, is shown there from the line, dated by it, and kept by the plant's next edit.</li>
+    <li>The plants sheet carries all of these, under ITF2's column names where ITF2 has a field (prot, prohis, cnam, cid, cdat, idql, vlev, vnam, vdat, vhist), and the import reads them back.</li>
     <li>The <a href="/about/formats">formats page</a> has the details.</li>
   </ul>
   </details>
+
+  <h3 id="season">A plant's growing season</h3>
+  <p class="sum">A plant can be a winter-grower, a summer-grower, or have no rest, with the months it rests. In those months Today does not count it as due, and says it is resting and why.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: a plant's growing season</span></summary>
+  <ul class="rules">
+    <li>A plant's page suggests a season from its species page's reading of the habitat (<a href="#year">what the rules read</a>), says it is a suggestion, and names the rule that made it. Nothing is written until you confirm it or set your own.</li>
+    <li>The rain rule's winter or summer growing season suggests that season, resting in every month outside the rainy months, shifted to your hemisphere as the season card shifts them.</li>
+    <li>Under 120 mm of rain a year, the temperature rule's cooler six months suggest a winter-grower resting in the other six. Rain spread over eight months or more suggests no rest.</li>
+    <li>A rainy season at the year's mean temperature, a flat temperature curve, a wet season with nights below freezing, or no season at all suggests nothing; nor does a hybrid, which has no one habitat.</li>
+    <li>A suggestion reads the habitat's rain and temperature, not the plant. You can change its months, and set a season on any plant.</li>
+    <li>In a plant's rest months Today lists it under its space as resting, with no Water button, in one line that says the season, the months, and whether you confirmed it from the habitat or set it yourself.</li>
+    <li>A plant's rest months add to its space's dry months: a plant with no rest, in a space kept dry in winter, is kept dry there.</li>
+    <li>A plant with a season set is not listed apart in its habitat's dry season; its own months decide. The watering calendar leaves its rest months out too.</li>
+  </ul>
+  </details>
+
+  <h3 id="attachments">Papers kept with a plant</h3>
+  <p class="sum">A plant's page keeps its papers (a CITES permit or certificate, a phytosanitary certificate, an invoice) as a PDF, JPEG or PNG of up to 10 MB, synced and backed up as its photographs are.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: papers kept with a plant</span></summary>
+  <ul class="rules">
+    <li>A file is taken by its own first bytes, never by its name: a PDF, a JPEG or a PNG, up to 10 MB, and thirty a plant.</li>
+    <li>It is kept in this browser as a photograph is, not encrypted on the device. With sync on it goes into the vault sealed on the device, and the device that receives it checks its hash.</li>
+    <li>Open shows it in a new tab from the file on this device; Download saves it under its own name. A paper whose file has not yet come from the device that added it says so.</li>
+    <li>A backup holds each paper's file and a restore puts it back. A version of the app made before papers keeps one as a record waiting for fields, syncs and backs up its file, and never shows it as a photograph.</li>
+    <li>A collection's papers hold at most 300 MB in all, so the sync vault keeps room for photographs and the log, and a backup with every paper still opens on a phone. The Backup page shows how much the papers hold, warns from 240 MB, and a paper that would pass 300 MB is refused with a sentence saying so.</li>
+  </ul>
+  </details>
+
+  <h3 id="labels">Labels</h3>
+  <p class="sum">Labels print on Avery sheets, on strips to cut, or on label tape 12, 18 or 24 mm wide. Each label's QR code carries the plant's number and identity tag.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: labels</span></summary>
+  <ul class="rules">
+    <li>The code is the plant's address by its number, such as /plants/2026-0012, and after a # the plant's tag, six letters and digits made from its identity: /plants/2026-0012#i=k3x9q2. A sheet label's code adds the species and the name after the tag. What follows the # stays on the phone.</li>
+    <li>The plant's page finds the plant by that number in the collection on this device, so it opens with no network, as the rest of your collection does. Any phone's camera shows the number in the address it reads.</li>
+    <li>A number can change hands: two devices gave it out offline and one plant was renumbered, a plant brought back took a new number, or a plant came from another collection with its label. So the page opens the plant holding the number only when the code's tag is that plant's.</li>
+    <li>When the tag is another plant's on this device, the page says the label was printed for a plant numbered otherwise now, lists that plant and the one holding the number, and opens neither.</li>
+    <li>When no plant on this device has the tag, the page says the label names a plant this collection does not hold under that identity. It lists your plant with that number, if there is one, and offers the label's species, as it does for a label from a plant you do not have.</li>
+    <li>A code printed by an earlier version carries the plant's identity, and still opens it. An address with a number and no tag opens the plant holding it, unless a renumbering moved another plant off that number: then it lists both.</li>
+    <li>Label tape prints one label a page, 50, 60 or 70 mm long, the code and the text 1.5, 2 or 3 mm clear of each edge of the tape. Choose the tape printer in the print dialog, set its tape, and print at 100%.</li>
+    <li>On 12 mm tape the code is 9 mm across, and is drawn with error correction L, which reads with up to 7% of it damaged: that keeps it 29 squares a side with the tag, each about 0.31 mm. The other stocks' codes use M, which reads with up to 15% damaged.</li>
+    <li>A backup label is a second label for each plant with the number alone, as large as the label holds, for the back or the bottom of the pot.</li>
+    <li>The large number prints the number at 14 points on a sheet label (9 on the pot-rim stock), or over a third of the tape's width, with the name on one line.</li>
+    <li>A label's code and its care line have their room from the start, so nothing on the sheet moves as they arrive.</li>
+  </ul>
+  </details>
+
+  <h3 id="exports">The plants sheet and the report</h3>
+  <p class="sum">My plants downloads the plants as a spreadsheet, one column a field, and prints a collection report with photographs.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the plants sheet and the report</span></summary>
+  <ul class="rules">
+    <li>The sheet is the backup's plants.csv. After the columns it has always had come the GBIF key, the plant's own watering rhythm and the page its name is an older name of. Then its identity and provenance, the plant it was taken from and how, its season, rest months and where the season came from, its number of photographs and its papers, then its id.</li>
+    <li>The log's bookkeeping (a notes edit's base, an import's key, the cover's id) is left out; the whole log is in the backup. An import of the sheet reads back the columns it always has, the identity and provenance, and the plant it was taken from. It names the others apart.</li>
+    <li>The report lists each growing plant, or every plant, by number, with its cover photograph, name, provenance, source, space, season and papers, and its price and notes if you choose. It is made on this device and printed, or saved as a PDF, from the print dialog.</li>
+    <li>Prices are totalled by currency as written, never converted.</li>
+  </ul>
+  </details>
+
+  <h3 id="lock">The app lock</h3>
+  <p class="sum">Settings can set a passcode this device asks for before it shows the app. It is a screen over the app, not encryption: it keeps out a casual look, not someone who can read the browser's storage.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the app lock</span></summary>
+  <ul class="rules">
+    <li>The collection, its photographs and papers, and the sync key are kept in this browser's storage as they are. Sync encrypts what it sends; nothing is encrypted on the device.</li>
+    <li>So anyone who can read the browser's storage, through its developer tools, the device's files or a copy of them, can read the collection with or without the passcode.</li>
+    <li>The passcode is kept on this device only, as a salted PBKDF2-SHA-256 hash of 600,000 rounds. It is never synced and never in a backup, so each device has its own or none.</li>
+    <li>Someone who can read the browser's storage can try passcodes against that hash as fast as their computer allows, and finds a short passcode that way. The hash keeps only a long passcode from being read off the device.</li>
+    <li>It asks when the app opens in a new tab or window, and again once the app has been out of sight for the time set: at once, or after 1, 5 or 15 minutes. A reload of an unlocked tab stays unlocked.</li>
+    <li>After five wrong passcodes it waits 30 seconds. The count and the wait are kept in this browser's storage, so a reload, another tab or a new window does not start them again. The about pages are never behind it.</li>
+    <li>While it is locked, the tab is titled "Locked · Cultifolio", not by the page under it.</li>
+    <li>If you forget the passcode, this device's sync key opens the app, and so does a backup file of this collection, read on the device and not restored. Either takes the passcode off, to be set again in Settings. The lock screen says which of the two this device has.</li>
+    <li>Stopping sync on a locked device says first that the key is a way back, and offers to take the lock off or make a backup. The device keeps a SHA-256 hash of the key it synced with beside the lock, so that key still opens it.</li>
+    <li>So it can be set only while sync is on or after a backup made in the last day. With neither the key nor a file, clearing the site's data in the browser takes the lock off, and the collection on this device with it.</li>
+    <li>The example collection has no lock.</li>
+  </ul>
+  </details>
+  </section>
+
+  <!-- ─────────────────────────── Lineage, batches and flowering (round eighty-seven, stage 3, t2) ─────────────────────────── -->
+  <section aria-labelledby="lineage">
+  <h2 id="lineage">Lineage, batches and flowering</h2>
+  <p class="sum">A plant's parents and offspring, a batch's counts and the flowerings are read from what you record, never from a photograph.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: lineage, batches and flowering</span></summary>
+  <ul class="rules">
+    <li>A cross is a Pollinated line on the seed parent, with the pollen parent chosen from your plants, and is written seed parent first: 2026-0001 × 2026-0002. A batch can be sown from it, and the plants potted up from that batch list both parents.</li>
+    <li>A batch sown from a cross is filed under the seed parent's species name. The cross is said beside the name, never in its place; a parentage you write yourself stays yours.</li>
+    <li>A graft is a Grafted line on the grafted plant, naming the plants its scion and its stock came from, either of which may be none of yours. A graft batch keeps the stock's plant beside the scion's.</li>
+    <li>A plant added as an offset, a cutting, a division, a leaf or a bulbil of one of yours keeps a link to it, as a plant potted up from a batch of cuttings does through the batch.</li>
+    <li>A plant's page shows its parents and its offspring, one step each way, as links. A parent or a child that is dead, archived or removed is still shown and linked, and one this device holds no record of is said as that.</li>
+    <li>A batch's page lists each count as a checkpoint: what had come up or struck by then, what had been potted up and lost by that day, what was alive in the pot, and its share of what went in. Its losses are grouped by the cause you wrote, and a loss with none is said as not stated.</li>
+    <li>Pot up splits a batch into plants, each with its own number and its batch.</li>
+    <li>Fruit set and seed set are dated lines on a plant, as a flowering is.</li>
+    <li>Today's "Flowered this week in past years" lists your plants with a Flowered line in an earlier year whose day and month fall within three days of today's. A line of 29 February counts as the 28th in a year without one. Dead plants are left out.</li>
+    <li>The flowering calendar, under My plants, shows which plants flowered in which month, from their Flowered lines, every year together, with the number of years in each month. The species page's flowering by month is from wild records, and is another thing.</li>
+    <li>The photo walk, under My plants, adds a room of plants one photograph at a time: take a photograph, name the plant, next. Each becomes a plant with its photograph, in the space chosen at the top.</li>
+    <li>The name is the one you type, checked against the reference as the add form checks it. The photograph is resized and kept on this device as every photograph is, and is sent nowhere to be identified.</li>
+  </ul>
+  </details>
+  </section>
+
+  <!-- ─────────────────────────── Browse, with your collection (round eighty-seven, stage 2) ─────────────────────────── -->
+  <section aria-labelledby="browse-own">
+  <h2 id="browse-own">Browse, with your collection</h2>
+  <p class="sum">The browse pages are the same for everyone. Pins and the collection lens are worked out in your browser from your own collection.</p>
+  <ul class="plain">
+    <li>A browse view can be pinned: its filters (regions, family, genus and the rest), not its order or its page. A pin is kept in your collection, so it syncs and is backed up with it; the pin itself goes nowhere else; its view is asked of the site as opening it would be.</li>
+    <li>A pin keeps the page ids of the view's species as they were when it was pinned, or when its changes were last opened. Your front page and the empty search box show each pin, and "+3 · −1 since 12 Nov" is the species the reference has added to the view and taken from it since then.</li>
+    <li>A view of more than 3,000 species keeps no such list, and its pin says it is too many to follow for changes.</li>
+    <li>A pin of a region the reference no longer holds says so, by the region's code, and opens the rest of its view, which it does not follow for changes.</li>
+    <li>Opening a pin from the front page or the search box opens its changes, each species by name; one taken from the view that the reference no longer holds is counted, not named. From then on the pin counts from the view's species of that day. That it was opened from a pin is carried by the move itself, never in the address or the browser's storage.</li>
+    <li>At most fifty views are pinned; past that, Pin says so.</li>
+    <li>On a region's, a genus's or a family's page, a collection with a growing plant shows which of the page's species you grow now and which of your plants belong there. Your plants are matched in this browser against the reference's entries for their species, asked by hash group. Yours and Not yours filter the page's results in this tab; neither is in the address or in any request.</li>
+    <li>A plant filed under another page's name counts as that page's. A plant filed under its genus alone counts on its genus's page only.</li>
+    <li>The map picker draws every TDWG level-3 region on the world map from this site's own files, and ticks a region by a press on it, by its keyboard, as the picker says, or by its list. Its files are fetched when it is opened.</li>
+    <li>The results map shows how many of a view's species are native to each region, in steps its legend names. A region the view is filtered by holds every result and is drawn apart. Its files are fetched when the map is near the screen, and once the page is idle, so a printed page holds it.</li>
+    <li>A region's page names the regions next door: those whose outlines in the shapes file touch it, a corner of one within 0.022 degrees (about 2.4 km) of the other's outline, minor islands left out. Three regions have no outline there (Cocos (Keeling) Is., Christmas I., the South China Sea), and their pages say none was worked out.</li>
+    <li>The list's record low is the index's: the lowest night in NASA POWER's daily series at the habitat's typical spot, as the species page gives it. An index built without it says "not in this index" and offers no order by it.</li>
+    <li>Names on the browse pages are in one alphabet, English at base strength: accents and case are not differences, Æ is read as Ae, and numbers as numbers.</li>
+  </ul>
   </section>
 
   <!-- ─────────────────────────── Privacy ─────────────────────────── -->
@@ -852,26 +1080,28 @@
     <li>Your collection is stored in this browser. It leaves only through sync, encrypted on the device, or a backup file you download.</li>
     <li>Your plant pages ask the server for the reference's figures by hash group (a few hundred species each), never by name.</li>
     <li>A plant page's "Is it an older name?" sends that plant's species name to the catalogue's search, as the search box does, only when you press it.</li>
+    <li id="bcss">A plant page's "Look up at BCSS Field Number Database" sends that plant's field number to the British Cactus and Succulent Society's database only when you press it. It opens in a new tab, without this page's address. The page never asks BCSS anything by itself.</li>
     <li>The frost watch sends the coordinates of your site and of any space that has them, rounded to about a kilometre, with an altitude if one is set, and your units. This server asks the weather services.</li>
     <li>Frost shows on Today, and in a line under the top bar on every page when a frost is within the next 72 hours, or a night below the floor of one of your spaces. It is red only at or below freezing, and dated. No notification is sent, since that would mean the server keeping a push address and a location for each device.</li>
     <li>A search typed in the catalogue or on the compare page goes to the server. A search of your own plants stays on the device.</li>
     <li>The species picker sends the name you are typing to the server twice. Once as typed, to the catalogue's search, which the server answers from the reference's own files. Once as its species part alone (the genus as typed and the epithet in lower case) to the name service, which the server passes on to GBIF.</li>
     <li>The species part never holds a qualifier, a rank and what follows it, a cultivar, an author or a field number. When the species is not found and the name is a genus followed by capitalised words, the genus alone is asked too.</li>
     <li>The names in a list you import are checked by hash group, then by the catalogue's search, never by GBIF's name service.</li>
-    <li>The about pages ask this site once for the reference's counts (<code>/api/counts</code>), which carries nothing of yours.</li>
+    <li>The about pages ask this site once for the reference's counts (<code>/api/counts</code>), which carries nothing of yours. The not-found page asks once for the species of the day (<code>/about/data/today</code>), which carries nothing of yours either; under a species address or the address of a page of your own collection it asks nothing.</li>
+    <li>A browse page's own requests (<code>/browse/data</code>) carry the view's query alone: its count as you tick regions on the map, its regions' counts, its species for a pin. A pin's changes are asked with that pin's query, one request a pin shown, as opening the view would. Nothing of your plants is sent, and the collection lens asks only by hash group.</li>
     <li>Two small cookies: your units (<code>cultifolio.units</code>), and once a site is set, its hemisphere (<code>cultifolio.hemi</code>).</li>
     <li>The app's service worker keeps the app on the device for use without a signal. It is installed from the second page this device opens on the site, or at once on a page of your own collection, or as soon as the device holds a collection (<a href="#on-device">in full below</a>).</li>
     <li>A visit of one page of the reference installs nothing, and nothing is fetched for offline use.</li>
     <li>The server keeps short-lived rate counters by address, dropped within two days, and nothing about your plants.</li>
     <li>Public answers are kept for a while by Cloudflare's edge, linked to no address, and the server keeps its own copies under keys that name the app's version, so a new version is never answered from an old one's copies.</li>
     <li>The edge keeps no copy of an error or of a redirect to another page: an address the reference does not hold is answered "not found" anew each time. The server keeps GBIF's answer on whether it is an older name for a day, and your browser may keep the page for five minutes, not when GBIF could not be asked. An older name's redirect to its species is made anew each time too, your browser keeping it for a day.</li>
-    <li>Species pages, the front page and the compare page load photographs from iNaturalist (two hosts), Wikimedia Commons and GBIF's image cache, which see your address. Your own pages do not, unless you switch that on.</li>
+    <li>Species pages, the front page, the browse pages (<code>/browse</code> and the pages of a region, a genus and a family), the compare page and the not-found page load photographs from iNaturalist (two hosts), Wikimedia Commons and GBIF's image cache, which see your address. Your own pages do not, unless you switch that on.</li>
   </ul>
 
   <details class="full" id="on-device"><summary>Full detail: the app kept on the device</summary>
   <ul class="rules">
     <li>The service worker is installed from the second page this device opens on the site: a page loaded in full, a reload, or a move inside the app to another address.</li>
-    <li>It is installed at once on a page of your own collection (My plants, My spaces, Propagation, Today, Sync, Labels or Backup, an import among them), or as soon as the device holds a collection: a plant added, a species followed, a backup restored, sync set up.</li>
+    <li>It is installed at once on a page of your own collection (My plants, My spaces, Propagation, Today, Sync, Labels or Backup, an import among them), or as soon as the device holds a collection: a plant added, a species followed, a view pinned, a backup restored, sync set up.</li>
     <li>The install fetches, once, the app's own files that the pages working offline use: the scripts, styles and typefaces of the collection's pages, the front page and the offline page, the species page's styles, the tab's icon, the web manifest and the maps' two coastlines. It fetches the collection's pages, the offline page and the front page too.</li>
     <li>The app's other files (a species page's scripts, the maps, the large icons and the share image other sites show beside a link) are kept the first time a page asks for them.</li>
     <li>So a species page opened online, by its address or by a link inside the app, is readable offline after. When the app updates itself, it reads the last fifty species pages you opened again from the server, one request each, and each of their maps' files it does not already keep, so they stay readable offline, with their maps, in the new version. A species page read online also hands the worker its maps' files to keep. Its maps are drawn when you scroll near them, or once the lead photograph has loaded and the browser is idle, whichever comes first, so a page printed without scrolling holds them.</li>
@@ -900,8 +1130,10 @@
     <li>The name you are typing in the species picker, sent twice: as typed to <code>/api/search</code>, answered from the reference's own files, and its species part to <code>/api/names</code>, which the server passes to GBIF's name service. A cross is asked about by its genus alone, and only of the name service.</li>
     <li>The names in a list you import that the hash groups do not settle, each asked of the catalogue's search as the front page asks it, never of GBIF's name service.</li>
     <li>A plant's species name, when you press "Is it an older name?" on its page (shown only where the name has no species page): sent to <code>/api/search</code> as the catalogue's search sends it.</li>
-    <li>The hash group of the species a scanned plant label names, when this device holds no plant of that label. So the page can show that species, as a plant page asks for its own; the species is never sent by name.</li>
-    <li>The text you type into the catalogue's search on the front page, or the search on the compare page. The server answers it from the reference's files, and it is the same thing a species page you then open already shows.</li>
+    <li>The hash group of the species a scanned plant label names, when this device holds no plant of that label, or holds its number under another name. So the page can show that species, as a plant page asks for its own; the species is never sent by name.</li>
+    <li>The text you type into the catalogue's search on the front page, the search box at the top of every page, or the search on the compare page. The server answers it from the reference's files (<code>/api/search</code>, and for the box's rows of genera, families, countries and regions, and of a genus or family in a region or country, <code>/api/suggest</code>), and it is the same thing a page you then open already shows.</li>
+    <li>A browse view's query, to <code>/browse/data</code>, from the map picker (how many species the regions ticked give, and each region's count), from a pin (the view's species now, to count what changed), and for the names of the species a pin gained or lost (their page ids). The answer is the same for anyone who asks it.</li>
+    <li>Not your plants, on a region's, a genus's or a family's page: the collection lens asks for their species by hash group only, as a plant's page does.</li>
     <li>Not the text you type on "Your species", which is searched on the device. Nor anything shaped like a plant number, nor anything typed before your collection has opened.</li>
     <li>The position of the catalogue's rows you scroll or jump to by letter: a grouping and a row number, nothing of yours.</li>
     <li>A species address the reference does not answer to, which the server asks the backbone about once, in case it is an older name of a species that is here. Never an older name two species of the reference hold, which the page names without asking.</li>
@@ -917,7 +1149,7 @@
 
   <details class="full"><summary>Full detail: other hosts</summary>
   <ul class="rules">
-    <li>Your browser does talk to outside image hosts on species pages, the front page and the compare page. They are iNaturalist's image hosts (inaturalist-open-data.s3.amazonaws.com and static.inaturalist.org), Wikimedia Commons (upload.wikimedia.org) and GBIF's image cache (api.gbif.org). Each sees your address, like any image host.</li>
+    <li>Your browser does talk to outside image hosts on species pages, the front page, the browse pages (<code>/browse</code>, <code>/region/…</code>, <code>/genus/…</code> and <code>/family/…</code>), the compare page and the not-found page. They are iNaturalist's image hosts (inaturalist-open-data.s3.amazonaws.com and static.inaturalist.org), Wikimedia Commons (upload.wikimedia.org) and GBIF's image cache (api.gbif.org). Each sees your address, like any image host.</li>
     <li>Commons is asked at its 120-, 250-, 500- and 960-pixel sizes, or at a file's own size when it is narrower. A photograph that reached GBIF from another dataset is shown from GBIF's cache, not from that dataset's own server.</li>
     <li>The species picker's species part goes to this site's <code>/api/names</code>, which asks api.gbif.org from the server. So that host sees the server's address, not yours.</li>
     <li>The server waits eight seconds for GBIF's name service, and the picker ten seconds for the server. A name not answered by then is said as not checked, and the reference's own search, which the picker waits for apart, is not held up by it.</li>
@@ -927,7 +1159,7 @@
     <li>Those three are the only hosts the server asks. Your browser asks no host but this site and the four image hosts. "Use my location" asks the browser for its position; how the browser finds it is the browser's own.</li>
     <li>One host is Cloudflare's own, not this site's choice. Cloudflare, which serves the site, adds two headers of its network error logging to every answer (<code>Report-To</code> and <code>NEL</code>), while that setting of Cloudflare's is on for the site, as it was when last checked, on 5 November 2026.</li>
     <li>A browser that honours them (Chrome, Edge and other Chromium browsers) then reports to <code>a.nel.cloudflare.com</code>, from your address and for a week, any request to this site that fails, naming the address that failed. The site's code cannot remove these headers; the setting is the owner's to turn off.</li>
-    <li>The site's three typefaces are among its own files. Until they arrive, a page is set in faces the device already has, each scaled to the same average width, so the text hardly moves when they land: Segoe UI, Georgia and Consolas on Windows; Helvetica Neue, Georgia and Menlo on Apple devices; Liberation and DejaVu on Linux.</li>
+    <li>The site's three typefaces are Adobe's Source Sans 3 for the text, Source Serif 4 italic for the scientific names and Source Code Pro for identifiers such as a plant's number, under the SIL Open Font Licence, and are among the site's own files. Until they arrive, a page is set in faces the device already has, each scaled to the same average width, so the text hardly moves when they land: Segoe UI, Georgia and Consolas on Windows; Helvetica Neue, Georgia and Menlo on Apple devices; Roboto and Noto Serif on Android; Liberation and DejaVu on Linux.</li>
   </ul>
   </details>
 
@@ -935,6 +1167,8 @@
   <ul class="rules">
     <li>The one thing the server keeps about a visitor is short-lived rate counters keyed by address: an IPv4 address or an IPv6 /64.</li>
     <li>For vault creation, sync, searches, reference reads and the requests that call another service, the /48 around an IPv6 address is counted too. For the calls to other services, the index and sync, so is an IPv4 address's /24.</li>
+    <li>Pages rendered with no copy kept are counted per address under one allowance: 1,200 per ten minutes, and four times that for an IPv6 /48. They are Compare, a species page or the front page the server cannot keep a copy of (one reached by an older name, a move inside the app, a HEAD), every browse page (<code>/browse</code>, <code>/region</code>, <code>/genus</code>, <code>/family</code> and the pages under them) and a browse page's own requests (<code>/browse/data</code>). A browse page's address with a query it does not read, or spelt another way, is moved to its one spelling first.</li>
+    <li>A browse view's CSV is counted with the whole index: six per ten minutes for one address, and four times that for its IPv4 /24 or IPv6 /48. Its file of columns and sources is counted as a page.</li>
     <li>Requests are counted per ten minutes in KV. Calls to other services are counted per minute in the counter object's memory, never stored; without the counter object, in KV for two minutes.</li>
     <li>Bytes stored per day and vaults created per day are counted in a small counter object. The networks that took the most of a day's new-vault places are recorded once half the day's places are taken, for the operator.</li>
     <li>For each vault that takes a place, the network it was counted to is kept beside the vault's id with the day's counts. So a place given back on its day goes back to that network.</li>
@@ -989,10 +1223,13 @@
     <li><code>cultifolio.frost.site</code>: your site's coordinates and name, as you set them. "Use my location" keeps three decimals; they are rounded further only when a forecast is asked for.</li>
     <li><code>cultifolio.prefs</code>: your settings. <code>cultifolio.theme</code>: light or dark.</li>
     <li><code>cultifolio.compare</code>: the species in your comparison; in the example collection, that tab's own copy.</li>
-    <li><code>cultifolio.corpus</code>: the reference's version last seen. <code>cultifolio.labels</code>: the label sheet's choices.</li>
+    <li><code>cultifolio.corpus</code>: the reference's version last seen. <code>cultifolio.labels</code>: the label sheet's choices. <code>cultifolio.report</code>: the collection report's choices.</li>
+    <li><code>cultifolio.lock</code>: the app lock's passcode, as a salted hash, and how long the app may be out of sight before it asks again; and, once this device stopped syncing while locked, a SHA-256 hash of the sync key it synced with, made with the prefix <code>cultifolio-lock-key:</code>, so that key still opens the lock.</li>
+    <li><code>cultifolio.lock.tries</code>: how many wrong passcodes in a row, and until when the lock screen waits after five, so a reload or another tab does not start them again.</li>
     <li><code>cultifolio.lastLocation</code> and <code>cultifolio.lastSowLocation</code>: the space last used on the Add and sowing forms. <code>cultifolio.countMode</code>: how a batch page last took its counts.</li>
     <li><code>cultifolio.visits</code>, <code>cultifolio.lastVisit</code> and <code>cultifolio.installSnoozedUntil</code>: when to offer installing the app.</li>
     <li><code>cultifolio.views</code>: 1 or 2, whether this device has opened a page of the site before, so the service worker is installed from the second.</li>
+    <li><code>cultifolio.recentSearches</code>: the last eight searches you opened from the search box at the top of every page (the words typed, the row's name and its address), shown when the box is empty and forgotten by its "Clear recent searches". Never sent.</li>
     <li><code>cultifolio.welcomed</code>: the front page's welcome dismissed. <code>cultifolio.hasMine</code>: that this device has species of its own, so the front page opens on them; never written from the example collection.</li>
     <li><code>cultifolio.sampleGen</code>: the example collection's generation, a random value written anew by every Leave and every deletion of the example. A tab that was in the example while another tab left it opens your own collection on its next load.</li>
     <li><code>cultifolio.persistAfterFirst</code>: that the browser's answer to whether it will keep this site's storage was said (once there was a plant to keep, whichever page asked).</li>
@@ -1007,6 +1244,7 @@
     <li><code>cultifolio.demo.</code> and a setting's name: that setting, for the example's tab only, such as <code>cultifolio.demo.units</code> or <code>cultifolio.demo.compare</code>.</li>
     <li><code>cultifolio.demo.own</code>: whether this device had a collection of its own when the example was opened, so the example's bar says the right thing. <code>cultifolio.demo.gen</code>: the example's generation when this tab opened it. Both go with the example's other copies.</li>
     <li><code>cultifolio.keepDraft</code>: what an add form inside the example held when Keep it as my own was pressed, read once by the same form in your own collection and taken off.</li>
+    <li><code>cultifolio.unlocked</code>: that the app lock was opened in this tab, and when the app went out of sight, so a reload stays unlocked and the time set is counted.</li>
     <li><code>cultifolio.labelsPicked</code>: the plants picked on the labels page, written when the page is hidden or left, forgotten when you move to another page of the app, and read back only when that page is reloaded or brought back through the browser's history.</li>
     <li><code>cultifolio.sampleLeft</code>: this tab has just left the example by Leave, so its next page deletes the example's database. An address alone never does.</li>
     <li><code>cultifolio.sampleLeaving</code>: a one-use token Leave writes and its address carries (<code>?left=</code>). Only when the two match does the first page after Leave mark the example for deletion; the token is taken off as it is read.</li>
@@ -1056,6 +1294,8 @@
   <dl class="gloss">
     <dt>Plant</dt><dd>One plant (or one pot of a clump) under its own permanent number, the plant number. The number is never reused, even after the plant is gone.</dd>
     <dt>Batch</dt><dd>A sowing or a tray of cuttings, numbered like a plant, from which plants are potted up.</dd>
+    <dt>Cross</dt><dd>A pollination you recorded between two of your plants, seed parent first, and the seed it gave.</dd>
+    <dt>Checkpoint</dt><dd>A batch's count on a day, with what was alive in the pot that day.</dd>
     <dt>Space</dt><dd>A room, bench, shelf or tray, nested, with the conditions a plant inherits from it.</dd>
     <dt>Vault</dt><dd>The encrypted copy of your collection on this site's server, which sync keeps. It holds sealed bundles of changes and photographs the server cannot read.</dd>
     <dt>Sync key</dt><dd>The thirty symbols that encrypt the vault and let a second device join it. There is no account behind it and no recovery.</dd>
@@ -1069,7 +1309,7 @@
     <dt>Held</dt><dd>A change dated more than five minutes ahead of this device's clock, kept out of the collection until the clock reaches it.</dd>
     <dt>Parked</dt><dd>A change from a clock that was badly wrong (stamped more than two days past the arrival of its bundle), kept in the log but counted only if you apply it, on every device alike.</dd>
     <dt>Not reached</dt><dd>This site could not be reached from the device just now. Not the same as "not in the reference".</dd>
-    <dt>Backbone</dt><dd>GBIF's Backbone Taxonomy: GBIF's one list of names, each with a number (its key), under which GBIF files every record it holds.</dd>
+    <dt>Backbone</dt><dd>GBIF's list of names, each with a number (its key), last built on 28 August 2023. GBIF now files its records under the Catalogue of Life too; this site reads them by the backbone's keys.</dd>
     <dt>Epithet</dt><dd>The second word of a species' name: "vera" in Aloe vera. A subspecies or variety has one of its own after its rank word.</dd>
     <dt>Basionym</dt><dd>The name a species was first published under, whose epithet a later name keeps: Echinocactus hamatacanthus is the basionym of Ferocactus hamatacanthus.</dd>
     <dt>Homotypic</dt><dd>Of two names: resting on one type specimen, so one plant by definition, as a basionym and every name moved from it are. A heterotypic synonym rests on another type: a botanist's judgement that two plants are one.</dd>
@@ -1104,11 +1344,12 @@
 
 <style>
   .prose { max-width: 720px; font-size: var(--fs-base); line-height: 1.6; color: var(--ink); font-family: var(--ui); }
-  .prose h2 { font-family: var(--serif); font-size: var(--fs-2xl); margin: 32px 0 8px; }
+  /* Headings in the text face, the brief flush with the page under a rule (round eighty-seven's look; the review of stage
+     2's pages, 8): the serif is the scientific names' alone, and its roman is never loaded. */
+  .prose h2 { font-family: var(--ui); font-weight: 400; font-size: 1.375rem; margin: 32px 0 8px; }
   .prose h3 { font-family: var(--ui); font-size: var(--fs-lg); margin: 20px 0 6px; }
   .prose p { margin: 0 0 12px; }
-  .topseg { margin: 14px 0 6px; }
-  .brief { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 4px 18px 14px; margin: 0 0 18px; }
+  .brief { background: none; border-radius: 0; box-shadow: none; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 4px 0 14px; margin: 0 0 18px; }
   .brief ul, .plain { padding-left: 1.1rem; }
   .brief li, .plain li { margin: 4px 0; }
   .counts { margin: 8px 0 10px; }
@@ -1139,8 +1380,10 @@
     .src tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
     .src th, .src td { border: 0; padding: 2px 0; }
   }
-  /* An anchor, /privacy among them, lands under the top bar rather than beneath it. */
-  .prose [id] { scroll-margin-top: calc(44px + 16px); }
+  /* An anchor, /privacy among them, lands 16 px under the top bar, whatever the bar's height: the page's own scroll
+     padding is the bar's measured height (--bar-h, theme.css) and 12 px, and this adds 4. Until round eighty-seven it
+     added 44 + 16 px, a bar of 44 px counted twice; the bar is 52 to 57 px now, and --bar-h follows it. */
+  .prose [id] { scroll-margin-top: 4px; }
   /* The repository's address breaks rather than pushing the page sideways at 320 px and 200% text. */
   .prose a, .prose code { overflow-wrap: anywhere; }
 </style>

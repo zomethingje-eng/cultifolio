@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildIcs, foldLine, escapeText, wetRuns, addDays, DRY_HORIZON_DAYS, type Rhythm } from '$lib/export/ics';
 import { rhythmsOf, type RhythmSource } from '$lib/export/rhythms';
-import { plantQrUrl, labelFromHash, speciesFromHash, QR_NAME_MAX } from '$lib/ui/grow/qr';
+import { plantQrUrl, labelFromHash, speciesFromHash, QR_NAME_MAX, idTag } from '$lib/ui/grow/qr';
 import { readPrice, spendOf, spendWords, amountWords } from '$lib/ui/grow/spend';
 import { firstsOf } from '$lib/ui/grow/firsts';
 import { isIos, iosInBrowser } from '$lib/ui/grow/ios';
@@ -93,13 +93,13 @@ describe('the watering calendar file', () => {
 describe("a label's code", () => {
   it('carries the species and the printed name in the fragment, which is never sent to the server', () => {
     const u = plantQrUrl('https://cultifolio.example', { id: 'r123', taxonName: 'Haworthia truncata', cultivar: 'Lime Green', nameKind: 'cultivar' });
-    expect(u).toBe("https://cultifolio.example/plants/r123#s=haworthia-truncata&n=Haworthia%20truncata%20'Lime%20Green'");
+    expect(u).toBe(`https://cultifolio.example/plants/r123#i=${idTag('r123')}&s=haworthia-truncata&n=Haworthia%20truncata%20'Lime%20Green'`); // the identity tag first (round eighty-seven, the stage 3 fixes)
     expect(new URL(u).pathname).toBe('/plants/r123');
-    expect(labelFromHash(new URL(u).hash)).toEqual({ slug: 'haworthia-truncata', name: "Haworthia truncata 'Lime Green'" });
+    expect(labelFromHash(new URL(u).hash)).toEqual({ slug: 'haworthia-truncata', name: "Haworthia truncata 'Lime Green'", tag: idTag('r123') });
   });
   it('gives a cross its name and no species, since a cross has no species page', () => {
     const u = plantQrUrl('https://x', { id: 'r1', taxonName: 'Ariocarpus', cultivar: null, nameKind: 'hybrid' });
-    expect(labelFromHash(new URL(u).hash)).toEqual({ slug: null, name: 'Ariocarpus' });
+    expect(labelFromHash(new URL(u).hash)).toEqual({ slug: null, name: 'Ariocarpus', tag: idTag('r1') });
   });
   it('keeps the code short: the name is cut', () => {
     const u = plantQrUrl('https://x', { id: 'r1', taxonName: 'Gymnocalycium ' + 'a'.repeat(200), cultivar: null, nameKind: 'species' });

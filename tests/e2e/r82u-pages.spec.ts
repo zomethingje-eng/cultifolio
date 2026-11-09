@@ -189,15 +189,38 @@ test('r82u 9: running text on a desktop is 15 px; a phone keeps its own', async 
   expect(await px('.factgrid > div')).toBeCloseTo(13.5, 1);
 });
 
-test('r82u 10: the first screen says what the app is in one sentence, and the example\'s button is 44 px tall @phone', async ({ page }) => {
+test('r82u 10: the first screen leads with a figure, the next sentence says what the app is, and the example\'s button is 44 px tall @phone', async ({ page }) => {
   await noThirdParty(page);
   await page.goto('/'); await ready(page);
   const vh = page.viewportSize()!.height;
   // On a phone the welcome's first sentence says both halves; on a desktop the pitch above it says the reference, as before.
-  const lead = page.viewportSize()!.width <= 640 ? page.locator('#welcome .wlead b') : page.locator('.pitch li').first();
+  // Round eighty-seven (plan D1, DESIGN-87): the first screen is the lead, one figure from the reference and where it came
+  // from; the sentence that says what the site is follows it, the plain facts, at every width. The welcome's own first
+  // sentence still says both halves on a phone, and its example button is under the strip and Browse, a finger's height.
+  const lead = page.locator('section.lead h1');
   await expect(lead).toBeVisible();
-  await expect(lead).toHaveText(page.viewportSize()!.width <= 640 ? /^A reference to \d+ species, every figure sourced, and a record of your own plants, kept on this device\.$/ : /^A reference for the plants people grow/);
   expect((await lead.boundingBox())!.y + (await lead.boundingBox())!.height).toBeLessThanOrEqual(vh);
+  await expect(page.locator('.factsline p')).toHaveText(/^\d[\d,]* plant species, named as Kew's World Checklist names them, with wild records from GBIF and iNaturalist, and for \d[\d,]* of them the climate where they grow\. Free, with no account, no adverts and no tracking\. Your own plants stay on your device unless you turn on sync, which is encrypted before it leaves\.$/);
+  // And where it stands (round eighty-seven, the review of stage 1, S7): on a phone the sentence that says what the site
+  // is comes directly under the figure, on the first screen, over the photograph; on a desktop the facts line follows the
+  // lead directly. The text alone was asserted, and on the owner's phone the first screen held the figure and its photograph.
+  const box = async (sel: string) => (await page.locator(sel).boundingBox())!;
+  const h1 = await box('section.lead h1');
+  if (page.viewportSize()!.width <= 640) {
+    const what = await box('section.lead .leadwhat');
+    await expect(page.locator('section.lead .leadwhat')).toHaveText(/^\d[\d,]* plant species, named as Kew names them, with their wild records and, for \d[\d,]*, the climate where they grow\. Free, with no account and no tracking\.$/);
+    expect(what.y).toBeGreaterThanOrEqual(h1.y + h1.height - 0.5);
+    expect(what.y - (h1.y + h1.height)).toBeLessThan(24);
+    expect(what.y + what.height).toBeLessThanOrEqual((await box('section.lead .leadph')).y + 0.5);
+    expect(what.y + what.height).toBeLessThanOrEqual(vh);
+  } else {
+    const lead = await box('section.lead');
+    const facts = await box('section.factsline');
+    expect(Math.abs(facts.y - (lead.y + lead.height))).toBeLessThanOrEqual(1);
+    await expect(page.locator('section.lead .leadwhat')).toBeHidden();
+  }
+  if (page.viewportSize()!.width <= 640) await expect(page.locator('#welcome .wlead b')).toHaveText(/^A reference to \d+ species, every figure sourced, and a record of your own plants, kept on this device\.$/);
+  await page.locator('#try-sample-home').scrollIntoViewIfNeeded();
   const b = await page.locator('#try-sample-home').boundingBox();
   // 44 px under a finger or in a narrow window; a desktop mouse's target (the theme's 36 px) elsewhere. Base: 19.6 everywhere.
   const finger = page.viewportSize()!.width <= 700 || (await page.evaluate(() => matchMedia('(pointer: coarse)').matches));

@@ -13,7 +13,10 @@ test('front page renders server-side with the fixture corpus: closed genus rows,
   const page = await ctx.newPage();
   const res = await page.goto('/');
   expect(res?.status()).toBe(200);
-  await expect(page.locator('h1')).toContainText('Cultifolio'); // a visitor's head names the site and says what it is (round fifty-eight)
+  // A visitor's page names the site (round fifty-eight) in the top bar's name, and leads with one figure of the reference
+  // and where it came from (round eighty-seven; plan D1), drawn by the server, no script needed.
+  await expect(page.locator('#topbar .wordmark')).toHaveText('Cultifolio');
+  await expect(page.locator('h1')).toContainText('The coldest night on record where Copiapoa cinerea grows wild');
   await expect(page.locator('.grow')).toHaveCount(4); // Copiapoa, Hesperocyparis (K's page without a GBIF key, round seventy-nine), Refusia, Welwitschia: rows, not tiles
   await expect(page.locator('a.tile')).toHaveCount(0);
   await expect(page.locator('.seg[aria-label="Group by"] .on')).toHaveText('Genus');
@@ -41,8 +44,8 @@ test('the menu behind the mark reaches every place from any page', async ({ page
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#menu');
   await expect(menu).toBeVisible();
-  for (const l of ['Species', 'My plants', 'My spaces', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
-  await expect(menu.locator('a.on')).toHaveText('Species');
+  for (const l of ['Reference', 'My plants', 'My spaces', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'About', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
+  await expect(menu.locator('a.on')).toHaveText('Reference'); // "Reference" since round eighty-seven (DESIGN-87)
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
@@ -223,7 +226,7 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
   // count what is up
   await page.fill('#g-n', '5');
   await page.getByRole('button', { name: 'Record count' }).click();
-  await expect(page.getByText('42%')).toBeVisible();
+  await expect(page.locator('.cards').getByText('42%')).toBeVisible(); // the card's: the checkpoints table says it too (round eighty-seven, F5)
   await page.fill('#l-n', '1');
   await page.fill('#l-cause', 'damping off');
   await page.getByRole('button', { name: 'Record loss' }).click();
@@ -929,8 +932,9 @@ test('the app shell is installed for offline use: collection pages, a species pa
   expect(cached.some((u) => u.startsWith('/_app/immutable/'))).toBe(true);
   // the Latin font subsets are installed; the extended and Vietnamese ones are not, until a name needs them (improvements, 9)
   const fonts = cached.filter((u) => u.endsWith('.woff2'));
-  expect(fonts.some((u) => /newsreader-latin-wght-normal/.test(u))).toBe(true);
-  expect(fonts.some((u) => /public-sans-latin-wght-normal/.test(u))).toBe(true);
+  // Round eighty-seven: the owner's type, the site's own files (Source Sans 3's roman and italic, Source Serif 4's italic, Source Code Pro).
+  for (const f of ['source-sans-3-latin-wght-normal', 'source-sans-3-latin-wght-italic', 'source-serif-4-latin-opsz-italic', 'source-code-pro-latin-400-normal']) expect(fonts.some((u) => u.includes(f)), f).toBe(true);
+  expect(fonts.filter((u) => /public-sans|newsreader|dm-mono/.test(u))).toEqual([]);
   expect(fonts.filter((u) => /latin-ext|vietnamese/.test(u))).toEqual([]);
   expect(cached).toContain('/species/copiapoa-cinerea'); // read once, kept
   expect(cached).not.toContain('/species/welwitschia-mirabilis'); // never read: the offline page would answer for it
@@ -1001,7 +1005,8 @@ test('the front page carries closed rows, never fetches the whole index, and a s
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const p = await ctx.newPage();
-  await p.goto('/about');
+  // /about is the owner's page since round eighty-seven, no longer a move to /about/how (r87p-pages 1 reads it).
+  await p.goto('/about/how');
   await expect(p).toHaveURL(/\/about\/how$/);
   await expect(p.locator('h2#marker')).toHaveText('The map marker');
   await expect(p.locator('h2#climate')).toHaveText('The climate across the range');

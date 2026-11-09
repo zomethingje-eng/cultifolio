@@ -52,14 +52,14 @@ for (const who of ['grower', 'visitor'] as const) for (const width of [320, 360,
     } else {
       await page.goto('/'); await ready(page);
     }
-    await expect(page.locator('#tabbar a:visible')).toHaveCount(5); // the grower's five for a visitor too (round sixty-three, V1)
+    await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveCount(4); // the same four for a visitor (round sixty-three, V1; four since round eighty-seven, DESIGN-87)
     await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
     await expect(page.locator('#tabbar')).not.toHaveAttribute('data-icons', '1'); // the first pass: data-icons="1" at 320 and 360, five bare icons
-    const labels = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar a')].filter((a) => a.offsetParent).map((a) => {
+    const labels = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar :is(a, button.moretab)')].filter((a) => a.offsetParent).map((a) => {
       const s = a.querySelector('span')!;
       return { t: s.textContent, w: s.getBoundingClientRect().width, whole: s.scrollWidth <= s.clientWidth + 1 };
     }));
-    expect(labels.map((l) => l.t)).toEqual(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+    expect(labels.map((l) => l.t)).toEqual(['Reference', 'My plants', 'Today', 'More']); // the owner's four (round eighty-seven)
     for (const l of labels) { expect(l.whole, l.t!).toBe(true); expect(l.w, l.t!).toBeGreaterThan(20); }
     await ctx.close();
   });
@@ -68,7 +68,7 @@ for (const who of ['grower', 'visitor'] as const) for (const width of [320, 360,
 /** Each tab's label: whether it is drawn, whether it is cut, and any line that starts inside a word. */
 const tabState = (page: Page) => page.evaluate(() => ({
   icons: document.getElementById('tabbar')!.hasAttribute('data-icons'),
-  tabs: [...document.querySelectorAll<HTMLElement>('#tabbar a')].filter((a) => a.offsetParent).map((a) => {
+  tabs: [...document.querySelectorAll<HTMLElement>('#tabbar :is(a, button.moretab)')].filter((a) => a.offsetParent).map((a) => {
     const s = a.querySelector('span')!;
     const shown = s.getClientRects().length > 0 && s.getBoundingClientRect().width > 2;
     const r = document.createRange(); const text = s.textContent ?? ''; const breaks: string[] = [];
@@ -97,7 +97,7 @@ for (const who of ['grower', 'visitor'] as const) {
     const seen: string[] = [];
     for (const width of [320, 360, 375, 390, 412]) {
       await page.setViewportSize({ width, height: 780 });
-      await expect(page.locator('#tabbar a:visible')).toHaveCount(5); // everyone's five (round sixty-three, V1)
+      await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveCount(4); // everyone's four (round sixty-three, V1; round eighty-seven)
       await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
       const st = await tabState(page);
       seen.push(`${width}: ${st.icons ? 'icons' : 'labels'}`);

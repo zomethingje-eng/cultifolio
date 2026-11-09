@@ -51,11 +51,12 @@ test('r69p P2: after a takeover, a move between pages finishes and the page it r
   await page.waitForLoadState('load');
   await takeOver(page);
   expect(await loads(page)).toEqual(['/plants:navigate']); // nothing typed, but past the first seconds: no reload here
-  await page.locator('a[href="/places"]:visible').first().click();
-  await expect(page).toHaveURL(/\/places$/);
+  // Today, a place the tab bar and the top bar both hold (since round eighty-seven My spaces is in the menu).
+  await page.locator('a[href="/today"]:visible').first().click();
+  await expect(page).toHaveURL(/\/today$/);
   // The move was the app's own (the page arrived), and that page then reloaded: the base loaded /places by
   // `location.href` from the move it cancelled, a "navigate" load.
-  await expect.poll(() => loads(page).catch(() => []), { timeout: 15_000 }).toEqual(['/plants:navigate', '/places:reload']);
+  await expect.poll(() => loads(page).catch(() => []), { timeout: 15_000 }).toEqual(['/plants:navigate', '/today:reload']);
   await ready(page);
 });
 
@@ -76,7 +77,7 @@ test('r69p P2: a half-filled add form is asked about once, by the page; "no" kee
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await takeOver(page);
-  await page.locator('a[href="/places"]:visible').first().click();
+  await page.locator('a[href="/today"]:visible').first().click();
   await expect.poll(() => asked.length).toBeGreaterThan(0);
   await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): a second question would follow the first
   expect(asked).toEqual(['confirm']); // the base: the page's confirm and the browser's beforeunload
@@ -85,8 +86,9 @@ test('r69p P2: a half-filled add form is asked about once, by the page; "no" kee
   expect(await loads(page)).toEqual(['/plants/new:navigate']);
   // Yes this time: the move finishes, and the page it reaches reloads.
   leave = true;
-  await page.locator('a[href="/places"]:visible').first().click();
-  await expect(page).toHaveURL(/\/places$/);
-  await expect.poll(() => loads(page).catch(() => []), { timeout: 15_000 }).toEqual(['/plants/new:navigate', '/places:reload']);
+  // Today, a place the tab bar and the top bar both hold (since round eighty-seven My spaces is in the menu).
+  await page.locator('a[href="/today"]:visible').first().click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect.poll(() => loads(page).catch(() => []), { timeout: 15_000 }).toEqual(['/plants/new:navigate', '/today:reload']);
   expect(asked).toEqual(['confirm', 'confirm']);
 });

@@ -1,6 +1,7 @@
 import { ownSynonyms } from '$core/shown-names';
 import { error, redirect, isHttpError } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, searchAnswer, kewHolders } from '$lib/server/dossiers';
+import { saysBrowse } from '$lib/browse/load.server';
 import { synonymAsk, nameFromSlug, authorsOf, sharedNameMessage, placedElsewhere, type SynonymAnswer } from '$lib/server/synonyms';
 import { lookupOf, addressOf, mergedHolder, type Lookup } from '$lib/server/lookup';
 import { plainName, synonymKey, type Card } from '$dossier/lookups';
@@ -19,6 +20,7 @@ import { LABEL_AT } from '$lib/map/region-labels';
 import { unitName } from '$core/regions';
 import { drawOnce } from '$lib/server/drawn';
 import { describedBy } from '$lib/ui/ref/words';
+import { parentKeys, parentPage } from '$lib/ui/ref/links-words';
 import type { PageServerLoad } from './$types';
 
 /** The genera's words for `englishNames`, once for each genera read (round seventy-seven: every page folded all 1,300). */
@@ -28,7 +30,20 @@ const generaHeld = (g: ReadonlyMap<string, number>) => { let w = generaWords.get
 /** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
 const SPECIES_UNREADABLE = 'This species page could not be read just now';
 
-export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress, locals, isDataRequest }) => {
+/**
+ * The page's load, with a not-found answer that says whether the browse pages its links name are there (round
+ * eighty-seven, the review of stage 1, B2): on a corpus with no browse table each of them is a 503.
+ */
+export const load = (async (event) => {
+  try {
+    return await loadPage(event);
+  } catch (e) {
+    await saysBrowse(e, event.locals, event.platform, event.fetch);
+    throw e;
+  }
+}) satisfies PageServerLoad;
+
+const loadPage = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress, locals, isDataRequest }: Parameters<PageServerLoad>[0]) => {
   // One corpus for the page, the hook's when it held the page: its key, its slug and every index read (round fifty-nine).
   // A corpus that cannot be read is a 503 that says so (`UNREADABLE`), never the fixture's species (round sixty).
   const c = locals?.corpus ?? (await corpusNow(platform, fetch));
@@ -170,6 +185,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
   // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
   const d = params.slug !== loaded.slug ? { ...loaded, slug: params.slug } : loaded;
+  // A hybrid's parents' own pages (round eighty-seven, stage 2; the links agent's Parents section): each parent Kew's ids
+  // lead to a page here is read once, for its habitat figures, which the section shows side by side and never combines.
+  // A parent whose page could not be read just now is null, and the section says it was not checked, never that it has no page.
+  const parentPages = Object.fromEntries(await Promise.all(parentKeys(d.parents).map(async (k) => [k, await getDossier(platform, fetch, k, c).then((p) => (p ? parentPage(p) : null)).catch(() => null)] as const)));
   // The open records are shown only as the regional map's points, which the page draws from their places, and the datasets
   // they came from only as a count (round seventy-seven): each record's year, country, kind and licence, and each
   // dataset's key, title, licence and count, are read by nothing the page shows, and were a fifth of what it carried to
@@ -189,7 +208,13 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
   const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaHeld(genera), older: [...(d.name.synonyms ?? []), ...(d.name.kew?.synonyms ?? [])], shared: d.name.shared }); // the names another species of the genus is given more often, as the index (round eighty-four, D9)
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
-  const allSiblings = (await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus))).filter((e) => e.key !== key);
+  const genusRow = await (me && genusOf(me.name) === genus ? myRow! : rowOf(genus));
+  const allSiblings = genusRow.filter((e) => e.key !== key);
+  // Where the species stands in its genus's row of the catalogue, for the page's trail "Cactaceae › Copiapoa › 3 of 31"
+  // (round eighty-seven; the owner's look): its place in the row's own order, and the row's length. Null when the row does
+  // not hold it (a page the index files under another genus).
+  const atInGenus = genusRow.findIndex((e) => e.key === key);
+  const genusAt = atInGenus >= 0 ? { n: atInGenus + 1, of: genusRow.length } : null;
   const siblings = allSiblings.slice(0, 12).map(card);
   const siblingCount = allSiblings.length;
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.
@@ -326,7 +351,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     genusRecord,
     siblings,
     siblingCount,
+    genusAt,
     near,
+    /** A hybrid's parents' habitat figures, by page id, each read from its own page; null for one not read (round eighty-seven, stage 2). */
+    parentPages,
     /**
      * The open records' places (latitude, longitude), which the page draws its regional map from, in the browser and on the
      * server, rather than carried as drawn (round seventy-seven); in a move inside the app's data only. The page's own HTML

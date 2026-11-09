@@ -28,7 +28,8 @@ test('r63u U1: every fallback face this machine has sets the site\'s sentences w
   await page.locator('html[data-ready]').waitFor({ state: 'attached', timeout: 60_000 });
   await page.evaluate(() => document.fonts.ready);
   const out = await page.evaluate(async ({ SENTENCES, MONO }) => {
-    const webOf = (fam: string) => (fam.startsWith('Public Sans') ? 'Public Sans Variable' : fam.startsWith('Newsreader') ? 'Newsreader Variable' : 'DM Mono');
+    // The faces of round eighty-seven (DESIGN-87): Source Sans 3, Source Serif 4 (its italic) and Source Code Pro.
+    const webOf = (fam: string) => (fam.startsWith('Source Sans 3') ? 'Source Sans 3' : fam.startsWith('Source Serif 4') ? 'Source Serif 4' : 'Source Code Pro');
     const span = document.createElement('span');
     span.style.cssText = 'position:absolute;left:-99999px;top:0;white-space:nowrap;font-size:20px;letter-spacing:0;font-synthesis:none';
     document.body.appendChild(span);
@@ -47,9 +48,9 @@ test('r63u U1: every fallback face this machine has sets the site\'s sentences w
       if (f.status !== 'loaded') { missing.push(name); continue; }
       const web = webOf(fam);
       await document.fonts.load(`${f.style === 'italic' ? 'italic ' : ''}${weight} 20px "${web}"`);
-      const texts = fam.startsWith('DM Mono') ? MONO : SENTENCES;
-      // The Newsreader italic is declared at 200 to 800; DM Mono at 400 alone (its other weights are drawn from it).
-      const w = web === 'DM Mono' ? '400' : weight;
+      const texts = fam.startsWith('Source Code Pro') ? MONO : SENTENCES;
+      // The variable faces are declared at 200 to 900; Source Code Pro at 400 alone (its other weights are drawn from it).
+      const w = web === 'Source Code Pro' ? '400' : weight;
       let a = 0, b = 0;
       for (const t of texts) { a += width(fam, weight, f.style, t); b += width(web, w, f.style, t); }
       rows.push({ face: name, ratio: a / b });

@@ -247,6 +247,24 @@ export async function searchCatalogue(q: string, n = 60, at = 0): Promise<Search
 }
 
 /**
+ * The search box's browse rows for the words typed (/api/suggest; round eighty-seven, C3), asked under the corpus and the
+ * build as a search is (`withCorpus`; the review of stage 1, M5), so an answer the edge kept is never another corpus's or
+ * another build's. An answer that did not come is no rows: the box's species rows are asked apart and stand alone.
+ */
+export async function suggestRows<T>(text: string): Promise<T[]> {
+  const t = [...text.trim()].slice(0, 80).join('');
+  if (!t) return [];
+  try {
+    const r = await withCorpus(`/api/suggest?q=${encodeURIComponent(t)}`).then((u) => fetch(u));
+    if (!r.ok) return [];
+    const j = (await r.json()) as { rows?: T[] };
+    return Array.isArray(j?.rows) ? j.rows : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Whether what is typed in the front page's search is shaped like one of the collection's plant numbers, which is never
  * sent to the server (rule 4): digits, a dash and a digit ("2026-0013", as the year scheme numbers), and, under a
  * prefix scheme, the collection's own prefix with a dash or a digit after it ("ACC-0013", "acc 13"). Only the year

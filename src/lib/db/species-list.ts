@@ -4,6 +4,7 @@
  */
 import { speciesSlug, speciesName, parseName, slugify, withoutSign, isGenusOnly } from '$core/names';
 import type { Accession, Taxon } from './types';
+import { recordedKind, type OlderKind } from '$lib/ui/ref/older-kind';
 
 export interface MySpecies {
   slug: string;
@@ -20,6 +21,13 @@ export interface MySpecies {
    * tile said "not in the reference" of Aloe aristata, whose plants' pages said "An older name of Aristaloe aristata").
    */
   olderOf?: string;
+  /**
+   * Which kind of name that is, as the plant's record says the form or the import read it when it was filed (round
+   * eighty-seven; `olderKind`, read by `recordedKind` where it was recorded for that `olderOf`): from the plant that gave `olderOf`, or from another growing plant
+   * of the same name and page where that one's record does not say. Absent where none says, or says a word this version
+   * does not know.
+   */
+  olderKind?: OlderKind;
 }
 
 /**
@@ -42,8 +50,12 @@ export function mySpeciesOf(accessions: readonly Accession[], taxa: readonly Tax
     const slug = speciesSlug(a.taxonName);
     if (!slug) continue;
     const cur = out.get(slug);
-    if (cur) { cur.grown++; if (!cur.olderOf && a.olderOf) cur.olderOf = a.olderOf; }
-    else out.set(slug, { slug, name: speciesName(a.taxonName), gbifKey: a.taxonKey ?? null, grown: 1, followed: false, ...(isGenusOnly(a.taxonName) ? { genus: true } : {}), ...(a.olderOf ? { olderOf: a.olderOf } : {}) });
+    const kind = recordedKind(a); // only where recorded for this `olderOf` (round eighty-seven, M1)
+    if (cur) {
+      cur.grown++;
+      if (!cur.olderOf && a.olderOf) { cur.olderOf = a.olderOf; if (kind) cur.olderKind = kind; }
+      else if (cur.olderOf && a.olderOf === cur.olderOf && !cur.olderKind && kind) cur.olderKind = kind;
+    } else out.set(slug, { slug, name: speciesName(a.taxonName), gbifKey: a.taxonKey ?? null, grown: 1, followed: false, ...(isGenusOnly(a.taxonName) ? { genus: true } : {}), ...(a.olderOf ? { olderOf: a.olderOf } : {}), ...(kind ? { olderKind: kind } : {}) });
   }
   for (const t of taxa) {
     const slug = t.id;

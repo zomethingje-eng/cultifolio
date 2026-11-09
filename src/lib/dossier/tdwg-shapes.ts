@@ -36,6 +36,32 @@
 import { TDWG3, tdwgLabel } from './tdwg';
 import { inBox } from '$core/geo';
 import { ADMISSION_POLICY, ADMISSIONS as POLICY_ADMISSIONS, stateKey, type Admission as PolicyAdmission, type AdmissionBy, type AdmissionPolicy } from './admission-policy';
+import { STATE_ALIASES, STATE_HISTORICAL } from './state-aliases';
+
+/**
+ * The places an alias of a state stands for in a country (round eighty-seven; `state-aliases.ts`): an ISO 3166-2 code as
+ * written ("ZA-KZN", "us-tx"), else its suffix or an old province's name as `stateKey` reads it ("KZN", "Natal",
+ * "Transvaal"). Each place as `stateKey` reads Natural Earth's name; undefined when the table has none.
+ */
+export function aliasOf(country: string, state: string | null | undefined): readonly string[] | undefined {
+  const k = aliasKey(country, state);
+  return k ? STATE_ALIASES[country]?.[k] : undefined;
+}
+/** The table's key for a stated state in a country ("=ZA-KZN", "~natal"), or undefined (another country's code, none stated). */
+function aliasKey(country: string, state: string | null | undefined): string | undefined {
+  if (!STATE_ALIASES[country] || !state) return undefined;
+  const code = /^\s*([A-Za-z]{2})\s*-\s*([A-Za-z0-9]{1,3})\s*$/.exec(state);
+  if (code) return code[1].toUpperCase() === country ? `=${country}-${code[2].toUpperCase()}` : undefined;
+  return `~${stateKey(state)}`;
+}
+/**
+ * Whether a stated state is a historical name of the table (round eighty-seven's review, S1: `STATE_HISTORICAL`), an old
+ * province that may have held land on both sides of a border; every other alias is a current ISO 3166-2 subdivision.
+ */
+export function historicalAlias(country: string, state: string | null | undefined): boolean {
+  const k = aliasKey(country, state);
+  return !!k && !!STATE_ALIASES[country]?.[k] && (STATE_HISTORICAL[country] ?? []).includes(k);
+}
 
 /** A polygon: its rings, the first the outer, in thousandths of a degree, [lon, lat]. */
 type Ring = Array<[number, number]>;
@@ -245,13 +271,54 @@ export function regionTester(file: ShapesFile, policyOrBuffer: AdmissionPolicy |
     }
     return n;
   };
-  /** Which side of a border inside one country a record's stated state or province names: the native region, another, or neither. */
-  function stateSide(state: string | null | undefined, native: string, others: ReadonlyArray<string>): 'native' | 'other' | 'neither' {
+  /** The regions of a country by each of its places' keys (round eighty-seven), so an alias's places name their regions. */
+  const placeRegions = new Map<string, Map<string, Set<string>>>();
+  const regionsOfPlace = (country: string) => {
+    let m = placeRegions.get(country);
+    if (!m) {
+      m = new Map();
+      for (const [code, ps] of Object.entries(file.places ?? {})) for (const x of ps) {
+        const [name, cc] = x.split('|');
+        if (cc !== country) continue;
+        const k = stateKey(name);
+        if (k) (m.get(k) ?? m.set(k, new Set()).get(k)!).add(code);
+      }
+      placeRegions.set(country, m);
+    }
+    return m;
+  };
+  /**
+   * Which side of a border inside one country a record's stated state or province names: the native region, another,
+   * neither (none stated, or a third region named), or a name nothing matches (`unmatched`). By the shapes' own names
+   * first, as round eighty-six read them; then (round eighty-seven, `borderState.aliases`) by its ISO 3166-2 code or an
+   * old province's name (`state-aliases.ts`). A current subdivision's code stands for its place, and is read as that
+   * place's name is: the native region's first (round eighty-seven's review, S1: at the 37 places the shapes file parts
+   * between two regions, "Oregon" was admitted for Oregon's region and "OR" and "US-OR" refused, since the code was read
+   * the neighbour's first). An old province that stands for places on both sides decides nothing, and the drawing
+   * decides, the record lying in the neighbour's shape (`other`).
+   */
+  function stateSide(state: string | null | undefined, native: string, others: ReadonlyArray<string>, country: string): 'native' | 'other' | 'neither' | 'unmatched' {
     const k = stateKey(state);
     if (!k) return 'neither';
     if (namesOf(native).has(k)) return 'native';
-    return others.some((o) => namesOf(o).has(k)) ? 'other' : 'neither';
+    if (others.some((o) => namesOf(o).has(k))) return 'other';
+    // A name of a third region of the country, by the shapes' names: neither side, as before.
+    const byPlace = regionsOfPlace(country);
+    if (byPlace.has(k) || [...COUNTRIES_OF(country)].some((c) => namesOf(c).has(k))) return 'neither';
+    if (!policy.borderState.aliases) return 'unmatched';
+    const places = aliasOf(country, state);
+    if (!places) return 'unmatched';
+    if (!historicalAlias(country, state)) {
+      if (places.some((p) => namesOf(native).has(p))) return 'native';
+      if (others.some((o) => places.some((p) => namesOf(o).has(p)))) return 'other';
+      return 'neither';
+    }
+    const regions = new Set(places.flatMap((p) => [...(byPlace.get(p) ?? [])]));
+    const n = regions.has(native), o = others.some((x) => regions.has(x));
+    return o ? 'other' : n ? 'native' : 'neither';
   }
+  /** The regions of a country, as the file gives them. */
+  const COUNTRIES_OF = (country: string) => Object.keys(COUNTRIES).filter((c) => COUNTRIES[c]?.includes(country));
   /**
    * Review D4 (round eighty-six): a record strictly inside another region's shape (`land`), within the policy's border
    * tolerance of a native shape, counts for the native region when it states that region's country and not the land's;
@@ -265,9 +332,11 @@ export function regionTester(file: ShapesFile, policyOrBuffer: AdmissionPolicy |
       if (!p || !COUNTRIES[code]?.includes(country) || distTo(p, lat, lon, d) > d) continue;
       const shared = land.filter((l) => COUNTRIES[l]?.includes(country));
       if (!shared.length) return { code, how: 'buffer', by: 'border' };
-      const side = policy.borderState.read ? stateSide(state, code, shared) : 'neither';
+      const side = policy.borderState.read ? stateSide(state, code, shared, country) : 'neither';
       if (side === 'native') return { code, how: 'buffer', by: 'border-state' };
       if (side === 'neither' && policy.borderState.unnamed === 'admit') return { code, how: 'buffer', by: 'border' };
+      // A state given that nothing matches (round eighty-seven): admitted as naming none, the owner's setting, and said apart.
+      if (side === 'unmatched' && policy.borderState.unmatched === 'admit') return { code, how: 'buffer', by: policy.borderState.aliases ? 'border-unmatched' : 'border' };
     }
     return null;
   }
@@ -397,7 +466,8 @@ export function regionTester(file: ShapesFile, policyOrBuffer: AdmissionPolicy |
     hasShape: (code) => !!SHAPES[code]?.length,
     countriesOf: (code) => COUNTRIES[code] ?? [],
     source: file.meta.source,
-    ...(file.meta.rule ? { rule: file.meta.rule } : {})
+    // The policy's rule where the file is the one it reads (round eighty-seven: r87 reads r86's shapes), else the file's own.
+    ...(file.meta.rule ? { rule: file.meta.rule === policy.shapes ? policy.rule : file.meta.rule } : {})
   };
 }
 

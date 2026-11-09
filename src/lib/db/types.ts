@@ -81,7 +81,77 @@ export interface Accession {
    * when the name is changed.
    */
   olderOf?: string | null;
+  /**
+   * Which kind of name that is, as the add form or the import read it when they filed the plant (round eighty-seven,
+   * the deeper fix of round eighty-six's U3): `gbif`, GBIF's name for that page's own key; `older`, one of its older
+   * names. Absent on a plant filed before, or where the form could not tell (the reference not reached). Read only
+   * through `recordedKind` ($lib/ui/ref/older-kind), which takes any other word as not known; set and cleared with
+   * `olderOf`.
+   */
+  olderKind?: string | null;
+  /**
+   * The `olderOf` the kind was recorded for (round eighty-seven, the review of stage 1, M1): the kind is read only while
+   * `olderOf` is still that name, since the live code of round eighty-six moves `olderOf` and leaves the kind. Set with
+   * the kind (`withKindOf`, for every new plant) and cleared with it.
+   */
+  olderKindOf?: string | null;
+  /*
+   * Round eighty-seven (t1): identity and provenance, read and validated by $core/identity. Each is a plain field, so a
+   * version that does not know it keeps it as an unknown field.
+   */
+  /** An item's letter ("A" in 2026-0012/A): an offset, division or bulb split of the accession, a plant of its own (F1). */
+  item?: string | null;
+  /** On an item: the record id of the plant that holds the accession's bare number. */
+  itemOf?: string | null;
+  /** Why the plant is no longer held; the record is kept (F1). */
+  deacc?: DeaccReason | null;
+  /** The day it stopped being held: YYYY-MM-DD, YYYY-MM or YYYY. */
+  deaccOn?: string | null;
+  deaccNote?: string | null;
+  /** ITF2 E.1, Provenance Type (F2). */
+  provType?: ProvType | null;
+  /** ITF2 E.2, Propagation History. */
+  propHistory?: PropHistory | null;
+  /** ITF2 F.24, the primary collector's name; the collector's number is `fieldNumber`. */
+  collector?: string | null;
+  /** ITF2 F.27, the collection date: YYYY-MM-DD, YYYY-MM or YYYY. */
+  collected?: string | null;
+  /** ITF2 D.1, Verification Level, and who identified it (D.2) and when (D.3, a partial date). */
+  idLevel?: IdLevel | null;
+  idBy?: string | null;
+  idOn?: string | null;
+  /** Earlier holders, the most recent first: "ex Devon, ex Mesa Garden" (F6). */
+  exChain?: string[] | null;
+  /** A clone's name ("clone A"), apart from a cultivar. */
+  clone?: string | null;
+  /** The names the plant had before, with the day each stopped (F6). */
+  idHistory?: Array<{ name: string; until: string; idLevel?: string; idBy?: string; idOn?: string }> | null;
+  /**
+   * The plant this one was taken from, by its record id, when it was added as one (round eighty-seven, F4): an offset, a
+   * cutting, a division, a leaf or a bulbil of one of the grower's own plants, added without a batch. A plant potted up
+   * from a batch knows its parent through the batch (`sowingId`, then the batch's `parentAcc`). Read through
+   * `$lib/db/lineage`, which takes an id that is not one (a list, a text past 64 characters, the plant's own) as none.
+   */
+  motherAcc?: string | null;
+  /** How it was taken from `motherAcc`: one of `MOTHER_HOW` (a word a newer version writes is shown as it is). */
+  motherHow?: string | null;
+  /**
+   * The plant's growing season, as the grower set or confirmed it (round eighty-seven, t3; plan F7): winter, summer, or
+   * none (no rest). Read only through `seasonOf` ($core/season), which takes any other word as not set. Absent on a
+   * plant whose season was never set: it follows its space's dry months as before.
+   */
+  season?: string | null;
+  /** The months, 1 to 12, the plant rests in by its season: Today does not count it as due then. Read through `seasonOf`. */
+  restMonths?: number[] | null;
+  /** What the season was confirmed from: the species page's rain rule, its temperature rule, its spread rain, or the grower alone. */
+  seasonFrom?: string | null;
 }
+/** Why a plant is no longer held ($core/identity's DEACC_REASONS). */
+export type DeaccReason = 'died' | 'given' | 'lost' | 'failed' | 'stolen' | 'reaccessioned';
+/** ITF2's codes ($core/identity). */
+export type ProvType = 'W' | 'Z' | 'G' | 'U';
+export type PropHistory = 'I' | 'S' | 'SA' | 'SB' | 'SC' | 'V' | 'VA' | 'VB' | 'U';
+export type IdLevel = 'U' | '0' | '1' | '2' | '3' | '4';
 
 /**
  * A photograph of one of your plants (or a sowing). The record here is the
@@ -103,9 +173,20 @@ export interface Photo {
   bytes: number;
   /** SHA-256 of the full-size JPEG, hex; what sync will use to know a blob is already there. */
   sha?: string | null;
+  /**
+   * On an attachment, not a photograph (round eighty-seven, t3; plan F9): the file's type (a PDF, a JPEG or a PNG). An
+   * attachment is a photo record with no `w` and `h`, so a version that does not know attachments keeps it as a record
+   * waiting for fields it does not have, syncs and backs up its bytes, and never shows it as a photograph. Read only
+   * through `attachmentOf` ($lib/attach/attach).
+   */
+  mime?: string | null;
+  /** The attachment's file name as it was added, cut to 120 characters. */
+  fileName?: string | null;
+  /** What the attachment is: a CITES permit or certificate, a phytosanitary certificate, an invoice, or other. */
+  doc?: string | null;
 }
 
-export type EventType = 'acquire' | 'repot' | 'water' | 'feed' | 'treat' | 'prune' | 'flower' | 'pollinate' | 'seed' | 'graft' | 'measure' | 'move' | 'note' | 'death' | 'propagate' | 'audit' | 'germinate' | 'potup' | 'loss';
+export type EventType = 'acquire' | 'repot' | 'water' | 'feed' | 'treat' | 'prune' | 'flower' | 'pollinate' | 'fruit' | 'seed' | 'graft' | 'measure' | 'move' | 'note' | 'death' | 'propagate' | 'audit' | 'germinate' | 'potup' | 'loss';
 
 export interface PlantEvent {
   id: string;
@@ -123,6 +204,16 @@ export interface PlantEvent {
   auto?: boolean | null;
   /** The plants a pot-up made, by id: the line names them by their current numbers, so a renumbering after a merge does not leave it naming the wrong plant (round fifty-two, 4). */
   plants?: string[] | null;
+  /**
+   * On a pollinate line, the pollen parent by its record id (round eighty-seven, F4): the line's own plant (`acc`) is the
+   * seed parent, so the line is a cross, seed parent first, dated by `d`. The cross is the seed lot a batch is sown from
+   * (the batch's `cross`).
+   */
+  pollen?: string | null;
+  /** On a graft line, the plant the scion was taken from, by its record id; the line's plant is the grafted plant (round eighty-seven, F4). */
+  scion?: string | null;
+  /** On a graft line, the plant the stock was, by its record id. */
+  stock?: string | null;
 }
 
 export interface Taxon {
@@ -149,6 +240,7 @@ export const EVENT_LABEL: Record<EventType, string> = {
   prune: 'Pruned',
   flower: 'Flowered',
   pollinate: 'Pollinated',
+  fruit: 'Set fruit',
   seed: 'Set seed',
   graft: 'Grafted',
   measure: 'Measured',
@@ -205,6 +297,10 @@ export interface Sowing {
   notes?: string | null;
   /** As on a plant: the stamp of the notes the latest edit was based on. */
   notesBase?: string | null;
+  /** The cross this seed came from: a pollinate line's id, its plant the seed parent and its `pollen` the pollen parent (round eighty-seven, F4). */
+  cross?: string | null;
+  /** For a graft batch: the plant the stock was, by its record id; the scion's plant is `parentAcc` (round eighty-seven, F4). */
+  stockAcc?: string | null;
 }
 
 export const PROP_METHODS: Array<{ k: PropMethod; label: string; unit: string; veg: boolean }> = [
@@ -216,6 +312,11 @@ export const PROP_METHODS: Array<{ k: PropMethod; label: string; unit: string; v
   { k: 'bulbil', label: 'Bulbils / bulblets', unit: 'bulbils', veg: true },
   { k: 'graft', label: 'Grafts', unit: 'scions', veg: true }
 ];
+
+/** How a plant added from one of the grower's own was taken from it (`motherAcc`): the vegetative methods a batch knows, but grafting, which is a graft line (round eighty-seven, F4). */
+export const MOTHER_HOW = ['offset', 'cutting', 'division', 'leaf', 'bulbil'] as const;
+export type MotherHow = (typeof MOTHER_HOW)[number];
+export const MOTHER_HOW_LABEL: Record<MotherHow, string> = { offset: 'an offset', cutting: 'a cutting', division: 'a division', leaf: 'a leaf cutting', bulbil: 'a bulbil' };
 
 export const MEASURES: Array<{ k: string; label: string; unit: string }> = [
   { k: 'diam', label: 'Diameter', unit: 'mm' },

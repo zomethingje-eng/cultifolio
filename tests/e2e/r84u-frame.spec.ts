@@ -142,12 +142,12 @@ test('P2: a cold load of 400 plants on a throttled phone shifts nothing (layout-
 
 for (const [width, height] of [[640, 400], [568, 320]] as const) test.describe(`A17: the main navigation at ${width} x ${height}`, () => {
   test.use({ viewport: { width, height } });
-  test(`the five places are in the top bar at ${width} x ${height}, whole, and the bar fits the window`, async ({ page }) => {
+  test(`the places are in the top bar at ${width} x ${height}, whole, and the bar fits the window`, async ({ page }) => {
     for (const path of ['/', '/plants', '/species/copiapoa-cinerea']) {
       await page.goto(path); await ready(page);
       const main = page.getByRole('navigation', { name: 'Main' });
       await expect(main, path).toBeVisible(); // r84base: hidden (and the tab bar too, under 480 px tall)
-      for (const name of ['Species', 'My plants', 'My spaces', 'Propagation', 'Today']) {
+      for (const name of ['Reference', 'My plants', 'Today', 'About']) { // the owner's four since round eighty-seven (DESIGN-87)
         const box = await main.getByRole('link', { name, exact: true }).boundingBox();
         expect(box, `${path} ${name}`).not.toBeNull();
         expect(box!.x + box!.width, `${path} ${name}`).toBeLessThanOrEqual(width);

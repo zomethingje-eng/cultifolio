@@ -611,5 +611,35 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   return notes.length ? { status: 'none', detail: notes.join('; ') } : { status: 'none' };
 }
 
+/* ---------- Other registers' identifiers (round eighty-seven, stage 2; links agent; `../elsewhere.ts`) ---------- */
+
+import type { IdClaims } from '../elsewhere-links';
+export type { IdClaims };
+
+/** Items asked of Wikidata a request, for their statements only: the API's own limit for one wbgetentities. */
+export const CLAIMS_PER_ASK = 50;
+
+/**
+ * The statements of up to fifty items, one request (`wbgetentities`, `props=claims`; Wikidata is CC0): each item asked
+ * that Wikidata serves, by its id; one it does not serve (deleted, or merged into another, which Wikidata answers under
+ * the other's id) is absent from the map, and `missing` names it. MediaWiki's error answered with HTTP 200 is the source
+ * not answering, never "none" (`mwError`).
+ */
+export async function itemsClaims(f: JsonFetcher, ids: readonly string[]): Promise<FetchResult<{ claims: Map<string, IdClaims>; missing: string[] }>> {
+  const r = await mwGet<{ entities?: Record<string, { id?: string; missing?: string; redirects?: { from: string; to: string }; claims?: IdClaims }>; error?: unknown }>(f, `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims`);
+  if (r.status !== 'ok') return r;
+  const err = mwError(r.data);
+  if (err) return { status: 'error', detail: `wikidata ${err}` };
+  const claims = new Map<string, IdClaims>();
+  const missing: string[] = [];
+  for (const id of ids) {
+    const e = r.data.entities?.[id];
+    // A redirect answers under the item it was merged into: not this page's item, so not read as it.
+    if (!e || 'missing' in e || (e.id && e.id !== id)) { missing.push(id); continue; }
+    claims.set(id, e.claims ?? {});
+  }
+  return { status: 'ok', data: { claims, missing } };
+}
+
 /* ---------- Wikipedia: `./wikipedia.ts` (round seventy, before the round: moved, unchanged) ---------- */
 export * from './wikipedia';

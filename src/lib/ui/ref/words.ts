@@ -49,17 +49,26 @@ export const OPENALEX_NOW = 'the reference does not ask OpenAlex for papers';
  * A row kept from an earlier build of the page (round eighty-five; outside review A's 16d, W13): "carried from build of
  * 2026-10-22 (rederive); that build: not asked: …" is the builder's log. Said as what it is: the reason, then where it
  * was kept from, "(kept from this page's build of 2026-10-22)". Read after the parser's `unchain`, which leaves one origin
- * and one reason.
+ * and, since round eighty-seven, both what the build that asked recorded ("that build: …") and what the build that kept
+ * it got ("this build: …"), in that order. The two are said apart: "<that build's words> (kept from this page's build of
+ * 2026-10-22; not asked again)", never the second read as part of the first. The range's snapshot names itself ("…of
+ * 2026-11-02 as one snapshot; …"), and is read the same.
  */
 export function carried(t: string): string {
-  const m = /^carried from build of (\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?(?:; (that|this) build: (.*))?$/s.exec(t);
+  const m = /^carried from build of (\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?(?: as one snapshot)?(?:; (that|this) build: (.*))?$/s.exec(t);
   if (!m) return t;
   const [, day, which, reason] = m;
   if (!reason) return `kept from this page's build of ${day}`;
-  if (which === 'that') return `${reason} (kept from this page's build of ${day})`;
-  // What the later build did: a bare status word said as a reader's words.
-  const again = reason === 'skipped' ? 'not asked again' : reason === 'refused' ? 'asked again, and refused' : reason === 'error' ? 'asked again, with no answer' : `asked again: ${reason}`;
-  return `kept from this page's build of ${day}; ${again}`;
+  if (which === 'that') {
+    const at = reason.lastIndexOf('; this build: '); // the last, as the builder reads a carried row (round eighty-seven, M3)
+    if (at < 0) return `${reason} (kept from this page's build of ${day})`;
+    return `${reason.slice(0, at)} (kept from this page's build of ${day}; ${againWords(reason.slice(at + '; this build: '.length))})`;
+  }
+  return `kept from this page's build of ${day}; ${againWords(reason)}`;
+}
+/** What the build that kept a row did with its source: a bare status word said as a reader's words. */
+function againWords(reason: string): string {
+  return reason === 'skipped' ? 'not asked again' : reason === 'refused' ? 'asked again, and refused' : reason === 'error' ? 'asked again, with no answer' : `asked again: ${reason}`;
 }
 
 /**

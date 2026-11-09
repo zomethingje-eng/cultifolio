@@ -3,7 +3,7 @@
  * rule has one owner.
  */
 import type { JsonFetcher } from './fetch';
-import type { Dossier } from './schema';
+import { askedDetail, type Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
 import { summary as wikiSummary, summaryTitleFits } from './sources/wikipedia';
 import { mwWait, sameTypeOfRecord } from './sources/wikimedia';
@@ -65,9 +65,20 @@ const PROOF_WORDS = /this species' name|an older name of this species|the Englis
  * item read as its own basionym ("the basionym of Q278283 and Q278283"), which round seventy-one no longer takes.
  */
 export function recordedProof(rec: { status?: string; detail?: string } | undefined): string | null {
-  if (rec?.status !== 'ok' || !rec.detail || /\bthe basionym of (Q\d+) and \1\b/.test(rec.detail)) return null;
-  const words = REDIRECT.exec(rec.detail)?.[3] ?? ARTICLE.exec(rec.detail)?.[2];
-  return words && PROOF_WORDS.test(words) ? words : null;
+  // A row a build carried keeps the asking build's words after "that build:" (round eighty-seven): the proof is read there.
+  const detail = askedDetail(rec?.detail);
+  if (rec?.status !== 'ok' || !detail || /\bthe basionym of (Q\d+) and \1\b/.test(detail)) return null;
+  const words = REDIRECT.exec(detail)?.[3] ?? ARTICLE.exec(detail)?.[2];
+  return words && PROOF_WORDS.test(words) ? words.replace(/; the opening paragraph read again at revision \d+ of \d{4}-\d{2}-\d{2}, it differed \([a-z]+\)$/, '') : null;
+}
+
+/** The title asked and the title given, by a build's record of a summary as its proof read it (carried or not): for `--check-summaries`. */
+export function recordedTitles(rec: { detail?: string } | undefined): { asked?: string; got?: string; redirect: boolean } {
+  const detail = askedDetail(rec?.detail) ?? '';
+  const r = REDIRECT.exec(detail);
+  if (r) return { asked: r[1], got: r[2], redirect: true };
+  const a = ARTICLE.exec(detail);
+  return a ? { got: a[1], redirect: false } : { redirect: false };
 }
 
 type Ask = { file: string; asked?: string; why?: Unanswered; got?: string };
@@ -107,7 +118,7 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
       ask.push({ file, asked: was?.[1] });
       continue;
     }
-    const redirect = REDIRECT.exec(rec?.detail ?? '');
+    const redirect = REDIRECT.exec(askedDetail(rec?.detail) ?? '');
     if (!redirect && summaryTitleFits(d.summary.title, d.name.scientific, d.name.synonyms ?? [])) { c.kept++; continue; }
     const n = proofByName(d.summary.title, whoOf(d));
     if (n) { proved(file, d, n.proof, n.words); continue; }
@@ -115,7 +126,7 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
     if (!f) { c.unchecked++; c.uncheckedLines.push(`${d.name.scientific}: not asked (offline)`); continue; }
     // The title the build asked, as its record names it: a redirect's, or the article's own (round eighty-five, H: an
     // article proved by the item of a name Kew holds with the species' type is under neither its name nor its item's).
-    ask.push({ file, asked: redirect?.[1] ?? ARTICLE.exec(rec?.detail ?? '')?.[1] });
+    ask.push({ file, asked: redirect?.[1] ?? ARTICLE.exec(askedDetail(rec?.detail) ?? '')?.[1] });
   }
   if (!f || !ask.length) return c;
   // What a source did not answer is asked again after a wait, three times, before it is counted not checked.
@@ -181,11 +192,11 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
     c.confirmed++;
     c.proofs[p] = (c.proofs[p] ?? 0) + 1;
     const rec = d.upstream?.wikipedia;
-    const m = REDIRECT.exec(rec?.detail ?? '');
+    const m = REDIRECT.exec(askedDetail(rec?.detail) ?? '');
     const detail = m ? `${redirected(m[1], d.summary!.title)}, ${words}` : `Wikipedia's article ${d.summary!.title}, ${words}`;
     if (rec?.status === 'ok' && detail === rec.detail) return;
     c.changed++;
-    const old = m?.[3] ?? ARTICLE.exec(rec?.detail ?? '')?.[2];
+    const old = m?.[3] ?? ARTICLE.exec(askedDetail(rec?.detail) ?? '')?.[2];
     c.changedLines.push(`${d.name.scientific}: ${old ? `"${old}", now ` : ''}"${words}"`);
     d.upstream.wikipedia = { status: 'ok', at: now(), detail };
     store.write(file, d);

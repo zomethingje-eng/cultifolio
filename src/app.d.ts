@@ -7,6 +7,8 @@ declare global {
       species?: { name: string; genus: string; inGenus: number; wholeGenus: boolean; accepted?: string; /** The reference's nearest names, by its own search (round fifty-eight). */ suggest?: Array<{ slug: string; name: string }> };
       /** The page exists but its data could not be read just now (a 503): not a statement that it does not exist (round sixty). */
       unreadable?: boolean;
+      /** A not-found answer: whether the corpus has the browse pages' table, so the page links them only where they answer; absent, not known, and they are not linked (round eighty-seven, the review of stage 1, B2). */
+      browse?: boolean;
     }
     interface PageState {
       /** What is open on the page and closes on Back, in the order opened: the photo viewer, the menu, the Record form (round eighty-one; src/lib/ui/back-layer.svelte.ts). */

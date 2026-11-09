@@ -37,21 +37,55 @@ names the source of each figure and photograph, with its licence:
   iNaturalist's counts of observations marked     read through iNaturalist's API, under its
     captive or cultivated, from which the         terms, when the list and the count were
     species list and "Popular genera" were made   made; published only as counts
+  iNaturalist's counts of research-grade wild     read through iNaturalist's API, under its
+    observations annotated flowering, by month    terms; published only as counts, linked
+                                                  to the same search on iNaturalist
   Wikimedia Commons photographs                   CC0, public domain, CC BY, CC BY-SA per file
   Wikipedia summaries                             CC BY-SA 4.0
+
+Read offline by the build from files, matched by identifiers (round
+eighty-seven):
+
+  Predicted extinction risk for all Angiosperm species, v1.0 (2024-02-01).
+    Bachman, S.P., Brown, M.J.M., Leão, T.C.C., Nic Lughadha, E., Walker, B.E.
+    https://doi.org/10.5281/zenodo.10605228. CC BY 4.0. Paper: New Phytologist
+    242: 797-808, https://doi.org/10.1111/nph.19592. IUCN categories in the
+    file are not used.
+  CITES Appendices I, II and III (valid from 5 March 2026), CITES Secretariat,
+    https://cites.org/eng/app/appendices.php: plant listings transcribed by
+    hand (src/lib/dossier/cites-appendices.tsv). No Species+ or CITES
+    Checklist data.
+  ChromoDB Source Data: Chromosome counts from the IAPT/IOPB chromosome data
+    series, v3.1 (2026-11-08). Simon, J., Bosch, M., Blanché, C.
+    https://doi.org/10.5281/zenodo.24057855. CC BY 4.0.
+  World Flora Online Plant List, release 2026-06 (2026-06-21).
+    https://doi.org/10.5281/zenodo.20782718. CC0 1.0.
 
 Read, and published only as codes, names or links: the level-3 region codes
 and names of TDWG's World Geographical Scheme for Recording Plant
 Distributions, 2nd edition, and its tables that place states and provinces in
 regions (github.com/tdwg/wgsrpd; TDWG's own boundary polygons are not used);
 IPNI and POWO identifiers (RBG Kew), and IPNI's records of names, read to
-prove an identifier; iNaturalist taxon identifiers; and the
+prove an identifier; iNaturalist taxon identifiers; the page addresses of
+the Biodiversity Heritage Library (biodiversitylibrary.org), asked of its
+resolver for a name's place of publication and only linked; and the
 titles and descriptions of GBIF's datasets, read to tell living collections
 from genebanks when the species list was made.
+
+Cited as definitions, not read as data: the zones of the USDA Plant
+Hardiness Zone Map (planthardiness.ars.usda.gov), the RHS hardiness rating's
+bands (rhs.org.uk), the Köppen-Geiger thresholds of Peel, Finlayson and
+McMahon (2007), Hydrology and Earth System Sciences 11: 1633-1644
+(https://doi.org/10.5194/hess-11-1633-2007), and the scale of Walter and
+Lieth's climate diagrams.
 
 The frost watch, which is no part of the reference, shows forecasts asked for
 your site: from MET Norway (api.met.no; CC BY 4.0) and, in the
 US and its territories, from the National Weather Service (public domain).
+
+The typefaces under static/fonts/ (Source Sans 3, Source Serif 4 and Source
+Code Pro, by Adobe) are licensed under the SIL Open Font License 1.1; each
+folder holds its OFL.txt.
 
 The licences' texts:
   CC BY 4.0      https://creativecommons.org/licenses/by/4.0/

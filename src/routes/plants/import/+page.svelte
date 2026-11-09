@@ -84,7 +84,7 @@
   const columns = $derived(sheet ? Math.max(...sheet.slice(0, 50).map((r) => r.length)) : 0);
   const colName = (i: number) => (sheet && header ? sheet[0][i]?.trim() || `Column ${i + 1}` : `Column ${i + 1}`);
   const preview = $derived(sheet ? sheet.slice(header ? 1 : 0, (header ? 1 : 0) + 3) : []);
-  const unmapped = $derived(sheet ? unmappedColumns(sheet, mapping, header) : { extra: [], own: [] });
+  const unmapped = $derived(sheet ? unmappedColumns(sheet, mapping, header) : { extra: [], own: [], restated: [] });
   const amb = $derived(sheet ? ambiguousDates(sheet, mapping, header, localDate()) : { n: 0, first: null, dayFirst: { n: 0, first: null }, monthFirst: { n: 0, first: null }, yearFirst: { n: 0, first: null } });
   /**
    * What the sheet's other dates show of its order, said beside the question and never chosen for the grower (round
@@ -424,6 +424,8 @@
       <p><b>{result.added.length} plant{result.added.length === 1 ? '' : 's'} added</b>{result.added.length ? `, numbered ${range(result)}` : ''}{result.placesMade ? `, and ${result.placesMade} new space${result.placesMade === 1 ? '' : 's'}` : ''}. <span class="muted">({(result.ms / 1000).toFixed(1)} s)</span></p>
       {#if result.renumbered.length}<p>{result.renumbered.length === 1 ? 'One number was' : `${result.renumbered.length} numbers were`} taken, so the next free one was given: {result.renumbered.slice(0, 12).map((x) => `line ${x.line}, ${x.given} → ${x.got}`).join('; ')}{result.renumbered.length > 12 ? '; …' : ''}.</p>{/if}
       {#if result.alreadyHere.length}{@const k = result.alreadyHere.length}<p id="imp-already-here">Meanwhile {k === 1 ? 'one line was' : `${k} lines were`} imported elsewhere (in another tab, or by sync), so {k === 1 ? 'its plants were' : 'their plants were'} left out, never added twice: {result.alreadyHere.slice(0, 12).map((x) => (x.whole ? `line ${x.line}` : `line ${x.line} (${x.plants === 1 ? 'one plant' : `${x.plants} plants`} of it; the rest added)`)).join(', ')}{k > 12 ? ', …' : ''}.</p>{/if}
+      {#if result.items}<p id="imp-items">{result.items.linked ? `Linked ${result.items.linked} plant${result.items.linked === 1 ? '' : 's'} numbered as an item to the plant holding ${result.items.linked === 1 ? 'its' : 'each one\'s'} accession number.` : ''}{#if result.items.unlinked.length}{' '}Added as plants of their own, not as items: {result.items.unlinked.map((u) => `line ${u.line} (${u.no}): ${u.why}`).join('; ')}.{/if}</p>{/if}
+      {#if result.mothers}{#if result.mothers.failed}<p class="bad" id="imp-mothers">The plants each line was taken from were not linked: {result.mothers.failed}. The plants stand; set it in each plant's Edit.</p>{:else}<p id="imp-mothers">{result.mothers.linked ? `Linked ${result.mothers.linked} plant${result.mothers.linked === 1 ? '' : 's'} to the plant ${result.mothers.linked === 1 ? 'it was' : 'each was'} taken from.` : ''}{#if result.mothers.unlinked.length}{' '}Not linked, since the number names no single plant here: {result.mothers.unlinked.map((u) => `line ${u.line} (${u.no})`).join(', ')}; the number is in each plant's notes.{/if}</p>{/if}{/if}
       {#if result.watered}{#if result.watered.failed}<p class="bad">The last watering was not recorded: {result.watered.failed}. The plants stand; record it from Today or My plants.</p>{:else}<p>Last watered on {lastWatered || 'the date given'}: recorded on {result.watered.lines} plant{result.watered.lines === 1 ? '' : 's'}.</p>{/if}{/if}
       {#if result.failed}
         {#if result.failed.line === null}<p class="bad">Stopped before any plant was added: {result.failed.error}.{result.placesMade ? ` ${result.placesMade === 1 ? 'One new space was' : `${result.placesMade} new spaces were`} made, and stay${result.placesMade === 1 ? 's' : ''}; a second try finds ${result.placesMade === 1 ? 'it' : 'them'} and makes no other.` : ''} Every line is still in the list below.</p>
@@ -472,7 +474,7 @@
           </div>
         {/each}
       </div>
-      {#if unmapped.extra.length || unmapped.own.length}
+      {#if unmapped.extra.length || unmapped.own.length || unmapped.restated.length}
         <div class="full unmapped" id="imp-unmapped">
           {#if unmapped.extra.length}
             <p class="small">Not matched to a field: <b>{unmapped.extra.map((c) => c.name).join(', ')}</b>.</p>
@@ -480,6 +482,8 @@
             {#if !extraToNotes}<p class="small warn">{unmapped.extra.length === 1 ? 'This column is' : 'These columns are'} then left out of the import.</p>{/if}
           {/if}
           {#if unmapped.own.length}<p class="small muted">{unmapped.own.join(' and ')}: the sheet's own links to its batches and records, which mean nothing in another collection, so not imported.</p>{/if}
+          <!-- Round eighty-seven (t1): columns the plants sheet writes that restate others (the name's qualifier, the field number, the status, an item's accession). -->
+          {#if unmapped.restated.length}<p class="small muted" id="imp-restated">{unmapped.restated.join(', ')}: {unmapped.restated.length === 1 ? 'restates' : 'restate'} what the name, the field number, the status or the number already hold, so not imported again.</p>{/if}
         </div>
       {/if}
       {#if dq}

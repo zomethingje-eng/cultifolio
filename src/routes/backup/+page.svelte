@@ -6,6 +6,8 @@
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, BACKUP_FROM, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { ReplaceBegunError } from '$lib/backup/replace';
   import { KEPT_NUMBERS } from '$lib/db/types';
+  import { PIN_PREFIX } from '$lib/browse/pins';
+  import { PAPERS_MAX_BYTES, PAPERS_WARN, sizeWords } from '$lib/attach/attach'; // the papers' room in all (round eighty-seven, the stage 3 fixes; S2)
   import { sync } from '$lib/sync/engine.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { heldWords } from '$lib/ui/held-words';
@@ -144,7 +146,7 @@
    */
   const addedWords = (m: Opened['merge']): string => {
     const k = m.addedByKind;
-    return listWords([some(k.accession, 'plant'), some(k.location, 'space'), some(k.sowing, 'propagation batch', 'propagation batches'), some(k.event, 'timeline entry', 'timeline entries'), some(k.photo, 'photo')]) || (k.taxon || k.setting || k[KEPT_NUMBERS] ? 'only the app\'s own records' : m.added ? 'no record a page shows' : 'no records'); // not "the app's own" when the file adds only removed records or the lines of a removed plant (round sixty-three; the backlog audit, 20)
+    return listWords([some(k.accession, 'plant'), some(k.location, 'space'), some(k.sowing, 'propagation batch', 'propagation batches'), some(k.event, 'timeline entry', 'timeline entries'), some(k.photo, 'photo'), some(k.attachment, 'paper'), some(k[PIN_PREFIX], 'pinned view')]) || (k.taxon || k.setting || k[KEPT_NUMBERS] ? 'only the app\'s own records' : m.added ? 'no record a page shows' : 'no records'); // not "the app's own" when the file adds only removed records or the lines of a removed plant (round sixty-three; the backlog audit, 20)
   };
   /** The rest of what a merge adds, for the disclosure. */
   const addedDetail = (m: Opened['merge']): string[] => {
@@ -155,7 +157,7 @@
       k[KEPT_NUMBERS] ? 'the numbers another device had given before it was replaced from a backup, which are not given again here' : '',
       m.addedDeleted ? `${plural(m.addedDeleted, 'record')} removed on the other device, which ${m.addedDeleted === 1 ? 'stays' : 'stay'} removed here; nothing on this device is removed` : '',
       // The lines and photographs of a plant or batch removed (in the file or here) or not yet shown: counted apart, not as added (round sixty-three; the backlog audit, 20).
-      m.addedOnRemoved ? `${listWords([some(m.addedOnRemovedByKind.event ?? 0, 'timeline entry', 'timeline entries'), some(m.addedOnRemovedByKind.photo ?? 0, 'photo')])} ${m.addedOnRemoved === 1 ? 'on a removed plant or batch (or one not shown yet): kept, and shown on its page only if it comes back' : 'on removed plants or batches (or ones not shown yet): kept, and shown on their pages only if they come back'}` : '',
+      m.addedOnRemoved ? `${listWords([some(m.addedOnRemovedByKind.event ?? 0, 'timeline entry', 'timeline entries'), some(m.addedOnRemovedByKind.photo ?? 0, 'photo'), some(m.addedOnRemovedByKind.attachment ?? 0, 'paper')])} ${m.addedOnRemoved === 1 ? 'on a removed plant or batch (or one not shown yet): kept, and shown on its page only if it comes back' : 'on removed plants or batches (or ones not shown yet): kept, and shown on their pages only if they come back'}` : '',
       m.addedWaiting ? `${plural(m.addedWaiting, 'record')} the file leaves without a field ${m.addedWaiting === 1 ? 'it' : 'they'} cannot be shown without (${m.waitingNames.slice(0, 5).join(', ')}${m.waitingNames.length > 5 ? ` and ${m.waitingNames.length - 5} more` : ''}); not shown until a later file or sync completes ${m.addedWaiting === 1 ? 'it' : 'them'}` : ''
     ].filter(Boolean);
   };
@@ -199,6 +201,10 @@
       {#if exported}<span class="ok">Saved <span class="mono">{exported.name}</span>, {mb(exported.bytes)}. Put it somewhere that is not this device.</span>{/if}
       {#if exportErr}<span class="bad">{exportErr}</span>{/if}
     </div>
+    {#if collection.ready && collection.allAttachments.length}
+      <!-- The papers kept with plants, against the collection's room for them (S2): said with the amount used, warned near it. -->
+      <p class:notice={collection.papersBytes >= PAPERS_MAX_BYTES * PAPERS_WARN} id="bk-papers">Papers kept with your plants: {sizeWords(collection.papersBytes)} of the {PAPERS_MAX_BYTES / 1048576} MB a collection keeps.{#if collection.papersBytes >= PAPERS_MAX_BYTES * PAPERS_WARN}{' '}That is near the most: a paper that would pass it is refused, so remove the papers you no longer need.{/if}</p>
+    {/if}
     {#if shortfall}
       {@const n = shortfall.photosMissing.length}
       <div class="notice err" id="bk-shortfall">{n} {n === 1 ? 'photograph had' : 'photographs had'} no pixels on this device and {n === 1 ? 'is' : 'are'} not in the file. {n === 1 ? 'Its record is' : 'Their records are'}, and the file says which.{#if sync.configured}{' '}Sync may still bring the pixels down; take the backup again afterwards.{/if} <button class="btn" type="button" onclick={() => shortfall && save(shortfall)}>Download it anyway</button></div>
@@ -267,7 +273,9 @@
 <style>
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .cult { margin-top: 12px; }
-  .cult .body { padding: 14px 17px; font-family: var(--ui); }
+  /* The round's look (the review of stage 2's pages, 8): the sections are their rules, the words flush with their heads,
+     no card's inset; the caution between two thin rules with no warm bar; a file's name in the monospace, not a filled chip. */
+  .cult .body { padding: 12px 0; font-family: var(--ui); }
   .cult .body p { margin: 0 0 12px; color: var(--ink2); font-size: var(--fs-md); line-height: 1.5; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .row input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
@@ -276,10 +284,11 @@
   .ok { color: var(--accent); font-size: var(--fs-md); }
   .bad { color: var(--bad); font-size: var(--fs-md); }
   .faint { color: var(--ink3); }
-  .warn { margin-top: 14px; border-left: 3px solid var(--warm); }
-  .warn .body { padding: 12px 16px; font-size: var(--fs-md); color: var(--ink2); font-family: var(--ui); }
-  .preview { border-top: 1px solid var(--rule); padding: 0 17px 14px; }
-  .preview .factgrid { margin: 14px 0 12px; box-shadow: none; border: 1px solid var(--rule); grid-template-columns: 1fr 1fr; }
+  .warn { margin-top: 14px; border-bottom: 1px solid var(--rule); }
+  .warn .body { padding: 10px 0; font-size: var(--fs-md); color: var(--ink2); font-family: var(--ui); }
+  .warn .body b { color: var(--ink); }
+  .preview { border-top: 1px solid var(--rule); padding: 0 0 14px; }
+  .preview .factgrid { margin: 14px 0 12px; box-shadow: none; grid-template-columns: 1fr 1fr; }
   .preview .factgrid > div { font-size: var(--fs-md); font-family: var(--ui); }
   .acts { gap: 8px; }
   .infile { margin: 0 0 12px; font-size: var(--fs-md); color: var(--ink2); }
@@ -287,6 +296,6 @@
   .infile ul, #bk-shared ul { margin: 4px 0 0; padding-left: 20px; }
   #bk-shared { margin: 0 0 12px; font-size: var(--fs-md); }
   #bk-shared p { margin: 0 0 4px; }
-  code { font-family: var(--mono); font-size: var(--fs-md); background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+  code { font-family: var(--mono); font-size: 0.9em; background: none; padding: 0; border-radius: 0; }
   @media (max-width: 640px) { .preview .factgrid { grid-template-columns: 1fr; } }
 </style>

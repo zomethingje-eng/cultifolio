@@ -74,7 +74,8 @@
 {/if}
 
 <style>
-  .install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; padding: 10px 14px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh); font-size: var(--fs-md); }
+  /* Between two thin rules, flush with the page: no card (round eighty-seven's look; the review of stage 2's pages, 8). */
+  .install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; padding: 10px 0; background: none; border: 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); border-radius: 0; box-shadow: none; font-size: var(--fs-md); }
   .install img { border-radius: var(--r); flex: none; }
   .tx { flex: 1 1 240px; min-width: 0; line-height: 1.45; }
   .tx b { display: block; }

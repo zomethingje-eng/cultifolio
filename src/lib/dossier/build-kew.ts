@@ -46,13 +46,13 @@ import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, canonicalOf, type OwnNames } from './own-names';
 import { canonicalOfKew, sameTypeLabel, type SameTypeName } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, admissionRecord, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, admissionRecord, apiDatasetsOf, ownShown, COMMONS_BELOW, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
 import { dedupePhotos } from './dedupe';
 import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier, type Photo, type Upstream } from './schema';
-import type { HeldNames } from './photo-kind';
+import { kindNamesOf, type HeldNames } from './photo-kind';
 import type { KewInfra } from './kew-infra';
 import { statementsOfEntity, wikidataNames, wdNamesRecord, wdNamesNoItem, WD_NAMES, type WdNameStatement } from './wikidata-names';
 
@@ -90,6 +90,8 @@ export interface KewBuildOptions {
   skip?: SkippableSource[];
   /** The reference's names, as `BuildOptions.held`. */
   held?: HeldNames | null;
+  /** The photographs the page on disk holds marked shared, as `BuildOptions.sharedBefore` (round eighty-seven). */
+  sharedBefore?: ReadonlySet<string>;
   /** Whether the reference holds a name as another of its species: such a taxon is never taken for this one. */
   heldElsewhere?: (name: string) => boolean;
   /** Kew's names below species, as `BuildOptions.kewInfra`. */
@@ -298,6 +300,8 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       restrictedShiftKm: r.restrictedShiftKm,
       thin: r.allPts.length < 12,
       datasets: [...r.datasets.entries()].map(([key, d]) => ({ key, ...(d.title ? { title: d.title } : {}), licence: d.licence, n: d.n })),
+      // The in-range records GBIF's search API gave, by dataset (round eighty-seven), where this build read the records.
+      ...(occ.status === 'ok' || occ.status === 'none' ? { api: apiDatasetsOf(r.apiDatasets) } : {}),
       ...(extra.keys.length ? { keys: extra.keys } : {})
     };
     centroid = r.centroid;
@@ -395,7 +399,8 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   }
   skipped('gbif.media', NO_GBIF_WHY);
   if (skip('commons')) skipped('commons');
-  else if (!o.quick && photos.length < 12) {
+  // Counted as the page will show them, as `buildDossier` counts (round eighty-seven; `ownShown`).
+  else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, name: { scientific, synonyms, authorship: k.authors || undefined } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
     const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
     const c: FetchResult<Photo[]> = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms, key: pageId, held: o.held, authorship: k.authors || undefined });
     mark('commons', c);

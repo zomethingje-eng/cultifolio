@@ -5,6 +5,8 @@
  */
 import type { JsonFetcher, FetchOptions, FetchResult } from './fetch';
 import { fromWikidata, WD_NAMES } from './wikidata-names';
+import { unchain, carriedParts } from './schema';
+import { LITERATURE_OFF } from './sources/openalex';
 
 type Upstream = { status: string; at?: string; detail?: string };
 
@@ -31,6 +33,44 @@ export function offlineFetcher(net: JsonFetcher, prevName: (key: number) => { ke
 
 /** The upstream rows of the one derivation (range, records, climate), never carried row by row. */
 export const CORE: ReadonlySet<string> = new Set(['gbif.occurrences', 'wcvp.distribution', 'climate', 'climate.extremes']);
+/**
+ * The rows a re-derivation never carries (round eighty-seven): OpenAlex's. Literature is off (round seventy-eight, the
+ * owner's decision 2) on every path: an offline walk kept a September build's papers and its OpenAlex row, and Conophytum
+ * calculus subsp. vanzylii listed seven papers against /about/how's "No page lists papers".
+ */
+export const NEVER_CARRIED: ReadonlySet<string> = new Set(['openalex']);
+
+/** Literature off on a dossier, whatever build made it (round eighty-seven): no paper, and the row that says why. */
+export function literatureOff(d: { literature: unknown[]; upstream: Record<string, Upstream> }, now = new Date().toISOString()): void {
+  d.literature = [];
+  d.upstream.openalex = { status: 'skipped', at: d.upstream.openalex?.status === 'skipped' && d.upstream.openalex.detail === LITERATURE_OFF ? d.upstream.openalex.at : now, detail: LITERATURE_OFF };
+}
+
+/**
+ * A row carried from the build before, as a re-derivation carries it (round thirty-five, R1-10; round thirty-seven, R1-6):
+ * "carried from build of <the day the source was asked> (rederive); that build: <what it said>"; a row already carried
+ * keeps the build that asked and its words (`unchain`).
+ */
+export function carriedRow(u: { status?: string; detail?: string; at?: string }, prevBuilt: string | undefined): string {
+  if (u.detail?.startsWith('carried from build of')) return unchain(u.detail)!;
+  const from = carriedOrigin(u, prevBuilt, ' (rederive)');
+  return u.detail ? `${from}; that build: ${u.detail}` : from;
+}
+
+/**
+ * A row a build carries because the source refused, failed or was not asked this time (round eighty-seven, the second stop's
+ * finding): the build that asked, the words it recorded ("that build: …") and what this build got ("this build: …"). The
+ * builder wrote "carried from build of …; this build: …" and dropped the asking build's words: a summary's proof
+ * (`recordedProof`), a range's source, the download a set of records was read from. A row already carried keeps its
+ * origin and its words. `origin` overrides the origin of a row not yet carried (the range's snapshot names the build).
+ */
+export function carriedDetail(u: { status?: string; detail?: string; at?: string }, prevBuilt: string | undefined, thisBuild: string, origin?: string): string {
+  // Read by `carriedParts` (round eighty-seven; review M3): the asking build's words whole, though they hold "; that build: ".
+  const chained = carriedParts(u.detail);
+  const from = chained ? chained.origin : (origin ?? carriedOrigin(u, prevBuilt));
+  const that = chained ? chained.that : u.detail;
+  return `${from}${that ? `; that build: ${that}` : ''}; this build: ${thisBuild}`;
+}
 /** A row that says iNaturalist was not asked because the GBIF download already gave wild photographs. */
 export const claimsDownloadPhotos = (u?: { status?: string; detail?: string }) => u?.status === 'skipped' && /already from the GBIF download/.test(u.detail ?? '');
 
@@ -44,7 +84,7 @@ export function carryRederivedRows(prev: { upstream?: Record<string, Upstream> }
   for (const k of Object.keys(prev.upstream ?? {})) {
     const was = prev.upstream![k];
     if (d.upstream[k]?.status !== 'skipped' || !was) continue;
-    if (CORE.has(k)) continue;
+    if (CORE.has(k) || NEVER_CARRIED.has(k)) continue;
     if (claimsDownloadPhotos(was) && !d.photos.some((p) => p.src === 'gbif' && !p.captive)) {
       d.upstream[k] = { status: 'skipped', at: now, detail: 'the wild photographs the GBIF download once gave are not in this dossier; iNaturalist is to be asked again (--fill inat)' };
       continue;

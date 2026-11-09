@@ -27,7 +27,7 @@
   /* the initial scales with the box (a 40 px row thumbnail, a 170 px tile); the caption is the theme's hint ink, 4.5:1 or better on the tint */
   .ini { font-family: var(--serif, Georgia, serif); font-style: italic; font-size: 2.125rem; line-height: 1; font-weight: 500; }
   @supports (font-size: 1cqh) { .ini { font-size: clamp(16px, 38cqh, 72px); } } /* scales with the box where container units exist; a fixed size where they do not (older Safari) */
-  .cap { font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.3; color: var(--ink2); max-width: 100%; }
+  .cap { font-family: var(--ui); font-size: var(--fs-xs); line-height: 1.3; color: var(--ink2); max-width: 100%; }
   @media (prefers-color-scheme: dark) {
     :global(:root:not([data-theme='light'])) .ph { background: hsl(var(--h) 22% 20%); color: hsl(var(--h) 30% 78%); }
   }

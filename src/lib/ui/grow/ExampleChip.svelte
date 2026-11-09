@@ -14,7 +14,7 @@
 <a class="examplechip" href="#demobar" id="example-chip" aria-label="Example collection: nothing here is yours or kept">Example</a>
 
 <style>
-  .examplechip { flex: none; display: inline-flex; align-items: center; min-height: max(32px, var(--tap)); padding: 0 10px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); background: var(--accent-soft, var(--card)); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
+  .examplechip { flex: none; display: inline-flex; align-items: center; min-height: max(32px, var(--tap)); padding: 0 10px; border: 1px solid var(--accent); border-radius: var(--r); color: var(--accent); background: var(--accent-soft, var(--card)); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
   .examplechip:hover { text-decoration: none; }
   :global(html:not([data-demo])) .examplechip { display: none; }
   @media print { .examplechip { display: none; } }

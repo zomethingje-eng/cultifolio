@@ -5,9 +5,10 @@
  * server. On a device without that plant the page says the label is from someone's collection and links the species
  * page. Both are printed on the label anyway, so the fragment tells nobody anything the label does not.
  */
-import { kindOf, type Accession } from '$lib/db/types';
+import { kindOf, accNo, type Accession } from '$lib/db/types';
 import { parseName, speciesSlug, isNamedHybrid } from '$core/names';
 import { crossName } from '$lib/ui/plant-label';
+import { idTag } from '$core/tag';
 
 /** The name in the fragment is cut here: a longer code needs more modules, and a small label prints them too fine to scan. */
 export const QR_NAME_MAX = 60;
@@ -45,8 +46,23 @@ const LONE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\ud
 /** A name made safe: no lone surrogate, nothing invisible, at most two marks on a letter (a run of more is a stack drawn over the label), spaces closed up, cut. */
 const safeName = (s: string) => cut(s.replace(LONE, '\ufffd').normalize('NFC').replace(INVISIBLE, '').replace(BREAKS, ' ').replace(/(\p{M}{2})\p{M}+/gu, '$1').replace(/\s+/g, ' ').trim(), QR_NAME_MAX);
 
-export function plantQrUrl(origin: string, a: Pick<Accession, 'id' | 'taxonName' | 'cultivar' | 'nameKind'> & { parentage?: string | null }): string {
-  const base = `${origin}/plants/${a.id}`;
+/**
+ * The code carries the plant's number, the one printed beside it (round eighty-seven, t3; plan F10): `/plants/2026-0012`.
+ * The plant page finds a plant by its number as by its identity, on the device and with no network (the collection is
+ * there, and the page is in the service worker's shell), and the number is what the label says, so the code still means
+ * something read by any scanner. A code printed before carries the identity, and the page finds the plant by it as
+ * before. `bare` leaves the species and name off (a tape label's code, kept small enough to scan at 9 mm).
+ *
+ * A number can name two plants over a label's life (two devices gave it out offline and "Renumber now" moved one; a plant
+ * restored to a number taken while it was away; a plant traded in with another collection's label), so every code, a
+ * tape's too, carries the plant's identity tag (`idTag`) first in its fragment, `#i=k3x9q2`, and the page opens the plant
+ * holding the number only when the tag is that plant's; otherwise it says so and offers the plant whose tag it is, when
+ * this device holds it (round eighty-seven, the stage 3 fixes; review B1).
+ */
+export function plantQrUrl(origin: string, a: Pick<Accession, 'id' | 'acc' | 'taxonName' | 'cultivar' | 'nameKind'> & { parentage?: string | null }, bare = false): string {
+  const base = `${origin}/plants/${encodeURIComponent(accNo(a))}`;
+  const tag = `i=${idTag(a.id)}`;
+  if (bare) return `${base}#${tag}`;
   // The name as it reads, without the invisible characters a paste brings: the slug of "Gymno\u00adcalycium" was
   // "gymno-calycium" (round sixty-two; the verification grower review, 8).
   const taxonName = a.taxonName.replace(INVISIBLE, '');
@@ -58,20 +74,25 @@ export function plantQrUrl(origin: string, a: Pick<Accession, 'id' | 'taxonName'
   // only "Astrophytum" for every Astrophytum cross (round sixty-two; triage-self N10, the self-review's grower 11).
   const sci = crossName({ ...a, taxonName }) ?? taxonName;
   const name = safeName(`${sci}${a.cultivar ? ` '${a.cultivar}'` : ''}`);
-  const parts = [slug ? `s=${slug}` : '', name ? `n=${encodeURIComponent(name)}` : ''].filter(Boolean);
-  return parts.length ? `${base}#${parts.join('&')}` : base;
+  const parts = [tag, slug ? `s=${slug}` : '', name ? `n=${encodeURIComponent(name)}` : ''].filter(Boolean);
+  return `${base}#${parts.join('&')}`;
 }
 
-/** What a scanned label's address carries: the species slug (only a slug's own characters) and the printed name, as plain text. */
-export function labelFromHash(hash: string): { slug: string | null; name: string | null } {
+// The identity tag lives in $core/tag (the collection reads it, and the layout must not load this module; check-bundle).
+export { ID_TAG_LEN, idTag, tagIs } from '$core/tag';
+
+/** What a scanned label's address carries: the species slug (only a slug's own characters), the printed name as plain text, and the plant's identity tag (`idTag`; base-36, 4 to 12 characters). */
+export function labelFromHash(hash: string): { slug: string | null; name: string | null; tag: string | null } {
   const h = hash.replace(/^#/, '');
   let slug: string | null = null;
   let name: string | null = null;
+  let tag: string | null = null;
   for (const part of h.split('&')) {
     const i = part.indexOf('=');
     if (i < 0) continue;
     const k = part.slice(0, i), v = part.slice(i + 1);
     if (k === 's' && /^[a-z0-9-]{2,120}$/.test(v)) slug = v;
+    else if (k === 'i' && /^[0-9a-z]{4,12}$/.test(v)) tag = v;
     else if (k === 'n') {
       let t: string;
       try { t = decodeURIComponent(v.replace(/\+/g, ' ')); } catch { continue; }
@@ -80,7 +101,7 @@ export function labelFromHash(hash: string): { slug: string | null; name: string
       if (t) name = t;
     }
   }
-  return { slug, name };
+  return { slug, name, tag };
 }
 
 /** The species slug alone, or null. */

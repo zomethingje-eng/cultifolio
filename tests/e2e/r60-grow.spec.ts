@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { test, expect, type Page } from '@playwright/test';
 import { openDisclosure } from './helpers/disclosure';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
+import { tag36 } from '../../src/lib/core/tag'; // a label's identity tag (round eighty-seven, the stage 3 fixes)
 
 /**
  * Round sixty's grower features, end to end (agent F's list; the unit tests cover each piece's rules): the paste and CSV
@@ -534,9 +535,10 @@ test('r60 16: a label\'s QR code is the plant\'s address with the species and na
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await ready(page);
   await addPlant(page);
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const no = page.url().split('/plants/')[1]; // the plant's number, which the code carries since round eighty-seven (t3, F10)
   await more(page, 'Label');
   await expect(page).toHaveURL(/\/labels\?acc=r[a-z0-9]+$/);
-  const id = page.url().split('acc=')[1];
   await ready(page);
   await expect(page.locator('#lb-qr')).toBeChecked();
   await expect(page.locator('.page .label')).toHaveCount(1);
@@ -546,9 +548,13 @@ test('r60 16: a label\'s QR code is the plant\'s address with the species and na
   // would need a reader; drawing the expected one with the page's own library and settings is the same check).
   const paths = async (markup: string) => [...markup.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
   const drawn = await svg.evaluate((el) => [...el.querySelectorAll('path')].map((p) => p.getAttribute('d')));
-  const want = `${new URL(baseURL!).origin}/plants/${id}#s=copiapoa-cinerea&n=Copiapoa%20cinerea`;
+  // Round eighty-seven (t3, plan F10): the address names the plant by its number, the one printed beside the code, so it
+  // resolves offline and after an import into another collection; the fragment is as before.
+  // And, since the stage 3 fixes (review B1), the plant's identity tag first in the fragment.
+  const id = new URL(page.url()).searchParams.get('acc')!;
+  const want = `${new URL(baseURL!).origin}/plants/${no}#i=${tag36(`label:${id}`).slice(0, 6)}&s=copiapoa-cinerea&n=Copiapoa%20cinerea`;
   expect(drawn).toEqual(await paths(await QRCode.toString(want, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })));
-  expect(drawn).not.toEqual(await paths(await QRCode.toString(`${new URL(baseURL!).origin}/plants/${id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })));
+  expect(drawn).not.toEqual(await paths(await QRCode.toString(`${new URL(baseURL!).origin}/plants/${no}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })));
   // printing still works: one label, the print dialog asked for once
   await page.evaluate(() => { (window as unknown as { __printed: number }).__printed = 0; window.print = () => { (window as unknown as { __printed: number }).__printed++; }; });
   await expect(page.locator('#lb-print')).toHaveText('Print 1 label');

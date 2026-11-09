@@ -14,6 +14,7 @@
   import HeldNote from '$lib/ui/HeldNote.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { rhythmWords, restWords, dayWords, addedWords, type Rhythm } from '$lib/ui/today-words';
+  import { seasonOf, restReason } from '$core/season';
   import { frost } from '$lib/ui/frost.svelte';
   import { tempUnit, rainUnit, tempN, rainN, ruleRain } from '$core/units';
   import { onMount, tick } from 'svelte';
@@ -21,6 +22,7 @@
   import Today from '$lib/ui/Today.svelte';
   // Each by its own path, not the barrel, which carries every grower component into this page (round sixty-one; the accessibility review, 3).
   import Firsts from '$lib/ui/grow/Firsts.svelte'; // round sixty, agent F: firsts in Also today, the watering calendar
+  import FloweredBefore from '$lib/ui/grow/FloweredBefore.svelte'; // round eighty-seven, F8: flowered this week in past years
   import CalendarExport from '$lib/ui/grow/CalendarExport.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import { accNo, kindOf, type Accession, type Location } from '$lib/db/types';
@@ -98,7 +100,7 @@
   // morning's work yesterday on a page left open overnight (round fifty-four, 4; the first reviewer's finding 2).
   const today = $derived(day.current);
   onMount(() => day.start());
-  type Stop = { key: string; place: Location | null; depth: number; overdue: Accession[]; unknown: Accession[]; ahead: Accession[]; resting: Accession[]; restRain: Accession[]; restCool: Accession[]; unseen: Accession[]; keptDry: number; n: number; watered: Watered | null };
+  type Stop = { key: string; place: Location | null; depth: number; overdue: Accession[]; unknown: Accession[]; ahead: Accession[]; resting: Accession[]; restRain: Accession[]; restCool: Accession[]; unseen: Accession[]; keptDry: number; ownRest: Array<{ why: string; plants: Accession[] }>; n: number; watered: Watered | null };
   /** The species in their habitat's dry season now, by the sheets the front page reads too (round fifty-four, 4; the second reviewer's finding 23). Until the sheets have answered (or failed), the Water buttons wait: a button whose count changes as the sheets arrive moves under a reading eye (round fifty-five, 5). */
   let sheets = $state<Map<string, Sheet> | null>(null);
   let sheetsSettled = $state(false);
@@ -184,7 +186,9 @@
    * outside of, and its species page says so (round fifty-nine). Null when the plant is not resting by either.
    */
   const restRule = (a: Accession): 'rain' | 'cool' | null => {
-    if (!sheets || kindOf(a) !== 'species') return null;
+    // A plant whose growing season the grower set or confirmed follows its own months, not the sheet's reading (round
+    // eighty-seven, t3; plan F7): outside its rest months it is watered as any plant is.
+    if (!sheets || kindOf(a) !== 'species' || seasonOf(a)) return null;
     const sh = sheets.get(speciesSlug(a.taxonName));
     if (!sh || sh.climate.status !== 'ok') return null;
     const year = growingYear(sh.climate.months, sh.habitatLat);
@@ -219,8 +223,13 @@
       const unseen = here.filter((a) => !listed.has(a.id) && collection.unseenWhy(a.id));
       const watered = wateredHere.get(key);
       // Kept dry this month by the place's own rule: one quiet line, not a warning per plant (round fifty-eight).
-      const keptDry = here.filter((a) => collection.keptDry(a)).length;
-      if (dry.length || unseen.length || ahead.length || watered || keptDry) out.push({ key, place, depth, overdue, unknown, ahead, resting, restRain: resting.filter((a) => restRule(a) === 'rain'), restCool: resting.filter((a) => restRule(a) === 'cool'), unseen, keptDry, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
+      const keptDry = here.filter((a) => collection.placeDry(a)).length;
+      // Resting by its own growing season, set or confirmed on the plant (round eighty-seven, t3; plan F7): no Water
+      // button, and one line a reason saying why, the plants under it. A plant its space keeps dry is counted there.
+      const ownRest = new Map<string, Accession[]>();
+      for (const a of here) { if (collection.placeDry(a)) continue; const r = collection.resting(a); if (!r) continue; const why = restReason(r); (ownRest.get(why) ?? ownRest.set(why, []).get(why)!).push(a); }
+      const rests = [...ownRest].map(([why, plants]) => ({ why, plants }));
+      if (dry.length || unseen.length || ahead.length || watered || keptDry || rests.length) out.push({ key, place, depth, overdue, unknown, ahead, resting, restRain: resting.filter((a) => restRule(a) === 'rain'), restCool: resting.filter((a) => restRule(a) === 'cool'), unseen, keptDry, ownRest: rests, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
     };
     const walk = (parent: string | null, depth: number) => {
       for (const l of collection.children(parent)) { stop(l, depth); walk(l.id, depth + 1); }
@@ -428,6 +437,10 @@
             {#if s.keptDry}
               <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its space\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
             {/if}
+            {#each s.ownRest as r, ri (r.why)}
+              <!-- Resting by the plant's own season: listed, never offered a Water button (round eighty-seven, t3; plan F7). -->
+              <p class="row resting ownrest" data-row="{s.key}-r{ri}"><span class="lab">Resting, not counted as due: {r.why}.</span> {#each firstOf(r.plants, `${s.key}-r${ri}`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.wateringWords(a)}</span></a>{/each}{@render more(r.plants, `${s.key}-r${ri}`, false)}</p>
+            {/each}
             {#if s.ahead.length}
               <p class="row ahead" data-row="{s.key}-a"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each firstOf(s.ahead, `${s.key}-a`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}{@render more(s.ahead, `${s.key}-a`, false)}</p>
             {/if}
@@ -449,7 +462,7 @@
       <!-- The method, one tap away rather than before the first plant (round sixty; the grower review, §3). -->
       <details class="why howdecides" id="how-today">
         <summary>How Today decides</summary>
-        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its space or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A space's dry months keep its plants off the list. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its space's audit, is listed too. Spaces come in the order they are kept, spaces inside after their parent.</p>
+        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its space or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A space's dry months keep its plants off the list, and so do a plant's own rest months, once you set or confirm its growing season on its page; it is listed as resting, with why, and no Water button. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its space's audit, is listed too. Spaces come in the order they are kept, spaces inside after their parent.</p>
       </details>
     {/if}
   </section>
@@ -513,6 +526,7 @@
   <section id="rest" aria-labelledby="rest-h">
     <div class="secrule"><h2 id="rest-h">Also today</h2><div class="line"></div></div>
     <Firsts />
+    <FloweredBefore />
     <Today where="today" />
     <CalendarExport />
   </section>
@@ -526,17 +540,23 @@
   .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
   section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
   section.waiting { min-height: 80vh; align-content: start; }
-  .risk { padding: 0.9rem 1.1rem; }
-  .risk.frost, .risk.warning { background: var(--bad-soft); }
-  .risk.cold { background: var(--warm-soft); }
+  /* The night's risk as a line with a rule in its colour, not a tinted box (DESIGN-87; round eighty-seven's stage-3
+     integration): ink on the page, so the words keep AA whatever the tint. */
+  .risk { padding: 0.4rem 0 0.4rem 0.8rem; }
+  .risk.card { background: none; border: 0; border-left: 3px solid var(--rule); border-radius: 0; box-shadow: none; color: var(--ink); }
+  .risk.frost, .risk.warning { border-left-color: var(--bad); font-weight: 600; }
+  .risk.cold { border-left-color: var(--warm); }
   tr.frost td { color: var(--bad); font-weight: 600; }
   tr.cold td { color: var(--warm-ink); }
   .alerts { padding-left: 1.1rem; }
   .small { font-size: var(--fs-md); }
   .stops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .stop { box-sizing: border-box; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; margin-left: calc(var(--depth) * 14px); }
-  .stop .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; } /* the button goes under the name at a large text size rather than off the screen (round fifty-nine) */
-  .stop h3 { min-width: 0; margin: 0; font-size: var(--fs-base); font-weight: 600; }
+  .stop { box-sizing: border-box; background: transparent; border-radius: 0; border-top: 1px solid var(--rule); padding: 10px 0 10px calc(var(--depth) * 14px); }
+  .stop .head { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 6px 10px; } /* the button never off the screen at a large text size (round fifty-nine): the name beside it wraps within itself (round eighty-seven) */
+  /* The name takes the line and wraps within itself, so the button stays beside it whatever the face: with the button
+     wrapping on the name's whole width, the web font's arrival moved the button and every row under it (round
+     eighty-seven; r63v V2's layout shift, 0.12 at 390 px). */
+  .stop h3 { min-width: 0; margin: 0; font-size: var(--fs-base); font-weight: 600; flex: 1 1 auto; overflow-wrap: anywhere; }
   .stop h3 .small { font-weight: 400; margin-left: 6px; }
   .stop .btn { flex: none; min-height: 36px; }
   .row { margin: 6px 0 0; font-size: var(--fs-md); line-height: 1.5; border-left: 3px solid var(--rule); padding-left: 10px; }
@@ -549,21 +569,26 @@
   .row > a { display: inline-block; padding: 9px 8px 9px 0; min-height: var(--tap); } /* a tap target, not a line of text (round fifty-four, 4) */
   /* Each plant a chip with its number and name (round fifty-eight; the grower review): a number alone said nothing at the bench. */
   /* The chip's edge at 3:1 like a field's; its parts never break inside themselves ("no record · 8 / d"), the chip wraps whole parts instead (round fifty-nine). */
-  .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 6px 0 0; padding: 4px 10px; min-height: var(--tap); max-width: 100%; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--paper, var(--card)); color: var(--ink); text-decoration: none; vertical-align: middle; }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: no chips): each plant is its tick box, number and name as plain
+     words, a finger tall, set apart by space, not a bordered box. Its width leaves room for the space after it, which
+     pushed a page 2 px sideways at 320 px with 200% text (r61a a11y-perf 7). */
+  .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 18px 0 0; padding: 4px 0; min-height: var(--tap); max-width: calc(100% - 18px); border: 0; border-radius: 0; background: none; color: var(--ink); text-decoration: none; vertical-align: middle; font-variant-numeric: tabular-nums lining-nums; }
+  a.chip:hover { text-decoration: underline; }
   .chip i { color: var(--ink2); }
   .chip.tick a { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 0.3em; min-width: 0; }
   .chip b, .chip .muted { white-space: nowrap; }
   /* Room for the italic's overhang inside the clipped box: "Lithops lesliei" drew as "Lithops leslie" with its last letter cut (round sixty-seven; triage-66 P6, S-F13). */
   .chip i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; min-width: 0; padding-inline-end: 0.15em; }
   /* A done chip's parts wrap inside it, as a ticked chip's do: at 320 px with 200% text "Conophytum minimum ✓" pushed the page 4 px sideways (round sixty-two; the accessibility review, 9). */
-  .row.done a.chip { display: inline-flex; flex-wrap: wrap; column-gap: 0.3em; row-gap: 0; padding: 4px 10px; } /* a chip, not the row's plain link (`.row > a`), which drew it inline and let the name run past the screen */
+  .row.done a.chip { display: inline-flex; flex-wrap: wrap; column-gap: 0.3em; row-gap: 0; padding: 4px 0; } /* a chip, not the row's plain link (`.row > a`), which drew it inline and let the name run past the screen */
   .restnc { border-left-color: var(--warm); }
   .restnc .linkish { min-height: var(--tap); margin-left: 4px; color: var(--accent); }
-  .chip.tick { padding-left: 4px; }
+  .chip.tick { padding-left: 0; }
   .chip.tick a { color: inherit; text-decoration: none; min-height: var(--tap); }
+  .chip.tick a:hover { text-decoration: underline; }
   .chip.tick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
   /* The box's own target, a finger wide and tall, apart from the plant link (round sixty; the accessibility review, 6). */
-  .chip.tick .tickbox { display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); margin: -4px 2px -4px -6px; cursor: pointer; border-right: 1px solid var(--rule); }
+  .chip.tick .tickbox { display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); margin: -4px 0 -4px -10px; cursor: pointer; }
   .nonetick { margin-left: 6px; font-size: var(--fs-sm); }
   .head .nonetick { margin-left: 0; }
   .howdecides { margin-top: 6px; }
@@ -573,7 +598,7 @@
   .nights.strip .unchecked { color: var(--warm-ink); font-weight: 600; }
   .chip.off { opacity: 0.55; }
   .chip.off b { text-decoration: line-through; }
-  .donemark { cursor: default; background: var(--accent-soft, var(--sunk)); border-color: transparent; color: var(--accent); }
+  .donemark { cursor: default; background: none; color: var(--accent); }
   .row .btn { margin-left: 6px; vertical-align: middle; }
   .row.done { border-left-color: var(--accent); }
   .row.done .lab { color: var(--accent); font-weight: 600; }
@@ -587,7 +612,7 @@
     /* The section follows the head straight away: the head's margin, the grid's gap and the rule's own top margin stood 65 px empty above "By place" (round sixty-two; the outside review's A40). */
     .page > :global(.phead) { margin-bottom: 0; }
     #water > .secrule { margin-top: 0; }
-    .stop { margin-left: calc(var(--depth) * 8px); padding: 8px 12px; }
+    .stop { padding: 8px 0 8px calc(var(--depth) * 8px); }
     .row { font-size: var(--fs-md); }
   }
 </style>

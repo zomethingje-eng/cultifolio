@@ -1,0 +1,41 @@
+# Round eighty-seven, stage 2: one walk for the whole round's data, then the fills that need the walk's pages, the
+# index, the checks, the upload and the live check. The stage-1 data fix (summaries left for --fill summaries, the pages
+# an offline build did not derive again, the round's own pages) is folded in, so the download is read once.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r87s2.txt
+# Before it: the new bulk files in bulk\ (docs\STAGE2-OWNER-87.md, steps 1 to 3). CITES is optional here: until the
+# owner's check (that file's step 4) sets the table's "# checked:" line, every page's CITES line says "not asked".
+# Not in this plan: --fill flowering and --fill bhl, which run for days within their daily allowances; they are
+# scripts\corpus-plan-r87-daily.txt, run once a day after this plan has uploaded.
+#
+# Why this order:
+#   - The walk derives every page again offline under this round's code and, with --bulk, reads Kew's names, the four
+#     sourced facts and Kew's citations and parents for the pages it builds. It carries each page's summary,
+#     identifiers, iNaturalist taxon and the fills' fields from the dossier on disk, so the online steps come after it.
+#   - --list-offline reads the dossiers the walk wrote, so it comes after it; the one online --keys build then builds
+#     its list, the summaries left and the round's own pages together (a list that is not there names no page).
+#   - --fill kew-published and --fill sources run once more over every page after the --keys build: a walk that stopped
+#     and resumed ran them only on the pages of its last part. Each is offline and writes nothing a second time.
+#   - --fill elsewhere reads each page's own Wikidata item, so it comes after every build that can change the item.
+#   - --index comes after every step that changes a page; the three checks and the listing read the index's corpus.
+backup
+dossier --list-summaries-left
+dossier --dry-run --offline --grid climate --bulk bulk
+review Read the dry run's totals: "Dry run, rule … against the dossiers on disk", its records and climates lost and gained, and "the N pages that change, one a line → dry-run-ranges.txt". Then its two lines of the habitat figures: "… pages derived: K would be given a Köppen–Geiger class (A a, B b, C c, D d, E e) …; R would be given an RHS band of the record low, U of them a USDA zone of the mean yearly low …", K about the pages with a habitat climate (37,667 in the index of 5 November), U close to R less the pages whose yearly lows are not held. Each typical cell is chosen among every cell, as live (the stage's stated-wild rule is out: the review of stage 2, S4), so the dry run asks NASA POWER for no new cell. Stop, and paste the end of corpus-step.log back, if K is far from 37,667, or if R is 0. Also read --list-summaries-left's line above it ("N summaries not read as the article's opening paragraph … → rebuild-summaries-left.txt"); the --keys build below builds them.
+dossier --walk --offline --grid climate --bulk bulk
+review Read the walk's last lines. The habitat figures: "48375 pages written: K given a Köppen–Geiger class …; R given an RHS band of the record low, U of them a USDA zone …", K, R and U as the dry run said them. Kew's citations and parents: "Kew's file of 2026-06-04: N pages read, … P pages say where their name was published; H hybrids list X parents as Kew states them: L linked to their pages here, E Kew entries with no page here, U not matched (said why)", expected about 48,367 citations, 506 hybrids, 1,031 parents, about 918 linked, 73 with no page here and 40 not matched. The sources: "Reading the stage-2 sources for N dossiers" and its four lines (as the review after --fill sources below says them). Then "… pages built in this run had a source of the range not asked offline", which --list-offline below lists. Stop, and paste the end of corpus-step.log back, if P is far below 48,000, if drops.txt lists anything you do not expect, or if a sources line says "NOT the one its publisher gives".
+dossier --list-offline
+dossier --keys rebuild-offline.txt,rebuild-summaries-left.txt,scripts/rebuild-r87.txt --grid climate --bulk bulk
+dossier --fill kew-published --bulk bulk
+dossier --fill sources --bulk bulk
+review Read the --keys build's last lines (and drops.txt if one was written: each line expected, or stop), then the two offline fills. --fill kew-published: "Kew's file of 2026-06-04: …" with the counts the walk gave, and "0 pages written" unless the walk stopped and resumed (then the pages of its first part). --fill sources: the four lines after "Reading the stage-2 sources for N dossiers", each naming its file, its date and its md5 ("md5 as its publisher gives it"), the rows read and the pages matched: about 330,000 risk rows (328,565), 32,063 ChromoDB records and 1,664,014 WFO rows; most pages matched by IPNI id for risk (flowering plants only), 9 of them with a row of no figures (Extinct in the Wild), and found in WFO's list; a few thousand with chromosome counts. Measured on these files with the index of 5 November (48,370 pages): WFO about 47,985 found, 286 not decided, 99 not in its list; ChromoDB about 8,107 with counts, 123 not decided (77 of them records under the page's IPNI id named otherwise). The CITES line says "is not yet checked against the Appendices valid from …" until the owner's check is done, then "N pages listed". Then "N dossiers read, M written": after the walk, M is small (the --keys build's pages read again). Stop, and paste the end of corpus-step.log back, if a line says "md5 NOT the one its publisher gives", "COULD NOT BE READ", or "not asked" for a file you put in bulk\.
+dossier --fill summaries
+dossier --fill elsewhere
+review Read --fill summaries' last line (the summaries proved again or dropped, and those asked again), and --fill elsewhere's: "N Wikidata items read on <day>: M hold an identifier of another register, … in all (…); … no longer served under the page's id; … not answered; …", about 47,000 items (97.7% of a 781-page sample hold one), fifty a request, under twenty minutes. Stop, and paste the end of corpus-step.log back, if N is far below 45,000, or if "not answered" is over a few hundred (run the plan again in an hour: the fill reads only what is left).
+dossier --index
+review Read --index's lines: "index: 48375 species"; "L of the E entries with a record low (low); first seen (first): C as the index before gave it, F the earliest day the dossier records (no index before held one)", L about the pages with shown extremes, E 48,375, and on this first index C 0 with "(no index before held one)"; and the homonym line "… older names on … pages spelt as another page's accepted name, by another author: … (hom), B of them said by Kew's author (name.kew.by)", B about 12 (review D's D13: Cordia collococca on Bourreria succulenta and others). Then by hand, in another window: npx tsx scripts/dev/r87-older-kinds.ts static\s\v3 older-kinds-other.txt, and paste its line ("P pages, S shown older names: …") into the round's notes. Stop, and paste the end of corpus-step.log back, if the index holds fewer species than 48,375, if L is 0, or if B is far from 12.
+dossier --check-summaries
+dossier --check-ranges
+dossier --list-derived
+review Read the three checks. --check-summaries: no page quoting another plant's article (rebuild-summaries.txt not written); a stop for "not checked" summaries (check-summaries-unchecked.txt) is passed by --go-on once read. --check-ranges: "48375 dossiers read (shapes rule …): 0 with a typical cell outside every native region, 0 whose records were not tested by rule …, 0 with an open record outside every native region, …", the "fixed:" lines, one "held open: Xeronema", then "ready to upload"; if it lists pages in check-ranges.txt, build them online (npm run dossier -- --keys check-ranges.txt --grid climate --bulk bulk), then npm run dossier -- --index and npm run dossier -- --check-ranges, before --go-on. --list-derived: "… in-range records that came through GBIF's search API, by dataset → derived-dataset.csv". Stop, and paste the end of corpus-step.log back, if anything reads "NOT FIXED".
+upload
+live-check

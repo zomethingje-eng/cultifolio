@@ -208,6 +208,7 @@ describe('IndexedDB, cache, lock and channel names, both ways', () => {
     const named = new Set([...how.matchAll(/\b(cultifolio-[a-z0-9-]*:?)/g), ...formats.matchAll(/\b(cultifolio-[a-z0-9-]*:?)/g)].map((m) => m[1]));
     named.delete('cultifolio-backup'); // the backup file's format name, not a browser store
     named.delete('cultifolio-vault-v1'); // the key derivation's salt
+    named.delete('cultifolio-lock-key:'); // the prefix of a kept sync key's hash beside the app lock (round eighty-seven, the stage 3 fixes), a hash's input, not a store
     named.delete('cultifolio-plants-'); // a downloaded file's name (round eighty-four: /about/formats names the exports' files)
     named.delete('cultifolio-watering-');
     expect([...named].filter((n) => !names.has(n)).sort()).toEqual([]);

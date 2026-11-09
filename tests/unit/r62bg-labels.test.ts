@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { plantQrUrl, labelFromHash } from '$lib/ui/grow/qr';
+import { plantQrUrl, labelFromHash, idTag } from '$lib/ui/grow/qr';
 
 const at = (taxonName: string, more: Record<string, unknown> = {}) => labelFromHash(new URL(plantQrUrl('https://x.test', { id: 'p1', taxonName, cultivar: null, nameKind: 'species', ...more } as never)).hash);
 
@@ -45,7 +45,7 @@ describe('a cross in the code (triage-self N10)', () => {
   });
   it('a cross with no parents stated is its genus, and no slug', () => {
     const got = at('Astrophytum', { nameKind: 'hybrid' });
-    expect(got).toEqual({ slug: null, name: 'Astrophytum' });
+    expect(got).toEqual({ slug: null, name: 'Astrophytum', tag: idTag('p1') });
   });
 });
 

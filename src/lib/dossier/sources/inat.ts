@@ -484,3 +484,24 @@ export async function taxonFor(f: JsonFetcher, a: InatAsk): Promise<SourceResult
   if (o.status !== 'none') return o;
   return o.detail && t.detail ? { status: 'none', detail: `${t.detail}; ${o.detail}` } : t.detail ? t : o;
 }
+
+/* ---------- Flowering by month (round eighty-seven, stage 2; links agent; `../flowering.ts`) ---------- */
+
+/** The annotation and the addresses (`../flowering-terms.ts`, which the species page reads without this module). */
+export { FLOWERING_TERM, floweringUrl, floweringSearchUrl } from '../flowering-terms';
+
+/**
+ * The twelve counts of a histogram answer, January first, or null when the answer is not one: iNaturalist answers
+ * `{ results: { month_of_year: { "1": n, …, "12": n } } }`, every month present, zero included.
+ */
+export function floweringMonths(data: unknown): number[] | null {
+  const m = (data as { results?: { month_of_year?: Record<string, unknown> } } | null)?.results?.month_of_year;
+  if (!m || typeof m !== 'object') return null;
+  const out: number[] = [];
+  for (let i = 1; i <= 12; i++) {
+    const n = m[String(i)];
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) return null;
+    out.push(n);
+  }
+  return out;
+}

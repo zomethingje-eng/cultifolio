@@ -82,7 +82,11 @@ test('a removed plant whose number another plant has taken is still found by its
   await expect(page.locator('#removed-plant')).toContainText('Copiapoa cinerea was removed');
   await page.getByRole('button', { name: 'Restore this plant' }).click();
   await expect(page.locator('.toast')).toContainText('2026-0001 is another plant\'s now');
+  // The number typed: since the stage 3 fixes of round eighty-seven (review B1), a number a plant was renumbered off
+  // lists both plants, the one holding it and the one moved off it, and opens neither by itself.
   await page.goto('/plants/2026-0001'); await ready(page);
+  await expect(page.locator('#label-choices li')).toHaveCount(2);
+  await page.locator('#label-choices li', { hasText: 'numbered 2026-0001 now' }).locator('a').click();
   await expect(page.locator('h1')).toContainText('Lithops lesliei');
 });
 

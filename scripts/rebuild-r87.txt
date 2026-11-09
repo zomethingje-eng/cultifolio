@@ -1,0 +1,16 @@
+# Round eighty-seven's pages for the stage-2 walk's online --keys build (the data agent). One page id a line; the notes
+# after a tab are not read. The plan builds this list with rebuild-summaries-left.txt (the summaries --fill summary-leads
+# left for --fill summaries, which --list-summaries-left writes from the dossiers) and rebuild-offline.txt (the pages whose
+# range source the offline walk did not ask, the build before's range kept or none to keep, which --list-offline writes
+# from the dossiers after the walk), in one --keys run.
+#
+# Ceropegia elegans lost its Commons files at round eighty-six's --keys stop: the build counted its 11 iNaturalist
+# photographs twice and asked Commons nothing (round eighty-seven counts the photographs the page will show).
+k502679	Ceropegia elegans
+# The four pages put right by hand at round eighty-six's second stop (fix-r86-pages.mjs, its lines in fix-r86-pages.txt),
+# built now by the rule, so that what their pages hold is a build's and not a hand's (round eighty-seven: a summary's proof
+# kept, --check-summaries, and literature off on every path).
+k125305
+k2920560
+k362335
+k2941308

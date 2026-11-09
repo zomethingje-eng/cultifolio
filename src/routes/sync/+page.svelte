@@ -16,6 +16,7 @@
   import { syncWords, refusalKept, checkAgainWords, syncedWords } from '$lib/ui/sync-words';
   import { heldWords } from '$lib/ui/held-words';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import { lock } from '$lib/ui/lock.svelte'; // stopping sync on a locked device says what opens the lock after (round eighty-seven, the stage 3 fixes; S3)
 
   /** The sample collection: no sync controls are drawn at all (round sixty-one; decision 10, a guard in the page as in the engine), and the heading stays (the accessibility review's 10). */
   const demo = PAGE_IN_DEMO; // the page's collection (round sixty-seven; triage-66 V3)
@@ -185,7 +186,7 @@
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${changes(sync.pending)} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? checkAgainWords(sync.retryAt) : 'when you are back online'}`) : errWords ? errWords.text : sync.runs ? syncedWords(sync.lastSync, ago, sync.photosLater) : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
+    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? (sync.vaultFull.photos ? 'No room for photographs' : 'Vault full') : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${changes(sync.pending)} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? checkAgainWords(sync.retryAt) : 'when you are back online'}`) : errWords ? errWords.text : sync.runs ? syncedWords(sync.lastSync, ago, sync.photosLater) : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
     <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet sent (a watering or a note is one; a new plant is a few){#if sync.refusedWaiting}; besides {sync.refusedWaiting === 1 ? 'these, 1 change' : `these, ${sync.refusedWaiting} changes`} the server refused, kept here and sent again a day after the refusal{/if}</div></div>
     {#if aheadWords}<p class="small muted" id="clock-ahead">{aheadWords.text}{#if aheadWords.detail}{' '}<details class="tech inline"><summary>Details</summary><span class="mono">{aheadWords.detail}</span></details>{/if}</p>{/if}
     {#if sync.quarantined.length || sync.refused.length || collection.incomplete}
@@ -201,7 +202,10 @@
     <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. The day's upload allowance is waited out to the server's time, at most a day (round seventy; triage-69 W2), so "within the hour" is not said of it. What is kept here is said by the refusal's kind (round seventy-one; E6). -->
     <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, {sync.refusal.day ? 'when the server said to' : 'when the server said to or within the hour'}. {refusalKept(sync.refusal)}</p>
   {/if}
-  {#if sync.vaultFull}
+  {#if sync.vaultFull?.photos}
+    <!-- Photographs and papers stop short of the ceiling, so the changes keep syncing (round eighty-seven, the stage 3 fixes; S2). -->
+    <p class="notice bad" id="vault-full">Your vault has no more room for photographs and papers ({mb(sync.vaultFull.bytes)} of the {mb(sync.vaultFull.limit)} MB they may fill; the last 64 MB of the vault is kept for your changes, which still sync). New photographs and papers stay on this device and are sent once there is room. Removing photographs or papers frees their bytes once the removal is ten minutes old.</p>
+  {:else if sync.vaultFull}
     <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the sync bundles of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
   {/if}
   {#if sync.clockWarning}
@@ -261,7 +265,13 @@
   <div class="dangerrow">
     <span class="muted">Stop syncing on this device. Nothing here is deleted and nothing on the server is deleted; you can rejoin with the key.</span>
     {#if confirmForget}
-      <span><button class="btn danger" onclick={() => sync.forget()}>Yes, stop</button> <button class="btn" onclick={() => (confirmForget = false)}>Keep syncing</button></span>
+      {#if lock.enabled}
+        <!-- A locked device's sync key is one of its two ways back: said before it stops, with the lock off or a backup first offered (S3). -->
+        <p class="notice" id="sync-forget-lock">This device is locked with a passcode, and its sync key is one of the two ways back if the passcode is forgotten. After you stop, the key still opens the lock here (this device keeps a hash of it with the lock), so keep the key. A backup file of this collection opens it too. You can take the lock off first, or make a backup first.</p>
+        <span><a class="btn" id="sync-forget-unlock" href="/settings#lock">Take the lock off first</a> <a class="btn" id="sync-forget-backup" href="/backup">Back up first</a> <button class="btn danger" id="sync-forget-yes" onclick={() => sync.forget()}>Stop, keeping the key</button> <button class="btn" onclick={() => (confirmForget = false)}>Keep syncing</button></span>
+      {:else}
+      <span><button class="btn danger" id="sync-forget-yes" onclick={() => sync.forget()}>Yes, stop</button> <button class="btn" onclick={() => (confirmForget = false)}>Keep syncing</button></span>
+      {/if}
     {:else}
       <button id="sync-forget" class="btn" onclick={() => (confirmForget = true)}>Stop syncing here</button>
     {/if}

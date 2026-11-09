@@ -34,6 +34,20 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['src/lib/db/types.ts', /caudex|Caudex/],
   ['src/routes/plants/[acc]/+page.svelte', /^caudex$/],
   ['src/routes/about/formats/+page.svelte', /spread, caudex and/],
+  // the CITES Appendices' own words for a listing, quoted (round eighty-seven, stage 2: the sources agent's CITES rules)
+  ['src/routes/about/how/+page.svelte', /the listing is of "succulent species only"/],
+  // the owner's own line on /about, approved for the footer (round eighty-seven, plan D5): a fact about who made the site,
+  // not a pitch to one kind of grower
+  ['src/routes/about/+page.svelte', /Made by Jonathan, who grows cacti, succulents and rare bulbs/],
+  // the owner's words about himself in the footer, approved by him (round eighty-seven): a fact about who made the site
+  ['src/routes/+layout.svelte', /Made by Jonathan, who grows cacti, succulents and rare bulbs/],
+  // an item of an accession is an offset, a division or a bulb split, the plan's own words for a kind of propagation (round
+  // eighty-seven, t1; F1), and the BCSS Field Number Database is the British Cactus and Succulent Society's, by its name (F3)
+  ['src/routes/plants/[acc]/+page.svelte', /^A bulb split$|^bulb split$/],
+  ['src/routes/about/formats/+page.svelte', /an offset, division or bulb split of an accession/],
+  ['src/routes/about/how/+page.svelte', /An offset, division or bulb split can be split off a plant/],
+  ['src/routes/about/how/+page.svelte', /the British Cactus and Succulent Society's database only when you press/],
+  ['src/routes/plants/[acc]/+page.svelte', /Opens the British Cactus and Succulent Society's database/],
   // the example collection's own greenhouse bench
   ['src/lib/ui/grow/demo-seed.ts', /The cacti, in full sun\./],
   // how today's species list was derived: a fact about the corpus, worded as how it was built

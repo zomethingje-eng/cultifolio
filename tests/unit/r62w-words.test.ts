@@ -215,7 +215,13 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
   it('the front page shows no species whole: no feature, no chart, no figures, no dossier read', () => {
     expect(home).not.toContain('This is what a species page with a habitat climate shows');
     expect(home).not.toMatch(/class="feature"|featureBlock|<Climograph|<Glance|cultivationSheet|climograph\(/);
-    expect(code('src/routes/+page.server.ts')).not.toMatch(/getDossier|feature\b/);
+    // Round eighty-seven (plan D1, DESIGN-87: the owner's front page leads with one real figure and its trail): one species'
+    // record is read, by the lead's rule alone (`leadFrom`, the strip's first species that holds the figure), for that
+    // figure and where it came from; no feature, no chart, no sheet.
+    const server = code('src/routes/+page.server.ts');
+    expect(server).not.toMatch(/feature\b/);
+    expect(server.match(/getDossier\(/g)).toHaveLength(1);
+    expect(server).toMatch(/const lead = await leadFrom\(featured, async \(slug\) => \{ const k = await resolveSlug\(platform, fetch, slug, c\); return k \? getDossier\(platform, fetch, k, c\) : null; \}\)/);
     const how = readFileSync('src/routes/about/how/+page.svelte', 'utf8');
     // Round eighty-five: a summary, then the rules folded under it.
     expect(how).toMatch(/id="feature">The photographs on the front page<\/h3>\s*<p class="sum">The front page's photographs are picked by rule from the popular genera, not by hand\.<\/p>\s*<details class="full in-full"><summary>The rules in full(?:<span class="sr">[^<]*<\/span>)?<\/summary>\s*<ul class="rules">\s*<li>The front page's photographs are chosen by rule/);

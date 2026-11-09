@@ -1,6 +1,8 @@
 /** Pasted lines and sheet rows as the one shape the review list and the commit read (round sixty). */
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
-import { cellText, readDate, readRow, unmappedColumns, type DateOrder, type Field, type Mapping } from './csv';
+import { cellText, readDate, readRow, unmappedColumns, IDENT_FIELDS, type DateOrder, type Field, type Mapping } from './csv';
+import { readIdentCells, deaccStatus, type IdentCells } from '$core/identity';
+import { MOTHER_HOW } from '$lib/db/types';
 import type { PastedLine } from './paste';
 import { readPrice } from '$lib/ui/grow/spend';
 import { blankRow, keyLines, keySheet, numberKey, type AltCells, type ImportRow } from './plan';
@@ -137,7 +139,10 @@ interface KeyParts { name: string; v: Partial<Record<Field, string>>; date: stri
  */
 function keyCells(p: KeyParts): string[] {
   const t = (f: Field) => (p.v[f] ?? '').trim();
-  return [cleanName(p.name), t('cultivar'), numberKey(t('number')), t('place'), p.date, t('source'), t('fieldNumber'), p.notes, p.price ?? priceKey(t('price')), t('kind'), t('parentage'), t('nameAsReceived'), t('provenance'), t('status'), t('lot'), t('form')];
+  // The plant it was taken from and how, only when the line gives either (round eighty-seven, F4): a sheet without them keys
+  // as it did before, so a plant an earlier run filed is still found.
+  const mother = numberKey(t('mother')), how = t('motherHow').toLowerCase();
+  return [cleanName(p.name), t('cultivar'), numberKey(t('number')), t('place'), p.date, t('source'), t('fieldNumber'), p.notes, p.price ?? priceKey(t('price')), t('kind'), t('parentage'), t('nameAsReceived'), t('provenance'), t('status'), t('lot'), t('form'), ...(mother || how ? [mother, how] : [])];
 }
 /** Round sixty-seven's key cells, for its plants only (`dateKey67`): the notes column alone, and the price as written. */
 function keyCells67(name: string, v: Partial<Record<Field, string>>, acquired: string): string[] {
@@ -189,6 +194,10 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
   let repeatedHeader = 0;
   const head = header ? (rows[0] ?? []).map((c) => cellText(c).toLowerCase()) : null;
   const extra = opts.extra ?? unmappedColumns(rows, m, header).extra;
+  // The identity columns (round eighty-seven, t1) enter a line's import key as a column no field takes would, "Collector:
+  // Brack, S.", in the sheet's own column order: before this round they were such columns, and a sheet imported then must
+  // find its plants again now, not add them twice.
+  const keyed = [...extra, ...IDENT_FIELDS.filter((f) => m[f] !== undefined && m[f]! >= 0).map((f) => ({ i: m[f]!, name: (header ? cellText(rows[0]?.[m[f]!]) : '') || `Column ${m[f]! + 1}` }))].sort((x, y) => x.i - y.i);
   /** Each line's import key cells, and the other keys a plant of it may have been filed under (`keyCellsOf`). */
   const cellsOf: Array<{ cells: string[]; alts: AltCells[]; bare?: string[] }> = [];
   // A Cultifolio plants.csv names each plant's record in its id column: read back into the collection that wrote it, a
@@ -215,6 +224,11 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     r.nameAsReceived = orNull(v.nameAsReceived);
     r.lot = orNull(v.lot);
     r.form = orNull(v.form);
+    // The plant it was taken from, by number, and how: a word that is not one of the five is kept in the notes and said, as an unread Kind is (round eighty-seven, F4).
+    r.mother = orNull(v.mother);
+    const how = orNull(v.motherHow)?.toLowerCase();
+    if (how) { if ((MOTHER_HOW as readonly string[]).includes(how)) r.motherHow = how; else { r.problems.push(`"taken as" ${v.motherHow} is not ${MOTHER_HOW.join(', ').replace(/, (\w+)$/, ' or $1')}; kept in the notes`); addNote(r, `Taken as: ${v.motherHow}`); } }
+    if (r.motherHow && !r.mother) r.problems.push('"taken as" is given with no plant it was taken from; not linked');
     if (idCol >= 0) r.recordId = orNull(cellText(cells[idCol]));
     const q = orNull(v.qty);
     if (q) {
@@ -242,9 +256,21 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     if (prov && !PROV.includes(prov as Provenance)) addNote(r, `Provenance: ${v.provenance}`);
     const st = orNull(v.status)?.toLowerCase();
     if (st) { if (STATUS.includes(st as AccStatus)) r.status = st as AccStatus; else { r.problems.push(`status "${v.status}" was not read; added as growing, and kept in the notes`); addNote(r, `Status: ${v.status}`); } }
+    // Identity and provenance (round eighty-seven, t1): each read as the forms read it; a value that cannot be is said and
+    // kept in the notes. A deaccession sets the status it goes with, unless the sheet says dead or archived itself.
+    const ic: IdentCells = {};
+    for (const f of IDENT_FIELDS) if (v[f]) ic[f] = v[f];
+    if (Object.keys(ic).length) {
+      const got = readIdentCells(ic, r.provenance ?? 'unknown');
+      if (Object.keys(got.fields).length) r.ident = got.fields;
+      r.problems.push(...got.problems);
+      for (const k of got.kept) addNote(r, k);
+      if (got.fields.deacc && r.status === 'growing') r.status = deaccStatus(got.fields.deacc);
+    }
     // Every column no field takes, in the notes as "Locality: Totoral, Chile": nothing in the sheet is dropped unseen.
     const extras: string[] = [];
-    for (const c of extra) { const t = cellText(cells[c.i]); if (t) { extras.push(`${c.name}: ${t}`); addNote(r, `${c.name}: ${t}`); } }
+    for (const c of extra) { const t = cellText(cells[c.i]); if (t) addNote(r, `${c.name}: ${t}`); }
+    for (const c of keyed) { const t = cellText(cells[c.i]); if (t) extras.push(`${c.name}: ${t}`); }
     out.push(r);
     cellsOf.push(keyCellsOf(name, v, r.acquired, extras, today));
   });

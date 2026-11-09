@@ -1,8 +1,10 @@
-import { corpusNow } from '$lib/server/dossiers';
+import { corpusNow, getDossier, resolveSlug } from '$lib/server/dossiers';
+import { leadFrom } from '$lib/ui/ref/lead-figure';
 import { unitsFor } from '$lib/server/units';
 import { catalogueRows, rowItemsOf, featuredOfCorpus, byOf, chipOf, homeWindow, HOME_ITEMS, type Item } from '$lib/server/catalogue';
 import { grownChipFrom, grownFrom } from '$lib/ui/ref/most-grown';
 import { lookupOf } from '$lib/server/lookup';
+import { browseCounts, hasBrowse } from '$lib/browse/load.server';
 import type { PageServerLoad } from './$types';
 
 /** Rows in the first window: a phone shows about ten; the rest come from /api/rows as the reader nears the end (round forty-seven, 1). */
@@ -52,9 +54,30 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const sum = (rs: ReadonlyArray<{ notChecked?: number; notAsked?: number; pending?: number }>) => rs.reduce<{ notChecked: number; notAsked: number | null; pending: number }>((a, r) => ({ notChecked: a.notChecked + (r.notChecked ?? 0), notAsked: a.notAsked == null || r.notAsked == null ? (r.notChecked ? null : a.notAsked) : a.notAsked + r.notAsked, pending: a.pending + (r.pending ?? 0) }), { notChecked: 0, notAsked: 0, pending: 0 });
   const without = chip === 'all' || chip === 'noclimate' ? sum(rows) : sum((await catalogueRows(platform, fetch, by, 'noclimate', c)).cat.rows);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]) : [];
+  // The lead (round eighty-seven; plan D1): one figure from the reference and where it came from, read from the record of
+  // the day's first species in the strip that holds it (`leadFrom`). A record that cannot be read leaves the lead out; the
+  // page is drawn without it, never with a figure whose source it could not read.
+  const lead = await leadFrom(featured, async (slug) => { const k = await resolveSlug(platform, fetch, slug, c); return k ? getDossier(platform, fetch, k, c) : null; }).catch(() => null);
+  // The Browse table (round eighty-seven; the review of stage 1, B1 and B2). Where the corpus has a browse table
+  // (`hasBrowse`), its rows are the browse pages, each with the count its page lists: the TDWG level-3 regions /region
+  // names, the families /family lists, the genera with a page /genus lists, and "Grown by someone", the species with
+  // iNaturalist observations in cultivation as /browse?grown=1 counts them. All from the build's few bytes of browse
+  // counts, never the table itself (`browseCounts`); a count the file does not hold, or a file that cannot be read, is
+  // left out, and the row shows none rather than a number it did not read. An index that counts no cultivated
+  // observations has no "grown" count; one that counts some says how many species it does not count.
+  // Where the corpus has no table, every browse page is a 503: the rows are the catalogue's own groupings, each with
+  // its count of rows, and nothing links a page that cannot answer.
+  const browsable = hasBrowse(c);
+  const counts = browsable ? await browseCounts(c, platform, fetch).catch(() => null) : null;
+  const rowsOf = (b: 'family' | 'origin' | 'genus') => (by === b && chip === 'all' ? Promise.resolve(rows.length) : catalogueRows(platform, fetch, b, 'all', c).then((r) => r.cat.rows.length, () => null));
+  const catalogueGroups = browsable ? null : await Promise.all([rowsOf('origin'), rowsOf('family'), rowsOf('genus')]).then(([origins, families, genera]) => ({ origins, families, genera }));
   return {
     units: unitsFor(cookies, request),
     featured,
+    lead,
+    // `grownUncounted`: the counts were read and the index counts no cultivated observations (said so); with no counts read, not known.
+    groups: browsable ? { regions: counts?.regions ?? null, families: counts?.families ?? null, genera: counts?.genera ?? null, grown: counts?.grown ?? null, grownNotCounted: counts?.grown != null ? (counts.grownNotCounted ?? null) : null, grownUncounted: !!counts && counts.grown === null } : null,
+    catalogueGroups,
     by,
     open: w.open,
     /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */

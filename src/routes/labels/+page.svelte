@@ -11,7 +11,7 @@
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
    * sheet at true size; @media print hides everything else and sets the page
    * size, so what you see is what the printer gets. A QR code on each label
-   * opens the plant's page on this site.
+   * opens the plant's page on this site, by the number printed beside it (round eighty-seven, t3).
    */
   import { onMount, onDestroy } from 'svelte';
   import { frame } from '$lib/ui/frame.svelte';
@@ -45,8 +45,17 @@
     { k: '5163', label: 'Avery 5163 · 10 per sheet · 4 × 2 in', page: [215.9, 279.4], cols: 2, rows: 5, w: 101.6, h: 50.8, left: 4.0, top: 12.7, gapX: 4.7, gapY: 0, qr: true },
     { k: '5167', label: 'Avery 5167 · 80 per sheet · 1¾ × ½ in (pot rim)', page: [215.9, 279.4], cols: 4, rows: 20, w: 44.45, h: 12.7, left: 7.62, top: 12.7, gapX: 7.62, gapY: 0, qr: false }, // 0.3 in each side and between: 7.3 and 7.6 set every column a third of a millimetre left (round sixty-two; A36)
     { k: 'L7160', label: 'Avery L7160 · 21 per sheet · 63.5 × 38.1 mm (A4)', page: [210, 297], cols: 3, rows: 7, w: 63.5, h: 38.1, left: 7.2, top: 15.1, gapX: 2.5, gapY: 0, qr: true },
-    { k: 'strip', label: 'Strips to cut · 70 × 18 mm · 3 across', page: [215.9, 279.4], cols: 3, rows: 14, w: 70, h: 18, left: 3, top: 10, gapX: 2, gapY: 1, qr: true }
+    { k: 'strip', label: 'Strips to cut · 70 × 18 mm · 3 across', page: [215.9, 279.4], cols: 3, rows: 14, w: 70, h: 18, left: 3, top: 10, gapX: 2, gapY: 1, qr: true },
+    // Label tape for a P-touch-style printer (round eighty-seven, t3; plan F10): one label a page, the page the tape's
+    // width high and the label's length wide, so the printer's own dialog, set to the tape, prints each label as it is.
+    // `pad` is the margin kept inside the tape's width, top and bottom: the code and the text stay inside the middle
+    // 9, 14 or 18 mm, clear of the edges a tape printer does not print to. A backup label is `bw` long.
+    { k: 'tape12', label: 'Label tape 12 mm (P-touch and the like) · one label a page · 50 mm long', page: [50, 12], cols: 1, rows: 1, w: 50, h: 12, left: 0, top: 0, gapX: 0, gapY: 0, qr: true, tape: true, pad: 1.5, bw: 26 },
+    { k: 'tape18', label: 'Label tape 18 mm · one label a page · 60 mm long', page: [60, 18], cols: 1, rows: 1, w: 60, h: 18, left: 0, top: 0, gapX: 0, gapY: 0, qr: true, tape: true, pad: 2, bw: 30 },
+    { k: 'tape24', label: 'Label tape 24 mm · one label a page · 70 mm long', page: [70, 24], cols: 1, rows: 1, w: 70, h: 24, left: 0, top: 0, gapX: 0, gapY: 0, qr: true, tape: true, pad: 3, bw: 34 }
   ] as const;
+  /** A stock that is tape: one label a page, no cells to skip. */
+  const isTape = (s: Sheet): s is Extract<Sheet, { tape: true }> => 'tape' in s && s.tape;
   type Sheet = (typeof SHEETS)[number];
 
   // US Letter stock for the US and Canada, A4 for everyone else, until the grower picks one (it is remembered then): en-GB
@@ -55,7 +64,7 @@
   // with the defaults and wrote them over the grower's choice on every load (round sixty-one; the grower review, 1). It is
   // this device's (the stock in the printer); in the sample collection a change is kept for the tab only (`stored.ts`).
   const LABELS_KEY = 'cultifolio.labels';
-  const stored = (() => { try { const s = readSetting(LABELS_KEY, 'device'); const o = s ? JSON.parse(s) : null; return o && typeof o === 'object' ? (o as { sheetK?: unknown; withQr?: unknown; withCare?: unknown; withSource?: unknown }) : null; } catch { return null; } })();
+  const stored = (() => { try { const s = readSetting(LABELS_KEY, 'device'); const o = s ? JSON.parse(s) : null; return o && typeof o === 'object' ? (o as { sheetK?: unknown; withQr?: unknown; withCare?: unknown; withSource?: unknown; bigNo?: unknown; backup?: unknown }) : null; } catch { return null; } })();
   let sheetK = $state<Sheet['k']>(SHEETS.find((x) => x.k === stored?.sheetK)?.k ?? defaultSheet(typeof navigator !== 'undefined' ? navigator.language : undefined));
   const sheet = $derived(SHEETS.find((s) => s.k === sheetK)!);
   let skip = $state<number | null>(0); // cells already used on a part-used sheet; null once cleared (Svelte binds an emptied number input to null)
@@ -63,6 +72,10 @@
   let withQr = $state(typeof stored?.withQr === 'boolean' ? stored.withQr : true);
   let withCare = $state(typeof stored?.withCare === 'boolean' ? stored.withCare : true);
   let withSource = $state(typeof stored?.withSource === 'boolean' ? stored.withSource : false);
+  /** The number set large, to read from a step away (round eighty-seven, t3; plan F10). */
+  let bigNo = $state(typeof stored?.bigNo === 'boolean' ? stored.bigNo : false);
+  /** A second label for each, the number alone: for the back of the pot or under it, if the first fades or is lost (round eighty-seven, t3). */
+  let backupLabel = $state(typeof stored?.backup === 'boolean' ? stored.backup : false);
   let q = $state('');
   let chosen = $state<Set<string>>(new Set());
   /** What the link picked (?acc=, ?batch=, ?loc=): listed first, so ten plants just potted up are not scattered through three hundred (round fifty-eight; the grower review). */
@@ -71,6 +84,8 @@
   let ambiguous = $state<string[]>([]);
   let qrs = $state<Record<string, string>>({});
   const qrInflight = new Set<string>();
+  /** What the codes held were made for: a sheet (s), or a tape's bare code at error correction L (12 mm) or M (wider). */
+  let qrTape = 's';
   let care = $state<Record<string, string | null>>({}); // '' while asked, null when the reference was not reached
 
   onMount(async () => {
@@ -148,7 +163,7 @@
   // Saved when the grower changes a choice, not on the first run, which is the page starting with what it read (round sixty-one; the grower review, 1).
   let saveArmed = false;
   $effect(() => {
-    const v = JSON.stringify({ sheetK, withQr, withCare, withSource });
+    const v = JSON.stringify({ sheetK, withQr, withCare, withSource, bigNo, backup: backupLabel });
     if (!saveArmed) { saveArmed = true; return; }
     writeSetting(LABELS_KEY, 'device', v);
   });
@@ -220,12 +235,20 @@
     // The codes are made in one batch and assigned once: one assignment per code copied the whole map each time, which
     // with fifteen hundred plants was thirty seconds with the page frozen (round fifty-one, 5).
     // A stock with no room for a code makes none (round fifty-eight; the grower review).
+    // A tape's code is the bare address and a sheet's carries the name too, so each is made for its stock; a change of
+    // stock between the two makes them again (round eighty-seven, t3).
+    // The 12 mm tape's code is drawn at error correction L, which keeps it at 29 modules with the plant's identity tag
+    // (qr.ts, ID_TAG_LEN; round eighty-seven, the stage 3 fixes): a change of stock between the kinds makes them again.
+    const tape = isTape(sheet);
+    const ecl: 'L' | 'M' = sheetK === 'tape12' ? 'L' : 'M';
+    const mode = tape ? `t${ecl}` : 's';
+    if (mode !== qrTape) { qrTape = mode; qrs = {}; qrInflight.clear(); }
     const needQr = withQr && sheet.qr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
     if (needQr.length) {
       for (const a of needQr) qrInflight.add(a.id);
       // Each code is made inside its own promise, so a name that cannot be made into an address fails only its own code: one
       // threw out of this effect and the sheet printed with no code at all (round sixty-one; the records review, 3).
-      void Promise.all(needQr.map((a) => Promise.resolve().then(() => QRCode.toString(a.batch ? `${location.origin}/propagation/${a.id}` : plantQrUrl(location.origin, a.rec as Accession), { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
+      void Promise.all(needQr.map((a) => Promise.resolve().then(() => QRCode.toString(a.batch ? `${location.origin}/propagation/${encodeURIComponent(a.no)}` : plantQrUrl(location.origin, a.rec as Accession, tape), { type: 'svg', errorCorrectionLevel: ecl, margin: 0 })).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
         const next = { ...qrs };
         for (const [id, svg] of pairs) { if (svg) next[id] = svg; qrInflight.delete(id); }
         qrs = next;
@@ -253,7 +276,10 @@
   /** Cells per page, with `skip` blanks first; then pages. */
   const perPage = $derived(sheet.cols * sheet.rows);
   const skipN = $derived(Math.min(Math.max(0, Math.floor(numberOrNull(skip) ?? 0)), Math.max(0, perPage - 1)));
-  const cells = $derived<Array<Item | null>>([...Array(skipN).fill(null), ...picked]);
+  /** One cell a label: the label, and with a backup label its number-only twin straight after it. */
+  type Cell = { a: Item; backup: boolean };
+  const cells = $derived<Array<Cell | null>>([...Array(skipN).fill(null), ...picked.flatMap((a) => (backupLabel ? [{ a, backup: false }, { a, backup: true }] : [{ a, backup: false }]))]);
+  const labelCount = $derived(cells.length - skipN);
   // The box says what the sheet uses: 99 typed on a 30-cell sheet, or 25 left over from a 30-cell sheet after choosing a
   // 24-cell one, becomes the clamped figure in the box itself, not only in the print (round twenty-three, 18).
   $effect(() => {
@@ -268,7 +294,7 @@
     const unit = a.count === 1 ? (m.unit === 'leaves' ? 'leaf' : m.unit.replace(/s$/, '')) : m.unit;
     return [a.when ? `${m.veg ? 'started' : 'sown'} ${a.when}` : null, a.count != null ? `${a.count} ${unit}` : null].filter(Boolean).join(' · ');
   };
-  const tiny = $derived(sheet.h < 16);
+  const tiny = $derived(!isTape(sheet) && sheet.h < 16);
 
   // The footer waits for the preview, which is drawn once the collection is open (the merge, round eighty-five; W12), as
   // My plants' waits for its list.
@@ -279,7 +305,7 @@
 
 <svelte:head>
   <title>Labels · Cultifolio</title>
-  {@html `<style>@page { size: ${sheet.page[0]}mm ${sheet.page[1]}mm; margin: 0; }</style>`}
+  {@html `<style>@page { size: ${sheet.page[0]}mm ${sheet.page[1]}mm; margin: 0; }${isTape(sheet) ? `@page tapebk { size: ${sheet.bw}mm ${sheet.page[1]}mm; margin: 0; }` : ''}</style>`}
 </svelte:head>
 
 <div class="ui">
@@ -290,13 +316,15 @@
     <div class="body">
       <div class="row">
         <label class="field"><span>Sheet</span><select id="lb-sheet" bind:value={sheetK}>{#each SHEETS as s}<option value={s.k}>{s.label}</option>{/each}</select></label>
-        <label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} onchange={() => (skip = skipN)} /></label>
+        {#if !isTape(sheet)}<label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} onchange={() => (skip = skipN)} /></label>{/if}
         <!-- A stock that cannot carry a code shows the box empty, not ticked and greyed: a ticked box read as "the code will print" on 5167. The choice is kept for the next sheet that can (round fifty-eight; the grower review). -->
         <label class="check"><input id="lb-qr" type="checkbox" checked={withQr && sheet.qr} onchange={(e) => (withQr = e.currentTarget.checked)} disabled={!sheet.qr} aria-describedby={sheet.qr ? undefined : 'lb-qr-why'} /> QR code{#if !sheet.qr}{' '}<span class="faint small" id="lb-qr-why">(not on this stock: at {sheet.h} mm tall the label has no room for a code)</span>{/if}</label>
         <label class="check"><input type="checkbox" bind:checked={withCare} /> Care line</label>
         <label class="check"><input type="checkbox" bind:checked={withSource} /> Source and date</label>
+        <label class="check"><input id="lb-big" type="checkbox" bind:checked={bigNo} /> Large number</label>
+        <label class="check"><input id="lb-backup" type="checkbox" bind:checked={backupLabel} /> A backup label each (the number alone)</label>
         <span class="grow"></span>
-        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
+        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${labelCount} ${labelCount === 1 ? 'label' : 'labels'}`}</button>
       </div>
       {#if withCare && stillPending.length}
         <p class="small muted" role="status">{stillPending.length === 1 ? 'One care line' : `${stillPending.length} care lines`} {stillPending.length === 1 ? 'says' : 'say'} "climate pending": the reference has not built that species' climate yet.</p>
@@ -356,27 +384,37 @@
        a shift of 0.081 with 30 or 374 plants). Before the collection opens there is nothing to preview. -->
   {#if collection.ready}
   <div class="secrule"><h2>Preview</h2><div class="line"></div><span class="n">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</span></div>
-  <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
+  {#if isTape(sheet)}
+    <!-- Tape is one label a page (round eighty-seven, t3): the printer's dialog takes the tape's width. -->
+    <p class="small muted previewnote" id="lb-tape-note">Each label is a page {sheet.page[0]} mm long and {sheet.h} mm high, shown at its true size{backupLabel ? `, each backup label ${sheet.bw} mm long` : ''}. In the print dialog choose the tape printer, set the tape to {sheet.h} mm, and print at 100%; the code and the text keep {sheet.pad} mm clear of each edge of the tape.</p>
+  {:else}
+    <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
+  {/if}
   {/if}
 </div>
 
 <!-- The preview scrolls sideways on a narrow screen: reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
 {#if collection.ready}
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div class="sheets" tabindex="0" role="region" aria-label="Label sheets as they will print" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}">
+<div class="sheets" class:tape={isTape(sheet)} class:t12={sheetK === 'tape12'} class:bigno={bigNo} tabindex="0" role="region" aria-label="Label sheets as they will print" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}{isTape(sheet) ? `; --pad: ${sheet.pad}mm; --bw: ${sheet.bw}mm` : ''}">
   {#each pages as cellsOnPage, pi}
-    <div class="page" class:tiny>
-      {#each cellsOnPage as a, i}
+    <div class="page" class:tiny class:bk={isTape(sheet) && cellsOnPage[0]?.backup}>
+      {#each cellsOnPage as c, i}
         {@const col = i % sheet.cols}
         {@const row = Math.floor(i / sheet.cols)}
-        <div class="label" style="left: calc(var(--left) + {col} * (var(--lw) + var(--gx))); top: calc(var(--top) + {row} * (var(--lh) + var(--gy)))">
-          {#if a}
-            {#if withQr && sheet.qr && qrs[a.id]}<div class="qr" aria-hidden="true">{@html qrs[a.id]}</div>{/if}<!-- the code is for a phone's camera, and a screen reader said "image", unnamed, before each label; the number beside it is its text (round sixty-three; U4) -->
+        {@const a = c?.a}
+        <div class="label" class:backup={c?.backup} style="left: calc(var(--left) + {col} * (var(--lw) + var(--gx))); top: calc(var(--top) + {row} * (var(--lh) + var(--gy)))">
+          {#if a && c?.backup}
+            <!-- The backup label: the number alone, as large as the label holds (round eighty-seven, t3; plan F10). -->
+            <div class="bkno">{a.no}</div>
+          {:else if a}
+            <!-- The code's box is drawn with the label, empty until the code is made, so a code arriving after the label does not move the text beside it (round eighty-seven, t3; W12). -->
+            {#if withQr && sheet.qr}<div class="qr" aria-hidden="true">{#if qrs[a.id]}{@html qrs[a.id]}{/if}</div>{/if}<!-- the code is for a phone's camera, and a screen reader said "image", unnamed, before each label; the number beside it is its text (round sixty-three; U4) -->
             <div class="txt">
               <div class="no">{a.no}{#if a.fieldNumber}{' '}<span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
-              {#if withCare && care[a.id]}{@const cls = care[a.id]!.split(' · ')}<!-- careLine's clauses, joined by " · " (careParts): shown whole or dropped whole, never cut mid-figure (round eighty-one; review W6) --><div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'} use:fitClauses={`${sheetK} ${care[a.id]}`}>{#each cls as c, ci}{#if ci}{' '}{/if}<span class="cl">{c}{#if ci < cls.length - 1}<span class="sep">{' ·'}</span>{/if}</span>{/each}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: {careCell}</div>{/if}
+              {#if withCare && care[a.id]}{@const cls = care[a.id]!.split(' · ')}<!-- careLine's clauses, joined by " · " (careParts): shown whole or dropped whole, never cut mid-figure (round eighty-one; review W6) --><div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'} use:fitClauses={`${sheetK} ${care[a.id]}`}>{#each cls as cl, ci}{#if ci}{' '}{/if}<span class="cl">{cl}{#if ci < cls.length - 1}<span class="sep">{' ·'}</span>{/if}</span>{/each}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: {careCell}</div>{:else if withCare && kindOf(a.rec) !== 'hybrid' && !tiny}<div class="care held" aria-hidden="true"></div>{/if}<!-- the care line's room, held while it is asked and kept when there is none, so the number and the name above it never move (round eighty-seven, t3; W12) -->
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}
@@ -411,7 +449,7 @@
 
   /* The sheet, at true size on screen and on paper. */
   .sheets { margin: 12px 0 40px; display: grid; gap: 16px; overflow-x: auto; }
-  .page { position: relative; width: var(--pw); height: var(--ph); background: #fff; box-shadow: var(--sh2); color: #000; }
+  .page { position: relative; width: var(--pw); height: var(--ph); background: #fff; box-shadow: none; outline: 1px solid var(--rule); color: #000; } /* a sheet's edge as a thin rule, no shadow (DESIGN-87) */
   /* A page off screen is not laid out until it scrolls near: fifty preview pages were twenty-six thousand nodes laid out at once (round fifty-one, 5). Print lays out every page. */
   @media screen { .page { content-visibility: auto; contain-intrinsic-size: auto var(--pw) auto var(--ph); } }
   .label { position: absolute; width: var(--lw); height: var(--lh); display: flex; gap: 1.5mm; padding: 1.6mm 2mm; box-sizing: border-box; overflow: hidden; outline: 0.2mm dashed #bbb; outline-offset: -0.2mm; }
@@ -430,6 +468,9 @@
   .care.unchecked { font-style: italic; color: #666; }
   @media print { .care.unchecked { display: none; } } /* on paper the line is simply blank: a label lives in a pot for years, and the notice belongs on the screen, not in the pot */
   .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; overflow: hidden; line-height: 1.2; max-height: 2.4em; }
+  /* Two lines' room whether the line holds one or two, or is still asked: its arrival never moves the number and the name (round eighty-seven, t3; W12). */
+  .care { height: 2.4em; }
+  .sheets.t12 .care.held { display: none; }
   /* Two lines of whole clauses: a clause that does not end within them is dropped whole by fitClauses, with the
      separator before it, never cut to "…" mid-figure (round eighty-one; review W6). */
   .care :global([hidden]) { display: none; } /* set by fitClauses, after the markup: :global so the compiler keeps it */
@@ -439,7 +480,26 @@
   .page.tiny .sci { font-size: 7pt; -webkit-line-clamp: 1; line-clamp: 1; }
   .page.tiny .care, .page.tiny .src { display: none; }
 
+  /* The large number (round eighty-seven, t3; plan F10): read from a step away; the name gives way to one line. */
+  .bigno .no { font-size: 14pt; letter-spacing: 0.01em; }
+  .bigno .page.tiny .no { font-size: 9pt; }
+  .bigno .sci { -webkit-line-clamp: 1; line-clamp: 1; }
+  /* The backup label: the number alone, as large as the label holds, centred (round eighty-seven, t3). */
+  .label.backup { align-items: center; justify-content: center; }
+  .bkno { font-family: var(--mono); font-weight: 700; font-size: min(calc(var(--lh) * 0.42), 20pt); line-height: 1; white-space: nowrap; letter-spacing: 0.02em; }
+  /* Tape: one label a page, its height the tape's; the code and the text inside the tape's middle (round eighty-seven, t3). */
+  .sheets.tape .label { padding: var(--pad) 2mm; align-items: center; gap: 2mm; }
+  .sheets.tape .page.bk, .sheets.tape .page.bk .label { width: var(--bw); }
+  .sheets.tape .qr { max-height: none; height: 100%; }
+  .sheets.tape .no { font-size: calc(var(--lh) * 0.2); }
+  .sheets.tape .sci { font-size: calc(var(--lh) * 0.2); }
+  .sheets.tape.bigno .no { font-size: calc(var(--lh) * 0.36); }
+  .sheets.tape .bkno { font-size: calc(var(--lh) * 0.42); }
+  .sheets.t12 .sci { -webkit-line-clamp: 1; line-clamp: 1; }
+  .sheets.t12 .care, .sheets.t12 .src { display: none; }
+
   @media print {
+    .sheets.tape .page.bk { page: tapebk; }
     /* The body's side padding is zeroed too: the sheet started 16 px in, was 16 px wider than the paper, and every browser's
        fit-to-page shrank it to about 98%, so the labels drifted off their cells by a millimetre a row (round sixty-one; the
        grower review, 2). */
@@ -449,8 +509,10 @@
     :global(.install), :global(.frostbar), :global(.clockbar), :global(.vaultnote), :global(.toastregion), :global(.cmppill), :global(.tray), :global(.demobar), :global(.backupnudge), :global(.iosfirst) { display: none !important; }
     :global(main.wrap) { max-width: none !important; padding: 0 !important; margin: 0 !important; }
     .sheets { margin: 0; gap: 0; overflow: visible; display: block; }
-    .page { box-shadow: none; page-break-after: always; break-after: page; margin: 0; }
+    .page { box-shadow: none; outline: 0; page-break-after: always; break-after: page; margin: 0; }
     .page:last-child { page-break-after: auto; break-after: auto; }
     .label { outline: 0; }
   }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .pick .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
 </style>

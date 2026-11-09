@@ -38,7 +38,7 @@ for (const width of [360, 320]) {
   });
 }
 
-test('r84e 2: on a desktop the four habitat figures fill their row, the season card under them', async ({ page }) => {
+test('r84e 2: on a desktop the four habitat figures fill the column, a row each, the season card under them', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await quiet(page);
   await page.goto('/species/copiapoa-cinerea');
@@ -47,9 +47,11 @@ test('r84e 2: on a desktop the four habitat figures fill their row, the season c
   await expect(cards).toHaveCount(4);
   const g = (await grid.boundingBox())!;
   const boxes = await cards.evaluateAll((xs) => xs.map((x) => x.getBoundingClientRect()));
-  for (const b of boxes) expect(b.width).toBeGreaterThan(200); // r84base: 153 px
-  expect(Math.abs(boxes[3].right - (g.x + g.width))).toBeLessThan(2); // the last card ends the row
-  expect(new Set(boxes.map((b) => Math.round(b.top))).size).toBe(1);
+  // Round eighty-seven (DESIGN-87, the owner's look): the four figures are the rows of one table, each the column's width,
+  // what it is, the figure and its source on one line; round eighty-four had them as four cards filling one row.
+  for (const b of boxes) expect(Math.abs(b.width - g.width)).toBeLessThan(2); // r84base: 153 px
+  expect(new Set(boxes.map((b) => Math.round(b.left))).size).toBe(1);
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i].top).toBeGreaterThanOrEqual(boxes[i - 1].bottom - 1);
   await expect(page.locator('.glance .gseason .card.season')).toBeVisible();
 });
 

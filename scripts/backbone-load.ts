@@ -1,6 +1,7 @@
 /**
- * GBIF's backbone, read from its simple export (`simple.txt.gz`, https://hosted-datasets.gbif.org/datasets/backbone/current/,
- * 466 MB; round seventy-three) for `--list-extra-keys`: the plants' usages of the words asked for, and every plant usage's
+ * GBIF's backbone, read from its simple export (`simple.txt.gz`, https://hosted-datasets.gbif.org/datasets/backbone/2023-08-28/,
+ * 466 MB; round seventy-three; its last build's own folder since round eighty-seven, the same file as `current/`, which is a
+ * pointer GBIF could move: docs/COLXR-87.md 2) for `--list-extra-keys`: the plants' usages of the words asked for, and every plant usage's
  * place (its accepted usage or parent, and its rank), so the keys GBIF files a record under can be read without asking
  * GBIF once a key. Streamed through gunzip; never held whole. Node only.
  */

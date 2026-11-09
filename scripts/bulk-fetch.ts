@@ -36,7 +36,7 @@ import { execSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { makeFetcher } from '../src/lib/dossier/fetch';
-import { matchName } from '../src/lib/dossier/sources/gbif';
+import { matchName, BACKBONE } from '../src/lib/dossier/sources/gbif';
 import { downloadKeysOf, kewDownloadKeysOf, isSpeciesList, parseSpeciesList } from './select-species-lib';
 import { parseExtraKeys } from '../src/lib/dossier/extra-keys';
 import { dwcaRequest, sqlRequest, mediaRequest, predicateItems, splitKeys, partsNeeded, countUrl, sizes, PREDICATE_ITEMS_MAX, INAT_DATASET } from './gbif-request-lib';
@@ -150,7 +150,10 @@ function auth(): string {
  * cached. One search request carries 200 taxon keys and returns a count per
  * species as a facet, so 9,000 species is about 50 requests rather than
  * 9,000, which is what GBIF's per-IP throttle wants. A species absent from
- * the facet has no records that pass the filters.
+ * the facet has no records that pass the filters. The backbone's checklistKey
+ * ends the address (round eighty-seven): the facet's keys are then the
+ * backbone's, which the list's are, whatever GBIF's default becomes
+ * (docs/COLXR-87.md 2).
  */
 async function countsFor(keys: number[]): Promise<Map<number, number>> {
   const cachePath = `${DIR}/counts.json`;
@@ -159,7 +162,7 @@ async function countsFor(keys: number[]): Promise<Map<number, number>> {
   const BATCH = 200;
   for (let i = 0; i < todo.length; i += BATCH) {
     const batch = todo.slice(i, i + BATCH);
-    const url = `${GBIF}/occurrence/search?${batch.map((k) => `taxonKey=${k}`).join('&')}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&limit=0&facet=speciesKey&facetLimit=${BATCH * 2}`;
+    const url = `${GBIF}/occurrence/search?${batch.map((k) => `taxonKey=${k}`).join('&')}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&limit=0&facet=speciesKey&facetLimit=${BATCH * 2}&checklistKey=${BACKBONE}`;
     for (let attempt = 0; ; attempt++) {
       const res = await fetch(url);
       if (res.ok) {

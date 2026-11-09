@@ -32,7 +32,7 @@ export function tallyInto(t: RangeTally): (before: Admission | null, after: Admi
 }
 
 const REASON: Record<string, string> = { strict: 'inside', buffer: 'by the margin', coast: 'off a coast', island: 'on an island', out: 'out' };
-const BY: Record<string, string> = { border: 'across a border', 'border-state': 'across a border, by its stated state', 'minor-island': 'on a minor island', 'country-reach': 'by its country within the island reach', box: "by its country inside the region's box" };
+const BY: Record<string, string> = { border: 'across a border', 'border-state': 'across a border, by its stated state', 'border-unmatched': 'across a border, its stated state matched by nothing', 'minor-island': 'on a minor island', 'country-reach': 'by its country within the island reach', box: "by its country inside the region's box" };
 /** A tally's key in words: "out → by the margin (across a border)", "by the margin → out (no country stated)". */
 export function transitionWords(k: string): string {
   const [move, ...flags] = k.split(':');

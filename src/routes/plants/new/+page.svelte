@@ -17,13 +17,19 @@
   import { numberOrNull } from '$core/units';
   import { plantNumberProblem, PLANT_NUMBER_MAX } from '$core/accession';
   import { sheetForName } from '$lib/ui/index.svelte';
+  import type { OlderKind } from '$lib/ui/ref/older-kind';
+  import { olderKindLooker } from '$lib/ui/ref/older-kind-look';
   import type { Accession, Provenance } from '$lib/db/types';
+  import { MOTHER_HOW, MOTHER_HOW_LABEL, kindOf, type MotherHow } from '$lib/db/types';
+  import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { addedWords } from '$lib/ui/added-words';
   import { plantHref } from '$lib/db/links';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
+  // Round eighty-seven (t1): the collector, the collection date, earlier holders and a clone ($core/identity).
+  import { readPartialDate, readExChain } from '$core/identity';
   import { takeDraft, withoutKept, ownPlaceNamed, carriedPlace, startPlace as startFrom, str, num, bool, oneOf, type Draft, type StartPlace } from '$lib/ui/grow/keep-draft';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number | null> {
@@ -46,6 +52,17 @@
     // Carried from the example by "Keep it as my own": the whole form, read once (round sixty-nine; triage-68 X3).
     const kept = takeDraft('plant', page.url);
     if (kept) { applyDraft(kept); return; }
+    // From a plant's page, "Add an offset": the mother by identity, never one of two plants that share a number (round eighty-seven, F4).
+    const mo = page.url.searchParams.get('mother');
+    const moHit = mo ? collection.withNumber('accession', mo) : [];
+    if (moHit.length === 1) {
+      const mp = moHit[0] as Accession;
+      motherAcc = mp.id; motherOpen = true;
+      // The mother's name, key and kind, as Propagate takes the parent's: an offset is the plant it came from.
+      name = mp.taxonName; taxonKey = mp.taxonKey ?? null; cultivar = mp.cultivar ?? null; kind = kindOf(mp); parentage = mp.parentage ?? null; nameArmed = true;
+      locationId = mp.locationId ?? null;
+      return;
+    }
     // Arriving from a species page: /plants/new?species=Copiapoa%20cinerea&key=7284333
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
@@ -68,6 +85,14 @@
       await keyCheck;
     }
   });
+  /** Which kind of name the picker's line named a page for, asked while the line is shown ($lib/ui/ref/older-kind-look). */
+  const olderKind = olderKindLooker();
+  $effect(() => {
+    if (!nameArmed || !picker) return;
+    const page = picker.olderAnswer();
+    if (page) olderKind.look(parseName(name).scientific, page);
+  });
+  const olderKindFor = (name: string, page: string): OlderKind | null => olderKind.kindFor(name, page);
   /** The key in the link being checked against the reference; an Add clicked before the answer waits for it rather than filing the plant without its key or asking about a name that came with one (round twenty-three, 4). */
   let keyCheck: Promise<void> | null = null;
   const PROVENANCES = ['unknown', 'wild', 'f1', 'fn', 'veg'] as const;
@@ -77,16 +102,16 @@
   function draftOf(): Omit<Draft, 'form'> {
     // With the place it sits inside, by name and kind (round seventy; triage-69 X2; S-D7a, IND-7).
     const place = carriedPlace(placeTyped ?? (locationId ? collection.location(locationId) : undefined), (id) => collection.location(id));
-    return { place, fields: { name, taxonKey, cultivar, kind, parentage, nameAsReceived, pickReceived, fieldNumber, provenance, acquired, sourceFrom, price, sourceForm, notes, lastWatered, count, useOwnNumber, ownNumber, moreOpen } };
+    return { place, fields: { name, taxonKey, cultivar, kind, parentage, nameAsReceived, pickReceived, fieldNumber, collector, collected, exChain, clone, provenance, acquired, sourceFrom, price, sourceForm, notes, lastWatered, count, useOwnNumber, ownNumber, moreOpen, motherHow, motherOpen } }; // not the plant it was taken from, which is the example's (round eighty-seven, F4)
   }
   /** A draft carried from the example, field by field, each only as the type it holds; its place is the grower's own of that name, or a new one to make. */
   function applyDraft(d: Draft) {
     const f = d.fields;
     name = str(f.name, ''); cultivar = typeof f.cultivar === 'string' ? f.cultivar : null; kind = oneOf(f.kind, KINDS, 'species') as NameKind;
     parentage = typeof f.parentage === 'string' ? f.parentage : null; nameAsReceived = str(f.nameAsReceived, ''); pickReceived = typeof f.pickReceived === 'string' ? f.pickReceived : null;
-    fieldNumber = str(f.fieldNumber, ''); provenance = oneOf(f.provenance, PROVENANCES, 'unknown'); acquired = str(f.acquired, acquired);
+    fieldNumber = str(f.fieldNumber, ''); collector = str(f.collector, ''); collected = str(f.collected, ''); exChain = str(f.exChain, ''); clone = str(f.clone, ''); provenance = oneOf(f.provenance, PROVENANCES, 'unknown'); acquired = str(f.acquired, acquired);
     sourceFrom = str(f.sourceFrom, ''); price = str(f.price, ''); sourceForm = oneOf(f.sourceForm, FORMS, 'plant'); notes = str(f.notes, '');
-    lastWatered = str(f.lastWatered, ''); count = num(f.count, 1); useOwnNumber = bool(f.useOwnNumber, false); ownNumber = str(f.ownNumber, ''); moreOpen = bool(f.moreOpen, false);
+    lastWatered = str(f.lastWatered, ''); count = num(f.count, 1); useOwnNumber = bool(f.useOwnNumber, false); ownNumber = str(f.ownNumber, ''); moreOpen = bool(f.moreOpen, false); motherHow = oneOf(f.motherHow, MOTHER_HOW, 'offset'); motherOpen = bool(f.motherOpen, false);
     const own = ownPlaceNamed(d.place, collection.locations);
     if (own) locationId = own; else startPlace = startFrom(d.place, collection.locations);
     setTimeout(() => { try { replaceState(withoutKept(location.href), page.state); } catch { /* the router not up yet: the address keeps it, and the draft is gone */ } }, 0);
@@ -111,6 +136,11 @@
   /** The text as typed, when a pick in the picker wrote a name that left some of it out (round sixty-two; the grower review, 9). */
   let pickReceived = $state<string | null>(null);
   let fieldNumber = $state('');
+  let collector = $state('');
+  let collected = $state('');
+  let exChain = $state('');
+  let clone = $state('');
+  let identMsg = $state('');
   let provenance = $state<Provenance>('unknown');
   let acquired = $state(day.current); // follows the calendar while the form is open (round twenty-five, 4)
   let acquiredDefault = day.current;
@@ -144,7 +174,7 @@
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
   /** Whether the form has anything typed that leaving would lose; a save clears it before the page moves on. */
-  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault || !!lastWatered || placeTyped));
+  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || collector.trim() || collected.trim() || exChain.trim() || clone.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault || !!lastWatered || placeTyped));
   let saved = $state(false);
   beforeNavigate((nav) => {
     // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is asked about below (round forty-nine, 3; round fifty-one, 4).
@@ -185,6 +215,15 @@
   const addStatus = $derived(checking ? 'Checking the name against the reference…' : busy ? 'Adding…' : '');
   /** The fields a second plant from the same source shares; the rest are the one plant's. */
   let moreOpen = $state(false);
+  /**
+   * The plant this one was taken from, and how, when it is an offset, a cutting, a division, a leaf or a bulbil of one of
+   * the grower's own plants, added without a batch (round eighty-seven, F4): its page and the mother's link each other.
+   * ?mother=<id> from the mother's page fills it.
+   */
+  let motherAcc = $state<string | null>(null);
+  let motherHow = $state<MotherHow>('offset');
+  let motherOpen = $state(false);
+
   async function save(e: SubmitEvent) {
     e.preventDefault();
     // A second tap during a slow name check made a second plant (round fifty-one, 4); one after the plant was written, while
@@ -199,6 +238,10 @@
     // plants they have had for years knows when they last watered them better than when they bought them.
     waterMsg = lastWatered && lastWatered > localDate() ? `${lastWatered} is in the future.` : lastWatered && acquired && acquired !== acquiredDefault && lastWatered < acquired ? `${lastWatered} is before the plant was acquired (${acquired}).` : '';
     if (waterMsg) { moreOpen = true; setTimeout(() => document.getElementById('f-watered')?.focus(), 0); return; }
+    // A collection date is a day, a month or a year, not after today (round eighty-seven, t1).
+    const collectedOut = collected.trim() ? readPartialDate(collected) : null;
+    identMsg = collected.trim() && !collectedOut ? `Collected "${collected.trim()}" is not a day, a month or a year (2019-03-07, 2019-03 or 2019).` : collectedOut && collectedOut > localDate().slice(0, collectedOut.length) ? `Collected ${collectedOut} is in the future.` : '';
+    if (identMsg) { moreOpen = true; setTimeout(() => document.getElementById('f-collected')?.focus(), 0); return; }
     checking = true;
     try {
       if (keyCheck) await keyCheck.catch(() => undefined /* the key check's own failure leaves the key unconfirmed, which the save below says */);
@@ -240,6 +283,10 @@
         // What a pick left out of the name typed ("Copiapoa cinerea Pan de Azucar" picked as the species) is kept the same way.
         nameAsReceived: nameAsReceived.trim() || (p.aside ? name.trim() : null) || pickReceived,
         fieldNumber: fieldNumber.trim() || null,
+        ...(collector.trim() ? { collector: collector.trim().slice(0, 200) } : {}),
+        ...(collected.trim() ? { collected: readPartialDate(collected) } : {}),
+        ...(readExChain(exChain).length ? { exChain: readExChain(exChain) } : {}),
+        ...(clone.trim() ? { clone: clone.trim().slice(0, 80) } : {}),
         provenance,
         acquired: acquired || null,
         sourceFrom: sourceFrom.trim() || null,
@@ -247,7 +294,10 @@
         sourceForm,
         locationId,
         notes: notes.trim() || null,
-        ...(olderOf ? { olderOf } : {})
+        ...(olderOf ? { olderOf } : {}),
+        // Taken from one of the grower's plants: the link, and a provenance left unstated read as what it is, vegetative (round eighty-seven, F4).
+        ...(motherAcc ? { motherAcc, motherHow, ...(provenance === 'unknown' ? { provenance: 'veg' as Provenance } : {}) } : {}),
+        ...(olderOf && olderKindFor(taxonName, olderOf) ? { olderKind: olderKindFor(taxonName, olderOf) } : {})
       });
       // The last watering, one line per plant, as Water writes it; a second commit, after the plants exist.
       // The plants stand if it fails; the toast says the line did not, and why (round eighty-four; outside review A16: it was
@@ -263,7 +313,7 @@
         // Mid-batch the toast offers Undo, not Open: a tap on "Open" left the form and its typed plant behind (round sixty; the grower review, 3).
         const undo = { label: 'Undo', run: () => { void Promise.all(recs.map((r) => collection.remove('accession', r.id))).then(() => toast.show(wanted > 1 ? `Undone: the ${wanted} plants removed; their numbers stay reserved.` : `Undone: ${firstId} removed; its number stays reserved.`)); } };
         toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, undo);
-        name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
+        name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; collector = ''; collected = ''; clone = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
         setTimeout(() => document.querySelector<HTMLElement>('.picker input')?.focus(), 0);
         return;
       }
@@ -311,10 +361,19 @@
 
   <!-- The short form is the species, the place and the date: what every plant has. The rest is one tap away, and stays open once opened (round forty-nine, 3; U3). -->
   <details class="moredetails" bind:open={moreOpen}>
-  <summary class="faint">More: name as received, field number, provenance, source, price, last watered, how many, notes</summary>
+  <summary class="faint">More: name as received, field number, collector, provenance, source, price, last watered, how many, notes</summary>
   <div class="two">
     <label class="field"><span>Name as received <span class="faint">(if different)</span></span><input id="f-received" type="text" bind:value={nameAsReceived} placeholder="e.g. Copiapoa cinerea v. albispina" /></label>
     <label class="field"><span>Field number</span><input id="f-field" type="text" bind:value={fieldNumber} placeholder="e.g. KK 1462" /></label>
+  </div>
+  <!-- Who collected it and when, the holders before the source, and a clone's name (round eighty-seven, t1). The rest of ITF2's codes are on the plant's Edit. -->
+  <div class="two">
+    <label class="field"><span>Collector <span class="faint">(if known)</span></span><input id="f-collector" type="text" maxlength="200" bind:value={collector} placeholder="e.g. Brack, S." /></label>
+    <label class="field"><span>Collected</span><input id="f-collected" type="text" maxlength="10" bind:value={collected} oninput={() => (identMsg = '')} aria-invalid={!!identMsg} aria-describedby={identMsg ? 'f-collected-bad' : undefined} placeholder="2019-03-07, 2019-03 or 2019" />{#if identMsg}<span class="bad small" id="f-collected-bad">{identMsg}</span>{/if}</label>
+  </div>
+  <div class="two">
+    <label class="field"><span>Ex <span class="faint">(earlier holders)</span></span><input id="f-ex" type="text" maxlength="400" bind:value={exChain} placeholder="ex Devon, ex Mesa Garden" /></label>
+    <label class="field"><span>Clone</span><input id="f-clone" type="text" maxlength="80" bind:value={clone} placeholder="e.g. clone A" /></label>
   </div>
 
   <div class="two">
@@ -346,6 +405,13 @@
   </div>
 
   <label class="field"><span>Notes</span><textarea id="f-notes" rows="3" bind:value={notes}></textarea></label>
+  </details>
+
+  <details class="ownmother" bind:open={motherOpen}>
+    <summary class="faint">Taken from one of my plants</summary>
+    <!-- An offset, a cutting, a division, a leaf or a bulbil of a plant here: the two pages link each other (round eighty-seven, F4). -->
+    <div class="ownrow mother"><PlantChoice bind:value={motherAcc} id="f-mother" label="Taken from" none="Not from one of my plants" describedby="f-mother-hint" /><label class="ownno"><span class="eyebrow">As</span><select id="f-mother-how" bind:value={motherHow} disabled={!motherAcc}>{#each MOTHER_HOW as k}<option value={k}>{MOTHER_HOW_LABEL[k]}</option>{/each}</select></label></div>
+    <p class="faint small" id="f-mother-hint">Kept as a link to that plant, which its page lists among its offspring. Several taken at once and grown on together are a batch: start one from that plant's page, Propagate.</p>
   </details>
 
   <details class="own">
@@ -391,11 +457,16 @@
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
   .actions.sticky.loose { position: static; }
   .own { margin-top: 8px; }
-  .own summary { cursor: pointer; font-size: var(--fs-md); }
+  .own summary, .ownmother summary { cursor: pointer; font-size: var(--fs-md); }
+  .ownmother { margin-top: 8px; }
   .ownrow { display: flex; align-items: flex-end; gap: 8px 14px; margin-top: 8px; flex-wrap: wrap; }
   /* The box and its words, and the number with its small name over it (round fifty-eight; the accessibility review). */
   .ownchk { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); font-size: var(--fs-md); }
   .ownno { display: grid; gap: 3px; flex: 1 1 200px; }
+  .ownrow.mother > :global(.pc) { flex: 2 1 240px; }
+  .ownrow select { width: 100%; font: inherit; font-size: var(--fs-md); padding: 8px 11px; min-height: var(--tap); border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .ownrow input[type='text'] { width: 100%; font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
 </style>

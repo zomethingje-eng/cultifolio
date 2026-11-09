@@ -1,0 +1,11 @@
+# Round eighty-seven, stage 1 (the review of the pipeline's changes; the data fix): before this round's Worker is deployed,
+# the index written again by this round's code, so the corpus holds the browse pages' table (browse.json) and the front
+# page's count of it (browse-counts.json), each a product the manifest names; then the upload, which first asks the builder
+# whether the index on disk is the one the dossiers and the code on disk would write (--index-ready, every product the
+# manifest names read whole, the two new files among them), copies the corpus with them and checks the bucket holds it,
+# the manifest last; then the live check. No dossier is derived again here: the walk is stage 2's.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r87s1.txt
+dossier --index
+review Read the last lines of the --index step: "index: N species", then "browse.json written with N species, browse-counts.json written (grown by someone: M species)", N the same in both. If the index was not written again, the second line reads "browse.json as written <day> UTC with N species, …" instead. If either file says NOT written, or the two Ns differ, stop and paste the end of corpus-step.log back.
+upload
+live-check

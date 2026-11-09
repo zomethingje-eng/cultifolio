@@ -99,6 +99,25 @@ export function dropsBetween(prev: Dossierish, next: Dossierish, held?: HeldName
   return out;
 }
 
+/** A page this build lost something on, held with the build before until the page is written whole (round eighty-seven). */
+export interface PendingDrop { key: PageId; gbif?: number; name: string; prev: Dossierish; lines: string[] }
+
+/**
+ * The losses read again on each page as written (round eighty-seven; the --keys stop of 8 November): a build compared the
+ * page it derived with the build before, but Kew's names are read for the pages built only after every page is derived
+ * (`--fill kew-names`, then the ids by the rule), and they give a renamed page back what GBIF's name did not: Delphinium ×
+ * barlowii [k2759463] was said to have lost its IPNI identifier, while its written page holds 710426-1. `written` gives the
+ * page as it is on disk now (null where it cannot be read: the build's own lines stand).
+ */
+export function dropsAsWritten(pending: readonly PendingDrop[], written: (p: PendingDrop) => Dossierish | null, held?: HeldNames | null): string[] {
+  const out: string[] = [];
+  for (const p of pending) {
+    const w = written(p);
+    for (const why of w ? dropsBetween(p.prev, w, held) : p.lines) out.push(`${w?.name?.scientific ?? p.name} [${w?.key ?? p.key}]: ${why}`);
+  }
+  return out;
+}
+
 type IndexRow = { key: number; name: string; photos?: number; climate?: string; origin?: string[] };
 /** The same rule over two indexes (photographs, climate and native range per entry, by key): what `audit-common-names --before` fails on. */
 export function indexDrops(before: IndexRow[], after: IndexRow[]): string[] {

@@ -248,12 +248,12 @@ test('the species page reads in reference order: the facts and the figures, then
   await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
 });
 
-test('a visitor sees all five places in the top bar, the menu and, since round sixty-three, the phone\'s tab bar (round sixty; the visitor review; round sixty-three, V1)', async ({ page }) => {
+test('a visitor sees the same places in the top bar and the phone\'s tab bar, and the rest in the menu (round sixty; the visitor review; round sixty-three, V1; the owner\'s four of round eighty-seven)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  await expect(page.locator('.topseg a')).toHaveText(['Reference', 'My plants', 'Today', 'About']);
   // On a phone a visitor's tabs are the grower's five: an empty Today, My spaces or Propagation offers the example collection (round sixty-three, V1 and V2; a button since round seventy-four).
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveText([/^\s*Reference$/, /^\s*My plants$/, /^\s*Today$/, /^\s*More menu$/]);
   await page.setViewportSize({ width: 1280, height: 800 });
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
@@ -269,12 +269,12 @@ test('a visitor sees all five places in the top bar, the menu and, since round s
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  await expect(page.locator('.topseg a')).toHaveText(['Reference', 'My plants', 'Today', 'About']);
   // a grower's five, from the first plant, and on the next page load too (the hint is read before the first render)
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveText([/^\s*Reference$/, /^\s*My plants$/, /^\s*Today$/, /^\s*More menu$/]);
   await page.goto('/');
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'My spaces', 'Propagation', 'Today']);
+  await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveText([/^\s*Reference$/, /^\s*My plants$/, /^\s*Today$/, /^\s*More menu$/]);
 });
 
 test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL, browserName }) => {
@@ -392,13 +392,13 @@ test('keyboard: the menu keeps Tab inside and Escape returns focus; Enter in the
   await page.goto('/');
   const menu = page.getByRole('button', { name: 'Menu' });
   await expect.poll(async () => { await menu.focus(); await page.keyboard.press('Enter'); return menu.getAttribute('aria-expanded'); }).toBe('true'); // before hydration the key does nothing
-  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Species');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Reference'); // "Reference" since round eighty-seven
   await page.keyboard.press('Shift+Tab');
   await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Source');
   await page.keyboard.press('Tab');
-  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Species');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Reference'); // "Reference" since round eighty-seven
   await page.keyboard.press('Escape');
-  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Menu');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-controls'))).toBe('menu'); // the menu's button ("More" since round eighty-seven)
   // the search: Enter opens the first match
   await page.fill('.searchbar', 'copiapoa hum');
   await expect(page.locator('.hitrow').first()).toBeVisible();
@@ -804,7 +804,7 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   // count 6, then the started count cannot go below it
   await page.fill('#g-n', '6');
   await page.getByRole('button', { name: 'Record count' }).click();
-  await expect(page.getByText('60%')).toBeVisible();
+  await expect(page.locator('.cards').getByText('60%')).toBeVisible(); // the card's: the checkpoints table says it too (round eighty-seven, F5)
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#se-count', '4');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -970,11 +970,11 @@ test('round twenty-nine: a potting is judged by what was in the pot on its day, 
   await page.fill('#g-date', day(20));
   await page.fill('#g-n', '1');
   await page.getByRole('button', { name: 'Record count' }).click();
-  await expect(page.getByText('10%')).toBeVisible();
+  await expect(page.locator('.cards').getByText('10%')).toBeVisible(); // the card's: the checkpoints table says it too (round eighty-seven, F5)
   await page.fill('#g-date', day(5));
   await page.fill('#g-n', '8');
   await page.getByRole('button', { name: 'Record count' }).click();
-  await expect(page.getByText('80%')).toBeVisible();
+  await expect(page.locator('.cards').getByText('80%')).toBeVisible(); // the card's: the checkpoints table says it too (round eighty-seven, F5)
   // potting 2 dated day −10: only 1 was up then (round twenty-nine, 5)
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.fill('#p-n', '2');
@@ -1154,7 +1154,8 @@ test('round forty-two: the species photograph is preloaded from the head, one si
   await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /photos\/1000\/medium\.jpg$/);
   await expect(page.locator('head link[rel="preload"][as="image"][media="(min-width: 641px)"]')).toHaveAttribute('imagesrcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
   await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://inaturalist-open-data.s3.amazonaws.com');
-  const box = await page.locator('.hero.photo').boundingBox();
+  // The photograph's own box (round eighty-seven: its credit is a caption under it, in the same block).
+  const box = await page.locator('.hero.photo > a:first-child').boundingBox();
   expect(box?.height).toBe(150);
   // the phone's source is the medium file alone; the wide screen's img chooses between medium and large for a 480 px box
   await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/1000\/medium\.jpg$/);
@@ -1163,9 +1164,11 @@ test('round forty-two: the species photograph is preloaded from the head, one si
   await expect(page.locator('.hero.photo img')).toHaveAttribute('sizes', '480px');
 });
 
-test('round forty-two: the home page preloads the first featured tile and preconnects to its host (1)', async ({ page }) => {
+// Round eighty-seven's review fix (S6): the first screen's largest photograph is the lead's now, and the strip starts past
+// a desktop's first screen, so the lead's is the one preloaded; the strip's first tile was, at its small size.
+test('round forty-two: the home page preloads its first screen\'s photograph (the lead\'s, since round eighty-seven) and preconnects to its host (1)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', /\/small\.jpe?g$/);
+  await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', (await page.locator('section.lead .leadph img').getAttribute('src'))!);
   await expect(page.locator('head link[rel="preconnect"]').first()).toHaveAttribute('href', /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|api\.gbif\.org)$/);
 });
 
@@ -1189,7 +1192,9 @@ test('round forty-eight: on a phone the search row stays pinned through the list
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
   await page.evaluate((y) => window.scrollTo(0, y), Math.max(500, h - 900));
   // pinned under the top bar, not scrolled away with the chips and the letters; polled, not after a fixed 200 ms (round sixty; the harness review, 14)
-  await expect.poll(async () => Math.round((await page.locator('.stickyhead .toolrow').boundingBox())!.y)).toBe(44);
+  // Under the top bar, whatever its height (44 px until round eighty-seven, 52 on a phone since).
+  const barH = Math.round((await page.locator('#topbar').boundingBox())!.height);
+  await expect.poll(async () => Math.round((await page.locator('.stickyhead .toolrow').boundingBox())!.y)).toBe(barH);
   await expect(page.locator('.azbtn')).toBeVisible();
   await page.locator('.azbtn').click();
   await expect.poll(async () => { const y = (await page.locator('.letters').boundingBox())?.y ?? -1; return y > 44 && y < 400; }).toBe(true);
@@ -1329,17 +1334,20 @@ async function firstScreen(page: import('@playwright/test').Page) {
 
 test('round fifty: on a phone the first screen of the catalogue, My plants and a place shows records, not only controls (1, 4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  // a visitor: the search, the sampler of photographs and the first catalogue row, all on one screen
+  // a visitor: the lead's figure and the top bar's search on one screen (round eighty-seven, plan D1); the sampler of
+  // photographs, the catalogue's box and its first row follow, in that order
   await page.goto('/');
   let fs = await firstScreen(page);
+  const leadH = await page.locator('section.lead h1').boundingBox();
+  expect(leadH!.y + leadH!.height).toBeLessThan(fs.bottom);
+  expect((await page.locator('#topbar .searchicon').boundingBox())!.y).toBeLessThan(fs.bottom);
   const firstRow = await page.locator('.rows .grow').first().boundingBox();
-  expect(firstRow!.y + 24).toBeLessThan(fs.bottom); // the first genus row begins above the tab bar
   const strip = await page.locator('section.featured .strip').boundingBox();
   const search = await page.locator('.toolrow .searchbar').boundingBox();
   // Above the one toolbar, as round sixty had it (visitor 16) and a desktop always has: round sixty-three (V4) drew a phone's
   // strip after the first rows, and on the owner's iPhone it read as plants dropped into the list (round seventy-six).
   expect(strip!.y + strip!.height).toBeLessThanOrEqual(search!.y);
-  expect(search!.y + search!.height).toBeLessThan(fs.bottom); // and the search is on the first screen
+  expect(firstRow!.y).toBeGreaterThan(search!.y + search!.height); // and the first row after the search
   expect(strip!.height).toBeLessThan(200);
   // the lead tile is double width; the rest are 112px
   const tiles = page.locator('section.featured .strip .ftile');
@@ -1604,7 +1612,7 @@ test('round fifty-four: the selected segment of "Your species / All" stays reada
   await on.hover();
   const [color, bg] = await on.evaluate((el) => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; });
   expect(color).not.toBe(bg);
-  expect(color).toBe(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()).then((v) => v.startsWith('#') ? `rgb(${parseInt(v.slice(1, 3), 16)}, ${parseInt(v.slice(3, 5), 16)}, ${parseInt(v.slice(5, 7), 16)})` : v));
+  expect(color).toBe(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()).then((v) => (v.length === 4 ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v)).then((v) => v.startsWith('#') ? `rgb(${parseInt(v.slice(1, 3), 16)}, ${parseInt(v.slice(3, 5), 16)}, ${parseInt(v.slice(5, 7), 16)})` : v)); // #ffffff is sent as #fff by the build's minifier (round eighty-seven)
 });
 
 test('round fifty-four: a Today page left open overnight dates the morning\'s watering today; a site set in Settings is watched without a reload; a watering dated ahead has its own row (4)', async ({ browser }) => {

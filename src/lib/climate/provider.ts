@@ -16,6 +16,7 @@ const ADMISSIONS: ReadonlyArray<Admission> = ['strict', 'buffer', 'coast', 'isla
 import type { GridSource } from './source';
 import { decodeCell, cellOf, cellCentre, type ClimateVar } from './grid';
 import { fetchPowerSeries, extremesFor, powerCell, type PowerSeries } from './power';
+import { yearLows } from './year-lows';
 import { quantile } from '$core/extremes';
 import { r1 } from '$core/num';
 
@@ -138,7 +139,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
           : ', no lapse correction (POWER gave no cell elevation)';
     src.extremes = `NASA POWER (MERRA-2) daily 1981–2024, cell ${ps.cell}${lapse}`;
     // The frost figure is kept as the count and the exact rate: rounding the rate to a decimal turned one night in forty years into none.
-    return { extremes: { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: +e.extremes.frostDaysPerYear.toFixed(3), frostNights: e.extremes.frostNights, lapseAppliedM: e.deltaM }, status: 'ok' };
+    // Each year's lowest night too (round eighty-seven; `year-lows.ts`), by the same correction: the habitat's hardiness
+    // zone is the mean of these (`$dossier/hardiness`), which the record low alone cannot give.
+    const lows = yearLows(ps.series, e.deltaM);
+    return { extremes: { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: +e.extremes.frostDaysPerYear.toFixed(3), frostNights: e.extremes.frostNights, lapseAppliedM: e.deltaM, ...(lows ? { lows } : {}) }, status: 'ok' };
 
   }
 
@@ -229,26 +233,11 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       // The typical cell: the one whose coldest month's mean night is nearest the median of that across cells. Monthly means are
       // what the grid holds; the coldest single night is a POWER figure, read there afterwards.
       const coldest = (y: Month[]) => Math.min(...y.map((m) => m.tmin));
-      const medCold = quantile(used.map((c) => coldest(c.months)).sort((a, b) => a - b), 0.5);
-      // The typical cell is the one nearest the median coldest night whose NASA POWER cell is mostly land: a POWER cell
-      // (0.5°) over a coast or an island is averaged with the sea, and its extremes are the sea's, not the plant's
-      // (round thirty-one, 2). The candidates are tried nearest first, up to twelve and only while their coldest night
-      // is within 2 °C of the median (a fog-belt coast must not hand its cold floor to a mountain cell a few places down
-      // the list: round thirty-three, 7); when none is mostly land the nearest stands and its fraction is written, so the
-      // page can say it.
-      const byNearness = [...used].sort((a, b) => Math.abs(coldest(a.months) - medCold) - Math.abs(coldest(b.months) - medCold));
-      const nearest = byNearness[0];
-      let typical = nearest;
-      const nearestLand = await landFractionAround(nearest.lat, nearest.lon);
-      let landFraction = nearestLand;
-      let tried = 0;
-      for (const c of byNearness.slice(1, 12)) {
-        if (landFraction >= 0.5 || Math.abs(coldest(c.months) - medCold) > 2) break;
-        tried++;
-        const f = await landFractionAround(c.lat, c.lon);
-        if (f >= 0.5) { typical = c; landFraction = f; }
-      }
-      if (landFraction < 0.5) { typical = nearest; landFraction = nearestLand; }
+      // Round eighty-seven's review of stage 2 (S4): the stage's rule that chose the typical cell among the cells holding an
+      // iNaturalist research-grade record (review D's D2, the Poor Knights lily) is taken out. Research grade is "not
+      // marked captive", not "marked wild", so it chose by what no source states; the typical cell is every cell's again,
+      // and D2 (Xeronema callistemon) stays held open in the record.
+      const { typical, landFraction, tried } = await typicalOf(used, coldest, landFractionAround);
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
         envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding ${records} of the ${points.length} in-range records${drawnN ? ` (${drawnN} of them ${drawnN === 1 ? 'a cell' : 'cells'} the elevation layer reads as sea, read for the native region's land the regions' shapes draw in ${drawnN === 1 ? 'it' : 'them'}: an island narrower than the layer's 60″ pixels; no elevation there)` : ''}${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells poleward of 10° north, ${hemispheres.south} poleward of 10° south: the two sides' seasons are not combined, and cells within 10° of the equator stay in)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean nightly low nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land and none of the ${tried} next candidates within 2 °C of the median was mostly land` : ''}); its position is the cell centre`,
@@ -282,3 +271,31 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
 }
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
+
+/**
+ * The typical cell of a set of cells (round thirty-one, thirty-three): the one nearest the median coldest-month night whose
+ * NASA POWER cell is mostly land; the candidates are tried nearest first, up to twelve and only while their coldest night
+ * is within 2 °C of the median, and when none is mostly land the nearest stands. Out of `envelope` since round
+ * eighty-seven.
+ */
+async function typicalOf<C extends { id: string; lat: number; lon: number; months: Array<{ tmin: number }> }>(cells: C[], coldest: (y: C['months']) => number, landFractionAround: (lat: number, lon: number) => Promise<number>): Promise<{ typical: C; landFraction: number; tried: number }> {
+  const medCold = quantile(cells.map((c) => coldest(c.months)).sort((a, b) => a - b), 0.5);
+  // The typical cell is the one nearest the median coldest night whose NASA POWER cell is mostly land: a POWER cell
+  // (0.5°) over a coast or an island is averaged with the sea, and its extremes are the sea's, not the plant's
+  // (round thirty-one, 2). A fog-belt coast must not hand its cold floor to a mountain cell a few places down the list
+  // (round thirty-three, 7); when none is mostly land the nearest stands and its fraction is written, so the page can say it.
+  const byNearness = [...cells].sort((a, b) => Math.abs(coldest(a.months) - medCold) - Math.abs(coldest(b.months) - medCold));
+  const nearest = byNearness[0];
+  let typical = nearest;
+  const nearestLand = await landFractionAround(nearest.lat, nearest.lon);
+  let landFraction = nearestLand;
+  let tried = 0;
+  for (const c of byNearness.slice(1, 12)) {
+    if (landFraction >= 0.5 || Math.abs(coldest(c.months) - medCold) > 2) break;
+    tried++;
+    const f = await landFractionAround(c.lat, c.lon);
+    if (f >= 0.5) { typical = c; landFraction = f; }
+  }
+  if (landFraction < 0.5) { typical = nearest; landFraction = nearestLand; }
+  return { typical, landFraction, tried };
+}

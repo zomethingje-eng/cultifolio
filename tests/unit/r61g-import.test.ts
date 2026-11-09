@@ -67,7 +67,7 @@ describe('columns (the grower review, 3)', () => {
   });
   it('lists the columns no field takes, puts them in the notes by default, and leaves the backup\'s own links out', () => {
     const s = parseCsv(text);
-    expect(unmappedColumns(s, guessMapping(s, true), true)).toEqual({ extra: [{ i: 3, name: 'Locality' }], own: ['sowing', 'id'] });
+    expect(unmappedColumns(s, guessMapping(s, true), true)).toEqual({ extra: [{ i: 3, name: 'Locality' }], own: ['sowing', 'id'], restated: [] });
     expect(sheetOf(text).rows[0].notes).toBe('big one\nLocality: Totoral, Chile');
     expect(sheetOf(text, { extra: [] }).rows[0].notes).toBe('big one');
   });

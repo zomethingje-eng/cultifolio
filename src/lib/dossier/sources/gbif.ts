@@ -21,10 +21,19 @@ export interface GbifMatch {
   synonym?: boolean;
 }
 
+/**
+ * GBIF's match of a name in the backbone (v1). Round eighty-seven (docs/COLXR-87.md): the address is unchanged, and must
+ * stay the one `matchUrl` (batch.ts) holds answers under. Version 1 of the match is the backbone's alone: asked on
+ * 2026-11-08 with COL XR's checklistKey, it answered the backbone's keys as without it (Mammillaria grahamii, 5384013);
+ * version 2 (`/v2/species/match`) is the one that takes a checklistKey. A key that is not a whole number would be another
+ * taxonomy's, and is not read (`isBackboneKey`).
+ */
 export async function matchName(f: JsonFetcher, name: string): Promise<FetchResult<GbifMatch>> {
   const r = await f<GbifMatch & { matchType?: string }>(`${GBIF}/species/match?strict=false&name=${encodeURIComponent(name)}`);
   if (r.status !== 'ok') return r;
   if (!r.data.usageKey || r.data.matchType === 'NONE') return { status: 'none' };
+  const other = [r.data.usageKey, r.data.acceptedUsageKey].find((k) => k != null && !isBackboneKey(k));
+  if (other != null) return { status: 'error', detail: `api.gbif.org's backbone match answered a key that is not the GBIF Backbone's ("${other}"): not read` };
   return r;
 }
 
@@ -354,6 +363,57 @@ export const WCVP_ONLY = /-4$/;
 
 /** GBIF's backbone, whose usages of a name `usages` reads. */
 export const BACKBONE = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
+
+/**
+ * Round eighty-seven (docs/COLXR-87.md): GBIF's own taxonomy is now the Catalogue of Life eXtended Release (`COL_XR`), and
+ * the GBIF Backbone is frozen at its build of 2023-08-28: it "will not be updated again" (GBIF's data blog, 2026-06-23,
+ * https://data-blog.gbif.org/post/catalogue-of-life-taxonomic-backbone/). GBIF's occurrence search still answers by the
+ * backbone when an address names no taxonomy ("If this parameter is not provided, the API defaults to the GBIF backbone
+ * taxonomy": https://techdocs.gbif.org/en/data-processing/taxonomy-interpretation, read 2026-11-08), but GBIF names no day
+ * it will keep that default, and its own clients have changed theirs (rgbif 3.9.0, on CRAN 2026-10-05). So every
+ * occurrence search the build asks names the backbone (`ON_BACKBONE`), and the keys it asks by and reads back stay the
+ * backbone's whatever GBIF's default becomes. Asked so on 2026-11-08, the search gave the same records and the same keys
+ * as with no checklistKey (Mammillaria grahamii, 5384013: 210 records either way). The parameter goes last in the address:
+ * the bulk path's and the offline fetcher's patterns read an address from its start (`RE_OCC`, `RE_MEDIA` in bulk.ts;
+ * rederive.ts), and an answer recorded for a test is found by its address's start.
+ */
+export const COL_XR = '7ddf754f-d193-4cc9-b351-99906754a03b';
+/** The day of the backbone's last build (hosted-datasets.gbif.org/datasets/backbone/2023-08-28/, which current/ is). */
+export const BACKBONE_BUILT = '2023-08-28';
+/** What an occurrence search address ends with: the backbone named as its taxonomy. */
+export const ON_BACKBONE = `&checklistKey=${BACKBONE}`;
+
+/** A taxon key of the backbone: a whole number. COL XR's keys are letters and digits ("5ZHP3"). */
+export const isBackboneKey = (k: unknown): boolean => (typeof k === 'number' ? Number.isSafeInteger(k) && k > 0 : typeof k === 'string' && /^[1-9][0-9]{0,9}$/.test(k));
+
+/**
+ * The first taxon key in GBIF's records that is not the backbone's (`taxonKey`, `speciesKey`, `acceptedTaxonKey`), as GBIF
+ * wrote it, or undefined. A key that is absent is not read here; a key of another taxonomy is never read as a backbone key
+ * (rule 3): the records would be filed under no page, or another's.
+ */
+export function otherTaxonomyKey(records: ReadonlyArray<unknown> | undefined): string | undefined {
+  for (const o of records ?? []) {
+    if (!o || typeof o !== 'object') continue;
+    for (const f of ['taxonKey', 'speciesKey', 'acceptedTaxonKey'] as const) {
+      const k = (o as Record<string, unknown>)[f];
+      if (k != null && !isBackboneKey(k)) return String(k);
+    }
+  }
+  return undefined;
+}
+
+/** The record's words for an answer keyed by another taxonomy: said as GBIF not answering the question asked (rule 2), never as none. */
+export const otherTaxonomyWords = (k: string) => `api.gbif.org answered with a taxon key that is not the GBIF Backbone's ("${k}") to a search that named the backbone (checklistKey ${BACKBONE}): not read`;
+
+/** The line a build prints of the taxonomy its GBIF occurrence searches named (rule 6), from `gbifTaxonomyAsked`; null when it asked none. */
+export function taxonomyLine(asked: ReadonlyMap<string, number>): string | null {
+  const n = [...asked.values()].reduce((a, b) => a + b, 0);
+  if (!n) return null;
+  const on = asked.get(BACKBONE) ?? 0, none = asked.get('') ?? 0, other = n - on - none;
+  const backbone = `the GBIF Backbone (checklistKey ${BACKBONE}, its build of ${BACKBONE_BUILT})`;
+  if (on === n) return `GBIF's taxonomy: ${n} occurrence searches, all on ${backbone}`;
+  return `GBIF's taxonomy: ${n} occurrence searches, ${on} on ${backbone}${none ? `, ${none} naming no taxonomy (GBIF's default)` : ''}${other ? `, ${other} naming another (${[...asked.keys()].filter((k) => k && k !== BACKBONE).join(', ')})` : ''}`;
+}
 /** A usage of a name in GBIF's backbone: one name by one author, accepted, a synonym of another, or doubtful. */
 export type Usage = { key: number; scientificName: string; authorship?: string; taxonomicStatus?: string; acceptedKey?: number; accepted?: string; rank?: string };
 /** Every usage of a binomial in GBIF's backbone at species rank, by its words (one request); homonyms are several. */
@@ -437,17 +497,23 @@ export async function occurrences(f: JsonFetcher, key: number, pages = 3, region
   // regions' boxes (the largest first) gives its own first 300, so no region is read only where GBIF's order puts it. GBIF's
   // search has no spatial order of its own; the download (`OccIndex`) takes every distinct cell first.
   const boxes = [...regions].filter((b) => b.w <= b.e).sort((a, b) => (b.n - b.s) * (b.e - b.w) - (a.n - a.s) * (a.e - a.w)).slice(0, MAX_REGION_PAGES);
+  // Round eighty-seven: each address names the backbone (`ON_BACKBONE`), last; an answer keyed by another taxonomy is not read.
+  const foreign = (n: number, k: string) => ({ status: 'error' as const, detail: `${otherTaxonomyWords(k)}${n ? ` (after ${n} records: partial, not used)` : ''}` });
   for (let p = 0; p < pages; p++) {
-    const r = await f<OccPage>(`${base}&offset=${p * 300}`);
+    const r = await f<OccPage>(`${base}&offset=${p * 300}${ON_BACKBONE}`);
     if (r.status === 'refused' || r.status === 'error' || r.status === 'skipped') return { status: r.status, detail: `${r.detail}${out.length ? ` (after ${out.length} records: partial, not used)` : ''}` };
     if (r.status !== 'ok') break;
+    const k = otherTaxonomyKey(r.data.results);
+    if (k) return foreign(out.length, k);
     out.push(...r.data.results);
     if (r.data.endOfRecords) break;
     if (p === 0 && boxes.length && r.data.count > pages * 300) {
       const seen = new Set(out.map((o) => o.key));
       for (const b of boxes) {
-        const q = await f<OccPage>(`${base}&offset=0&decimalLatitude=${b.s},${b.n}&decimalLongitude=${b.w},${b.e}`);
+        const q = await f<OccPage>(`${base}&offset=0&decimalLatitude=${b.s},${b.n}&decimalLongitude=${b.w},${b.e}${ON_BACKBONE}`);
         if (q.status === 'refused' || q.status === 'error' || q.status === 'skipped') return { status: q.status, detail: `${q.detail} (after ${out.length} records: partial, not used)` };
+        const qk = q.status === 'ok' ? otherTaxonomyKey(q.data.results) : undefined;
+        if (qk) return foreign(out.length, qk);
         if (q.status === 'ok') for (const o of q.data.results) if (!seen.has(o.key)) { seen.add(o.key); out.push(o); }
       }
       break;
@@ -487,8 +553,11 @@ export async function media(f: JsonFetcher, key: number): Promise<(FetchResult<O
   // Each photograph's own licence is still read below: a record's licence is not its photograph's, and a photograph that
   // states none is not published under its record's (round sixty-nine; triage-68 M1, S-B6: an ALA sighting's photograph
   // went out as "Michael Sim, CC BY, via GBIF" on the record's licence). The download path reads the same way (bulk.ts).
-  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&limit=100`);
+  // The backbone named, last (round eighty-seven; `ON_BACKBONE`): a record's taxonKey is read against the page's keys.
+  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&limit=100${ON_BACKBONE}`);
   if (r.status !== 'ok') return r;
+  const foreign = otherTaxonomyKey(r.data.results);
+  if (foreign) return { status: 'error', detail: otherTaxonomyWords(foreign) };
   const file = r.data.downloadDay || r.data.downloadDoi ? { detail: mediaFileWords(r.data.downloadDoi, r.data.downloadDay), ...(r.data.downloadDay ? { asOf: r.data.downloadDay } : {}) } : {};
   const out: OccMedia[] = [];
   for (const o of r.data.results) {

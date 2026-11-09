@@ -28,6 +28,7 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { entriesFor, sheetForNameOr, gbifNamedOr, isUnreached, searchCatalogue, type Unreached } from '$lib/ui/index.svelte';
+  import { kindToSay, olderLead, recordedKind } from '$lib/ui/ref/older-kind';
   import { unreachedClause } from '$lib/ui/reach-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
@@ -52,6 +53,18 @@
   import type { Accession } from '$lib/db/types';
   import PhotoTimeline from '$lib/ui/grow/PhotoTimeline.svelte'; // round sixty, agent F: the photo strip; by its own path, not the barrel (round sixty-one; a11y 3)
   import ForeignLabel from '$lib/ui/grow/ForeignLabel.svelte'; // a stranger's label
+  // Round eighty-seven (t1): items, deaccession, ITF2 provenance, field numbers and identification ($core/identity).
+  import { identityOf, bcssHref, idqlOf, exChainText, readExChain, readPartialDate, withEarlierName, itf2Problem, DEACC_REASONS, DEACC_LABEL, PROV_TYPES, PROV_TYPE_LABEL, PROP_HISTORIES, PROP_HISTORY_LABEL, ID_LEVELS, ID_LEVEL_LABEL, QUALIFIER_MEANS, NOTE_MAX, type DeaccReason, type ProvType, type PropHistory } from '$core/identity';
+  // Round eighty-seven, F4: the plant's parents and offspring, the plant chosen as a cross's pollen parent or a graft's parts.
+  import Lineage from '$lib/ui/grow/Lineage.svelte';
+  import PlantRef from '$lib/ui/grow/PlantRef.svelte';
+  import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
+  import { MOTHER_HOW, MOTHER_HOW_LABEL } from '$lib/db/types';
+  import { linkId } from '$lib/db/lineage';
+  // Round eighty-seven (t3): the label's code, a plant's growing season and its papers.
+  import { labelFromHash, plantQrUrl, tagIs } from '$lib/ui/grow/qr';
+  import GrowingSeason from '$lib/ui/grow/GrowingSeason.svelte';
+  import Attachments from '$lib/ui/grow/Attachments.svelte';
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
@@ -62,7 +75,37 @@
    * Water would have gone to whichever loaded first (round sixty; the self-review's 2, the outside reviews' A13 and B1).
    */
   const choices = $derived(collection.ready ? (collection.withNumber('accession', param) as Accession[]) : []);
-  const a = $derived(choices.length === 1 ? choices[0] : undefined);
+  /**
+   * A scanned label's identity tag (`#i=…`, qr.ts): every code printed since round eighty-seven's stage 3 fixes carries it,
+   * a tape's too. The number names the plant holding it now, and a number can change hands (a renumbering, a restore, a
+   * plant traded in with another collection's label), so the page opens a plant from a code only when the tag is that
+   * plant's (review B1).
+   */
+  const scanTag = $derived(labelFromHash(page.url.hash).tag);
+  const tagged = $derived(scanTag && collection.ready ? collection.byTag(scanTag) : { live: [] as Accession[], removed: [] as Accession[] });
+  /** Plants a renumbering moved off this number, for an address with no tag (a code of round eighty-seven before the tag, a typed number). */
+  const movedAway = $derived(collection.ready && !scanTag && !choices.some((c) => c.id === param) ? collection.renumberedAway(param) : []);
+  const a = $derived.by((): Accession | undefined => {
+    if (scanTag) return choices.find((c) => tagIs(scanTag, c.id));
+    if (choices.length !== 1 || movedAway.length) return undefined;
+    return choices[0];
+  });
+  /**
+   * The address names a plant other than the one holding its number, or none this device holds: said, every candidate
+   * offered by its identity, none opened by itself (round eighty-seven, the stage 3 fixes; review B1). `moved`: the
+   * label's plant holds another number now (or, with no tag, a renumbering moved a plant off this number); `foreign`: no
+   * plant here has the label's tag, so it names a plant this collection does not hold under that identity.
+   */
+  const labelCase = $derived.by((): { kind: 'moved' | 'foreign'; printedFor: Accession[]; holders: Accession[] } | null => {
+    if (!collection.ready || a) return null;
+    if (scanTag) {
+      const printedFor = tagged.live.filter((x) => !choices.some((c) => c.id === x.id));
+      if (printedFor.length) return { kind: 'moved', printedFor, holders: choices };
+      if (tagged.removed.length) return null; // the removed plant's own sentence, with Restore
+      return { kind: 'foreign', printedFor: [], holders: choices };
+    }
+    return movedAway.length && choices.length <= 1 ? { kind: 'moved', printedFor: movedAway, holders: choices } : null;
+  });
   const id = $derived(a?.id ?? param);
   const events = $derived(collection.events(id));
   /* ---- photos ---- */
@@ -110,6 +153,17 @@
   /** The species a "cf." or "aff." plant is compared with: its link and its habitat comparison say so (round sixty-two; A21). */
   const compared = $derived(a ? comparedSpecies(a.taxonName) : null);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
+  /** The plant's identity and provenance fields, each read and checked ($core/identity; round eighty-seven, t1). */
+  const ident = $derived(a ? identityOf(a as unknown as Record<string, unknown>) : null);
+  /** Its earlier names, with those its rename lines record and its history does not (a rename on round eighty-six; review M2). */
+  const earlier = $derived(a ? collection.earlierNames(a.id).list : []);
+  /** The plant that holds the accession's bare number, and the accession's live plants (F1). */
+  const holder = $derived(a ? collection.accessionHolder(a.id) : undefined);
+  const accPlants = $derived(a ? collection.accessionPlants(a.id) : []);
+  /** The name's qualifier ("cf.", "aff.", "nr.", "sp."), said with what it means and ITF2's code for it (F6). */
+  const qualifier = $derived(a ? parseName(a.taxonName).qualifier ?? null : null);
+  /** The cross its batch was sown from, said beside the name and never in its place (round eighty-seven, F4): seed parent first. */
+  const crossParents = $derived.by(() => { const ps = a ? collection.parentsOf(a) : []; const seed = ps.find((p) => p.role === 'seed'), pollen = ps.find((p) => p.role === 'pollen'); return seed && pollen ? { seed: seed.id, pollen: pollen.id } : null; });
   let dossier = $state<Sheet | null>(null);
   /** The species page's slug: the sheet's own (a homonym's is suffixed) when the sheet is here, else the name's (round eighteen, 6). */
   // A sheet filed under another name for a plant of its key carries its page's own address (`page`; round eighty-five).
@@ -137,7 +191,8 @@
     if (!a || refiling) return;
     refiling = true;
     try {
-      await collection.putWith('accession', a.id, { nameKind: 'cultivar', parentage: null }, [{ acc: a.id, d: localDate(), t: 'note', note: 'Now recorded as a cultivar, species not stated', auto: true }]);
+      const fields = { nameKind: 'cultivar', parentage: null };
+      await collection.putWith('accession', a.id, fields, [{ acc: a.id, d: localDate(), t: 'note', note: 'Now recorded as a cultivar, species not stated', auto: true }], collection.sharedWith(a.id, fields)); // every plant of the accession (round eighty-seven, t1)
       toast.show('Now a cultivar, species not stated; the log says so.');
     } catch { /* refused: the notice above says why */ } finally { refiling = false; }
   }
@@ -182,7 +237,9 @@
     refiling = true;
     try {
       const why = foundBy?.how === 'gbif' || (!foundBy && olderLook?.state === 'older' && olderLook.gbif) ? "the reference's name; the old one is GBIF's name for its key" : foundBy?.how === 'merged' ? "the reference's name; the old one's page was merged into it" : foundBy?.how === 'filed' || (!foundBy && olderLook?.state === 'older' && olderLook.filed) ? "the reference's name; the reference files the old one under it" : "the reference's name; the old one is an older name of it";
-      await collection.putWith('accession', a.id, { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull, ...(a.olderOf ? { olderOf: null } : {}) }, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (${why})`, auto: true }]);
+      // The name it had goes into its identification history, and the rename to every plant of the accession (round eighty-seven, t1).
+      const fields = { taxonName, taxonKey: sub ? null : key, nameAsReceived: a.nameAsReceived ?? oldFull, idHistory: withEarlierName(collection.earlierNames(a.id).list, a, localDate()), ...(a.olderOf ? { olderOf: null } : {}), ...(a.olderKind != null ? { olderKind: null } : {}), ...(a.olderKindOf != null ? { olderKindOf: null } : {}) };
+      await collection.putWith('accession', a.id, fields, [{ acc: a.id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull} (${why})`, auto: true }], collection.sharedWith(a.id, fields));
       olderLook = null;
       toast.show(`Now filed under ${taxonName}; the old name is kept as received.`);
     } catch { /* refused: the notice above says why */ } finally { refiling = false; }
@@ -215,6 +272,7 @@
     const seq = ++asked;
     dossier = null; ref = 'loading'; foundBy = null;
     const olderOf = a.olderOf ?? null;
+    const recorded = recordedKind(a); // only where recorded for this `olderOf` (round eighty-seven, M1)
     (async () => {
       // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name. The key
       // the reference gives is kept here, not written: a page that opens does not write to the log (round fifty-eight;
@@ -234,9 +292,11 @@
           // eighty-six; review-w W1: the same name typed said "GBIF's name", imported said "An older name of").
           // A copy group not reached leaves the kind unknown: said as "Filed under", never as an older name it may not be
           // (round eighty-six, the final review: U3 on the plant's own page).
+          // Where the group is not reached, the kind the form or the import recorded when it filed the plant stands in
+          // (round eighty-seven, the deeper fix of U3: `olderKind`, read by `kindToSay`); with neither, "Filed under".
           const g = await gbifNamedOr(name);
           if (seq !== asked) return;
-          by = { how: isUnreached(g) ? 'filed' : g && g.slug === o.slug ? 'gbif' : 'older', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null };
+          by = { how: kindToSay(recorded, isUnreached(g) ? null : !!(g && g.slug === o.slug)) ?? 'filed', name: o.name.scientific, key: typeof o.gbif === 'number' ? o.gbif : null };
         }
       }
       foundBy = by;
@@ -321,6 +381,8 @@
     if (y.grow === 'even') return { label: `Rain ${home}, neither winter nor summer`, note: `the wet season sits at the year's mean temperature; ${same} (rain rule, CHELSA).` };
     return { label: `${y.grow === 'winter' ? 'Winter' : 'Summer'} rain ${home}`, note: `${same} (rain rule, CHELSA).` };
   });
+  /** Why no growing season is suggested, for the plant's growing-season line (round eighty-seven, t3): the reading's own reason, or why there is no reading. */
+  const seasonWhy = $derived(habitat?.year ? (habitat.year.frozen ? 'its habitat\'s wet season has nights below freezing, so its species page reads no growing season' : habitat.year.none ? 'its species page reads no season for its habitat' : habitat.year.flat ? 'its habitat\'s temperature curve is flat, so its species page reads no growing season' : habitat.year.grow === 'even' ? 'its habitat\'s rainy season is neither the cooler nor the warmer half of the year' : null) : kind === 'hybrid' ? 'a hybrid has no one habitat to read it from' : dossier && dossier.climate.status !== 'ok' ? 'its species page has no habitat climate to read it from' : ref === 'unreachable' ? 'the species reference was not reached, so no suggestion was read' : ref === 'none' ? 'no species page to read it from' : null);
   /* ---- move ---- */
   let moving = $state(false);
   let moveTo = $state<string | null>(null);
@@ -407,7 +469,7 @@
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');
   let logOpen = $state(false);
   /** The toast after a log line: "Watering recorded", not "Watered recorded" (round twenty-two, 21). */
-  const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
+  const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded', 'Set fruit': 'Fruit set recorded', 'Set seed': 'Seed set recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
   /** Water is one tap: a watering today, with an Undo for a few seconds; a watering with a date or a note goes through Log (round forty-nine, 3). */
   let wateringNow = $state(false);
   async function waterNow() {
@@ -459,9 +521,10 @@
   backLayer('record', () => logOpen, () => closeLog(undefined, 'back'));
   /** The kind and date of a draft Back kept, for the next "Record…". */
   let kept: { et: EventType; ed: string } | null = null;
-  const draftTyped = () => !!(enote.trim() || eused.trim() || ecause.trim() || emedium.trim() || numberOrNull(epot) != null || Object.values(measures).some((v) => numberOrNull(v) != null));
+  const draftTyped = () => !!(enote.trim() || eused.trim() || ecause.trim() || emedium.trim() || numberOrNull(epot) != null || Object.values(measures).some((v) => numberOrNull(v) != null) || epollen || escion || estock);
   function clearDraft() {
     enote = ''; eused = ''; ecause = ''; measures = {}; epot = ''; emedium = ''; evmsg = '';
+    epollen = null; escion = null; estock = null;
     kept = null;
   }
   // A draft is this plant's: the page is kept when another plant's page opens, and must not carry it there.
@@ -477,6 +540,10 @@
   // A repot's pot size and medium, both optional, beside its free-text note (round fifty-eight; the grower review).
   let epot = $state<string | number | null>('');
   let emedium = $state('');
+  /** A pollinate line's pollen parent, which makes it a cross; a graft line's scion and stock plants (round eighty-seven, F4). Each one of the grower's plants, or none. */
+  let epollen = $state<string | null>(null);
+  let escion = $state<string | null>(null);
+  let estock = $state<string | null>(null);
   let editingNotes = $state(false);
   let notesDraft = $state('');
   let notesBase = ''; // the text the editor opened on: a text that changed underneath it (another tab, a pull) is logged before it is written over (round twenty-four, 1)
@@ -496,14 +563,15 @@
   let edChecking = $state(false);
   let edArmed = $state(false);
   let edPicker = $state<{ check: () => Promise<boolean>; olderFirst: () => Promise<boolean>; olderAnswer: () => string | null } | null>(null);
-  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', waterDays: '', locationId: null as string | null });
+  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', waterDays: '', locationId: null as string | null, clone: '', exChain: '', collector: '', collected: '', provType: '', propHistory: '', idLevel: '', idBy: '', idOn: '', motherAcc: null as string | null, motherHow: 'offset' as string });
   function startEdit() {
     if (!a) return;
     edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
     edArmed = false;
-    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', waterDays: a.waterDays != null ? String(a.waterDays) : '', locationId: a.locationId ?? null };
+    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', waterDays: a.waterDays != null ? String(a.waterDays) : '', locationId: a.locationId ?? null, clone: a.clone ?? '', exChain: exChainText(ident?.exChain ?? []), collector: a.collector ?? '', collected: a.collected ?? '', provType: typeof a.provType === 'string' ? a.provType : '', propHistory: typeof a.propHistory === 'string' ? a.propHistory : '', idLevel: typeof a.idLevel === 'string' ? a.idLevel : '', idBy: a.idBy ?? '', idOn: a.idOn ?? '', motherAcc: linkId(a.motherAcc, a.id), motherHow: a.motherHow ?? 'offset' };
     fOpen = { ...f };
+    edIdentMsg = '';
     edWaterMsg = '';
     editing = true;
     void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
@@ -514,6 +582,8 @@
   const partialAcquired = $derived(a?.acquired && !/^\d{4}-\d{2}-\d{2}$/.test(a.acquired) && f.acquired === (a.acquired ?? '') ? a.acquired : null);
   let edDateMsg = $state('');
   let edWaterMsg = $state('');
+  /** Why the identity and provenance fields cannot be saved as typed (round eighty-seven, t1), said under them. */
+  let edIdentMsg = $state('');
   /** The rhythm this plant follows when it sets none: its place's, inherited down the tree, else 21 days (round fifty-eight; the grower review). */
   const inheritedRhythm = $derived(a ? collection.rhythm({ ...a, waterDays: null }) : 21);
   // The record's form asks only when a field differs from how it opened, as the notes and the species page's editor do: an
@@ -546,6 +616,16 @@
     const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
     edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its space.` : '';
     if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
+    // The collection and identification days, each a day, a month or a year, not after today; ITF2's codes as ITF2 allows
+    // them together and with the provenance word (round eighty-seven, t1; $core/identity's itf2Problem).
+    const collectedT = f.collected.trim(), idOnT = f.idOn.trim();
+    const collectedOut = collectedT ? readPartialDate(collectedT) : null, idOnOut = idOnT ? readPartialDate(idOnT) : null;
+    const dayWord = (t: string, d: string | null, what: string) => (!t ? '' : !d ? `${what} "${t}" is not a day, a month or a year (2019-03-07, 2019-03 or 2019).` : d > localDate().slice(0, d.length) ? `${what} ${d} is in the future.` : '');
+    const ptOut = (PROV_TYPES as readonly string[]).includes(f.provType) ? (f.provType as ProvType) : null, phOut = (PROP_HISTORIES as readonly string[]).includes(f.propHistory) ? (f.propHistory as PropHistory) : null;
+    const itfTouched = f.provType !== fOpen.provType || f.propHistory !== fOpen.propHistory || f.provenance !== fOpen.provenance;
+    edIdentMsg = (collectedT !== fOpen.collected ? dayWord(collectedT, collectedOut, 'Collected') : '') || (idOnT !== fOpen.idOn ? dayWord(idOnT, idOnOut, 'Identified on') : '') || (itfTouched ? (itf2Problem(f.provenance, ptOut, phOut) ?? '').replace(/^./, (c) => c.toUpperCase()) : '');
+    if (edIdentMsg && !/\.$/.test(edIdentMsg)) edIdentMsg += '.';
+    if (edIdentMsg) { document.getElementById('ed-prov')?.focus(); return; }
     // A name this edit typed, as the add form checks it (plants/new's `save`), before anything is made or written: a name
     // nothing resolved is kept on the Save after the picker's line has said so, and an older name of a page is asked
     // about once. A name left as it opened is not asked again, nor a cross, nor a name with "cf." or "aff.".
@@ -597,15 +677,25 @@
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
     // A page the add form found for the old name is not the new name's (round eighty-five; `olderOf`).
-    const all: Record<string, unknown> = { taxonName, taxonKey, ...(taxonName !== a.taxonName && olderNamed ? { olderOf: olderNamed } : taxonName !== a.taxonName && a.olderOf ? { olderOf: null } : {}), cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
+    const all: Record<string, unknown> = { taxonName, taxonKey, ...(taxonName !== a.taxonName && olderNamed ? { olderOf: olderNamed } : taxonName !== a.taxonName && a.olderOf ? { olderOf: null } : {}), ...(taxonName !== a.taxonName && a.olderKind != null ? { olderKind: null } : {}), ...(taxonName !== a.taxonName && a.olderKindOf != null ? { olderKindOf: null } : {}), cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null,
+      // Round eighty-seven (t1): identity and provenance. A code this version does not know, left as it opened, is not written.
+      clone: f.clone.trim().slice(0, 80) || null, exChain: readExChain(f.exChain).length ? readExChain(f.exChain) : null, collector: f.collector.trim() || null, collected: collectedOut, provType: f.provType || null, propHistory: f.propHistory || null, idLevel: f.idLevel || null, idBy: f.idBy.trim() || null, idOn: idOnOut,
+      // A change of name keeps the name it had, the day it stopped and how it had been identified (F6).
+      ...(oldFull !== newFull ? { idHistory: withEarlierName(collection.earlierNames(a.id).list, a, localDate()) } : {}),
+      // Round eighty-seven (t2): the plant it was taken from and how.
+      motherAcc: f.motherAcc ?? null, motherHow: f.motherAcc ? f.motherHow : null };
     // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place, and each other field on its own.
     const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
     const write = new Set<string>();
-    if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar', 'olderOf']) write.add(k);
+    if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar', 'olderOf', 'olderKind', 'olderKindOf']) write.add(k);
     if (touched.has('locationId')) write.add('locationId');
-    for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price', 'waterDays']) if (touched.has(k as keyof typeof f)) write.add(k);
+    for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price', 'waterDays', 'clone', 'exChain', 'collector', 'collected', 'provType', 'propHistory', 'idLevel', 'idBy', 'idOn']) if (touched.has(k as keyof typeof f)) write.add(k);
+    if ('idHistory' in all && write.has('taxonName')) write.add('idHistory');
+    // The plant it was taken from and how, written together: cleared together too (round eighty-seven, F4).
+    if (touched.has('motherAcc') || touched.has('motherHow')) { write.add('motherAcc'); write.add('motherHow'); }
     const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
-    await collection.putWith('accession', id, fields, lines, also);
+    // The name and provenance are the accession's: written to each of its plants in the same commit (round eighty-seven, t1).
+    await collection.putWith('accession', id, fields, lines, [...also, ...collection.sharedWith(id, fields)]);
     editing = false;
   }
 
@@ -623,18 +713,22 @@
     if (potN != null) m[POT.k] = toMm(potN); // the pot, in millimetres, beside the plant's own measures (round fifty-eight; the grower review)
     // The medium is words, so it goes in the note, ahead of whatever else was written (round fifty-eight; the grower review).
     const note = [et === 'repot' && emedium.trim() ? `Medium: ${emedium.trim()}` : '', enote.trim()].filter(Boolean).join('; ');
-    const ev = { acc: id, d: ed, t: et, note: note || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null };
+    // A pollinate line with a pollen parent is a cross, this plant the seed parent; a graft line names the plants its scion
+    // and stock came from. Only on their own kinds of line, and only when chosen: no other line carries the fields (round eighty-seven, F4).
+    const links = et === 'pollinate' && epollen ? { pollen: epollen } : et === 'graft' && (escion || estock) ? { ...(escion ? { scion: escion } : {}), ...(estock ? { stock: estock } : {}) } : {};
+    const ev = { acc: id, d: ed, t: et, note: note || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null, ...links };
     // A death is its line and the plant's status in one commit: closed between the two, the page left a dead plant marked growing (round forty-nine, 1).
     if (et === 'death') {
       // The death and the status in one commit, and one tap back: the toast's Undo removes the line and gives the plant
       // the status it had (round sixty; the grower review, 12: three steps to discover before).
       const was = a?.status ?? 'growing';
-      const line = await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
+      // A death is the plant's deaccession too, with the death's day (round eighty-seven, t1).
+      const line = await collection.addEventWith(ev, 'accession', id, { status: 'dead', deacc: 'died', deaccOn: ed });
       // One commit, as Archive's Undo is: the status back and the line removed together, and only while the plant is still
       // dead (round sixty-seven; triage-66 R7, the self-review's C6). A failure is said.
       deathUndo = { label: 'Undo', run: () => {
         if (collection.accession(id)?.status !== 'dead') { toast.show('Not undone: the plant has been changed since.'); return; }
-        void collection.putWith('accession', id, { status: was }, [], [{ kind: 'event', id: line.id, fields: { _deleted: true } }])
+        void collection.putWith('accession', id, { status: was, deacc: null, deaccOn: null }, [], [{ kind: 'event', id: line.id, fields: { _deleted: true } }])
           .then(() => toast.show(`Undone: ${was === 'archived' ? 'archived' : 'growing'} again, the death line removed.`), () => toast.show('The Undo was not saved: the plant is still marked dead.'));
       } };
     } else await collection.addEvent(ev);
@@ -644,16 +738,23 @@
     measures = {};
     epot = '';
     emedium = '';
+    epollen = null; escion = null; estock = null;
   }
   /** A log line removed is one tap from coming back: the record never left the log (round fifty-eight; the grower review). */
+  // A Pollinated line a batch names as its cross is the batch's seedlings' parents and batches.csv's cross: its × asks
+  // first, naming the batches (`crossNamedBy`), and the toast says what went with it (round eighty-seven, the stage 3
+  // fixes; review M4). The batch's page says the line was removed, with its way back.
+  const crossNamedBy = (eid: string) => collection.batchesOfCross(eid).map((s) => sowNo(s));
   async function removeEntry(eid: string) {
     confirmEvent = null;
+    const named = crossNamedBy(eid);
     await collection.remove('event', eid);
-    toast.show('Entry removed.', 8000, { label: 'Undo', run: () => { void collection.restore('event', eid).then(() => toast.show('Entry restored.')); } });
+    toast.show(named.length ? `Cross removed: ${named.join(', ')} no longer ${named.length === 1 ? 'names' : 'name'} its parents.` : 'Entry removed.', 8000, { label: 'Undo', run: () => { void collection.restore('event', eid).then(() => toast.show('Entry restored.')); } });
   }
   async function setStatus(s: 'growing' | 'archived' | 'dead') {
     // A status change is a line in the log too, so the timeline says when the plant was archived or grown again; a death is recorded through "Died…", with its date and cause (round twenty-two, 16). Status and line are one commit (round forty-nine, 1).
-    await collection.addEventWith({ acc: id, d: localDate(), t: 'note', note: s === 'archived' ? 'Archived' : s === 'growing' ? 'Marked growing again' : 'Marked dead' }, 'accession', id, { status: s });
+    // Marked growing again, a plant is held again: a deaccession it had is cleared with it (round eighty-seven, t1).
+    await collection.addEventWith({ acc: id, d: localDate(), t: 'note', note: s === 'archived' ? 'Archived' : s === 'growing' ? 'Marked growing again' : 'Marked dead' }, 'accession', id, { status: s, ...(s === 'growing' && a?.deacc != null ? { deacc: null, deaccOn: null, deaccNote: null } : {}) });
     toast.show(s === 'archived' ? 'Archived, and logged' : s === 'growing' ? 'Marked growing, and logged' : 'Marked dead, and logged');
     void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
@@ -687,13 +788,69 @@
     // Back by its identity, whatever number it holds after the restore: by number, a plant brought back beside another under the same number opened the other (round sixty).
     toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { const back = collection.accession(id); void goto(back ? plantHref(back) : `/plants/${encodeURIComponent(id)}`); if (moved) toast.show(restoredWords(moved, 'plant')); }); } });
   }
+  /* ---- no longer held, and items (round eighty-seven, t1) ---- */
+  let deaccOpen = $state(false);
+  let dReason = $state<DeaccReason>('given');
+  let dOn = $state(localDate());
+  let dNote = $state('');
+  let dMsg = $state('');
+  let dBusy = $state(false);
+  function openDeacc() { dReason = 'given'; dOn = localDate(); dNote = ''; dMsg = ''; deaccOpen = true; confirmRemove = false; void focusNext('#deacc-reason'); }
+  /** The record stays, listed under "No longer held", with one tap back (the toast's Undo, and Restore on its page). */
+  async function saveDeacc() {
+    if (!a || dBusy) return;
+    dMsg = !dOn ? 'Give the day it stopped being held.' : dOn > localDate() ? `${dOn} is in the future.` : '';
+    if (dMsg) { document.getElementById('deacc-on')?.focus(); return; }
+    dBusy = true;
+    const was = a.status, no = accNo(a);
+    try {
+      const line = await collection.deaccession(id, { reason: dReason, on: dOn, note: dNote });
+      deaccOpen = false;
+      toast.show(`${no} is no longer held (${DEACC_LABEL[dReason].toLowerCase()}); its record is kept.`, 8000, { label: 'Undo', run: () => { void collection.putWith('accession', id, { deacc: null, deaccOn: null, deaccNote: null, status: was }, [], [{ kind: 'event', id: line.id, fields: { _deleted: true } }]).then(() => toast.show('Undone: held again.'), () => toast.show('The Undo was not saved: it is still recorded as no longer held.')); } });
+    } catch { /* refused: the page says so from lastWriteError */ } finally { dBusy = false; }
+  }
+  let restoring = $state(false);
+  async function restoreHeld() {
+    if (!a || restoring) return;
+    restoring = true;
+    try { await collection.reaccession(id); toast.show(`${accNo(a)} is held again, and the log says so.`); } catch { /* refused: said from lastWriteError */ } finally { restoring = false; }
+  }
+  let splitOpen = $state(false);
+  let sHow = $state('offset');
+  let sOn = $state(localDate());
+  let sLoc = $state<string | null>(null);
+  let sMsg = $state('');
+  let sBusy = $state(false);
+  function openSplit() { sHow = 'offset'; sOn = localDate(); sLoc = a?.locationId ?? null; sMsg = ''; splitOpen = true; void focusNext('#split-how'); }
+  async function saveSplit() {
+    if (!a || sBusy) return;
+    sMsg = !sOn ? 'Give the day it was split off.' : sOn > localDate() ? `${sOn} is in the future.` : '';
+    if (sMsg) { document.getElementById('split-on')?.focus(); return; }
+    sBusy = true;
+    try {
+      try { await settlePlaces('split-loc'); } catch { return; }
+      const item = await collection.splitItem(id, { how: sHow, d: sOn, locationId: sLoc });
+      splitOpen = false;
+      toast.show(`${accNo(item)} split off: a plant of its own, under this accession.`, 8000, { label: 'Open it', run: () => { const it = collection.accession(item.id); void goto(it ? plantHref(it) : `/plants/${encodeURIComponent(item.id)}`); } });
+    } catch (e) { sMsg = collection.lastWriteError ? '' : e instanceof Error ? e.message : ''; } finally { sBusy = false; }
+  }
   const waiting = $derived(a ? undefined : collection.waiting('accession', param));
   /** A removed plant the address names, by its identity first (a label's code carries it) and then by its number (round sixty-one; the records review's 2). */
-  const removed = $derived(a || !collection.ready ? undefined : collection.removedAccession(param));
+  // A label's tag names the removed plant itself, whatever holds its number now (review B1).
+  const removed = $derived(a || !collection.ready ? undefined : scanTag ? tagged.removed[0] : collection.removedAccession(param));
   /** A scanned label of a plant this device has never held: its code carries an identity the log does not have, and a fragment with the species and the printed name (round sixty-one; the grower review's 13). */
+  /** The name a scanned label carries in its address, when it is not this plant's own (round eighty-seven, t3): the code carries the number, which another collection may give too. */
+  // A code with the plant's tag is that plant's whatever its name says (it may have been renamed since it was printed): the
+  // name is compared only for a code without one.
+  const labelOther = $derived.by(() => {
+    if (!a || scanTag || !/(^|[#&])n=/.test(page.url.hash.replace(/^#/, ''))) return null;
+    const theirs = labelFromHash(page.url.hash).name;
+    const ours = labelFromHash(new URL(plantQrUrl('https://x.invalid', a)).hash).name;
+    return theirs && theirs !== ours ? theirs : null;
+  });
   const strangerLabel = $derived(!a && !removed && collection.ready && !collection.exists('accession', param) && /(^|[#&])(s|n)=/.test(page.url.hash.replace(/^#/, '')));
   async function restoreRemoved() {
-    const r = collection.removedAccession(param);
+    const r = removed ?? collection.removedAccession(param);
     if (!r) return;
     const moved = await collection.restore('accession', r.id);
     if (moved) {
@@ -709,7 +866,7 @@
   const keyDiffers = $derived(!!a && !foundBy && refKey != null && a.taxonKey != null && a.taxonKey !== refKey && speciesOf(a.taxonName) === a.taxonName);
   async function useReferenceKey() {
     if (!a || refKey == null) return;
-    await collection.put('accession', a.id, { taxonKey: refKey });
+    await collection.putWith('accession', a.id, { taxonKey: refKey }, [], collection.sharedWith(a.id, { taxonKey: refKey })); // every plant of the accession (round eighty-seven, t1)
     toast.show(`This plant now records GBIF key ${refKey}.`);
   }
   /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
@@ -729,10 +886,10 @@
         return;
       }
       const now = collection.accession(id);
-      if (now && accNo(now) !== before) {
-        toast.show(`This plant is now ${accNo(now)}; a note on it says why.`);
-        if (param !== id) await goto(`/plants/${encodeURIComponent(id)}`, { replaceState: true });
-      } else toast.show(`${before} stays with this plant, recorded first; the other was given the next free number.`);
+      if (now && accNo(now) !== before) toast.show(`This plant is now ${accNo(now)}; a note on it says why.`);
+      else toast.show(`${before} stays with this plant, recorded first; the other was given the next free number.`);
+      // By its identity either way: the number now has a plant renumbered off it, and an address by the number lists both (B1).
+      if (param !== id) await goto(`/plants/${encodeURIComponent(id)}`, { replaceState: true });
     } finally {
       renumbering = false;
     }
@@ -740,7 +897,7 @@
 
 </script>
 
-<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : strangerLabel ? 'A plant label' : removed ? accNo(removed) : param} · Cultifolio</title></svelte:head>
+<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : strangerLabel || labelCase?.kind === 'foreign' ? 'A plant label' : removed ? accNo(removed) : param} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
@@ -767,6 +924,22 @@
     <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span><span class="skelname" aria-hidden="true">Species name</span></h1><Opening cls="vern muted" /></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
+{:else if labelCase}
+  <!-- A label whose plant does not hold its number now, or one from another collection: said, each plant offered by its
+       identity, none opened by itself (round eighty-seven, the stage 3 fixes; review B1). -->
+  {#snippet row(c: Accession, why: string)}<li><a class="azrow accrow" href="/plants/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{accNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{why}</span></span></a></li>{/snippet}
+  <h1 class="q" style="margin-top: 24px">{param}</h1>
+  {#if labelCase.kind === 'moved'}
+    <p id="renumbered-to">{#if scanTag}This label was printed for {labelCase.printedFor.length === 1 ? 'a plant' : 'plants'} numbered {param} then, and {labelCase.printedFor.length === 1 ? 'it is' : 'they are'} numbered otherwise now{labelCase.holders.length ? `; ${param} is another plant's now` : ''}. Open the one you mean, and print the plant a new label from its page.{:else}{param} was renumbered: a plant numbered {param} before is numbered otherwise now{labelCase.holders.length ? `, and ${param} is another plant's` : ''}. Open the one you mean.{/if}</p>
+    <ul class="chooser" id="label-choices">
+      {#each labelCase.printedFor as c (c.id)}{@render row(c, scanTag ? `the plant this label was printed for, numbered ${param} then` : `numbered ${param} before`)}{/each}
+      {#each labelCase.holders as c (c.id)}{@render row(c, `numbered ${param} now`)}{/each}
+    </ul>
+  {:else}
+    <p id="label-foreign">This label's code names a plant this collection does not hold under that identity{labelCase.holders.length ? `; your ${param} is another plant` : ''}. It may be a label from someone else's collection.</p>
+    {#if labelCase.holders.length}<ul class="chooser" id="label-choices">{#each labelCase.holders as c (c.id)}{@render row(c, `your ${param}, not the plant on this label`)}{/each}</ul>{/if}
+    <ForeignLabel />
+  {/if}
 {:else if choices.length > 1}
   <!-- Two or more plants under the number the address names: each, by its identity, to choose from (round sixty). -->
   <h1 class="q" style="margin-top: 24px">{param}</h1>
@@ -780,8 +953,9 @@
   <!-- A stranger's label is headed as what it is, not by the internal id its code carries (round sixty-one; the grower review's 13). -->
   <h1 class="q" style="margin-top: 24px">{strangerLabel ? 'A plant label' : removed ? accNo(removed) : param}</h1>
   {#if removed}
-    <p class="muted" id="removed-plant">{removed.id === param ? `${accNo(removed)} ${removed.taxonName}${removed.cultivar ? ` '${removed.cultivar}'` : ''} was removed.` : `${param} was given to a plant since removed.`} The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
+    <p class="muted" id="removed-plant">{removed.id === param || scanTag ? `${accNo(removed)} ${removed.taxonName}${removed.cultivar ? ` '${removed.cultivar}'` : ''} was removed.` : `${param} was given to a plant since removed.`} The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
     <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
+    {#if scanTag && choices.length}<p id="label-removed-holder">This label was printed for the plant removed; {param} is another plant's now: {#each choices as c, i (c.id)}{i ? ', ' : ''}<a href="/plants/{encodeURIComponent(c.id)}">{accNo(c)} {plantLabel(c)}</a>{/each}.</p>{/if}
   {:else if waiting}
     <WaitingRecord kind="accession" label={param} {waiting} />
   {:else if strangerLabel}
@@ -790,6 +964,15 @@
     <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
   {/if}
 {:else}
+  {#if ident?.deacc}
+    <!-- A plant no longer held keeps its page, its log and its photographs, and says so first (round eighty-seven, t1; F1). -->
+    <div class="notice" id="no-longer-held">No longer held{ident.deaccOn ? ` since ${ident.deaccOn}` : ''}: {DEACC_LABEL[ident.deacc].toLowerCase()}.{#if ident.deaccNote}{' '}{ident.deaccNote}{/if} Its record, log and photographs are kept. <button class="btn" type="button" id="restore-held" onclick={restoreHeld} aria-disabled={restoring}>Restore to the collection</button> <a href="/plants/gone">Every plant no longer held</a></div>
+  {/if}
+  {#if labelOther}
+    <!-- A code carries the number since round eighty-seven, and two growers may both have a 2026-0012: a label whose printed
+         name is not this plant's says so, and offers its species, as a stranger's label does (round eighty-seven, t3). -->
+    <div class="notice" id="label-other" role="status"><p>This label names <i>{labelOther}</i>, and your {accNo(a)} is <i>{plantLabel(a)}</i>: it may be a label from someone else's collection.</p><ForeignLabel /></div>
+  {/if}
   {#if cover}
     <div class="hero own">
       <!-- The button is named by what the photograph shows, and its image is then not read twice (round fifty-eight; the accessibility review). -->
@@ -815,13 +998,17 @@
       <p class="vern">
         {#if kind === 'hybrid'}<span class="kind">hybrid</span> · {:else if kind === 'cultivar'}<span class="kind">cultivar</span>{#if notStated}<span id="species-not-stated">, species not stated</span>{/if} · {/if}
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
+        <!-- An item says whose number it carries, and a clone its name (round eighty-seven, t1). -->
+        {#if ident?.item && holder && holder.id !== a.id}<span id="item-of">item {ident.item} of <a class="mono" href={collection.accession(holder.id) ? plantHref(holder) : `/plants/${encodeURIComponent(holder.id)}`}>{accNo(holder)}</a></span> · {/if}
+        {#if ident?.clone}<span id="clone-name">clone {ident.clone}</span> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
+        {#if crossParents}{' · '}<span id="cross-of">cross <PlantRef id={crossParents.seed} short /> × <PlantRef id={crossParents.pollen} short /></span>{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its space was removed; no space now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
         <!-- A page found for the plant by its key or by the form's answer, said as how (round eighty-five; review-c C4, review-s S2, outside review A16a). -->
-        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{#if foundBy.how === 'gbif'}GBIF's name for{:else if foundBy.how === 'merged'}Its page was merged into{:else if foundBy.how === 'filed'}The reference files it under{:else}An older name of{/if} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
+        {#if asSpecies && ref === 'ok' && foundBy}{' · '}<span id="found-by">{foundBy.how === 'merged' ? 'Its page was merged into' : olderLead(foundBy.how === 'filed' ? null : foundBy.how)} <a href="/species/{speciesHref}"><SpeciesName name={foundBy.name} /></a></span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={foundBy.name} /></button>
         {:else if asSpecies && ref === 'none' && olderLook?.state === 'older'}{' · '}<span id="older-name-of">{#if olderLook.via}A name below it, <SpeciesName name={olderLook.via} />, is an older name of{:else if olderLook.gbif}GBIF's name for{:else if olderLook.filed}The reference files it under{:else}An older name of{/if} {#if olderLook.slug}<a href="/species/{olderLook.slug}"><SpeciesName name={olderLook.name} /></a>{:else}<SpeciesName name={olderLook.name} />{/if}</span> <button class="linkish tap" type="button" id="file-under-older" onclick={fileUnderOlder} aria-disabled={refiling}>File it under <SpeciesName name={olderLook.name} /></button>
         {:else if asSpecies && ref === 'none'}{' · '}<span id="name-not-in-reference">No species page under this name</span>{#if parseName(a.taxonName).epithet && !parseName(a.taxonName).qualifier}{#if olderLook?.state === 'asking'}{' '}<span class="muted" role="status">looking among older names…</span>{:else if olderLook?.state === 'none'}<span id="older-name-none" role="status">, nor is it an older name of one</span>{:else if olderLook?.state === 'unreached'}<span id="older-name-unreached" role="status">; the reference's search did not answer, so older names were not checked. <button class="linkish tap" type="button" onclick={lookOlder}>Try again</button></span>{:else}{' '}<button class="linkish tap" type="button" id="look-older" onclick={lookOlder} title="Sends this name to the reference's search, as the search box does">Is it an older name?</button>{/if}{/if}{:else if !a.taxonKey && asSpecies && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
@@ -848,6 +1035,8 @@
             <a role="menuitem" href="/labels?acc={a.id}" onclick={() => closeCardMenu()}>Label</a>
             {#if a.status === 'growing'}<button role="menuitem" type="button" onclick={() => { closeCardMenu(); quick('death'); }}>Died…</button>{/if}
             {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
+            {#if a.status === 'growing'}<button role="menuitem" type="button" onclick={() => { closeCardMenu(); openSplit(); }}>Split off an item…</button>{/if}
+            {#if a.status === 'growing'}<a role="menuitem" href="/plants/new?mother={a.id}" onclick={() => closeCardMenu()}>Add an offset or cutting</a>{/if}
           </div>
         {/if}
       </div>
@@ -863,7 +1052,19 @@
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
-      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this version of the app does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <label><span>Provenance</span><select id="ed-prov" aria-describedby={edIdentMsg ? 'ed-ident-bad' : undefined} bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this version of the app does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <!-- ITF2's codes, the collection and the identification (round eighty-seven, t1; $core/identity). A code this version does not know is kept as it is. -->
+      <label><span>Provenance type (ITF2)</span><select id="ed-prot" bind:value={f.provType}>{#if f.provType && !(PROV_TYPES as readonly string[]).includes(f.provType)}<option value={f.provType}>{f.provType} (a code this version of the app does not know)</option>{/if}<option value="">{ident?.provTypeRead && ident.provType && !a.provType ? `Not stated (read as ${ident.provType} from the provenance)` : 'Not stated'}</option>{#each PROV_TYPES as c}<option value={c}>{PROV_TYPE_LABEL[c]}</option>{/each}</select></label>
+      <label><span>Propagation history (ITF2)</span><select id="ed-prohis" bind:value={f.propHistory}>{#if f.propHistory && !(PROP_HISTORIES as readonly string[]).includes(f.propHistory)}<option value={f.propHistory}>{f.propHistory} (a code this version of the app does not know)</option>{/if}<option value="">{ident?.propHistoryRead && ident.propHistory && !a.propHistory ? `Not stated (read as ${ident.propHistory} from the provenance)` : 'Not stated'}</option>{#each PROP_HISTORIES as c}<option value={c}>{PROP_HISTORY_LABEL[c]}</option>{/each}</select></label>
+      <label><span>Collector</span><input id="ed-collector" type="text" maxlength="200" bind:value={f.collector} placeholder="e.g. Brack, S." /></label>
+      <label><span>Collected</span><input id="ed-collected" type="text" maxlength="10" bind:value={f.collected} placeholder="2019-03-07, 2019-03 or 2019" /></label>
+      <label><span>Ex (earlier holders)</span><input id="ed-ex" type="text" maxlength="400" bind:value={f.exChain} placeholder="ex Devon, ex Mesa Garden" /></label>
+      <label><span>Clone</span><input id="ed-clone" type="text" maxlength="80" bind:value={f.clone} placeholder="e.g. clone A" /></label>
+      <label><span>Identification (ITF2 level)</span><select id="ed-vlev" bind:value={f.idLevel}>{#if f.idLevel && !(ID_LEVELS as readonly string[]).includes(f.idLevel)}<option value={f.idLevel}>{f.idLevel} (a code this version of the app does not know)</option>{/if}<option value="">Not stated</option>{#each ID_LEVELS as c}<option value={c}>{ID_LEVEL_LABEL[c]}</option>{/each}</select></label>
+      <label><span>Identified by</span><input id="ed-idby" type="text" maxlength="200" bind:value={f.idBy} /></label>
+      <label><span>Identified on</span><input id="ed-idon" type="text" maxlength="10" bind:value={f.idOn} placeholder="2019-03-07, 2019-03 or 2019" /></label>
+      {#if accPlants.length > 1}<p class="small muted wide" id="ed-shared">The name and provenance are the accession's: saved here, they are saved on its {accPlants.length} plants.</p>{/if}
+      {#if edIdentMsg}<p class="bad small wide" role="alert" id="ed-ident-bad">{edIdentMsg}</p>{/if}
       <!-- A partial date ("2017-08", "2019") is kept as it is, and a date field cannot show it: said under the field, so a grower who thinks it is missing does not guess a day (round sixty-two; the records review's 11). -->
       <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={[edDateMsg ? 'ed-date-bad' : '', partialAcquired ? 'ed-date-partial' : ''].filter(Boolean).join(' ') || undefined} />{#if partialAcquired}<span class="small muted" id="ed-date-partial">As imported: {partialAcquired}. Pick a day only if you know it.</span>{/if}{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
@@ -871,8 +1072,10 @@
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
       <!-- The plant's own watering rhythm, over its place's: blank follows the place, and the placeholder says what that is (round fifty-eight; the grower review). -->
       <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its space' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
+      <!-- An offset, a cutting, a division, a leaf or a bulbil of one of the grower's plants: the link its page and the other's show (round eighty-seven, F4). -->
+      <div class="wide motherrow"><PlantChoice bind:value={f.motherAcc} id="ed-mother" label="Taken from" none="Not from one of my plants" exclude={a.id} /><label><span>As</span><select id="ed-mother-how" bind:value={f.motherHow} disabled={!f.motherAcc}>{#if !(MOTHER_HOW as readonly string[]).includes(f.motherHow)}<option value={f.motherHow}>{f.motherHow} (a word this version of the app does not know)</option>{/if}{#each MOTHER_HOW as k}<option value={k}>{MOTHER_HOW_LABEL[k]}</option>{/each}</select></label></div>
       <div class="wide"><span class="lbl">Space</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Space" /></div>
-      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>{edChecking ? 'Checking the name…' : 'Save'}</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; edIdentMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>{edChecking ? 'Checking the name…' : 'Save'}</button></div>
     </form>
   {/if}
 
@@ -891,6 +1094,9 @@
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
       <button class="btn" onclick={() => quick('treat')}>Treat</button>
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
+      <!-- Fruit and seed set, dated as flowering is (round eighty-seven, F8). -->
+      <button class="btn" onclick={() => quick('fruit')}>Fruit</button>
+      <button class="btn" onclick={() => quick('seed')}>Seed</button>
       {#if a.status === 'growing'}{#if confirmArchive}<span class="confirmrow"><button class="btn" id="status-toggle" onclick={() => { confirmArchive = false; setStatus('archived'); }}>Yes, archive</button><button class="btn" type="button" onclick={() => (confirmArchive = false)}>Keep</button></span>{:else}<button class="btn" id="status-toggle" onclick={() => { confirmArchive = true; void focusNext('#status-toggle'); }} title="Takes the plant off the growing list; it can be marked growing again">Archive</button>{/if}{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
       <button class="btn more" type="button" aria-expanded="false" aria-label="More" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
@@ -901,6 +1107,23 @@
     <div class="cult evform">
       <div class="sum">Move to <span class="hint">records a move on the timeline</span></div>
       <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" label="Move to" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove} aria-disabled={moveBusy}>Move</button></div></div>
+    </div>
+  {/if}
+
+  {#if splitOpen}
+    <!-- An item of this accession: an offset, a division or a bulb split, a plant of its own (round eighty-seven, t1; F1). -->
+    <div class="cult evform" id="split-form">
+      <div class="sum">Split off an item <span class="hint">a plant of its own under {holder ? accNo(holder) : accNo(a)}, with its name and provenance</span></div>
+      <div class="fields">
+        <div class="row">
+          <label class="fl"><span class="eyebrow">What it is</span><select id="split-how" bind:value={sHow}><option value="offset">An offset</option><option value="division">A division</option><option value="bulb split">A bulb split</option><option value="another piece">Another piece of this plant</option></select></label>
+          <label class="fl"><span class="eyebrow">Date</span><input id="split-on" type="date" bind:value={sOn} oninput={() => (sMsg = '')} aria-invalid={!!sMsg} aria-describedby={sMsg ? 'split-bad' : undefined} /></label>
+        </div>
+        <div><span class="eyebrow">Its space</span><LocationPicker bind:value={sLoc} id="split-loc" label="Its space" /></div>
+        {#if sMsg}<p class="refuse" role="alert" id="split-bad">{sMsg}</p>{/if}
+        <p class="small muted">It takes the next free letter: {holder ? accNo(holder) : accNo(a)}/A, then /B. Its space, log and photographs are its own.</p>
+        <div class="actions"><button class="btn" type="button" onclick={() => (splitOpen = false)}>Cancel</button><button class="btn pri" type="button" id="split-save" onclick={saveSplit} aria-disabled={sBusy}>Split off</button></div>
+      </div>
     </div>
   {/if}
 
@@ -919,6 +1142,9 @@
         {#if evmsg}<p class="refuse" role="alert" id="ev-bad">{evmsg}</p>{/if}
         {#if et === 'treat' || et === 'feed'}<label class="fl"><span class="eyebrow">{et === 'treat' ? 'Product and rate' : 'Feed and rate'}</span><input id="ev-used" type="text" bind:value={eused} placeholder={et === 'treat' ? 'e.g. Safari 20SG drench' : 'e.g. Grow More 17-8-22 ¼ tsp/gal'} /></label>{/if}
         {#if et === 'death'}<label class="fl"><span class="eyebrow">Cause, if known</span><input id="ev-cause" type="text" bind:value={ecause} /></label>{/if}
+        <!-- A cross: this plant is the seed parent, the pollen parent one of the grower's plants; a graft: the plants its parts came from (round eighty-seven, F4). -->
+        {#if et === 'pollinate'}<PlantChoice bind:value={epollen} id="ev-pollen" label="Pollen from (makes it a cross, this plant the seed parent)" none="Not one of my plants, or not said" exclude={id} />{/if}
+        {#if et === 'graft'}<div class="row"><PlantChoice bind:value={escion} id="ev-scion" label="Scion from" none="This plant, or not one of mine" exclude={id} /><PlantChoice bind:value={estock} id="ev-stock" label="Stock" none="Not one of my plants" exclude={id} /></div>{/if}
         {#if et === 'measure'}
           <div class="measures">
             {#each MEASURES.filter((x) => x.k !== POT.k) as m}
@@ -970,9 +1196,10 @@
           {@const which = `${e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}, ${lineDates.get(e.id) ?? e.d}`}
           <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a space-wide action, not an observation of this plant' : undefined}>
             <span class="d">{lineDates.get(e.id) ?? e.d}</span>
-            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-            <!-- each × named by its line, not five "Remove this entry" in a row (round eighty-one; the desktop review's 7) -->{#if confirmEvent === e.id}<button class="rm confirm" type="button" aria-label="Remove? {which}: press again to remove it" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry: {which}" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
+            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.t === 'pollinate' && linkId(e.pollen, e.acc)}<span class="x2">{' · × '}<PlantRef id={linkId(e.pollen, e.acc)!} short /> (pollen parent)</span>{/if}{#if e.t === 'graft' && linkId(e.scion, e.acc)}<span class="x2">{' · scion from '}<PlantRef id={linkId(e.scion, e.acc)!} short /></span>{/if}{#if e.t === 'graft' && linkId(e.stock, e.acc)}<span class="x2">{' · on stock '}<PlantRef id={linkId(e.stock, e.acc)!} short /></span>{/if}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+            <!-- each × named by its line, not five "Remove this entry" in a row (round eighty-one; the desktop review's 7) -->{#if confirmEvent === e.id}<button class="rm confirm" type="button" aria-label="Remove? {which}: press again to remove it" aria-describedby={e.t === 'pollinate' && crossNamedBy(e.id).length ? 'cross-named' : undefined} onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry: {which}" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
+          {#if confirmEvent === e.id && e.t === 'pollinate' && crossNamedBy(e.id).length}{@const named = crossNamedBy(e.id)}<p class="crossnamed small" id="cross-named" role="status">{named.length === 1 ? 'Batch' : 'Batches'} {named.join(', ')} {named.length === 1 ? 'names' : 'name'} this cross as {named.length === 1 ? 'its' : 'their'} seed's parents. Removing the line takes both parents off {named.length === 1 ? 'its' : 'their'} seedlings and the cross out of batches.csv. Press Remove? again to remove it.</p>{/if}
         {:else}
           {@const ph = row.ph}
           <button class="tlrow tlphoto" type="button" onclick={() => openPhoto(ph)}>
@@ -1019,6 +1246,10 @@
       {/each}
     </div>
   {/if}
+
+  <!-- Its growing season and its papers, each its own component (round eighty-seven, t3; plans F7 and F9). -->
+  <GrowingSeason plant={a} year={habitat?.year ?? null} readerLat={cond?.lat ?? readerLat(collection.locations)} why={seasonWhy} />
+  <Attachments acc={a.id} />
 
   <details class="hab" id="habitat">
     <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this space{:else}Habitat vs this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
@@ -1070,24 +1301,51 @@
     </div>
   {/if}
 
+  <Lineage plant={a} />
+
   <div class="secrule"><h2>Provenance</h2><div class="line"></div></div>
-  {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && a.provenance === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid' && !a.price && !a.sourceRef}
+  {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && (a.provenance ?? 'unknown') === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid' && !a.price && !a.sourceRef && !ident?.provType && !ident?.propHistory && !ident?.collector && !ident?.collected && !ident?.exChain.length && !ident?.clone && !ident?.idLevel && !ident?.idBy && !earlier.length && !qualifier && accPlants.length < 2}
     <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
   {:else}
   <div class="factgrid">
     <div><b>Source</b>{#if a.sourceFrom}<a href="/plants?q={encodeURIComponent(a.sourceFrom)}" title="Every plant from this source">{a.sourceFrom}</a>{/if}{#if a.sourceForm}{a.sourceFrom ? ' · ' : ''}as {a.sourceForm === 'plant' ? 'a plant' : a.sourceForm === 'seed' ? 'seed' : a.sourceForm === 'seedling' ? 'a seedling' : a.sourceForm === 'cutting' ? 'a cutting' : a.sourceForm}{/if}{#if a.acquired}{a.sourceFrom || a.sourceForm ? ', ' : ''}{a.acquired}{/if}{#if !a.sourceFrom && !a.sourceForm && !a.acquired}not stated{/if}{#if a.price}{' · '}{a.price}{/if}</div>
     {#if a.sourceRef}<div><b>Lot or reference</b>{a.sourceRef}</div>{/if}
     <!-- A field left blank is not stated, never "none", as the batch page says (round eighty-four; review-w W9). -->
-    <div><b>Field number</b>{a.fieldNumber || 'not stated'}</div>
+    <!-- The field number as typed, read as the collector's code and number where it reads as one, with a lookup the grower
+         presses: the page never asks BCSS anything (round eighty-seven, t1; F3). -->
+    <div id="field-number"><b>Field number</b>{#if a.fieldNumber}{a.fieldNumber}{#if ident?.field}<span class="muted">{' · '}collector's code {ident.field.code}, number {ident.field.no}</span>{/if}{#if bcssHref(a.fieldNumber)}{' · '}<a id="bcss-lookup" href={bcssHref(a.fieldNumber)} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" title="Opens the British Cactus and Succulent Society's database with this field number">Look up at BCSS Field Number Database</a>{/if}{:else}not stated{/if}</div>
+    {#if ident?.collector || ident?.collected}<div id="collection"><b>Collected</b>{ident.collector ? `by ${ident.collector}` : 'collector not stated'}{ident.collected ? `, ${ident.collected}` : ''}</div>{/if}
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
+    {#if ident?.provType || ident?.propHistory}<div id="itf2-provenance"><b>ITF2</b>{#if ident.provType}{PROV_TYPE_LABEL[ident.provType]}{ident.provTypeRead ? ' (read from the provenance)' : ''}{/if}{#if ident.provType && ident.propHistory}{'; '}{/if}{#if ident.propHistory}{PROP_HISTORY_LABEL[ident.propHistory]}{ident.propHistoryRead ? ' (read from the provenance)' : ''}{/if}</div>{/if}
+    {#if ident?.exChain.length}<div id="ex-chain"><b>Earlier holders</b>{exChainText(ident.exChain)}</div>{/if}
+    {#if ident?.clone}<div><b>Clone</b>{ident.clone}</div>{/if}
+    {#if qualifier || ident?.idLevel || ident?.idBy || ident?.idOn}<div id="identification"><b>Identification</b>{#if qualifier}<span id="id-qualifier">{qualifier}: {QUALIFIER_MEANS[qualifier] ?? qualifier}{idqlOf(a.taxonName) ? ` (ITF2 ${idqlOf(a.taxonName)?.idql})` : ''}</span>{#if ident?.idLevel || ident?.idBy || ident?.idOn}{'; '}{/if}{/if}{#if ident?.idLevel}level {ID_LEVEL_LABEL[ident.idLevel]}{/if}{#if ident?.idBy}{ident.idLevel ? ', ' : ''}by {ident.idBy}{/if}{#if ident?.idOn}{ident.idLevel || ident.idBy ? ', ' : ''}{ident.idOn}{/if}</div>{/if}
+    {#if earlier.length}<div id="earlier-names"><b>Earlier names</b>{#each [...earlier].reverse() as e, i}{i ? '; ' : ''}{e.name}, until {e.until}{e.idBy ? ` (identified by ${e.idBy}${e.idOn ? `, ${e.idOn}` : ''})` : ''}{/each}</div>{/if}
+    {#if accPlants.length > 1 || (ident?.item && holder)}<div id="accession-plants"><b>Plants of {holder ? accNo(holder) : accNo(a)}</b>{#each accPlants as p, i (p.id)}{i ? ', ' : ''}{#if p.id === a.id}<span class="mono">{accNo(p)}</span> (this one){:else}<a class="mono" href={plantHref(p)}>{accNo(p)}</a>{p.status !== 'growing' ? ` (${p.deacc ? 'no longer held' : p.status})` : ''}{/if}{/each}{#if holder && !accPlants.some((p) => p.id === holder.id)}{accPlants.length ? '; ' : ''}<a class="mono" href="/plants/{encodeURIComponent(holder.id)}">{accNo(holder)}</a> was removed{/if}</div>{/if}
     {#if a.sowingId}<div><b>Raised from</b><a href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
     {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
   </div>
   {/if}
 
+  {#if deaccOpen}
+    <!-- No longer held, with a reason, a day and a note: the honest form of a removal, which keeps the plant's page (round eighty-seven, t1; F1). -->
+    <form class="cult evform" id="deacc-form" onsubmit={(e) => { e.preventDefault(); void saveDeacc(); }}>
+      <div class="sum">No longer held <span class="hint">the record, log and photographs are kept</span></div>
+      <div class="fields">
+        <div class="row">
+          <label class="fl"><span class="eyebrow">Why</span><select id="deacc-reason" bind:value={dReason}>{#each DEACC_REASONS as r}<option value={r}>{DEACC_LABEL[r]}</option>{/each}</select></label>
+          <label class="fl"><span class="eyebrow">Since</span><input id="deacc-on" type="date" bind:value={dOn} oninput={() => (dMsg = '')} aria-invalid={!!dMsg} aria-describedby={dMsg ? 'deacc-bad' : undefined} /></label>
+        </div>
+        <label class="fl"><span class="eyebrow">Note (optional)</span><input id="deacc-note" type="text" maxlength={NOTE_MAX} bind:value={dNote} placeholder={dReason === 'given' ? 'e.g. to the society plant sale' : dReason === 'reaccessioned' ? 'e.g. now 2026-0031' : ''} /></label>
+        {#if dMsg}<p class="refuse" role="alert" id="deacc-bad">{dMsg}</p>{/if}
+        <div class="actions"><button class="btn" type="button" onclick={() => (deaccOpen = false)}>Cancel</button><button class="btn pri" type="submit" id="deacc-save" aria-disabled={dBusy}>Record it</button></div>
+      </div>
+    </form>
+  {/if}
   <div class="dangerrow">
-    <span class="small muted">You can bring it back later from its page; its number stays its own, and its record stays in the change log.</span>
+    {#if !ident?.deacc}<span class="deaccrow"><span class="small muted">Died, given away, lost? Record it as no longer held: the page stays, listed under <a href="/plants/gone">No longer held</a>.</span> <button class="btn" type="button" id="deacc-open" onclick={openDeacc}>No longer held…</button></span>{/if}
+    <span class="small muted">Remove is for a record made by mistake. You can bring it back later from its page; its number stays its own, and its record stays in the change log.</span>
     {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove this plant</button>{/if}
   </div>
   {#if lightbox != null && photos.length}
@@ -1111,7 +1369,7 @@
   .idcard .pills:empty { display: none; }
   .cardmenu { position: relative; }
   .cardmenu .dots { font-weight: 700; letter-spacing: 0.1em; padding-left: 12px; padding-right: 12px; }
-  .cardmenu .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 160px; background: var(--card); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); padding: 6px; display: flex; flex-direction: column; }
+  .cardmenu .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 160px; background: var(--card); border-radius: var(--r); border: 1px solid var(--edge); box-shadow: none; padding: 6px; display: flex; flex-direction: column; }
   .cardmenu .menu > * { display: block; text-align: left; font: inherit; font-family: var(--ui); font-size: var(--fs-md); padding: 9px 12px; border: 0; background: none; color: var(--ink); border-radius: var(--r-sm); cursor: pointer; text-decoration: none; }
   .cardmenu .menu > *:hover, .cardmenu .menu > *:focus-visible { background: var(--sunk); outline: none; }
   /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
@@ -1122,7 +1380,7 @@
   .skel { min-height: calc(100vh - 150px); }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
   .skelname { visibility: hidden; } /* holds the name's line, which wraps under the number on a phone, so the card does not grow when the record arrives (round twenty-one, 14) */
-  .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: var(--r-lg); }
+  .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: var(--r); }
   .skelbtn { min-width: 64px; visibility: hidden; }
   .skelverbs { min-height: 52px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
@@ -1134,11 +1392,11 @@
   button.cred { border: 0; cursor: pointer; font: inherit; font-size: var(--fs-xs); }
   .addrow { padding: 14px 17px; margin-top: 12px; }
   .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
-  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: none; }
   .phgrid .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .phgrid .ph.cov { outline: 2px solid var(--accent); outline-offset: 2px; }
   .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
-  .phgrid .tag { position: absolute; right: 8px; top: 7px; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: var(--r-sm); }
+  .phgrid .tag { position: absolute; right: 8px; top: 7px; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
   .tlphoto { width: 100%; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); font: inherit; color: inherit; cursor: pointer; align-items: center; }
   .tlphoto:first-child { border-top: 0; }
   .tlphoto .thumb { display: inline-block; width: 44px; height: 44px; border-radius: var(--r-sm); overflow: hidden; vertical-align: middle; margin-right: 10px; background: var(--sunk); }
@@ -1165,6 +1423,9 @@
   /* The rhythm box and its word, not set as a label (round fifty-eight; the grower review). */
   .editform label > span.unitfield { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); letter-spacing: 0; text-transform: none; color: var(--ink2); font-weight: 400; }
   .editform .unitfield input { width: 6em; }
+  /* The plant it was taken from and how, side by side, the list wider (round eighty-seven, F4). */
+  .editform .motherrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px 12px; align-items: end; }
+  @media (max-width: 520px) { .editform .motherrow { grid-template-columns: minmax(0, 1fr); } }
   /* The habitat block is folded at the foot, one tap to open, its summary a 44px target (round fifty-eight; the grower review). */
   .hab { margin-top: var(--section-gap, 28px); }
   .hab > summary.secrule { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; cursor: pointer; list-style: none; }
@@ -1178,6 +1439,7 @@
   .tlmore .linkish { display: inline-flex; align-items: center; min-height: 44px; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: var(--fs-md); }
+  .crossnamed { margin: 2px 0 8px; padding: 6px 10px; background: var(--warm-soft); color: var(--warm-ink); border-radius: var(--r); }
   /* The × is small; its hit area is not. Negative margins keep the row's height. */
   .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: var(--fs-lg); line-height: 1; padding: 0 4px; min-width: 40px; min-height: 40px; margin: -12px -8px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r); }
   .rm:hover { color: var(--bad); }
@@ -1187,13 +1449,15 @@
   a.tlrow:hover { text-decoration: none; }
   a.tlrow:hover .t { color: var(--accent); }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: var(--fs-md); }
+  /* The deaccession's line on its own row above the removal's (round eighty-seven, t1). */
+  .deaccrow { flex-basis: 100%; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   .setup { margin-top: 14px; }
   .setup .setupbody { display: grid; }
   .setuprow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 17px; border: 0; border-top: 1px solid var(--rule); background: none; font: inherit; color: inherit; cursor: pointer; min-height: 48px; width: 100%; }
   .setuprow:first-child { border-top: 0; }
   .setuprow:hover { background: var(--sunk); }
-  .setuprow .n { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); }
+  .setuprow .n { font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); color: var(--ink3); }
   .setuprow .t { font-weight: 600; font-size: var(--fs-md); color: var(--accent); }
   .setuprow .w { font-size: var(--fs-sm); color: var(--ink3); }
   .setuprow.next { padding-top: 14px; padding-bottom: 14px; }
@@ -1206,10 +1470,12 @@
      stood between the name and the plant's first figures on the first screen (round fifty, 4). */
   @media (max-width: 640px) {
     .setup .sum .hint { display: none; }
-    .setup .setupbody { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 12px 12px; }
+    .setup .setupbody { display: flex; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 12px 12px; }
     .setup .setupbody::-webkit-scrollbar { display: none; }
-    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: var(--tap); padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); white-space: nowrap; }
-    .setuprow.next { border-color: var(--accent); }
+    /* Steps in a row of plain words, a thin rule between them, the next one in the accent: no chips (DESIGN-87; round
+       eighty-seven's stage-3 integration). */
+    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: var(--tap); padding: 6px 12px; border: 0; border-left: 1px solid var(--rule); border-radius: 0; background: none; white-space: nowrap; }
+    .setuprow:first-child { border-left: 0; padding-left: 0; }
     .setuprow .n { font-size: var(--fs-xs); }
     .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: var(--fs-md); }
     .setuprow .w { display: none; }
@@ -1223,6 +1489,14 @@
   /* A name wraps between words, never inside one ("Copia / poa"), and a pill wraps rather than pushing the page sideways at 200% text (round sixty; the accessibility review, 5; the outside review's A40). */
   .idcard h1.sci { overflow-wrap: break-word; word-break: normal; hyphens: manual; }
   .idcard .pills .pill { white-space: normal; overflow-wrap: break-word; max-width: 100%; }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips or bordered pills): the plant's
+     number as plain figures, and its state ("not watered for 39 d") as words in their colour, not a box. */
+  .accno { background: none; padding: 0; border-radius: 0; color: var(--ink2); font-variant-numeric: tabular-nums lining-nums; }
+  .accno.big { padding: 0; }
+  .fnchip { background: none; border: 0; padding: 0; border-radius: 0; }
+  .idcard .pills .pill { border: 0; background: none; padding: 0; border-radius: 0; letter-spacing: 0; font-size: var(--fs-md); }
+  .idcard .pills .pill.w { color: var(--warm-ink); }
+  .idcard .pills .pill.b { color: var(--bad); }
   /* At a large text size (an em query follows the reader's own size: 22em is 352 px at 100%, 704 px at 200%) the tile goes above the name, so the name has the card's width (round sixty; the accessibility review, 5). */
   @media (max-width: 22em) { .idcard.flat { grid-template-columns: minmax(0, 1fr) !important; } .idcard.flat .who { grid-column: 1 / -1; } }
   .chooser { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }

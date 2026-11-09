@@ -21,6 +21,7 @@ import { readRecords, rangeTest, admissionRecord, withPlace, extremesUpstream } 
 import type { GbifOccurrence } from '../../src/lib/dossier/sources/gbif';
 import type { Climate } from '../../src/lib/dossier/schema';
 import { TDWG3 } from '../../src/lib/dossier/tdwg';
+import { ADMISSION_POLICY } from '../../src/lib/dossier/admission-policy';
 
 const file = JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile;
 const t = regionTester(file);
@@ -29,9 +30,11 @@ beforeAll(() => { t.landOf(0, 0); }, 120_000);
 
 describe('the shapes file of round eighty-five', () => {
   it('names its rule, and gives each region its countries, its islands and each polygon its place', () => {
-    expect(file.meta.rule).toBe(RANGE_RULE);
+    // Round eighty-seven: the policy's rule is r87, which reads the shapes file of r86 (`AdmissionPolicy.shapes`).
+    expect(file.meta.rule).toBe(ADMISSION_POLICY.shapes);
     // Round eighty-six: the rule is r86 (`admission-policy.ts`; the file of r86 places Kashmir and adds GBIF's codes).
-    expect(RANGE_RULE).toBe('r86');
+    expect(file.meta.rule).toBe('r86');
+    expect(RANGE_RULE).toBe('r87');
     expect(file.countries?.OMA).toEqual(['OM']);
     expect(file.countries?.GST).toEqual(['AE', 'BH', 'QA']);
     expect(file.countries?.WSA).toEqual(['EH', 'MA']);

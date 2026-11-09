@@ -97,7 +97,7 @@ test.describe('W14, P7: the crumb at 640 x 400', () => {
       expect(drawn.w * drawn.h, `${path} ${JSON.stringify(drawn)}`).toBeLessThanOrEqual(1); // r85base: "SPECIE", cut with no mark
       // Still the page's trail to a screen reader.
       await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(path === '/plants' ? 'My plants' : 'Copiapoa cinerea');
-      await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: path === '/plants' ? 'My plants' : 'Species', exact: true })).toHaveAttribute('aria-current', 'page');
+      await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: path === '/plants' ? 'My plants' : 'Reference', exact: true })).toHaveAttribute('aria-current', 'page');
     }
   });
 });

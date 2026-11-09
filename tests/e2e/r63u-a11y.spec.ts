@@ -36,7 +36,7 @@ test('r63u U4: a visitor\'s front page has its landmarks, one h1 first, and one 
   await expect(page.getByRole('contentinfo')).toHaveCount(1);
   const tabs = page.getByRole('navigation', { name: 'Tabs' });
   await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
-  await expect(tabs.getByRole('link', { name: 'Species', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(tabs.getByRole('link', { name: 'Reference', exact: true })).toHaveAttribute('aria-current', 'page');
   const heads = await page.locator('main').getByRole('heading').evaluateAll((hs) => hs.map((h) => h.tagName));
   expect(heads[0]).toBe('H1');
   expect(heads.filter((h) => h === 'H1')).toHaveLength(1);

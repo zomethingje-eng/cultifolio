@@ -68,6 +68,8 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['vault', /vault('s)? place|its place (was|is) (given back|kept)|takes? (a|its) place|day's (new-vault )?places|places in all|gives (its )?places? back|gives the place back|the place is given back|for the places new vaults|new-vault places|keeps no place|no place recorded|no place is free|keeps its place|that place is checked|count of places|loses no place|a place given back|a place left unused|whose place was given back|its place was not|after its place was|its place could not|a reclaimed vault's place|does not reclaim places/],
   // an order: a change's place in the arrival order, a name's place among names
   ['order', /ha(s|ve) no place in it|has a place, which came first|the plant's place among the plants|the matching name's place among|a marked stamp's place|places its own repair/],
+  // a stored field's name, Kew's place_of_publication as the dossier keeps it (round eighty-seven, stage 2: elsewhere.published)
+  ['field', /\{ place, volPage\?/],
   // the idioms, and the place a photograph is shown in
   ['idiom', /\bin (its )?place\b/],
   ['idiom', /as long as it was, at the same place/],
@@ -107,9 +109,11 @@ describe('round seventy-four: a grower\'s greenhouse, bench or windowsill is a "
   it('every allowed use is still there, so the list says what the pages say', () => {
     expect(ALLOWED.filter(([, re]) => !used.has(re)).map(([k, re]) => `${k}: ${re.source}`)).toEqual([]);
   });
-  it('the tab, the menu and the page say "My spaces", at the same addresses', () => {
+  it('the menu, the bar\'s trail and the page say "My spaces", at the same addresses', () => {
     const layout = readFileSync('src/routes/+layout.svelte', 'utf8');
-    expect(layout.match(/\{ href: '\/places', label: 'My spaces'/g)).toHaveLength(3); // the menu, the phone's tabs, the top bar
+    // The menu and the top bar's trail (its section's name). Round eighty-seven (DESIGN-87, the owner's look): the tab bar and
+    // the top bar hold Reference, My plants, Today and About (and More, the menu); My spaces is in the menu, so two, not three.
+    expect(layout.match(/\{ href: '\/places', label: 'My spaces'/g)).toHaveLength(2);
     expect(layout).not.toMatch(/label: 'Places'/);
     const list = readFileSync('src/routes/places/+page.svelte', 'utf8');
     expect(list).toContain('<title>My spaces · Cultifolio</title>');

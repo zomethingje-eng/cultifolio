@@ -46,7 +46,7 @@ export interface KewRow {
  * is then not this page's, so `entry` is '' and `synonyms` empty (they are the other page's plant's names), and the
  * page keeps its GBIF id. Echeveria peacockii (g7530398) read to Dudleya pulverulenta's 2778991, page k2778991's.
  */
-export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string; accepted?: KewAccepted; elsewhere?: string[] }
+export interface KewNames { entry: string; synonyms: string[]; acceptedElsewhere: string[]; file: string; heldBy?: string; accepted?: KewAccepted; elsewhere?: string[]; /** For each of `synonyms`, the authors Kew's rows of it in the plant write (round eighty-seven; D13). */ by?: string[][] }
 /** `name.cited`: the page cites Kew's author; `gbif` is the backbone's citation, `kew` the Kew row cited. */
 export interface KewCited { gbif: string; kew: string }
 
@@ -224,9 +224,13 @@ export function kewNames(d: Page, idx: KewNamesIndex, file: string): KewNames {
   const plant = plantOf(entry, idx);
   const own = words(d.name.scientific);
   const synonyms = new Set<string>();
+  // Each name's authors as Kew's rows of it in the plant write them (round eighty-seven, derived agent; review D's D13):
+  // `by`, so an older name spelt as another page's heading is said by Kew's author (`homonymEntries`).
+  const authorsOf = new Map<string, Set<string>>();
+  const take = (r: KewRow) => { synonyms.add(r.name); const a = authorsOf.get(r.name) ?? new Set<string>(); if (r.authors?.trim()) a.add(r.authors.trim()); authorsOf.set(r.name, a); };
   // The entry's own name, where it is other words than the page's (Ferocactus glaucescens for Bisnaga glaucescens).
-  for (const id of plant) { const r = idx.byId.get(id); if (r?.rank === 'Species' && words(r.name) !== own) synonyms.add(r.name); }
-  for (const id of plant) for (const r of idx.under.get(id) ?? []) if (r.rank === 'Species' && r.status !== 'Misapplied' && words(r.name) !== own) synonyms.add(r.name);
+  for (const id of plant) { const r = idx.byId.get(id); if (r?.rank === 'Species' && words(r.name) !== own) take(r); }
+  for (const id of plant) for (const r of idx.under.get(id) ?? []) if (r.rank === 'Species' && r.status !== 'Misapplied' && words(r.name) !== own) take(r);
   const acceptedElsewhere = (d.name.synonyms ?? []).filter((s) => {
     const sp = splitName(s);
     if (!sp || !sp.author || words(sp.name) === own) return false;
@@ -250,7 +254,8 @@ export function kewNames(d: Page, idx: KewNamesIndex, file: string): KewNames {
   // the index (`kewPlace`): "Echinopsis pachanoi", which Kew accepts, was a search name of Echinopsis macrogona, and
   // "Dypsis lutescens", which Kew files under Chrysalidocarpus lutescens alone, an older name of Hyophorbe indica too.
   const elsewhere = [...new Set([...(d.name.synonyms ?? []), ...(d.name.infra ?? [])])].filter((s) => kewPlace(s, plant, idx) === 'elsewhere');
-  return { entry, synonyms: [...synonyms].sort(), acceptedElsewhere, file, ...(e ? { accepted: { ...kewAcceptedOf(e), ...(other ? { other } : {}) } } : {}), ...(elsewhere.length ? { elsewhere } : {}) };
+  const sorted = [...synonyms].sort();
+  return { entry, synonyms: sorted, acceptedElsewhere, file, ...(e ? { accepted: { ...kewAcceptedOf(e), ...(other ? { other } : {}) } } : {}), ...(elsewhere.length ? { elsewhere } : {}), ...(sorted.length ? { by: sorted.map((n) => [...(authorsOf.get(n) ?? [])].sort()) } : {}) };
 }
 
 /** POWO's address and IPNI's number of a Kew row: Kew's `powo_id`, and IPNI's `ipni_id` (else the `powo_id`) unless it is Kew's own number ("-4"), which IPNI does not hold. */

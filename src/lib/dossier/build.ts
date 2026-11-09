@@ -34,8 +34,8 @@ import { ownNames, isOwnName, canonicalOf } from './own-names';
 import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
 import type { KewInfra } from './kew-infra';
-import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
-import type { HeldNames } from './photo-kind';
+import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, askedDetail, carriedParts, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
+import { shownPhotos, kindNamesOf, photoIdentity, type HeldNames } from './photo-kind';
 import { gbifPage, type PageId } from '../core/page-id';
 import { countryOf, placeWords } from '../core/place-words';
 import { extraWhy, type ExtraKey } from './extra-keys';
@@ -49,6 +49,7 @@ import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean
 export interface EnvelopeOptions { drawnLand?: (box: { s: number; w: number; n: number; e: number }) => boolean }
 export interface ClimateProvider {
   /** The envelope across every in-range record's grid cell: what a species page carries. */
+  /** Each point: its position, and why it is in range. */
   envelope(points: ReadonlyArray<readonly [number, number, Admission?]>, opts?: EnvelopeOptions): Promise<Climate>;
   /** One point's cell (a bench, a garden): median and percentiles coincide. */
   at(lat: number, lon: number): Promise<Climate>;
@@ -81,7 +82,7 @@ export interface BuildOptions {
    * synonyms and vernaculars are carried, and the upstream records say so. Only honoured when the build is by key
    * and the key matches; a build by name always asks the backbone.
    */
-  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string; species?: Upstream; wdNames?: Upstream };
+  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string; species?: Upstream; synonyms?: Upstream; wdNames?: Upstream };
   /**
    * The previous build's identifiers for this key. When Wikidata does not answer (its maxlag, a failure), the build keeps
    * them, above all iNaturalist's taxon id, which the photographs are asked by: a Wikidata outage had cost 113 species
@@ -115,6 +116,11 @@ export interface BuildOptions {
    * as the Worker and the index read it (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
    */
   held?: HeldNames | null;
+  /**
+   * The photographs the page on disk holds marked `shared` by the last `--index` (round eighty-seven; `photoIdentity`): held
+   * by another page too, so shown on neither, and not counted towards the twelve that ask Commons nothing (`ownShown`).
+   */
+  sharedBefore?: ReadonlySet<string>;
   /**
    * The id of the page for a GBIF key (round seventy-eight; `$core/page-id`), asked for the key the build ends on (a name
    * followed to its accepted key asks for that one): the builder gives the id of the page already on disk under that key,
@@ -261,6 +267,25 @@ export function photosFromMedia(rows: OccMedia[]): Photo[] {
     return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'author not stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page, ...(im.specimen ? { specimen: true } : {}) };
   });
 }
+
+/** Commons is asked while a page would show fewer than this many photographs of its own sources (round sixty-nine). */
+export const COMMONS_BELOW = 12;
+/**
+ * How many of the photographs a build holds before Commons the page will show (round eighty-seven; the --keys stop of 8
+ * November: Ceropegia elegans [k502679] lost its Commons files, since the build counted its 11 iNaturalist photographs and
+ * the same photographs again through GBIF, 12 or more, and asked Commons nothing). Counted as the page reads them: one copy
+ * of each (`dedupePhotos`), no herbarium sheet, placeholder or another species' file (`shownPhotos`), and none the last
+ * `--index` marked as held by another page too (`sharedBefore`, the marks on the page on disk), which no page shows.
+ *
+ * The shared-photograph rule (`markSharedPhotos`, at `--index`) can still leave a page short: it compares every page's
+ * photographs, so a photograph this build takes that another page holds too is found only at the next `--index`, after
+ * the build. The marks it writes are on disk then, and the page's next build counts without them and asks Commons.
+ */
+export function ownShown(photos: readonly Photo[], names: Parameters<typeof shownPhotos>[1], sharedBefore?: ReadonlySet<string>): number {
+  return shownPhotos(dedupePhotos([...photos]), names, { shared: false }).filter((p) => !sharedBefore?.has(photoIdentity(p))).length;
+}
+/** The identities of the photographs a dossier on disk holds marked shared (`BuildOptions.sharedBefore`). */
+export const sharedOf = (d: { photos?: ReadonlyArray<{ src?: string; id: string; url: string; shared?: readonly string[] }> } | null | undefined): Set<string> => new Set((d?.photos ?? []).filter((p) => p.shared?.length).map(photoIdentity));
 
 /** GBIF's media answer for a key, as `gbif.media` gives it (the download's day with it). */
 type MediaAnswer = Awaited<ReturnType<typeof gbif.media>>;
@@ -424,11 +449,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   let syn: Awaited<ReturnType<typeof gbif.synonyms>>, vern: Awaited<ReturnType<typeof gbif.vernacular>>;
   if (carried) {
     // A re-derivation keeps what the build before it said of a homonym key.
-    if (o.taxon?.species?.detail && KEW_NAME.test(o.taxon.species.detail)) upstream['gbif.species'] = { ...upstream['gbif.species'], detail: `${upstream['gbif.species'].detail}; that build: ${o.taxon.species.detail.replace(/^carried from build of [^;]*; that build: /, '')}` };
+    // Round eighty-seven: what that build said of the name and of its older names, whatever it was (a homonym key's words,
+    // Kew's citation, the list cut short, the names read from another key), not only a homonym key's (`KEW_NAME`): a walk
+    // kept "carried from build of …" alone, and the list's "truncated" and the words of the key it was read from went.
+    // The build that asked, as `carriedDetail` names it (round eighty-seven; review M2): a row the build before had itself
+    // carried names its own origin, the build whose words these are, not the day of the build it is carried from.
+    const thatBuild = (u: Upstream | undefined) => { const w = askedDetail(u?.detail), from = carriedParts(u?.detail)?.origin ?? carriedFrom; return w ? `${from}; that build: ${w}` : from; };
+    upstream['gbif.species'] = { ...upstream['gbif.species'], detail: thatBuild(o.taxon?.species) };
     syn = { status: 'ok', data: carried.name.synonyms };
     // Names a `--fill wikidata-names --keyed` run took from Wikidata (round eighty) are carried with their record, or not at all.
     vern = { status: 'ok', data: carried.wdNames ? carried.name.vernacular : carried.name.vernacular.filter((v) => !fromWikidata(v)) };
-    upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: carriedFrom };
+    upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: thatBuild(o.taxon?.synonyms) };
     upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: carriedFrom };
     if (carried.wdNames) upstream[WD_NAMES] = { ...carried.wdNames, detail: [carried.wdNames.detail, carriedFrom].filter(Boolean).join('; ') };
   } else {
@@ -530,7 +561,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const before = o.rangeAudit ? rangeTest(native, o.rangeAudit.regions) : undefined;
   const audit: RangeAudit | undefined = o.rangeAudit && before ? { before: before.admit, tally: o.rangeAudit.tally } : undefined;
   const recs = readRecords(occ.status === 'ok' ? occ.data : [], boxes, !!verified, o.places, inside?.admitBy, o.defaults, audit);
-  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = recs;
+  const { open, restrictedInRange, forClimate, nOutside, nVague, datasets, apiDatasets, nInstitution, institutionKinds, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords } = recs;
   if (occ.status === 'ok' && nDefault) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, defaultWords(nDefault)].filter(Boolean).join('; ');
   if (occ.status === 'ok' && inside && boxes.length) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, inside.words].filter(Boolean).join('; ');
   if (occ.status === 'ok') {
@@ -859,7 +890,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
   if (skip('commons')) skipped('commons');
-  else if (!o.quick && photos.length < 12) {
+  else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, ids: { gbif: key }, name: { scientific, synonyms: syn.status === 'ok' ? syn.data : [], authorship } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
     const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : kewAsked ?? scientific;
     // The species' own and older names, by which a file named as another species is left out (triage-68 K1); Kew's name with them.
     const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship });
@@ -922,6 +953,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       restrictedShiftKm,
       thin: allPts.length < 12,
       datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n })),
+      // Where the records were read by this build (round eighty-seven): which of those in range came through the API.
+      ...(occ.status === 'ok' || occ.status === 'none' ? { api: apiDatasetsOf(apiDatasets) } : {}),
       ...(extra.keys.length ? { keys: extra.keys } : {})
     },
     centroid,
@@ -982,6 +1015,11 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
   let nOutside = 0,
     nVague = 0;
   const datasets = new Map<string, { title?: string; licence: string; n: number }>();
+  /**
+   * The in-range records GBIF's search API gave rather than a download, by dataset (round eighty-seven; GBIF's derived
+   * dataset): a record served from a download carries its DOI (`downloadDoi`), one from the API none.
+   */
+  const apiDatasets = new Map<string, number>();
   // Records at a botanic garden, a herbarium or a zoo (round seventy-nine, Q; `clean.ts`), counted by the kind of place.
   let nInstitution = 0;
   /** Records at a default point (round eighty, A). */
@@ -1049,6 +1087,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       const nHere = nAt.get(`${lat},${lon}`) ?? 1;
       nInRangeRecords += nHere;
       admitted[how] += nHere;
+      if (!r.downloadDoi) apiDatasets.set(dsKey, (apiDatasets.get(dsKey) ?? 0) + 1);
       if (isOpen(tag)) { open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]); openHow.push(how); }
       else restrictedInRange.push([lat, lon]);
       // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
@@ -1087,8 +1126,11 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
-  return { open, openHow, restrictedInRange, forClimate, nOutside, nVague, datasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords, admitted };
+  return { open, openHow, restrictedInRange, forClimate, nOutside, nVague, datasets, apiDatasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords, admitted };
 }
+
+/** The in-range records read through GBIF's search API, by dataset, as the dossier keeps them (`occurrences.api`): largest first. */
+export const apiDatasetsOf = (m: ReadonlyMap<string, number>): Array<{ key: string; n: number }> => [...m].map(([key, n]) => ({ key, n })).sort((a, b) => b.n - a.n || a.key.localeCompare(b.key));
 
 /**
  * The records' admission as the dossier keeps it (round eighty-five; outside review B's simplification 1, A23): every

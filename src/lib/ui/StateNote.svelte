@@ -17,7 +17,7 @@
 
 <style>
   .statenote { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0; color: var(--ink2); }
-  .word { font-family: var(--mono); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--sunk); padding: 3px 9px; border-radius: 999px; }
+  .word { font-family: var(--ui); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--sunk); padding: 3px 9px; border-radius: var(--r); }
   .why { display: inline; }
   .why summary { display: inline; cursor: pointer; color: var(--accent); text-decoration: underline; font-size: var(--fs-md); list-style: none; }
   .why summary::-webkit-details-marker { display: none; }

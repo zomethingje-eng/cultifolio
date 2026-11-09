@@ -45,6 +45,7 @@ import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SMALL_BATCH_BYTES, SEAL_OVERHEAD, OVE
 import { changeError, readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
 import { hlcCompare, isHlc, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, onReadingWanted, clockChecked, isPastStamp } from '$core/hlc';
 import { PAGE_IN_DEMO } from '$lib/db/demo';
+import { lock, syncKeyHash } from '$lib/ui/lock.svelte'; // a locked device keeps the key it synced with (round eighty-seven, the stage 3 fixes; S3)
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -71,8 +72,12 @@ interface SyncMeta {
   refusedAt?: Record<string, number>;
   /** HLCs of stored changes the fold is holding back because they are stamped too far ahead of this device's clock. */
   held?: string[];
-  /** The server said the vault is full: what it held and the limit, in bytes. Cleared when a push is taken again. */
-  vaultFull?: { bytes: number; limit: number; at: string };
+  /**
+   * The server said the vault is full: what it held and the limit, in bytes. Cleared when a push is taken again. `photos`:
+   * it was a photograph or a paper refused, past the room the server keeps for the log (round eighty-seven, the stage 3
+   * fixes; S2): the changes still go, and only a photograph taken clears it.
+   */
+  vaultFull?: { bytes: number; limit: number; at: string; photos?: true };
   photosPushed: string[];
   /** Removed photographs whose ciphertext this device has asked the server to drop, or found gone (round forty-nine, 1). */
   photosDropped?: string[];
@@ -272,7 +277,7 @@ class Sync {
   /** This device's own clock has jumped back behind its last stamp; a sentence for the sync page, or null. */
   clockWarning = $state<string | null>(null);
   /** The server has no room for more from this vault; what it holds and the limit, in bytes. */
-  vaultFull = $state<{ bytes: number; limit: number } | null>(null);
+  vaultFull = $state<{ bytes: number; limit: number; photos?: true } | null>(null);
   vaultId = $state('');
   keys: VaultKeys | null = null;
   /**
@@ -319,7 +324,7 @@ class Sync {
       this.lastSync = m.lastSync;
       this.quarantined = this.meta.quarantined ?? [];
       this.refused = this.meta.refused ?? [];
-      this.vaultFull = this.meta.vaultFull ? { bytes: this.meta.vaultFull.bytes, limit: this.meta.vaultFull.limit } : null;
+      this.vaultFull = this.meta.vaultFull ? { bytes: this.meta.vaultFull.bytes, limit: this.meta.vaultFull.limit, ...(this.meta.vaultFull.photos ? { photos: true as const } : {}) } : null;
       this.readRefusal(this.meta);
       this.configured = true;
       this.hook();
@@ -457,6 +462,12 @@ class Sync {
   async forget(why: 'stopped' | 'replaced' = 'stopped'): Promise<void> {
     // Why matters to the page: after a replace from backup, rejoining would merge the vault's records back into the restored collection, so Rejoin is not the lead there (round twenty-five, 6).
     const was = this.vaultId ? { vaultId: this.vaultId, at: new Date().toISOString(), why } : null;
+    // A device locked with a passcode keeps a hash of the key it synced with beside the lock, so the key it is told to
+    // keep still opens the lock once the device no longer syncs (round eighty-seven, the stage 3 fixes; S3).
+    if (lock.enabled) {
+      const k = parseVaultKey((await getMeta<{ key?: string }>(META).catch(() => null))?.key ?? '');
+      if (k) lock.keepKey(await syncKeyHash(k));
+    }
     this.dropped(); // this.meta is null from here: a run in flight cannot write the old record back (round fifteen, 2)
     clearClockOffset(); // no server to confirm a correction against: the device clock is what there is (round fifty-two, 1)
     await setMeta(META, null);
@@ -694,7 +705,7 @@ class Sync {
         Object.assign(m, fresh);
         this.quarantined = [...(m.quarantined ?? [])];
         this.refused = [...(m.refused ?? [])];
-        this.vaultFull = m.vaultFull ? { bytes: m.vaultFull.bytes, limit: m.vaultFull.limit } : null;
+        this.vaultFull = m.vaultFull ? { bytes: m.vaultFull.bytes, limit: m.vaultFull.limit, ...(m.vaultFull.photos ? { photos: true as const } : {}) } : null;
         this.readRefusal(m);
         this.lastSync = m.lastSync;
         this.setHeld();
@@ -947,11 +958,11 @@ class Sync {
     throw e;
   }
 
-  private setFull(m: SyncMeta, full: { bytes: number; limit: number } | null): void {
+  private setFull(m: SyncMeta, full: { bytes: number; limit: number } | null, photos = false): void {
     if (this.meta !== m) throw stopped(); // a stale 507 or 200 is the old vault's, never the new one's (round eighteen, 4)
     if (full) {
-      m.vaultFull = { ...full, at: new Date().toISOString() };
-      this.vaultFull = full;
+      m.vaultFull = { ...full, at: new Date().toISOString(), ...(photos ? { photos: true as const } : {}) };
+      this.vaultFull = { ...full, ...(photos ? { photos: true as const } : {}) };
     } else if (m.vaultFull) {
       delete m.vaultFull;
       this.vaultFull = null;
@@ -984,7 +995,7 @@ class Sync {
       sent += await this.pushBatch(m, batch);
       this.pending = Math.max(0, todo.length - sent - (this.refusedWaiting - refusedBefore));
       await this.save(m);
-      if (this.vaultFull) return;
+      if (this.vaultFull && !this.vaultFull.photos) return; // a vault full for photographs only still takes the changes (S2)
     }
     // The day's allowance or the hour's photographs spent: the batches above went (the small ones, for the day's); the
     // photographs wait, and the run says why (round seventy).
@@ -1023,7 +1034,7 @@ class Sync {
       this.photoTimeouts = 0; // answered, whatever the answer: the link carries a photograph
       const full = await this.fullFrom(r);
       if (full) {
-        this.setFull(m, full);
+        this.setFull(m, full, true);
         await this.save(m);
         return;
       }
@@ -1076,7 +1087,7 @@ class Sync {
       // A change refused before and taken now is no longer refused (round eighty-two).
       if (m.refusedAt) for (const c of batch) delete m.refusedAt[c.t];
       if (m.refused?.some((q) => batch.some((c) => c.t === q.key))) { m.refused = m.refused.filter((q) => !batch.some((c) => c.t === q.key)); this.refused = [...m.refused]; }
-      this.setFull(m, null);
+      if (!m.vaultFull?.photos) this.setFull(m, null); // a batch taken says nothing of the photographs' room (S2)
       // A small batch is not counted against the day's allowance, so its taking says nothing of it (round seventy).
       if (!(m.refusal?.day && body.length <= SMALL_BATCH_BYTES) && !m.refusal?.photos) this.clearRefusal(m);
       if (!m.have.includes(key)) m.have.push(key);
@@ -1097,7 +1108,7 @@ class Sync {
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = cutBefore(batch, Math.ceil(batch.length / 2)); // never between a notes change and its base (round twenty-nine, 9)
       const a = await this.pushBatch(m, batch.slice(0, mid));
-      return this.vaultFull ? a : a + (await this.pushBatch(m, batch.slice(mid)));
+      return this.vaultFull && !this.vaultFull.photos ? a : a + (await this.pushBatch(m, batch.slice(mid)));
     }
     if (r.status === 400 || r.status === 409 || r.status === 413) {
       // Noted under the last HLC, which is stable across runs.

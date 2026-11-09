@@ -103,7 +103,9 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
   await page.addInitScript(() => { const w = window as unknown as { __unhandled: string[] }; w.__unhandled = []; addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => w.__unhandled.push(String(ev.reason?.message ?? ev.reason))); });
   await page.goto('/plants'); await ready(page);
   for (const [to, h] of [['/today', /Today/], ['/propagation', /Propagation/], ['/places', /space/i], ['/plants', /plants/i]] as Array<[string, RegExp]>) {
-    await page.locator(`a[href="${to}"]:visible`).first().click();
+    // My spaces and Propagation from the menu (the tab bar's More) since round eighty-seven (DESIGN-87); the others by the bars.
+    if (to === '/propagation' || to === '/places') { await page.getByRole('button', { name: 'Menu' }).click(); await page.locator(`#menu a[href="${to}"]`).click(); }
+    else await page.locator(`a[href="${to}"]:visible`).first().click();
     await expect(page).toHaveURL(new RegExp(`${to}$`));
     await expect(page.locator('h1').first(), to).toContainText(h);
   }

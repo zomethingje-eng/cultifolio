@@ -158,7 +158,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
   await page.fill('#g-n', '3'); // nothing is potted from an uncounted pot
   await page.getByRole('button', { name: 'Record count' }).click();
-  await expect(page.getByText('30%')).toBeVisible(); // the count is stored and shown before the next form (round sixty; the harness review, 13)
+  await expect(page.locator('.cards').getByText('30%')).toBeVisible(); // the card's: the checkpoints table says it too (round eighty-seven, F5) // the count is stored and shown before the next form (round sixty; the harness review, 13)
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.getByRole('button', { name: 'Edit' }).click();
   expect((await a11yScan(page)).unlabeled).toEqual([]);

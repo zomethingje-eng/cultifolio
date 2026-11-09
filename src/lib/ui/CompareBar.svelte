@@ -33,8 +33,9 @@
 <style>
   .tray { position: fixed; right: 16px; bottom: 16px; z-index: 58; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 8px 10px; font-size: var(--fs-md); }
   .lab { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .pick { display: inline-flex; align-items: center; gap: 2px; background: var(--sunk); border-radius: 999px; padding: 2px 4px 2px 10px; font-family: var(--serif); font-size: var(--fs-md); }
-  .pick button { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-base); min-width: var(--tap); min-height: var(--tap); cursor: pointer; border-radius: 999px; }
+  /* A picked name as words with its ×, not a filled chip (round eighty-seven's look; the review of stage 2's pages, 8). */
+  .pick { display: inline-flex; align-items: center; gap: 0; background: none; border-radius: 0; padding: 0 0 0 4px; font-family: var(--serif); font-size: var(--fs-md); }
+  .pick button { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-base); min-width: var(--tap); min-height: var(--tap); cursor: pointer; border-radius: var(--r); }
   .pick button:hover { color: var(--bad); background: var(--card); }
   .hint { color: var(--accent); font-size: var(--fs-sm); font-weight: 600; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 6px; }
   .clear { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; min-height: var(--tap); min-width: var(--tap); padding: 0 6px; }
@@ -42,12 +43,12 @@
   @media (max-width: 700px) {
     .tray { display: none; }
     /* Clear of the tab bar (56 px and the safe area) by 10 px; right-aligned and small, so the page's own actions stay in reach. */
-    .cmppill { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 58; display: flex; align-items: center; background: var(--ink); color: var(--bg); border-radius: 999px; box-shadow: var(--sh2); font-size: var(--fs-md); font-weight: 600; transition: transform 0.22s ease; }
+    .cmppill { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 58; display: flex; align-items: center; background: var(--ink); color: var(--bg); border-radius: var(--r); box-shadow: var(--sh2); font-size: var(--fs-md); font-weight: 600; transition: transform 0.22s ease; }
     .cmppill.low { transform: translateY(56px); }
     .go { color: inherit; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px 0 16px; white-space: nowrap; }
     .go:hover { text-decoration: none; }
     .more { font-weight: 400; opacity: 0.8; }
-    .x { border: 0; background: none; color: inherit; opacity: 0.75; font: inherit; font-size: var(--fs-lg); min-width: 44px; min-height: 44px; border-radius: 999px; cursor: pointer; }
+    .x { border: 0; background: none; color: inherit; opacity: 0.75; font: inherit; font-size: var(--fs-lg); min-width: 44px; min-height: 44px; border-radius: var(--r); cursor: pointer; }
     .x:hover { opacity: 1; }
   }
   /* Under 480 px tall there is no tab bar: the pill sits at the bottom. */

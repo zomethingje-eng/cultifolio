@@ -9,7 +9,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Change } from '$core/log';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
 import { batchFingerprint, deriveKeys, newVaultKey, sealJson, sha256hex } from '$lib/sync/crypto';
-import { MAX_BYTES } from '$lib/server/sync';
+import { MAX_BYTES, LOG_RESERVE } from '$lib/server/sync';
 import { accNo } from '$lib/db/types';
 
 /* ------------------------------------------------------------------ fakes */
@@ -553,6 +553,29 @@ describe('a full vault is said, not split', () => {
     await B.sync.run(); // the retry seals with a fresh nonce: different bytes, same pixels
     expect(B.sync.refused).toEqual([]);
     expect((memB.meta.get('sync') as { photosPushed: string[] }).photosPushed).toContain(pid);
+  });
+  it('photographs and papers stop short of the ceiling, so the changes still sync; a later edit too (round eighty-seven, the stage 3 fixes; S2)', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    // Filled by photographs and papers to just under their part: a 110-byte photo passes it, though the vault has room.
+    await fillVault(r2, MAX_BYTES - LOG_RESERVE - 10);
+    const pid = 'pone000000001';
+    memB.photos.set(pid, { id: pid, blob: new Blob([new Uint8Array(100)]), thumb: new Blob([new Uint8Array(10)]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 100 });
+    await B.sync.run();
+    expect(B.sync.vaultFull).toMatchObject({ limit: MAX_BYTES - LOG_RESERVE, photos: true }); // its bytes: the fill and the batch sent first
+    expect(r2.objs.has(`vault/${(await deriveKeys(KEY)).id}/photo/${pid}.bin`)).toBe(false);
+    expect(memB.outbox.size).toBe(0); // the photo's record went, as every change does
+    // An ordinary edit afterwards syncs, and the photographs' flag stays (a batch taken says nothing of their room).
+    await B.collection.addEvent({ acc: a.id, d: '2026-02-01', t: 'water' });
+    expect(memB.outbox.size).toBeGreaterThan(0);
+    await B.sync.run();
+    expect(memB.outbox.size).toBe(0);
+    expect(B.sync.vaultFull?.photos).toBe(true);
+    expect(B.sync.lastError).toBeNull();
   });
   it('a full vault refuses a photo with 507 too; a photo that is merely too big is still 413 and noted', async () => {
     const r2 = fakeR2();

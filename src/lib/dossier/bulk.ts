@@ -1002,11 +1002,23 @@ export interface BulkSources {
 }
 
 /**
+ * What the bulk fetcher answered from the files, and what it passed on (round eighty-seven): `through` every request
+ * passed to the fetcher behind it; of those, `occApi` GBIF's occurrence search answered (the species the download left to
+ * the API path, and keys the download does not hold), and `unasked` not asked (`skipped`: an offline re-derivation's).
+ */
+/** How a range row begins that an offline re-derivation could not read (round eighty-seven): not asked, never none. */
+export const NOT_ASKED_OFFLINE = 'not asked: offline';
+
+export type BulkStats = { wcvp: number; occ: number; media: number; through: number; occApi: number; unasked: number };
+/** The build's last line of them: what the files answered, and what became of the rest. */
+export const bulkWords = (s: BulkStats): string => `bulk: ${s.wcvp} distributions, ${s.occ} occurrence sets and ${s.media} photograph sets from the files; ${s.through} requests passed on: ${s.occApi} answered by GBIF's occurrence search (the species the download left to the API path, and keys it does not hold: their records are the ones --list-derived counts), ${s.unasked} not asked (offline), ${s.through - s.occApi - s.unasked} answered otherwise (a species' name from the previous dossier offline, Kew's names from Kew's file, GBIF's backbone online)`;
+
+/**
  * Answer distribution and occurrence requests from the bulk files; pass the
  * rest through. When a file has nothing for a species the request falls
  * through to the API, so a name missing from the download still builds.
  */
-export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp: 0, occ: 0, media: 0, through: 0 }): JsonFetcher & { stats: typeof stats } {
+export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats: BulkStats = { wcvp: 0, occ: 0, media: 0, through: 0, occApi: 0, unasked: 0 }): JsonFetcher & { stats: BulkStats } {
   // JsonFetcher is generic in what the caller expects (`f<T>(url)`), and the URL is the only thing that says what T is: a
   // fetcher cannot prove to the type checker that a distributions URL is answered with a distributions page. The regexes
   // below decide that, so each answer is built in the shape the matching adapter asks for and cast `as unknown as T` at
@@ -1017,14 +1029,22 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
   // sixty-nine; triage-68 M4, S-A3: the two asks could have disagreed, one refused and one answered).
   let synOf = 0;
   const synPages = new Map<string, FetchResult<unknown>>();
+  // Every request the files do not answer, counted by what became of it (round eighty-seven: the walk's last line said
+  // "56990 requests to the APIs", most of them a name answered from the previous dossier or a source not asked offline).
+  const pass = async <T>(url: string, opts?: FetchOptions): Promise<FetchResult<T>> => {
+    stats.through++;
+    const r = await base<T>(url, opts);
+    if (r.status === 'skipped') stats.unasked++;
+    else if (RE_OCC.test(url) && (r.status === 'ok' || r.status === 'none')) stats.occApi++;
+    return r;
+  };
   const f = async <T = unknown>(url: string, opts?: FetchOptions): Promise<FetchResult<T>> => {
     let m: RegExpExecArray | null;
     if ((m = RE_SYN.exec(url))) {
       if (Number(m[1]) !== synOf) { synOf = Number(m[1]); synPages.clear(); }
       const held = synPages.get(url);
       if (held) return held as FetchResult<T>;
-      stats.through++;
-      const r = await base<T>(url, opts);
+      const r = await pass<T>(url, opts);
       synPages.set(url, r);
       return r;
     }
@@ -1095,21 +1115,24 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         if (otherAuthor) {
           // Nothing of Kew's is this species': GBIF's own answer is asked for the national checklists, without the WCVP rows
           // GBIF may have attached to the key from the other author's name, and the record says why.
-          stats.through++;
-          const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+          const r = await pass<{ results?: GbifDistribution[] }>(url, opts);
           // An offline re-derivation does not ask GBIF (round eighty-six; review D's D12: Monsonia lheritieri's range row
           // became "not asked" and its climate "pending", where round eighty-four said truly that Kew holds the name only
           // under another author). Kew's answer is the file's, and stands; only the national checklists were not asked.
           if (r.status === 'skipped') return { status: 'ok', data: { results: [], otherAuthor, unasked: r.detail } } as unknown as FetchResult<T>;
           return (r.status === 'ok' ? { status: 'ok', data: { ...r.data, results: (r.data.results ?? []).filter((d) => !isWcvpRow(d)), otherAuthor } } : r) as unknown as FetchResult<T>;
         }
+        // GBIF's older names not asked (an offline re-derivation; round eighty-seven, the walk's drop: Conophytum tomasii,
+        // g3702919, whose range an online build reads from Kew's entry under one of them): the range is not known, and is
+        // said as not asked, never as none (rule 2), so the walk carries the range the page had (`carriesCore`) and lists the
+        // page for an online build. A refusal or a failure of the list stays the "none" with its reason, as before.
+        if (syn.status === 'skipped') return { status: 'skipped', detail: `${NOT_ASKED_OFFLINE}: Kew's file${src.wcvp.fileDay ? ` of ${src.wcvp.fileDay}` : ''} holds no row of ${sp.name}${sp.authorship ? ` ${sp.authorship}` : ''}, and GBIF's older names for it, by which an online build reads Kew's range, were not asked` } as FetchResult<T>;
         const n = syn.status === 'ok' ? (syn.rows ?? []).length : 0;
         const older = syn.status !== 'ok' ? `GBIF's older names for it were not read (${syn.status})` : syn.truncated ? "GBIF's list of its older names was cut short, so they were not read" : n ? `none of GBIF's ${n} older name${n === 1 ? '' : 's'} for it leads to one species Kew accepts with a native range` : 'GBIF lists no older name for it';
         noKew = `Kew's file${src.wcvp.fileDay ? ` of ${src.wcvp.fileDay}` : ''} holds no row of ${sp.name}${sp.authorship ? ` ${sp.authorship}` : ''}, and ${older}`;
       } else if (sp && got === null) noKew = `Kew's file holds ${sp.name}${sp.authorship ? ` ${sp.authorship}` : ''}, and this build did not read its entry's range`;
       if (noKew) {
-        stats.through++;
-        const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+        const r = await pass<{ results?: GbifDistribution[] }>(url, opts);
         // Offline, as above (round eighty-six; D12): Kew's file answered; the national checklists were not asked.
         if (r.status === 'skipped') return { status: 'ok', data: { results: [], noKew, unasked: r.detail } } as unknown as FetchResult<T>;
         return (r.status === 'ok' || r.status === 'none' ? { status: 'ok', data: { ...(r.status === 'ok' ? r.data : { results: [] }), noKew } } : r) as unknown as FetchResult<T>;
@@ -1138,8 +1161,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         return { status: 'ok', data: page as unknown as T };
       }
     }
-    stats.through++;
-    const r = await base<T>(url, opts);
+    const r = await pass<T>(url, opts);
     if ((m = RE_SPECIES.exec(url)) && r.status === 'ok') {
       const sp = r.data as unknown as GbifSpecies;
       if (sp?.canonicalName) names.set(Number(m[1]), { name: sp.canonicalName, authorship: sp.authorship, family: sp.family });

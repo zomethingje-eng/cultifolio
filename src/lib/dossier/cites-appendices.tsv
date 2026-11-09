@@ -1,0 +1,276 @@
+# CITES Appendices I, II and III: the plant (FLORA) listings, transcribed by hand (round eighty-seven, stage 2; the
+# sources agent). Read by src/lib/dossier/cites.ts. The Appendices are the Convention's own text, published by CITES at
+# https://cites.org/eng/app/appendices.php. Never from Species+ or the CITES Checklist (checklist.cites.org), whose terms
+# (read 9 November 2026 at https://checklist.cites.org/terms_of_use_page_en.html) forbid redistributing their data, any
+# derivative work and commercial use without the Secretariat's and UNEP's written permission.
+#
+# What was read (9 November 2026): cites.org answers a script with a browser check (HTTP 403), so the edition in force,
+# "Appendices I, II and III valid from 5 March 2026" (https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf),
+# could not be read here. The rows are the FLORA pages (pp. 61-79) of the edition valid from 7 February 2025, read from
+# the copy the North American Rock Garden Society keeps (https://www.nargs.org/files/pages/cites_flora_e-appendices-2025-02-07.pdf,
+# 384,051 bytes, md5 d93e60c5e6c0221e6a882427d2dca031; its PDF names the CITES Secretariat as author, made 7 February
+# 2025), with the plant amendments of CoP20 (Samarkand, 24 November to 5 December 2025; in force 5 March 2026) added as
+# CITES Notification to the Parties No. 2026/005 gives them (https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf),
+# read from the U.S. Fish and Wildlife Service's notice PB 26-001 of 13 January 2026, which lists them
+# (https://www.fws.gov/sites/default/files/documents/2026-01/ole-public-bulletin-cites-cop20-amendments-to-appendices-i-and-ii-pb-26-001-01_13_2026.pdf).
+# Rows from the Notification say so in `source`. Appendix III changes between the two editions are not in the
+# Notification: the owner's check below is what finds them.
+#
+# The table is applied to the pages only when the line `checked:` below names the edition in force it was checked
+# against, row by row, and that file's md5 (the owner's step, docs/STAGE2-OWNER-87.md). Until then every page says
+# "not asked", never "not listed".
+#
+# valid-from: 2026-03-05
+# edition: https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf
+# checked: no
+#
+# Columns (tab-separated): appendix, taxon as the Appendices print it, annotation signs, the listing's parenthesis or
+# braces verbatim, the Party of an Appendix III listing, names excepted (";"), names included (";"), a rule this code
+# reads (genera:… the genera a family listing names, by the Appendices' family header; narrow:… genera whose species
+# Kew has moved into the listed genus, which the listing is not read to take; succulent, "succulent species only";
+# infra, "includes infraspecific taxa"), the family header it stands under, where the row was read, and its URL.
+appendix	taxon	annotation	scope	party	except	includes	rule	family	source	url
+I	Agave parviflora							AGAVACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Agave victoriae-reginae	#4						AGAVACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Nolina interrata							AGAVACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Yucca queretaroensis							AGAVACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+III	Conophytum spp.			South Africa				AIZOACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+III	Mestoklema tuberosum			South Africa				AIZOACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Galanthus spp.	#4						AMARYLLIDACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Sternbergia spp.	#4						AMARYLLIDACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Operculicarya decaryi							ANACARDIACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Operculicarya hyphaenoides							ANACARDIACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Operculicarya pachypus							ANACARDIACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Hoodia spp.	#9						APOCYNACEAE	Appendices of 7 February 2025, p. 61	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=61
+II	Pachypodium spp.	#4	(Except the species included in Appendix I)					APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+I	Pachypodium ambongense							APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+I	Pachypodium baronii							APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+I	Pachypodium decaryi							APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+I	Pachypodium windsorii							APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+III	Raphionacme zeyheri			South Africa				APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Rauvolfia serpentina	#2						APOCYNACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Panax ginseng	#3	(Only the population of the Russian Federation; no other population is included in the Appendices)					ARALIACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Panax quinquefolius	#3						ARALIACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+I	Araucaria araucana							ARAUCARIACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Beaucarnea spp.					Beaucarnea hookeri; Beaucarnea glassiana		ASPARAGACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Podophyllum hexandrum	#2						BERBERIDACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Handroanthus spp.	#17						BIGNONIACEAE	Appendices of 7 February 2025, p. 62	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=62
+II	Roseodendron spp.	#17						BIGNONIACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+II	Tabebuia spp.	#17						BIGNONIACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+II	Tillandsia harrisii	#4						BROMELIACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+II	Tillandsia kammii	#4						BROMELIACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+II	Tillandsia xerographica	#4						BROMELIACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+II	Commiphora wightii	#19						BURSERACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	CACTACEAE spp.	P1 #4	(Except the species included in Appendix I and Pereskia spp., Pereskiopsis spp. and Quiabentia spp. which are not included in the Appendices)		Pereskia spp.; Pereskiopsis spp.; Quiabentia spp.			CACTACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+I	Ariocarpus spp.							CACTACEAE	Appendices of 7 February 2025, p. 63	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=63
+I	Astrophytum asterias							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Aztekium ritteri							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Coryphantha werdermannii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Discocactus spp.							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Echinocereus ferreiranus ssp. lindsayorum							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Echinocereus schmollii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Escobaria minima							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Escobaria sneedii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Mammillaria pectinifera		{Includes ssp. solisioides}			Mammillaria pectinifera ssp. solisioides		CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Melocactus conoideus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Melocactus deinacanthus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Melocactus glaucescens							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Melocactus paucispinus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Obregonia denegrii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pachycereus militaris							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pediocactus bradyi							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pediocactus knowltonii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pediocactus paradinei							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pediocactus peeblesianus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pediocactus sileri							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Pelecyphora spp.						narrow:Escobaria,Neobesseya,Cochiseia	CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus blainei							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus brevihamatus ssp. tobuschii							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus brevispinus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus cloverae							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus erectocentrus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus glaucus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus mariposensis							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus mesae-verdae							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus nyensis							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus papyracanthus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus pubispinus							CACTACEAE	Appendices of 7 February 2025, p. 64	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=64
+I	Sclerocactus sileri							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Sclerocactus wetlandicus							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Sclerocactus wrightiae							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Strombocactus spp.							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Turbinicarpus spp.							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Uebelmannia spp.							CACTACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+II	Caryocar costaricense	#4						CARYOCARACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Crassothonna clavifolia			South Africa				COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Othonna armiana			South Africa				COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Othonna cacalioides			South Africa				COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Othonna euphorbioides			South Africa				COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Othonna retrorsa			South Africa				COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+I	Saussurea costus							COMPOSITAE (ASTERACEAE)	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+II	Rhodiola spp.	#2						CRASSULACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Tylecodon bodleyae			South Africa				CRASSULACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Tylecodon nolteei			South Africa				CRASSULACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+III	Tylecodon reticulatus			South Africa				CRASSULACEAE	Appendices of 7 February 2025, p. 65	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=65
+II	Zygosicyos pubescens							CUCURBITACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Zygosicyos tripartitus							CUCURBITACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+I	Fitzroya cupressoides							CUPRESSACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+I	Pilgerodendron uviferum							CUPRESSACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Widdringtonia whytei							CUPRESSACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Cyathea spp.	#4						CYATHEACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	CYCADACEAE spp.	#4	(Except the species included in Appendix I)					CYCADACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+I	Cycas beddomei							CYCADACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Cibotium barometz	#4						DICKSONIACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Dicksonia spp.	#4	(Only the populations of the Americas; no other population is included in the Appendices)					DICKSONIACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	DIDIEREACEAE spp.	#4					genera:Alluaudia,Alluaudiopsis,Decarya,Didierea	DIDIEREACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Dioscorea deltoidea	#4						DIOSCOREACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Dionaea muscipula	#4						DROSERACEAE	Appendices of 7 February 2025, p. 66	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=66
+II	Diospyros spp.	#5	(Only the populations of Madagascar; no other population is included in the Appendices)					EBENACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+II	Euphorbia spp.	P2 #4	(Succulent species only, except the species included in Appendix I and Euphorbia misera which is not included in the Appendices)		Euphorbia misera		succulent	EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia ambovombensis							EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia bupleurifolia							EUPHORBIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+I	Euphorbia capsaintemariensis							EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia cremersii		{Includes the forma viridifolia and the var. rakotozafyi}			Euphorbia cremersii f. viridifolia; Euphorbia cremersii var. rakotozafyi		EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia cylindrifolia		{Includes the ssp. tuberifera}			Euphorbia cylindrifolia ssp. tuberifera		EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia decaryi		{Includes the vars. ampanihyensis, robinsonii and spirosticha}			Euphorbia decaryi var. ampanihyensis; Euphorbia decaryi var. robinsonii; Euphorbia decaryi var. spirosticha		EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia francoisii							EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia moratii		{Includes the vars. antsingiensis, bemarahensis and multiflora}			Euphorbia moratii var. antsingiensis; Euphorbia moratii var. bemarahensis; Euphorbia moratii var. multiflora		EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia parvicyathophora							EUPHORBIACEAE	Appendices of 7 February 2025, p. 67	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=67
+I	Euphorbia quartziticola							EUPHORBIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+I	Euphorbia tulearensis							EUPHORBIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Quercus mongolica	#5		Russian Federation				FAGACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+II	Fouquieria columnaris	#4						FOUQUIERIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+I	Fouquieria fasciculata							FOUQUIERIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+I	Fouquieria purpusii							FOUQUIERIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Monsonia herrei			South Africa				GERANIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Monsonia multifida			South Africa				GERANIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Monsonia patersonii			South Africa				GERANIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Pelargonium crassicaule			South Africa				GERANIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Pelargonium triste			South Africa				GERANIACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+III	Gnetum montanum	#1		Nepal				GNETACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+II	Oreomunnea pterocarpa	#4						JUGLANDACEAE	Appendices of 7 February 2025, p. 68	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=68
+II	Aniba rosaeodora	#12						LAURACEAE	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Afzelia spp.	#17	(Only the African populations; no other population is included in the Appendices)					LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Dalbergia spp.	#15	(Except for the species included in Appendix I)					LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+I	Dalbergia nigra							LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Dipteryx spp.	#17						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Guibourtia demeusei	#15						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Guibourtia pellegriniana	#15						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Guibourtia tessmannii	#15						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Paubrasilia echinata	#10						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Pericopsis elata	#17						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Platymiscium parviflorum	#4						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 69	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=69
+II	Pterocarpus spp.	#17	(Except Pterocarpus santalinus which is included in Appendix II with annotation #7; only the African populations; no other population is included in the Appendices)					LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+II	Pterocarpus santalinus	#7						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+II	Senna meridionalis							LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+II	Aloe spp.	#4	(Except the species included in Appendix I and Aloe vera, also referenced as Aloe barbadensis, which is not included in the Appendices)		Aloe vera; Aloe barbadensis			LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+II	Aloe bergeriana	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Aloe jeppeae	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Aloe subspicata	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Aloe welwitschii	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+I	Aloe albida							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe albiflora							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe alfredii							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe bakeri							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe bellatula							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe calcairophila							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe compressa		{Includes the vars. paucituberculata, rugosquamosa and schistophila}			Aloe compressa var. paucituberculata; Aloe compressa var. rugosquamosa; Aloe compressa var. schistophila		LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe delphinensis							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe descoingsii							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe fragilis							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe haworthioides		{Includes the var. aurantiaca}			Aloe haworthioides var. aurantiaca		LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe helenae							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe laeta		{Includes the var. maniaensis}			Aloe laeta var. maniaensis		LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe parallelifolia							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe parvula							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe pillansii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe polyphylla							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe rauhii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe suzannae							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe versicolor							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe vossii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+III	Magnolia liliifera var. obovata	#1		Nepal				MAGNOLIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+II	Adansonia grandidieri	#16						MALVACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+II	Cedrela spp.	#6	(Only the populations of the Neotropics; no other population is included in the Appendices)					MELIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+II	Khaya spp.	#17	(Only the African populations; no other population is included in the Appendices)					MELIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+II	Swietenia humilis	#4						MELIACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+II	Swietenia macrophylla	#6	(Only the populations of the Neotropics; no other population is included in the Appendices)					MELIACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+II	Swietenia mahagoni	#5						MELIACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+II	Nepenthes spp.	#4	(Except the species included in Appendix I)					NEPENTHACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+I	Nepenthes khasiana							NEPENTHACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+I	Nepenthes rajah							NEPENTHACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+III	Fraxinus mandshurica	#5		Russian Federation				OLEACEAE	Appendices of 7 February 2025, p. 72	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=72
+II	ORCHIDACEAE spp.	P3 #4	(Except the species included in Appendix I)					ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Aerangis ellisii	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Cattleya jongheana	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Cattleya lobata	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Dendrobium cruentum	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Mexipedium xerophyticum	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Paphiopedilum spp.	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Peristeria elata	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Phragmipedium spp.	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Renanthera imschootiana	P4						ORCHIDACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+II	Cistanche deserticola	#4						OROBANCHACEAE	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+II	Beccariophoenix madagascariensis	#4						PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+II	Dypsis decaryi	#4						PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 73	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=73
+I	Dypsis decipiens							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+I	Jubaea chilensis							PALMAE (ARECACEAE)	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Lemurophoenix halleuxii							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+III	Lodoicea maldivica	#13		Seychelles				PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Marojejya darianii							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Ravenea louvelii							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Ravenea rivularis							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Satranala decussilvae							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Voanioala gerardii							PALMAE (ARECACEAE)	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+III	Meconopsis regia	#1		Nepal				PAPAVERACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Adenia firingalavensis							PASSIFLORACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Adenia olaboensis							PASSIFLORACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+III	Adenia spinosa			South Africa				PASSIFLORACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Adenia subsessilifolia							PASSIFLORACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Uncarina grandidieri							PEDALIACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Uncarina stellulifera							PEDALIACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+I	Abies guatemalensis							PINACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+III	Pinus koraiensis	#5		Russian Federation				PINACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+III	Podocarpus neriifolius	#1		Nepal				PODOCARPACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
+II	Podocarpus parlatorei	P7	(zero export quota for wild-taken specimens for commercial purposes)					PODOCARPACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Anacampseros spp.	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+I	Anacampseros quinaria					Avonia quinaria		PORTULACACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
+II	Avonia spp.	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Lewisia serrata	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+III	Portulacaria pygmaea			South Africa				PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Cyclamen spp.	P5 #4						PRIMULACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Adonis vernalis	#2						RANUNCULACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Hydrastis canadensis	#8						RANUNCULACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Prunus africana	#4						ROSACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+I	Balmea stormiae							RUBIACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Osyris lanceolata	#2	(Only the populations of Burundi, Ethiopia, Kenya, Rwanda, Uganda and the United Republic of Tanzania; no other population is included in the Appendices)					SANTALACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+II	Sarracenia spp.	#4	(Except the species included in Appendix I)					SARRACENIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+I	Sarracenia oreophila							SARRACENIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+I	Sarracenia rubra ssp. alabamensis							SARRACENIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+I	Sarracenia rubra ssp. jonesii							SARRACENIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+II	Picrorhiza kurrooa	#2	{Excludes Picrorhiza scrophulariiflora}		Picrorhiza scrophulariiflora			SCROPHULARIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+II	Bowenia spp.	#4						STANGERIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+I	Stangeria eriopus							STANGERIACEAE	Appendices of 7 February 2025, p. 76	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=76
+II	Taxus chinensis	#2	{Includes infraspecific taxa of this species}				infra	TAXACEAE	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Taxus cuspidata	P6 #2	{Includes infraspecific taxa of this species}				infra	TAXACEAE	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Taxus fuana	#2	{Includes infraspecific taxa of this species}				infra	TAXACEAE	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Taxus sumatrana	#2	{Includes infraspecific taxa of this species}				infra	TAXACEAE	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Taxus wallichiana	#2						TAXACEAE	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Aquilaria spp.	#14						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Gonystylus spp.	#4						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+II	Gyrinops spp.	#14						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
+III	Tetracentron sinense	#1		Nepal				TROCHODENDRACEAE (TETRACENTRACEAE)	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Nardostachys grandiflora	#2						VALERIANACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Cyphostemma elephantopus							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Cyphostemma laza							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Cyphostemma montagnacii							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Welwitschia mirabilis	#4						WELWITSCHIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	ZAMIACEAE spp.	#4	(Except the species included in Appendix I)					ZAMIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+I	Ceratozamia spp.							ZAMIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+I	Encephalartos spp.							ZAMIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+I	Microcycas calocoma							ZAMIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+I	Zamia restrepoi							ZAMIACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Hedychium philippinense	#4						ZINGIBERACEAE	Appendices of 7 February 2025, p. 79	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=79
+II	Siphonochilus aethiopicus		(Only the populations of Eswatini, Mozambique, South Africa and Zimbabwe; no other population is included in the Appendices)					ZINGIBERACEAE	Appendices of 7 February 2025, p. 79	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=79
+II	Bulnesia sarmientoi	#11						ZYGOPHYLLACEAE	Appendices of 7 February 2025, p. 79	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=79
+II	Guaiacum spp.	#2						ZYGOPHYLLACEAE	Appendices of 7 February 2025, p. 79	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=79

@@ -12,9 +12,11 @@ import { collection } from '$lib/db/collection.svelte';
 import { accNo, type Accession, type Provenance } from '$lib/db/types';
 import { parseName, speciesName, speciesSlug, tidyName, QUOTES } from '$core/names';
 import type { NameCheck } from './check';
+import { kindOfCheck } from '$lib/ui/ref/older-kind';
 import { checkKey } from './check';
 import { resolvePlace, type ImportRow, type NumberPlan } from './plan';
 import { cleanName } from './rows';
+import { splitItemNumber } from '$core/identity';
 
 export interface ImportResult {
   added: Accession[];
@@ -31,6 +33,18 @@ export interface ImportResult {
   placesMade: number;
   /** The last watering given for the whole sheet: how many lines were written, and whether that write failed. */
   watered: { lines: number; failed: string | null } | null;
+  /**
+   * The lines that named a plant they were taken from ("taken from"), once the plants had landed (round eighty-seven,
+   * F4): how many plants were linked, the lines whose number named no single plant (kept in the plant's notes), and
+   * whether that write failed. Absent when no line named one.
+   */
+  mothers?: { linked: number; unlinked: Array<{ line: number; no: string }>; failed: string | null };
+  /**
+   * The plants numbered as an item (2026-0012/A), once the plants had landed (round eighty-seven, the stage 3 fixes): how
+   * many were linked to the plant holding their accession's number, and the lines that were not, each with why; those
+   * stand as plants of their own under the number. Absent when no line was numbered as an item.
+   */
+  items?: { linked: number; unlinked: Array<{ line: number; no: string; why: string }> };
   ms: number;
 }
 
@@ -64,9 +78,14 @@ export function recordOf(row: ImportRow, check: NameCheck | undefined, placeId: 
     price: row.price,
     locationId: placeId,
     notes: row.notes,
+    // The identity and provenance the sheet gave (round eighty-seven, t1): ITF2's codes, the collector, the identification,
+    // earlier holders and names, a clone, and a deaccession, each read by $core/identity before it is here.
+    ...(row.ident ?? {}),
     // A name the review said is an older name of a page, kept as the sheet gave it: the page goes with the plant, as the
     // add form's answer does (round eighty-five; outside review A16a). Not for a species name typed with "cf.".
-    ...(check?.s === 'near' && check.why === 'older name' && !p.qualifier ? { olderOf: check.suggestion } : {})
+    // And which kind of name it is, as the row said it ("GBIF's name for", or "An older name of"), so the plant's page and
+    // its tile say it without asking again (round eighty-seven, the deeper fix of round eighty-six's U3; `olderKind`).
+    ...(check?.s === 'near' && check.why === 'older name' && !p.qualifier ? { olderOf: check.suggestion, olderKind: kindOfCheck(check) } : {})
   };
 }
 
@@ -201,7 +220,11 @@ async function commitNow(rows: ImportRow[], checks: Map<string, NameCheck>, plan
     const planned = plan.byRow.get(r.key);
     return { r, rec: recordOf(r, checks.get(checkKey(r.name)), placeId), planned, numbers: planned?.numbers ?? [] };
   };
+  const takenFrom: Array<{ r: ImportRow; made: Accession[] }> = [];
+  const landedRows: Array<{ key: string; line: number; made: Accession[] }> = [];
   const landed = (c: ReturnType<typeof prep>, made: Accession[]) => {
+    landedRows.push({ key: c.r.key, line: c.r.line, made });
+    if (c.r.mother) takenFrom.push({ r: c.r, made });
     result.added.push(...made);
     result.doneKeys.push(c.r.key);
     if (c.planned && !c.planned.kept && c.planned.given) result.renumbered.push({ line: c.r.line, given: c.planned.given, got: accNo(made[0]) });
@@ -228,6 +251,46 @@ async function commitNow(rows: ImportRow[], checks: Map<string, NameCheck>, plan
     done += plants;
     opts.onProgress?.(done, total);
   }
+  // A plant whose number is an accession's number and a letter ("2026-0012/A", as the plants sheet writes an item) is an
+  // item of the plant holding the bare number (round eighty-seven, t1). One commit, after the plants exist, since the
+  // plant holding the number may be in the same sheet. Linked by the holder's identity where the sheet gives it, and by
+  // number only when the plant here has the same name (round eighty-seven, the stage 3 fixes; review S1): a number alone
+  // attached an item to whatever plant holds that number here, which after a renumbering, or in another collection, is
+  // another plant. The holder's identity is its line in the sheet: the plant that line made in this import, or the plant
+  // here that line's id names (a sheet read back into the collection that wrote it leaves out the lines already here).
+  const items: Array<{ kind: 'accession'; id: string; fields: Record<string, unknown> }> = [];
+  const madeBy = new Map<string, Accession>();
+  for (const c of landedRows) if (c.made.length === 1) madeBy.set(c.key, c.made[0]);
+  const sheetNo = new Map<string, ImportRow[]>();
+  for (const r of rows) if (r.number) (sheetNo.get(r.number) ?? sheetNo.set(r.number, []).get(r.number)!).push(r);
+  const lineOf = new Map<string, number>();
+  for (const c of landedRows) for (const m of c.made) lineOf.set(m.id, c.line);
+  const unlinked: Array<{ line: number; no: string; why: string }> = [];
+  let linked = 0;
+  for (const a of result.added) {
+    const sp = splitItemNumber(accNo(a));
+    if (!sp || a.itemOf) continue;
+    const line = lineOf.get(a.id) ?? 0;
+    const inSheet = sheetNo.get(sp.base) ?? [];
+    let holder: Accession | undefined;
+    let why: string | null = null;
+    if (inSheet.length === 1) {
+      const h = inSheet[0];
+      holder = madeBy.get(h.key) ?? (h.recordId ? collection.accession(h.recordId) : undefined);
+      if (!holder) why = `its accession's line ${h.line} was not added, and no plant here has that line's id`;
+    } else if (inSheet.length > 1) why = `the sheet gives ${sp.base} to ${inSheet.length} lines`;
+    if (!holder && !why) {
+      const here = collection.withNumber('accession', sp.base) as Accession[];
+      if (here.length !== 1) why = here.length ? `${here.length} plants here have the number ${sp.base}` : `no plant here or in the sheet has the number ${sp.base}`;
+      else if (here[0].taxonName !== a.taxonName || (here[0].cultivar ?? null) !== (a.cultivar ?? null)) why = `your ${sp.base} is ${here[0].taxonName}${here[0].cultivar ? ` '${here[0].cultivar}'` : ''}, not this plant's name`;
+      else holder = here[0];
+    }
+    if (holder && holder.id !== a.id) { items.push({ kind: 'accession', id: a.id, fields: { item: sp.item, itemOf: holder.id } }); linked++; }
+    else unlinked.push({ line, no: accNo(a), why: why ?? 'it names itself' });
+  }
+  if (items.length) { try { await collection.putWith('accession', items[0].id, items[0].fields, [], items.slice(1)); } catch { /* the plants stand under their numbers; the page says a write was refused */ } }
+  if (linked || unlinked.length) result.items = { linked, unlinked };
+  if (takenFrom.length) result.mothers = await linkMothers(takenFrom, result.added);
   // The last watering the grower gave for the whole sheet: one line per plant, as Water writes it, in one commit after the plants exist (as the add form does).
   if (opts.lastWatered && result.added.length) {
     try {
@@ -276,6 +339,37 @@ async function writeRow(r: ImportRow, rec: ReturnType<typeof recordOf>, numbers:
     got.forEach((a, i) => { if (taken[i]) renumbered.push({ line: r.line, given: numbers[i], got: accNo(a) }); });
     return got;
   }
+}
+
+/**
+ * "Taken from" read as a plant, once every plant of the import has its number (round eighty-seven, F4): the one plant of
+ * this import under that number, else the one live plant here under it; never one of two that share a number, and never
+ * the plant itself. The links and the notes of the lines left unlinked are one commit, after the plants exist, as the
+ * last watering is: the plants stand if it fails, and the result says so.
+ */
+async function linkMothers(list: Array<{ r: ImportRow; made: Accession[] }>, added: Accession[]): Promise<NonNullable<ImportResult['mothers']>> {
+  const out: NonNullable<ImportResult['mothers']> = { linked: 0, unlinked: [], failed: null };
+  const writes: Array<{ kind: 'accession'; id: string; fields: Record<string, unknown> }> = [];
+  for (const { r, made } of list) {
+    const no = r.mother!.trim();
+    const ours = added.filter((a) => accNo(a) === no);
+    const here = ours.length ? ours : (collection.withNumber('accession', no) as Accession[]);
+    const mother = here.length === 1 ? here[0] : null;
+    for (const a of made) {
+      if (mother && mother.id !== a.id) { writes.push({ kind: 'accession', id: a.id, fields: { motherAcc: mother.id, motherHow: r.motherHow ?? null } }); out.linked++; }
+      else writes.push({ kind: 'accession', id: a.id, fields: { notes: `${a.notes ? `${a.notes}${/\n$/.test(a.notes) ? '' : '\n'}` : ''}Taken from: ${no}${r.motherHow ? ` (${r.motherHow})` : ''}` } });
+    }
+    if (!mother || made.some((a) => a.id === mother.id)) out.unlinked.push({ line: r.line, no });
+  }
+  if (!writes.length) return out;
+  try {
+    const [first, ...rest] = writes;
+    await collection.putWith(first.kind, first.id, first.fields, [], rest);
+  } catch (e) {
+    out.failed = collection.lastWriteError ?? (e instanceof Error ? e.message : String(e));
+    out.linked = 0;
+  }
+  return out;
 }
 
 /**

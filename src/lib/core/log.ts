@@ -108,17 +108,21 @@ const strings = (...f: string[]): Record<string, ValueType> => Object.fromEntrie
  * on every device that had not upgraded (round thirty, 1).
  */
 export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>>> = {
-  accession: { status: ['growing', 'archived', 'dead'], provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'], nameKind: ['species', 'cultivar', 'hybrid'] },
+  // Round eighty-seven (t1): why a plant is no longer held, and ITF2's provenance type, propagation history and
+  // verification level ($core/identity), each kept in step with its union in db/types.ts by a test. (t2): how a plant
+  // was taken from the plant it came from (lineage's MOTHER_HOW). (t3): a plant's growing season and what
+  // it was confirmed from ($core/season).
+  accession: { status: ['growing', 'archived', 'dead'], provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'], nameKind: ['species', 'cultivar', 'hybrid'], olderKind: ['gbif', 'older'], deacc: ['died', 'given', 'lost', 'failed', 'stolen', 'reaccessioned'], provType: ['W', 'Z', 'G', 'U'], propHistory: ['I', 'S', 'SA', 'SB', 'SC', 'V', 'VA', 'VB', 'U'], idLevel: ['U', '0', '1', '2', '3', '4'], motherHow: ['offset', 'cutting', 'division', 'leaf', 'bulbil'], season: ['winter', 'summer', 'none'], seasonFrom: ['rain', 'cool', 'spread', 'grower'] },
   sowing: { status: ['active', 'done', 'failed'], method: ['seed', 'cutting', 'offset', 'leaf', 'division', 'bulbil', 'graft'], provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'], nameKind: ['species', 'cultivar', 'hybrid'] },
-  photo: { dFrom: ['exif', 'added'] },
+  photo: { dFrom: ['exif', 'added'], mime: ['application/pdf', 'image/jpeg', 'image/png'], doc: ['cites', 'phyto', 'invoice', 'other'] },
   location: { type: ['room', 'shelf', 'bench', 'tray', 'windowsill', 'greenhouse', 'coldframe', 'garden', 'outdoor', 'other'] }
 };
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
-  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importKey', 'importKeyBare', 'olderOf'), taxonKey: 'number', waterDays: 'number' },
-  sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
+  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importKey', 'importKeyBare', 'olderOf', 'olderKind', 'olderKindOf', 'item', 'itemOf', 'deacc', 'deaccOn', 'deaccNote', 'provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'clone', 'motherAcc', 'motherHow', 'season', 'seasonFrom'), taxonKey: 'number', waterDays: 'number', exChain: 'array', idHistory: 'array', restMonths: 'array' },
+  sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase', 'cross', 'stockAcc'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number', waterDays: 'number', dryMonths: 'array' },
-  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'figures', auto: 'boolean', plants: 'array' },
-  photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
+  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used', 'pollen', 'scion', 'stock'), followUp: 'number', n: 'number', measures: 'figures', auto: 'boolean', plants: 'array' },
+  photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha', 'mime', 'fileName', 'doc'), w: 'number', h: 'number', bytes: 'number' },
   taxon: { ...strings('name', 'myNotes', 'myNotesBase'), gbifKey: 'number', followed: 'boolean' },
   setting: { scheme: 'object' }
 };

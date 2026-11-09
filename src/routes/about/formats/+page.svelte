@@ -2,10 +2,11 @@
   import { onMount } from 'svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
+  import AboutNav from '../AboutNav.svelte';
   import { revealHash, printOpens } from '$lib/ui/about-fold';
   import { COUNTS_ON, countText, fileCounts } from '$lib/ui/about-counts';
   $effect(() => {
-    setCrumb([{ label: 'About', href: '/about/how' }, { label: 'Formats' }]);
+    setCrumb([{ label: 'About', href: '/about' }, { label: 'Formats' }]);
     return () => setCrumb([]);
   });
   // Each section reads as its summary, the format in full one tap away (round eighty-five; S11). A link to a part inside
@@ -23,7 +24,8 @@
 
 <PageHead title="Formats" kick="About" places={false} sub="Your data is readable without this app: the change log, the backup file, and what sync puts on the server, all plain." />
 
-<nav class="seg topseg" aria-label="About"><a href="/about/how">How it is made</a><a class="on" href="/about/formats" aria-current="page">Formats</a></nav>
+<!-- The about pages' one row of links (round eighty-seven): the owner's page, the method, the formats, the data, the changes. -->
+<AboutNav at="formats" />
 
 <article class="prose">
   <section class="brief" aria-labelledby="brief-h">
@@ -90,6 +92,8 @@
     <li>Of two notes for one number renumbered two ways on two devices, the one whose new number the record holds is shown and the other hidden. A later renumbering that went on from it keeps it shown.</li>
     <li>Two notes an older version wrote for one renumbering (the same words) are shown as one line, the earliest dated. Removing it removes both, and Undo brings both back.</li>
     <li>While a number is shared, every link the app makes to either record is by its record id, not by the number. An address by the bare number (a typed one, an old bookmark) opens a chooser listing both.</li>
+    <li>So does a number a renumbering moved a plant off, read from the renumbering's note ("Renumbered from 2026-0012 to 2026-0019"): links to the plant holding it are by record id, and an address by that number with no label tag lists both.</li>
+    <li>An item (2026-0012/A) renumbered takes the next free letter of its accession, 2026-0012/B, its <code>acc</code> and <code>item</code> written together. A plant holding an accession's bare number, renumbered, takes its items to the new number in the same commit, each keeping its letter while that number was never given, each with a note. Restore does the same.</li>
     <li>A removed plant or batch brought back (Undo, or Restore on its page) yields its number only to a record that reached this device while it was removed, judged by the order in which changes arrived here and never by two devices' clocks, whenever that record was made; the one coming back then takes the next free number.</li>
     <li>It takes it with a note saying so, and the other keeps its number and its printed label.</li>
     <li>A change stored before this device kept that order (an older version did not) has no place in it, and a removal of that age comes before anything that has one.</li>
@@ -127,22 +131,48 @@
     <li><code>waterDays</code>: the plant's own watering rhythm, 1 to 365 days, over its space's. It does not take the plant out of its space's dry months.</li>
     <li><code>importKey</code>: the sheet line an import filed the plant from, as a 53-bit hash in base 36 after an "i". Nothing of the line's text is kept, and a plant not imported has none.</li>
     <li>The hash is of the line's fields as the import reads them through the column mapping: the name as read, Genus and Species joined; a date as read, or its text when not read; a number with its leading zeros dropped; a column no field takes left out.</li>
+    <li>"Taken from" and "taken as" are in the hash only on a line that gives either, so a sheet without them keys its lines as before.</li>
     <li>Each run of spaces is made one and the case folded, then "#" and the plant's place among the plants that line and its identical lines make.</li>
     <li><code>importKeyBare</code>: on a plant whose line had columns no field takes, the same key read without them, so a run of the sheet that has lost those columns finds the plant.</li>
     <li><code>olderOf</code>: the name of the species page the add form or an import found this plant's name to be an older name of, when you kept the name as typed. The plant's page then shows that species. A change of name clears it.</li>
+    <li><code>olderKind</code> (gbif, older): beside <code>olderOf</code>, which kind of name the add form, the photo walk or the import read it to be when the plant was filed. "gbif" is GBIF's name for that page's own key, and "older" one of the page's older names. It is absent where they could not tell, and on a plant filed before it was kept. The plant's page asks the reference again when it opens, and says what the record holds only when the reference is not reached. Any other word is read as not known. A change of name clears it.</li>
+    <li><code>motherAcc</code>: the plant this one was taken from, by its record id, when it was added from one of yours without a batch. <code>motherHow</code> (offset, cutting, division, leaf, bulbil): how. A plant potted up from a batch knows its parent through the batch instead.</li>
+    <li>A link to another plant stays when that plant is removed. A value that is not a record id (not text, longer than 64 characters, or the plant's own) is read as none, and a word for how that this version does not know is shown as it is.</li>
+    <li><code>season</code> (winter, summer, none): the plant's growing season, as you set or confirmed it on its page. <code>restMonths</code>: the months, 1 to 12, it rests in, at most eleven; none for a plant with no rest.</li>
+    <li><code>seasonFrom</code> (rain, cool, spread, grower): what you confirmed the season from. That is the species page's rain rule, its temperature rule or its spread rain, or your own setting.</li>
+    <li>A season of another word, or months that are not whole numbers from 1 to 12, or all twelve, is read as no season set, and the plant follows its space. Absent on a plant never given one.</li>
+    <li><code>olderKindOf</code>: the <code>olderOf</code> that <code>olderKind</code> was read for, filed with it. The kind is read only while <code>olderOf</code> is still that name: an older version of the app moves <code>olderOf</code> on a change of name and leaves the kind, so a kind filed for another name, or with no name beside it, is read as not known. A change of name clears it with the kind.</li>
+    <!-- Round eighty-seven (t1): identity and provenance, read and checked by src/lib/core/identity.ts. -->
+    <li id="f-items"><code>item</code> and <code>itemOf</code>: an offset, division or bulb split of an accession, filed as a plant of its own. Its number is the accession's and a letter, "2026-0012/A". <code>item</code> is the letter, A to ZZ, and <code>itemOf</code> the record id of the plant that holds the bare number.</li>
+    <li>The plants of one accession share their name, identification and provenance: an edit of any of these on one of them is written to each in the same commit. Each keeps its own space, status, notes, log and photographs.</li>
+    <li id="f-deacc"><code>deacc</code> (died, given, lost, failed, stolen, reaccessioned): why the plant is no longer held; failed is a propagation that failed. <code>deaccOn</code> is the day, YYYY-MM-DD, YYYY-MM or YYYY, and <code>deaccNote</code> a note of up to 1,000 characters. The status is set with it: dead for died and failed, archived otherwise. A plant whose status is growing is held whatever reason it still carries (a version before this one set the status alone when marking it growing), and its next edit writes the three fields empty.</li>
+    <li id="f-itf2"><code>provType</code> (W, Z, G, U) and <code>propHistory</code> (I, S, SA, SB, SC, V, VA, VB, U) are fields E.1 and E.2 of ITF2, the International Transfer Format for Botanic Garden Plant Records, version 2 (BGCI and TDWG). Provenance Type and Propagation History, in ITF2's codes.</li>
+    <li><code>collector</code>: the collector's name (ITF2 F.24). <code>collected</code>: the collection date (F.27), YYYY-MM-DD, YYYY-MM or YYYY. The collector's own number is <code>fieldNumber</code>, kept as typed.</li>
+    <li><code>idLevel</code> (U, 0, 1, 2, 3, 4): ITF2's Verification Level (D.1). <code>idBy</code>: who identified the plant (D.2). <code>idOn</code>: when (D.3), a day, a month or a year.</li>
+    <li><code>exChain</code>: an array of the plant's earlier holders, the most recent first, at most 12, each up to 80 characters. <code>clone</code>: a clone's name, apart from a cultivar.</li>
+    <li><code>idHistory</code>: an array of the names the plant had before, the oldest first, at most 30. Each entry is an object with "name", "until" (the day it stopped being the plant's name), and the "idLevel", "idBy" and "idOn" it had then.</li>
+    <li>A rename line on the plant ("Renamed from Copiapoa cinerea to Copiapoa gigantea", with " to " once in it) whose earlier name the array lacks is shown as an entry, its "until" the line's day, and written into the array by the plant's next edit. A version before this one wrote the line alone.</li>
+    <li>Each of these is read and checked when it is read. A value of another type, a word or code this version does not know, or a day that is not one, is shown as not stated and kept in the log as it is.</li>
   </ul>
   <h3 id="f-event">event</h3>
   <ul class="rules">
     <li><code>acc</code>: a record id, as above. <code>d</code>: YYYY-MM-DD; a plant's acquire line carries its date as read, so YYYY-MM or YYYY after an import.</li>
-    <li><code>t</code> (acquire, repot, water, feed, treat, prune, flower, pollinate, seed, graft, measure, move, note, death, propagate, audit, germinate, potup, loss), and as the type needs: <code>note</code>, <code>cause</code>, <code>used</code>, and <code>followUp</code> in days.</li>
+    <li><code>t</code> (acquire, repot, water, feed, treat, prune, flower, pollinate, fruit, seed, graft, measure, move, note, death, propagate, audit, germinate, potup, loss), and as the type needs: <code>note</code>, <code>cause</code>, <code>used</code>, and <code>followUp</code> in days.</li>
     <li><code>measures</code>: an object of named finite numbers: diam, h, spread, caudex and, on a repot line, pot, in millimetres whatever the display. Heads and leaves are counts.</li>
     <li><code>n</code>: a count: seedlings up so far, plants potted, plants lost. <code>plants</code>: on a potup line, the ids of the plants it made, so the line names them by their current numbers.</li>
+    <li><code>pollen</code>: on a pollinate line, the pollen parent's record id. The line's own plant is the seed parent, so the line is a cross, dated by its <code>d</code>, and the seed lot a batch can be sown from.</li>
+    <li><code>scion</code> and <code>stock</code>: on a graft line, the record ids of the plants the scion and the stock came from, either of which may be absent. The line's own plant is the grafted plant.</li>
+    <li>The three are read on their own kinds of line only. One that names the line's own plant, or no record id, is read as none.</li>
     <li><code>auto</code>: true on a line the app wrote by itself, a rename's note or a move when a space is removed, which never counts as the plant being seen. A watering the grower started for a whole space, from Today or the space's page, is the grower's and counts.</li>
   </ul>
   <h3 id="f-photo">photo</h3>
   <ul class="rules">
     <li><code>acc</code> or <code>sowing</code>, <code>d</code>, <code>dFrom</code> (exif or added), <code>caption</code>, <code>w</code>, <code>h</code>, <code>bytes</code>, and <code>sha</code>, the SHA-256 of the full-size JPEG, in hex.</li>
     <li>Its pixels are stored separately under the same id, as the browser's own files. A browser that will not keep a file in its own database (Safari in a Private Browsing window) keeps the two JPEGs as plain bytes with their type instead. A backup carries them the same way.</li>
+    <li>A paper kept with a plant is a photo record too, with <code>acc</code>, <code>d</code> (the day it was added), <code>bytes</code> (the file's size), <code>sha</code> and <code>caption</code>.</li>
+    <li>It has three fields a photograph never has. <code>mime</code> is the file's type (application/pdf, image/jpeg or image/png), read from its first bytes. <code>fileName</code> is its name as added, at most 120 characters. <code>doc</code> (cites, phyto, invoice, other) is what it is.</li>
+    <li>A paper has no <code>w</code> or <code>h</code>. So a version made before papers keeps it as a record waiting for fields, never shows it as a photograph, and still syncs and backs up its bytes.</li>
+    <li>Its file is stored under the record's id behind a JPEG of one grey pixel, 159 bytes, and the thumbnail is that JPEG alone. Every version's backup reader takes both for JPEGs, and this one reads the file whole after the first 159 bytes. Its <code>sha</code> is of the stored bytes.</li>
   </ul>
   <h3 id="f-location">location (a space)</h3>
   <ul class="rules">
@@ -159,6 +189,8 @@
     <li><code>sown</code> (YYYY-MM-DD), <code>count</code>, <code>sourceFrom</code>, and <code>sourceRef</code>, the seller's lot.</li>
     <li><code>fieldNumber</code>: the collector's number, which the plants potted up inherit.</li>
     <li><code>provenance</code>, <code>medium</code>, <code>container</code>, <code>treatment</code>, <code>bottomHeatC</code>, <code>covered</code>, <code>locationId</code>, <code>status</code>, <code>notes</code> and <code>notesBase</code>.</li>
+    <li><code>cross</code>: the id of the pollinate line the seed came from. <code>stockAcc</code>: for a graft batch, the stock's plant, by its record id; <code>parentAcc</code> is the scion's.</li>
+    <li>Every link between plants is a field on a kind every version reads, never a kind of its own: an older version folds them as fields it does not know, and shows a fruit line by its word.</li>
   </ul>
   <h3 id="f-taxon">taxon (a species you note or follow)</h3>
   <ul class="rules">
@@ -170,6 +202,10 @@
   <ul class="rules">
     <li>One record, id <code>numbering</code>, with <code>scheme</code>: the numbering scheme every device shares.</li>
     <li>And one record for each Replace, its id beginning <code>numbers-kept</code>, with <code>accession</code> and <code>sowing</code>: the plant and batch numbers this device had given that the file did not carry. So a number given once is never given again, and the log alone says so.</li>
+    <li>And one record for each pinned view, its id <code>pin-</code> and sixteen hex digits of a hash of its query, so a view pinned on two devices is one record. Unpinning removes the record.</li>
+    <li>A pin holds <code>href</code> (the page pinned), <code>view</code> (its browse query, such as <code>?r=NAM&amp;f=apocynaceae</code>), <code>label</code>, <code>made</code> and <code>seen</code> (days), <code>n</code> (its species when last seen) and <code>keys</code> (their page ids, written short; null for a view of more than 3,000 species).</li>
+    <li>The page ids are written as Kew's numbers in order, each as its distance from the one before in base-32 digits of a 64-letter alphabet, the last digit of each without its high bit; then <code>~</code> and GBIF's keys the same way.</li>
+    <li>A pin is a setting record, a kind every version reads, because a version refuses a batch that holds a kind it does not know, whole. A version made before pins folds them as setting records and shows none of them, but for its backup page, which calls a file's pins "the numbering scheme" when it merges the file. Each pin is checked when it is read; one whose fields are not a pin's is not shown, and stays in the log as it is. A field this version does not know is passed over.</li>
   </ul>
   </details>
   </section>
@@ -360,7 +396,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   <ul class="rules">
     <li>The example collection (the sample, in the code) is IndexedDB <code>cultifolio-demo</code>, beside the grower's <code>cultifolio</code>. A flag in this tab's session storage (<code>cultifolio.demo</code>) chooses it when a page loads, so entering or leaving it reloads the page.</li>
     <li>Which collection a page shows is decided once, as it loads. Its settings, the "keep data" question, sync and the front page's hint all read that decision, never the flag as it is later.</li>
-    <li>A device's own collection is empty when its log holds nothing at all: no plant, removed or not, nothing in Propagation, no species followed or noted, no space and no numbering scheme.</li>
+    <li>A device's own collection is empty when its log holds nothing at all: no plant, removed or not, nothing in Propagation, no species followed or noted, no space, no numbering scheme and no pinned view.</li>
     <li>It also has no frost site, no change waiting for this device's date or parked, no replacement waiting to finish, no change this version could not read, and no sync set up. This is read once the collection and the sync key have been read.</li>
     <li>On such a device, Today, My spaces and Propagation show their own empty state with one button under it, Show the example collection, which opens it on the same page. One sentence beside it says it is a sample kept apart from your own collection, which you can close at any time.</li>
     <li>My plants, while it lists no plant, has the same button and sentence at its head, whatever else the collection holds.</li>
@@ -386,7 +422,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A page that asks "Leave site?" (an unsaved form) and is answered Cancel stays a working example tab, and that Leave is called off. A later reload or closing the tab keeps the example, and the Leave button comes back.</li>
     <li>When you added or changed records in the example, Leave says how many and asks first. A deletion held up because another tab still has the example open is said, and finishes when that tab closes.</li>
     <li>Its settings are its own, and no cookie is written from it. In the example, units, the label sheet, preferences, the site, the last spaces chosen, the species compared and the plants picked for labels are kept for that tab only, in its session storage under <code>cultifolio.demo.</code> and the key's name.</li>
-    <li>Those keys are <code>cultifolio.demo.units</code>, <code>cultifolio.demo.labels</code>, <code>cultifolio.demo.prefs</code>, <code>cultifolio.demo.frost.site</code>, <code>cultifolio.demo.theme</code>, <code>cultifolio.demo.lastLocation</code>, <code>cultifolio.demo.lastSowLocation</code>, <code>cultifolio.demo.countMode</code>, <code>cultifolio.demo.compare</code> and <code>cultifolio.demo.labelsPicked</code>.</li>
+    <li>Those keys are <code>cultifolio.demo.units</code>, <code>cultifolio.demo.labels</code>, <code>cultifolio.demo.prefs</code>, <code>cultifolio.demo.frost.site</code>, <code>cultifolio.demo.theme</code>, <code>cultifolio.demo.lastLocation</code>, <code>cultifolio.demo.lastSowLocation</code>, <code>cultifolio.demo.countMode</code>, <code>cultifolio.demo.compare</code>, <code>cultifolio.demo.report</code> and <code>cultifolio.demo.labelsPicked</code>.</li>
     <li>Settings, Sync and Backup are shut there. A restore refuses to start in it, and so does sync, in the code and not only on the page.</li>
     <li>It offers no watering calendar file and no spreadsheet of its plants. Where a page says how your collection is kept (Today, My plants), the example says it is kept nowhere and is deleted when you leave it.</li>
     <li>Its frost watch says it has no site of its own (none is made up for it), and that yours is set on Today or in Settings once you leave.</li>
@@ -424,6 +460,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A write with <code>Origin: null</code> and no <code>Sec-Fetch-Site</code> is taken as the site's own only when it carries that header. That is what a browser from before <code>Sec-Fetch-Site</code> (Safari before 16.4) sends for this site's own requests, under its no-referrer policy. Any other write that names another site is refused (403).</li>
     <li>A page on another site cannot send the header without asking first, and this site never says yes.</li>
     <li>A body larger than the limit is 413. A vault with no room left (2 GB) is 507 with <code>{`{ error: "vault full", bytes, limit }`}</code>, and the device stops sending and says so rather than splitting the log batch.</li>
+    <li>A photograph or a paper is refused with that 507 once the vault holds 2 GB less 64 MB, its <code>limit</code> that figure: the last 64 MB is kept for log batches, so changes still sync. The device then sends its log batches as before, holds its photographs and papers, and says so.</li>
     <li>A log batch the server refuses (400, 409 or 413) is halved down to the changes at fault. Those stay in the device's log and outbox, are said on the Sync page apart from what waits to be sent, and are sent again a day after the refusal, not at every run.</li>
     <li>A refusal the sync code makes itself is JSON with an <code>error</code>. One the framework makes (a bad vault id, a missing token, a body past the limit) is JSON with a <code>message</code>. A fetch of a log batch or photograph that is not there is a plain-text 404. The device shows whichever of the two fields the body carries.</li>
   </ul>
@@ -553,7 +590,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A group that cannot be read is answered 503 with a <code>Retry-After</code> of at most thirty seconds, and the server process that refused it does not try that group again for those thirty seconds.</li>
     <li>Under a published reference a group's sheet file is always one the build wrote. If it cannot be read, the group is answered that way, and the server does not rebuild it from the species' own files.</li>
     <li>The server sees which groups a device asked for, which narrows each species to one of its group's, and no more. A species page you open is, of course, a page you opened.</li>
-    <li>A search typed on the front page or the compare page, a name typed in the species picker as typed, and a name in an import the groups do not settle, go to <code>/api/search?q=</code>. The answer is kept a day in the site's cache under that text, linked to no address, since it is a question about the catalogue, not about your plants.</li>
+    <li>A search typed on the front page, in the search box at the top of every page or on the compare page, a name typed in the species picker as typed, and a name in an import the groups do not settle, go to <code>/api/search?q=</code>. The answer is kept a day in the site's cache under that text, linked to no address, since it is a question about the catalogue, not about your plants. The box's words also go to <code>/api/suggest?q=</code>, kept five minutes.</li>
     <li>What is searched on the device is never sent: the text typed on "Your species", and anything typed before your collection has opened.</li>
     <li>Nor is anything shaped like a plant number: two to four digits and another, a dash between or not, as 2026-0013; under a prefix scheme, the collection's prefix followed by a dash or a digit, as ACC-0013; or a batch's number, as S2026-001.</li>
     <li>The catalogue's rows you scroll or jump to by letter are asked for by position (<code>/api/rows</code>: a grouping and a row number, nothing of yours).</li>
@@ -630,6 +667,8 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A plant filed under a name other than the sheet's (a suggestion used, a name edited in the review, a word not read) keeps the sheet's text as its name as received. "Use it" puts the suggested species in place of the species part only.</li>
     <li>A name the reference holds as an older name of one species is said as that ("an older name: the reference has this species as …"). Its name can be taken on one line, on every line of the same name, or on every such line at once. A near spelling is offered line by line.</li>
     <li>A Status or Kind the import cannot read is said on its line and kept in the notes, as Provenance is.</li>
+    <li>"Taken from" names a plant by its number, and "taken as" how (offset, cutting, division, leaf or bulbil). Once the plants are in, the number is read as the one plant of the import under it, else the one plant here under it, and linked. A number that names no single plant is kept in the plant's notes and said.</li>
+    <li>A word for how that is not one of the five is said on its line and kept in the notes.</li>
     <li>A space path is split on " › ", after a space whose whole name is the cell.</li>
     <li>When the sheet's space cells have a "&gt;" between words (Greenhouse &gt; Bench 2), a "/" with a space on each side (Greenhouse / Bench 2), or a "/" with no spaces between two words of three letters or more after a space here (Greenhouse/Bench 2), the review asks once whether to read those as paths too. The answer is yes by default when the first part names a space here or begins another such cell.</li>
     <li>Nothing in brackets is a step, so Cold frame (N/S), S/W window and Shelf 1/2 are each one space.</li>
@@ -684,6 +723,10 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   <h3 id="sheets">The backup's spreadsheets</h3>
   <ul class="rules">
     <li>My plants offers the plants sheet on its own too, as <code>cultifolio-plants-</code> and the day, <code>.csv</code>: the backup's <code>plants.csv</code>, written the same way.</li>
+    <li>Its columns, in order: number, species, cultivar, kind, parentage, name as received, field number, provenance, status, location, acquired, from, lot or reference, form, price, sowing and notes.</li>
+    <li>Then GBIF key, water every (days) and older name of. Then the identity and provenance, under ITF2's names where it has a field: item of, accsta, no longer held, no longer held on, no longer held note, prot, prohis, cnam, cid, field code, cdat, idql, rkql, vlev, vnam, vdat, vhist, ex and clone. Then taken from and taken as.</li>
+    <li>Then growing season, rest months (as Jun Jul Aug), season from, photographs (a count) and papers (each as its kind and file name, joined by semicolons). The id is last.</li>
+    <li>The import reads back by their heads the columns before GBIF key, but for sowing, and the identity and provenance columns, taken from and taken as. It lists item of, accsta, cid beside a field number, field code, idql and rkql apart, as restating other columns. It names the others apart. None is added to a plant's notes.</li>
     <li>The backup's sheets write <code>="…"</code> around the shapes of text a spreadsheet would change into a number or a date. These are a leading zero (0012), an exponent (1E5), a day and month (3-12, 1/2), a year and month (2026-01), a day, month and year (3-12-2024, 1/2/24), and a run of twelve digits or more.</li>
     <li>A text a spreadsheet would read as a formula gets a leading apostrophe, and one that already begins with an apostrophe and a formula sign gets a second.</li>
     <li>Only those shapes: text such as 3.12, 2026/01, Aug 2017, 1:30 or 50%, which some spreadsheets read as a date, a time or a number, is written as it is.</li>
@@ -691,6 +734,8 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A full date (2017-08-14) is written as it is. A spreadsheet takes it for a date and shows it in its own short form (14/08/2017 in Excel set to British English). A sheet saved again from the spreadsheet carries that form, which the import reads, asking once which way round a date like 09/03/2024 is.</li>
     <li>A date kept as a month (2017-08) is one of the shapes above, so it shows as written, not as Aug-17.</li>
     <li>In LibreOffice, tick "Evaluate formulas" when opening the sheet, or those cells show as <code>="…"</code>.</li>
+    <li>A plant's lineage is in the sheets by plant number. <code>plants.csv</code> has "taken from" and "taken as", which the import reads back. <code>events.csv</code> has a cross's pollen parent and a graft's scion and stock plants. <code>batches.csv</code> has the cross a batch was sown from, seed parent first, and a graft batch's stock plant.</li>
+    <li>A linked plant this file holds no record of is written by its record id.</li>
   </ul>
   <h3 id="calendar">The watering calendar</h3>
   <ul class="rules">
@@ -716,7 +761,10 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   </ul>
   <h3 id="label">The label's QR code</h3>
   <ul class="rules">
-    <li><b>The label's QR code</b> is the plant's address, <code>/plants/&lt;identity&gt;#s=&lt;species&gt;&amp;n=&lt;name as printed&gt;</code>.</li>
+    <li><b>The label's QR code</b> is the plant's address by its number, <code>/plants/&lt;number&gt;#i=&lt;tag&gt;&amp;s=&lt;species&gt;&amp;n=&lt;name as printed&gt;</code>, the number escaped as an address needs. On label tape it is the address and the tag, <code>/plants/&lt;number&gt;#i=&lt;tag&gt;</code>, so the code is small enough to read at 9 mm. A batch's is <code>/propagation/&lt;number&gt;</code>.</li>
+    <li>The tag is six characters of base 36 made from the plant's record id: two FNV-1a 32-bit hashes of <code>label:</code> and the id, from the offset bases 0x811c9dc5 and 0x050c5d1f, each written in base 36 and joined, and the first six characters kept. The id itself begins with the time it was made, so plants of one import share its first characters, and the hash tells them apart.</li>
+    <li>A plant's page finds a plant by its number as by its identity, and with a tag opens it only when the tag is that plant's; otherwise it lists the plant the tag names and the plant holding the number, or says no plant here has the tag. A code printed before this carries the identity, <code>/plants/&lt;identity&gt;#…</code>, and opens the plant as it did.</li>
+    <li>The 12 mm tape's code is drawn at error correction L, so with the tag it stays at version 3, 29 modules a side; the other stocks' codes are drawn at M.</li>
     <li>The part after <code>#</code> stays in the phone that scans it and is never sent to the server as written.</li>
     <li>A phone without that plant shows the species the label names and a link to its page, after asking for that species' hash group (<code>/api/entries?b=</code>, as a plant page asks for its own). So the server learns the group, one species in a few hundred, and not the name.</li>
     <li>The name in the code is cut to at most 60 code points, by whole characters as a reader sees them (a letter with its marks, a joined emoji), never inside one.</li>
@@ -793,6 +841,15 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li><code>occurrences.keys</code> (<code>{`{ key, name, kew, n, from, slug }`}</code>), present when the records also come from other GBIF keys than the page's own, or, on a page without a GBIF key, from the keys Kew's synonymy gives it.</li>
     <li>For each key: GBIF's name for it, how Kew's file holds it as this page's name or type, the records it added, <code>download</code> or <code>api</code>, and, for a page merged into this one, the old address.</li>
     <li>The species page reads these fields.</li>
+    <li><code>occurrences.api</code> (<code>{`[{ key, n }]`}</code>): the in-range records that came through GBIF's search API rather than a download, counted by their dataset (GBIF's <code>datasetKey</code>), the largest first. Empty when none came so; absent where the page was derived before the count was kept, so not known. The page does not show it; the build adds these counts up across the pages for a GBIF derived dataset of those records.</li>
+    <li><code>flowering</code> (<code>{`{ taxon, months?, read, unanswered? }`}</code>): iNaturalist's research-grade observations of wild plants annotated flowering, by month, January first, for the taxon named, and the day read. Without <code>months</code>, with <code>unanswered</code>: asked and not answered.</li>
+    <li><code>elsewhere.wikidata</code> (<code>{`{ item, read, ids, unanswered? }`}</code>): the identifiers the page's Wikidata item holds, each <code>{`{ p, v }`}</code>, its Wikidata property and value, and the day read.</li>
+    <li><code>elsewhere.published</code> (<code>{`{ place, volPage?, year?, row, file?, bhl? }`}</code>): where the name was published, as Kew's file writes it for the row named, and the day of Kew's file. <code>bhl</code> (<code>{`{ page?, none?, read }`}</code>): BHL's page for exactly that citation, or why none was taken, and the day asked.</li>
+    <li><code>parents</code> (<code>{`{ formula, row, file?, of }`}</code>): a hybrid's parents as Kew's formula states them. Each of <code>of</code> gives the words, Kew's row and accepted entry, the page here where there is one, and why where there is none. <code>others</code> counts the other authors' names of the same words.</li>
+    <li><code>risk</code>, <code>cites</code>, <code>chromosomes</code> and <code>nameAgreement</code>: Kew's predicted extinction risk, the CITES listing, ChromoDB's counts and the WFO Plant List's reading of the name. Each has a <code>status</code> (<code>ok</code>, <code>none</code>, <code>undecided</code>, or <code>skipped</code> for not asked, with why), the day it was read, and the file or table it was read from, with the date its publisher gives it.</li>
+    <li><code>hardiness</code> (<code>{`{ usda?, usdaWhy?, rhs, src }`}</code>): the USDA zone of the mean yearly low, with its years, or why there is none, and the RHS band of the record low. <code>koppen</code>: the Köppen–Geiger class, or why there is none, with the figures it was worked out from.</li>
+    <li><code>climate.extremes.lows</code> (<code>{`{ from, t }`}</code>): the lowest night of each calendar year from the first, null for a year with fewer than 347 of its days.</li>
+    <li><code>name.kew.by</code>: for each of Kew's older names, Kew's authors of it in the plant.</li>
     <li>GBIF's English names are one row per exact spelling and language. Each has the first source that gives it (<code>source</code>), the other named sources of that spelling (<code>alsoFrom</code>), how many sources give it when more than one (<code>sources</code>), and GBIF's <code>preferred</code> flag.</li>
     <li>A row whose name holds commas is read by the common-name rule as a list of names, each given by that row's sources. A list longer than four pages of a thousand rows is kept as far as it was read, and its upstream record says "truncated".</li>
     <li>A row whose <code>source</code> is "Wikidata" is an English name from the page's Wikidata item, its taxon common name (P1843), for a page without a GBIF key.</li>
@@ -809,10 +866,12 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li><code>thumb</code> and <code>credit</code>: the thumbnail and its licence and author as a tile shows them after "Photo: ", absent when they cannot be said short and true.</li>
     <li><code>near</code>: the ids of the six species of nearest habitat climate.</li>
     <li><code>changed</code>: the day the dossier last changed in substance, as whole days since 1 January 1970.</li>
+    <li><code>low</code>: the record low at the typical spot, °C to one decimal, where the page shows one. <code>first</code>: the day the page was first seen, as days since 1970-01-01, the earliest day its record notes or an earlier index's.</li>
     <li><code>syn</code>: up to six older names, shown. <code>older</code>: every other older name of species rank, searched, never shown.</li>
     <li><code>kew</code>: Kew's older names for the plant that <code>syn</code> and <code>older</code> do not hold, and the names GBIF files under the species' own varieties and subspecies, which the search reads only as a name typed and nothing shows. Absent where there are none, or Kew's file has not been read for the page.</li>
     <li><code>gname</code>: GBIF's name for the page's own key, where Kew's name heads the page and the page answers to GBIF's too; a row found by it says "GBIF's name for" the page. Absent on a page GBIF's own name heads.</li>
     <li><code>hom</code>: the record's older names spelt as another page's accepted name, by another author than that page's, searched only as a name typed and said as another author's name. <code>homBy</code>: for each of them, the authors the record writes after it, as written.</li>
+    <li>Or, in <code>homBy</code>, Kew's authors for the name in this plant, where the record writes none or Kew files the name here by another author than the other page's.</li>
     <li><code>merged</code>: the names of the pages merged into this one, each also among its older names. The search lists this page first for them, and its row says the name is merged into it.</li>
     <li><code>grown</code>: how many of iNaturalist's observations are marked captive or cultivated for the species, as the species list counts them. The search breaks a tie by it, before the photographs.</li>
     <li>Each of these, where absent, means none was written, never that the species has none.</li>
@@ -843,6 +902,10 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li><code>genera.json</code>: every genus with its count of species, <code>[[genus, count], …]</code>.</li>
     <li><code>older-genera.json</code>: every genus no page is headed in that is the first word of the older names of at least three species, with that count, <code>[[genus, count], …]</code>. The search reads a misspelt genus against both files.</li>
     <li><code>featured.json</code>: the species the front page's strip rotates through (<code>{`{ slug, name, thumb, credit, common, family }`}</code>).</li>
+    <li><code>browse.json</code>: what the browse pages filter, count, list and export, as columns, every species by its position in the index (<code>{`{ v, n, name, key, gbif, slug, common, families, family, origins, origin, climate, grown, changed, low }`}</code>).</li>
+    <li>In it <code>key</code> is the page's id (a number for Kew's) and <code>gbif</code> its GBIF key, or 0. <code>slug</code> holds only the addresses that are not the name's. <code>family</code> and <code>origin</code> are positions in <code>families</code> and <code>origins</code>, and <code>climate</code> is one letter a species.</li>
+    <li><code>grown</code> is a species' observations in cultivation, or -1 where they were not counted, and <code>changed</code> the day it last changed, in days since 1970. Its record low is <code>low</code>, °C to a tenth, or null where none is known; a table written before it lacks it. A <code>first</code> column, the day a page was first seen, is no longer written, and is not read where an earlier table has it: the index keeps that day. Where the reference has no such file, the server makes the table from the index, if it can read one.</li>
+    <li><code>browse-counts.json</code>: <code>{`{ grown, regions, families, genera, grownNotCounted }`}</code>: the species with observations in cultivation, as the browse page's filter counts them (<code>null</code> where the index counts none); the TDWG level-3 regions, the families and the genera that /region, /family and /genus list; and the species whose cultivated observations are not counted. The front page's Browse table shows them.</li>
     <li><code>sitemap/&lt;n&gt;.json</code>: forty thousand of the sitemap's addresses a file, with each one's day (<code>{`{ urls, days }`}</code>).</li>
   </ul>
   <h3 id="lookup-files">The names every page looks up</h3>
@@ -880,14 +943,15 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
 
 <style>
   .prose { max-width: 720px; font-size: var(--fs-base); line-height: 1.6; color: var(--ink); font-family: var(--ui); }
-  .prose h2 { font-family: var(--serif); font-size: var(--fs-2xl); margin: 32px 0 8px; }
+  /* Headings in the text face, the brief flush with the page under a rule (round eighty-seven's look; the review of stage
+     2's pages, 8): the serif is the scientific names' alone, and its roman is never loaded. */
+  .prose h2 { font-family: var(--ui); font-weight: 400; font-size: 1.375rem; margin: 32px 0 8px; }
   .prose h3 { font-family: var(--ui); font-size: var(--fs-lg); margin: 20px 0 6px; }
   .prose p { margin: 0 0 12px; }
   .prose pre { background: var(--sunk); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; font-size: var(--fs-md); line-height: 1.5; margin: 0 0 12px; }
   .prose code { font-family: var(--mono); font-size: var(--fs-md); }
   .prose p code, .prose li code { background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
-  .topseg { margin: 14px 0 6px; }
-  .brief { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 4px 18px 14px; margin: 0 0 18px; }
+  .brief { background: none; border-radius: 0; box-shadow: none; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 4px 0 14px; margin: 0 0 18px; }
   .brief ul { padding-left: 1.1rem; }
   .brief li { margin: 4px 0; }
   .toc { font-size: var(--fs-md); line-height: 2; }
@@ -903,7 +967,9 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
   .full > summary::before { content: '›'; content: '›' / ''; display: inline-block; width: 1em; flex: none; color: var(--accent); font-weight: 700; transition: transform 0.15s; }
   .full[open] > summary::before { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { .full > summary::before { transition: none; } }
-  /* An anchor lands under the top bar, not beneath it. */
-  .prose [id] { scroll-margin-top: calc(44px + 16px); }
+  /* An anchor, /privacy among them, lands 16 px under the top bar, whatever the bar's height: the page's own scroll
+     padding is the bar's measured height (--bar-h, theme.css) and 12 px, and this adds 4. Until round eighty-seven it
+     added 44 + 16 px, a bar of 44 px counted twice; the bar is 52 to 57 px now, and --bar-h follows it. */
+  .prose [id] { scroll-margin-top: 4px; }
   .prose code { overflow-wrap: anywhere; }
 </style>

@@ -1,4 +1,5 @@
-import { type Handle, type HandleFetch, type RequestEvent } from '@sveltejs/kit';
+import { type Handle, type HandleFetch, type HandleServerError, type RequestEvent } from '@sveltejs/kit';
+import { hasBrowse } from '$lib/browse/load.server';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
 import { corpusNow } from '$lib/server/dossiers';
@@ -209,6 +210,21 @@ export const handle: Handle = async ({ event, resolve }) => {
     else await put;
   }
   return r;
+};
+
+/**
+ * A failure the framework met, as its own handler said it (the error logged; its words the framework's), and for an
+ * address no route has (a 404) whether the corpus has the browse pages' table, so the not-found page links them only
+ * where they answer (round eighty-seven, the review of stage 1, B2: on a corpus with no `browse.json` each was a 503).
+ * A corpus that cannot be read is said as none. A 404 is no fault, and is not logged.
+ */
+export const handleError: HandleServerError = async ({ error, event, status, message }) => {
+  if (status !== 404) {
+    console.error(error);
+    return { message };
+  }
+  const browse = await Promise.resolve(event.locals?.corpus ?? corpusNow(event.platform, event.fetch)).then(hasBrowse, () => false);
+  return { message, browse };
 };
 
 /**

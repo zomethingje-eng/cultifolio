@@ -49,14 +49,16 @@ async function keptAsTyped(page: Page, typed: string) {
   expect(await stored(page, 'accession', 'olderOf')).toEqual(['Hoodia alstonii']);
 }
 
+// Round eighty-seven (pages: the deeper fix of U3): the add form records the kind it read (`olderKind`), and a tile says
+// the record's kind where the reference is not reached. So U3's case, a kind not known, is a plant filed while the sheets
+// were not reached either (no kind recorded, as r87p 9 has it); the recorded kind's case is U3 1b.
 test("r86f U3 1: with the sheets not reached, the tile of GBIF's name says only that the reference files it under the page @phone", async ({ page }) => {
   await page.route(/\/api\/names\?/, (r) => json(r, [row(9269454, 'Ceropegia alstonii')]));
   await page.route(/\/api\/search\?/, (r) => json(r, [HOODIA]));
   await page.route(/\/api\/entries\?/, (r) => json(r, []));
-  await page.route(/\/api\/sheets\?/, (r) => json(r, [SHEET, GBIF_COPY]));
+  await page.route(/\/api\/sheets\?/, (r) => r.abort()); // not reached when the plant is filed: no kind recorded
   await keptAsTyped(page, 'Ceropegia alstonii');
-  await page.unroute(/\/api\/sheets\?/);
-  await page.route(/\/api\/sheets\?/, (r) => r.abort()); // the group not reached
+  expect(await stored(page, 'accession', 'olderKind')).toEqual([]);
   await page.goto('/');
   await ready(page);
   const tile = page.locator('a.tile[href="/species/ceropegia-alstonii"]').first();
@@ -69,6 +71,32 @@ test("r86f U3 1: with the sheets not reached, the tile of GBIF's name says only 
   await page.reload();
   await ready(page);
   await expect(page.locator('a.tile[href="/species/ceropegia-alstonii"]').first()).toContainText("GBIF's name for Hoodia alstonii", { timeout: 15_000 });
+});
+
+test("r86f U3 1b (round eighty-seven): a kind recorded when the plant was filed stands in for the sheets not reached @phone", async ({ page }) => {
+  await page.route(/\/api\/names\?/, (r) => json(r, [row(9269454, 'Ceropegia alstonii')]));
+  await page.route(/\/api\/search\?/, (r) => json(r, [HOODIA]));
+  await page.route(/\/api\/entries\?/, (r) => json(r, []));
+  let served = 0;
+  await page.route(/\/api\/sheets\?/, (r) => { served++; return json(r, [SHEET, GBIF_COPY]); });
+  // The add form's steps (keptAsTyped), with its question of the kind answered before the press, as r87p 8 waits for it.
+  await page.goto('/plants/new');
+  await ready(page);
+  await page.locator('#species-name').fill('Ceropegia alstonii');
+  await leave(page);
+  await expect(add(page)).toHaveText('Add as typed');
+  await expect.poll(() => served, { timeout: 15_000 }).toBeGreaterThan(0);
+  await press(add(page));
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  expect(await stored(page, 'accession', 'olderKind')).toEqual(['gbif']);
+  await page.unroute(/\/api\/sheets\?/);
+  await page.route(/\/api\/sheets\?/, (r) => r.abort());
+  await page.goto('/');
+  await ready(page);
+  const tile = page.locator('a.tile[href="/species/ceropegia-alstonii"]').first();
+  await expect(tile).toContainText("GBIF's name for Hoodia alstonii", { timeout: 15_000 });
+  await expect(tile).not.toContainText('an older name of');
+  await expect(tile).not.toContainText('not in the reference');
 });
 
 test('r86f U3 2: guard: an older name, the sheets read, still says "an older name of" @phone', async ({ page }) => {

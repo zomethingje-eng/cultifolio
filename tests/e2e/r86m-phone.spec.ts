@@ -113,8 +113,10 @@ test.describe('where the head still wraps', () => {
     const few = page.locator('#few-records-line'), figs = page.locator('.hline .hhead a.figs');
     await expect(few).toBeVisible();
     const [f, g] = [(await few.boundingBox())!, (await figs.boundingBox())!];
-    expect(g.y).toBeGreaterThan(f.y + f.height); // wrapped: "Figures ›" under the mark, in a column 164 px wide
-    expect(g.y + g.height / 2 - (f.y + f.height / 2)).toBeGreaterThanOrEqual(43.5); // the two finger margins, 44 px each, do not meet
+    // Wrapped ("Figures ›" under the mark, in a column 164 px wide), the two finger margins, 44 px each, do not meet in
+    // height; beside it on one line (Source Sans 3 is narrower than Public Sans was; round eighty-seven), nor in width.
+    if (g.y > f.y + f.height) expect(g.y + g.height / 2 - (f.y + f.height / 2)).toBeGreaterThanOrEqual(43.5);
+    else expect(g.x - (f.x + f.width)).toBeGreaterThanOrEqual(0);
     const hits = await underFinger(page, f);
     expect(hits.figs).toBe(0);
     expect(hits.few).toBeGreaterThan(20);

@@ -32,11 +32,13 @@ export type PutResult = { ok: true } | { ok: false; refused: string };
 const metaRefused = (e: unknown): e is Error & { key: string } => e instanceof Error && e.name === 'MetaRefusedError' && typeof (e as { key?: unknown }).key === 'string';
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
-import { tag36 } from '$core/tag';
+import { tag36, tagIs } from '$core/tag'; // and a label's identity tag (round eighty-seven, the stage 3 fixes)
 import { isRecordedTime } from '$core/when';
 import { byNumberNewest } from './number-order';
 import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
+import { seasonOf, restsIn, type PlantSeason } from '$core/season';
+import { attachmentOf, isAttachmentRecord, wrap, unwrap, ENVELOPE, sniff, cleanName, fileError, MAX_PER_PLANT, CAPTION_MAX, papersFullError, type Attachment, type Doc } from '$lib/attach/attach';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, FIELD_TYPES, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
 import { nextAccession, plantNumberProblem, isScheme, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type MetaCondition, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
@@ -44,12 +46,18 @@ import { version as buildVersion } from '$app/environment';
 import { askToKeep } from '$lib/ui/keep-ask';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL, KEPT_NUMBERS, keptNumbers } from './types';
+import { PIN_PREFIX } from '$lib/browse/pins';
 import { fieldWords } from '$lib/ui/held-words';
 import { mySpeciesOf, type MySpecies } from './species-list';
+import { withKindOf } from '$lib/ui/ref/older-kind';
+import { DEACC_LABEL, NOTE_MAX, deaccOf, deaccStatus, isItemLetter, itemNumber, nextItem, pickShared, splitItemNumber, withRenameLines, type DeaccReason, type EarlierName } from '$core/identity'; // round eighty-seven, t1
+import { parentsOf as parentsIn, childrenOf as childrenIn, crossesOf as crossesIn, crossOf, type Parent, type Child, type Cross } from './lineage';
 /** How long after a load the pixels nothing names are swept (`sweepPixels`): off the page's first moments. */
 export const PIXEL_SWEEP_MS = 5000;
 
 export { NUMBERING_SETTING };
+/** A pinned view's record id begins so (round eighty-seven, C6; $lib/browse/pins): the parked list names it. */
+const PIN_RECORD = PIN_PREFIX;
 
 
 /** A short, deterministic tag for a string: two 32-bit FNV-1a hashes in base 36 (up to 14 characters, [a-z0-9]). */
@@ -155,7 +163,7 @@ class Collection {
         : kind === 'event' ? named(`A log line (${EVENT_LABEL[f('t') as keyof typeof EVENT_LABEL] ?? (f('t') || 'an entry')})`, plantWords(f('acc')), f('d'))
         : kind === 'photo' ? named('A photograph', plantWords(f('acc') || f('sowing')), f('d') ? `taken ${f('d')}` : '')
         : kind === 'taxon' ? `Your notes on ${f('name') || 'a species'}`
-        : kind === 'setting' ? (id.startsWith(KEPT_NUMBERS) ? 'The numbers kept from a replacement' : 'The numbering scheme') : 'A record';
+        : kind === 'setting' ? (id.startsWith(KEPT_NUMBERS) ? 'The numbers kept from a replacement' : id.startsWith(PIN_RECORD) ? `A pinned view${f('label') ? ` (${f('label')})` : ''}` : 'The numbering scheme') : 'A record';
       out.push({ kind, id, label, fields: fieldWords(kind, live) });
     }
     return out;
@@ -376,6 +384,21 @@ class Collection {
     return isScheme(s) ? s : DEFAULT_SCHEME;
   }
 
+  /**
+   * The setting records not removed whose id begins with `prefix` (round eighty-seven, C6: the pinned views, `pin-…`,
+   * $lib/browse/pins, which validates each on read). Read from the setting records' own map, so a page that lists them
+   * follows each fold of them and nothing else.
+   */
+  settingsWith(prefix: string): Record_[] {
+    const out: Record_[] = [];
+    for (const r of this.kinds.setting.values()) if (!r._deleted && r.id.startsWith(prefix)) out.push(r);
+    return out;
+  }
+  /** Whether the setting record with this id is in the log and removed: a pin unpinned, which pinning again brings back. */
+  settingRemoved(id: string): boolean {
+    return this.kinds.setting.get(id)?._deleted === true;
+  }
+
   /** How many records the fold holds, removed ones included: the example's "empty" test (round sixty-seven; triage-66 V4). */
   get recordCount(): number {
     return this.state.size;
@@ -383,6 +406,15 @@ class Collection {
   /** Whether the log holds a record with this identity, live or deleted. */
   exists(kind: Kind, id: string): boolean {
     return this.state.has(recKey(kind, id));
+  }
+
+  /** Whether the log holds this record removed (a log line removed, a plant removed): kept, and one Restore from back. */
+  isRemoved(kind: Kind, id: string): boolean {
+    return this.state.get(recKey(kind, id))?._deleted === true;
+  }
+  /** The batches that name this Pollinated line as the cross their seed came from (round eighty-seven, the stage 3 fixes; review M4). */
+  batchesOfCross(eventId: string): Sowing[] {
+    return this.sowings.filter((s) => s.cross === eventId);
   }
 
   /* ---- reads ---- */
@@ -1204,6 +1236,53 @@ class Collection {
     if (r && !r._deleted && isComplete(r)) return r as unknown as Sowing;
     return this.live<Sowing>('sowing').find((x) => sowNo(x) === idOrNo);
   }
+  /**
+   * A line by its record id, live and whole: a batch's `cross` names one (round eighty-seven, F4). Lines are filed by
+   * their record, so this reads the state directly rather than every plant's list.
+   */
+  event(id: string): PlantEvent | undefined {
+    const r = this.state.get(recKey('event', id));
+    return r && !r._deleted && isComplete(r) ? (r as unknown as PlantEvent) : undefined;
+  }
+  /** A plant's record by its identity, removed or not, when it is whole: what a parent or child link is shown by once the plant is gone (round eighty-seven, F4). */
+  anyAccession(id: string): (Accession & { _deleted?: boolean }) | undefined {
+    const r = this.state.get(recKey('accession', id));
+    return r && isComplete(r) ? (r as unknown as Accession & { _deleted?: boolean }) : undefined;
+  }
+  /** Every live line that may link two plants: a pollinate line naming a pollen parent, a graft line naming a scion's or a stock's plant (round eighty-seven, F4). */
+  private linkLines = $derived.by(() => {
+    const out: PlantEvent[] = [];
+    for (const list of this.eventsByAcc.values()) for (const e of list) if ((e.t === 'pollinate' && e.pollen != null) || (e.t === 'graft' && (e.scion != null || e.stock != null))) out.push(e);
+    return out;
+  });
+  /** The plant's parents, one step up (`parentsOf`). */
+  parentsOf(a: Accession): Parent[] {
+    return parentsIn(a, this);
+  }
+  /**
+   * The plant's children, one step down, among the plants that are not removed (`childrenOf`). Only the plants that could
+   * name it are read through: those whose `motherAcc` is it, those raised in a batch it is a parent of, and those on a
+   * graft line that names it; a plant's page does not read every plant's log.
+   */
+  childrenOf(id: string): Child[] {
+    const batches = new Set(this.sowings.filter((s) => s.parentAcc === id || s.stockAcc === id || (!!s.cross && ((c) => !!c && (c.seed === id || c.pollen === id))(crossOf(this.event(s.cross))))).map((s) => s.id));
+    const grafted = new Set(this.linkLines.filter((e) => e.t === 'graft' && (e.scion === id || e.stock === id)).map((e) => e.acc));
+    return childrenIn(id, this.accessions.filter((a) => a.motherAcc === id || (!!a.sowingId && batches.has(a.sowingId)) || grafted.has(a.id)), this);
+  }
+  /** The crosses the plant took part in, as seed or pollen parent, newest first (`crossesOf`). */
+  crossesOf(id: string): Array<Cross & { as: 'seed' | 'pollen' }> {
+    return crossesIn(id, this.linkLines);
+  }
+  /** Every cross recorded here, newest first: what a new seed batch can be sown from (round eighty-seven, F4). */
+  allCrosses(): Cross[] {
+    const out: Cross[] = [];
+    for (const e of this.linkLines) { const c = crossOf(e); if (c) out.push(c); }
+    return out.sort((a, b) => (b.d ?? '').localeCompare(a.d ?? '') || b.id.localeCompare(a.id));
+  }
+  /** The batches sown from a cross. */
+  sownFrom(crossId: string): Sowing[] {
+    return this.sowings.filter((s) => s.cross === crossId);
+  }
   /** Plants that were potted up from a sowing. */
   raisedFrom(sowingId: string): Accession[] {
     return this.accessions.filter((a) => a.sowingId === sowingId);
@@ -1426,6 +1505,116 @@ class Collection {
       if (p?.acc && wasCover && !this.accession(p.acc)?.cover) await this.put('accession', p.acc, { cover: id });
     };
   }
+  /* ---- attachments (round eighty-seven, t3; plan F9): see $lib/attach/attach ---- */
+  /** Every attachment by plant, newest first: photo records of an attachment's shape, read through `attachmentOf`. */
+  private attachByAcc = $derived.by(() => {
+    const m = new Map<string, Attachment[]>();
+    for (const r of this.kinds.photo.values()) { const x = attachmentOf(r); if (x) (m.get(x.acc) ?? m.set(x.acc, []).get(x.acc)!).push(x); }
+    for (const l of m.values()) l.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+    return m;
+  });
+  /** A plant's attachments, newest first. */
+  attachments(acc: string): Attachment[] {
+    return this.attachByAcc.get(acc) ?? [];
+  }
+  /**
+   * Every number a renumbering moved a plant off, with the plants it moved, read from the notes the renumberings wrote
+   * ("Renumbered from 2026-0012 to 2026-0019…", the repair's and a restore's): a label printed before carries the old
+   * number in its code (round eighty-seven, t3; plan F10). Kept as one map, since `plantHref` asks it for every row.
+   */
+  private renumberedIndex = $derived.by(() => {
+    const m = new Map<string, string[]>();
+    for (const r of this.kinds.event.values()) {
+      if (r._deleted || r.t !== 'note' || typeof r.note !== 'string' || typeof r.acc !== 'string' || !r.note.startsWith('Renumbered from ')) continue;
+      const x = /^Renumbered from (.+?) to /.exec(r.note);
+      if (x) (m.get(x[1]) ?? m.set(x[1], []).get(x[1])!).push(r.acc);
+    }
+    return m;
+  });
+  /**
+   * The live plants a renumbering moved off this number and that hold another now, first made first: the page a label of
+   * the old number opens shows them beside the plant holding the number, if one does, and opens neither by itself (round
+   * eighty-seven, the stage 3 fixes; review B1).
+   */
+  renumberedAway(no: string): Accession[] {
+    const ids = this.renumberedIndex.get(no);
+    if (!ids) return [];
+    const head = `Renumbered from ${no} to `;
+    const out: Accession[] = [];
+    for (const id of new Set(ids)) {
+      const a = this.accession(id);
+      if (a && a.id === id && accNo(a) !== no && this.events(id).some((e) => e.t === 'note' && typeof e.note === 'string' && e.note.startsWith(head))) out.push(a);
+    }
+    return out.sort((x, y) => this.keeperOrder('accession', x, y));
+  }
+  /** The first of `renumberedAway`, or undefined. */
+  renumberedFrom(no: string): Accession | undefined {
+    return this.renumberedAway(no)[0];
+  }
+  /**
+   * The plants whose identity tag (`idTag`, from a label's code) is this one: the live ones, and apart the removed ones.
+   * A tag is six characters of a hash of the identity, so two plants of one collection all but never share one; both are
+   * returned if they do, for the page to list rather than pick (round eighty-seven, the stage 3 fixes; review B1).
+   */
+  byTag(tag: string): { live: Accession[]; removed: Accession[] } {
+    const live: Accession[] = [], removed: Accession[] = [];
+    for (const r of this.kinds.accession.values()) {
+      if (!isComplete(r) || !tagIs(tag, r.id)) continue;
+      (r._deleted ? removed : live).push(r as unknown as Accession);
+    }
+    return { live, removed };
+  }
+  /** Every attachment in the collection. */
+  get allAttachments(): Attachment[] {
+    return [...this.attachByAcc.values()].flat();
+  }
+  /** What the collection's papers hold, as their files: what `PAPERS_MAX_BYTES` bounds. */
+  get papersBytes(): number {
+    let n = 0;
+    for (const l of this.attachByAcc.values()) for (const x of l) n += x.bytes;
+    return n;
+  }
+  /**
+   * File a paper with a plant: the file is checked by its own first bytes and its size, stored behind the envelope in the
+   * photo store, and its record written, as a photograph is added (`addPhoto`: the bytes first, the record after, held as
+   * one unit). Throws a sentence when the file is not taken.
+   */
+  async addAttachment(acc: string, file: Uint8Array, name: string, doc: Doc, caption: string | null): Promise<Attachment> {
+    const fileName = cleanName(name);
+    const err = fileError(file, fileName);
+    if (err) throw new Error(err);
+    if (this.attachments(acc).length >= MAX_PER_PLANT) throw new Error(`A plant keeps at most ${MAX_PER_PLANT} attachments; remove one first.`);
+    const full = papersFullError(this.papersBytes, file.length); // the collection's papers in all (round eighty-seven, the stage 3 fixes; S2)
+    if (full) throw new Error(full);
+    const mime = sniff(file)!;
+    const stored = wrap(file);
+    const { sha256hex } = await import('$lib/sync/crypto');
+    const sha = await sha256hex(stored);
+    const cap = caption?.trim() ? Array.from(caption.trim()).slice(0, CAPTION_MAX).join('') : null;
+    const rec = await this.addPhoto({ acc, d: localDate(), mime, fileName, doc, caption: cap, bytes: file.length, sha, blob: new Blob([stored as BlobPart], { type: 'image/jpeg' }), thumb: new Blob([ENVELOPE as BlobPart], { type: 'image/jpeg' }) } as never);
+    return attachmentOf({ ...(rec as unknown as Record<string, unknown>), kind: 'photo', id: rec.id })!;
+  }
+  /** The attachment's own file, with its own type, or null when its bytes are not on this device (not yet synced) or are not an attachment's. */
+  async attachmentFile(id: string): Promise<Blob | null> {
+    const x = attachmentOf(this.state.get(recKey('photo', id)));
+    if (!x) return null;
+    const b = await getPhotoBlobs(id);
+    if (!b) return null;
+    const file = unwrap(new Uint8Array(await b.blob.arrayBuffer()));
+    return file ? new Blob([file as BlobPart], { type: x.mime }) : null;
+  }
+  /** Remove an attachment, with the way back, as a photograph is removed. */
+  async removeAttachment(id: string): Promise<() => Promise<void>> {
+    if (!this.ready) await this.untilOpen();
+    const blobs = await getPhotoBlobs(id);
+    await this.commit([{ t: this.tick(), kind: 'photo', id, field: '_deleted', value: true }]);
+    await deletePhotoBlobs(id);
+    this.urls.delete(id);
+    return async () => {
+      if (blobs) await putPhotoBlobs(blobs);
+      await this.restore('photo', id);
+    };
+  }
   async setCover(acc: string, photoId: string | null): Promise<void> {
     if (!this.ready) await this.untilOpen(); // a write pressed while the collection is still opening waits for it (round seventy-four)
     await this.put('accession', acc, { cover: photoId });
@@ -1511,10 +1700,25 @@ class Collection {
     const c = a.locationId ? this.conditions(a.locationId) : null;
     return c && typeof c.waterDays === 'number' && c.waterDays > 0 ? c.waterDays : DUE_DAYS;
   }
-  /** Whether the plant's place is kept dry this month by the grower's rule: then it is not due, and Today says so in one line. */
+  /**
+   * Whether the plant is kept dry this month by the grower's rule: its place's dry months, or its own growing season's
+   * rest months (round eighty-seven, t3; plan F7). Either way it is not due, and Today says why in one line. One reading
+   * of "dry on purpose", extended rather than doubled: the plant's own months add to its place's, as its own rhythm does
+   * not take it out of its place's dry months (round fifty-eight), so a plant set to "no rest" in a space kept dry in
+   * winter is still kept dry there.
+   */
   keptDry(a: Accession): boolean {
+    return this.placeDry(a) || this.resting(a) != null;
+  }
+  /** Whether the plant's place is kept dry this month by the grower's rule (round fifty-eight). */
+  placeDry(a: Accession): boolean {
     const c = a.locationId ? this.conditions(a.locationId) : null;
     return !!c?.dryMonths?.includes(Number(day.current.slice(5, 7)));
+  }
+  /** The plant's own growing season when it rests this month by it, else null (round eighty-seven, t3): the season as stored, read through `seasonOf`, which reads a word or a month it does not know as not set. */
+  resting(a: Accession): PlantSeason | null {
+    const s = seasonOf(a);
+    return s && restsIn(s, Number(day.current.slice(5, 7))) ? s : null;
   }
   /** The words for a plant's watering, the same on the plant page, the plants list and Today: watered N days ago, dated ahead of today, or none recorded. */
   wateringWords(a: Accession): string {
@@ -1592,7 +1796,7 @@ class Collection {
   }
 
   /** Records here that lack a field their kind cannot be shown without: made by a batch this build could not read, touched by a later one (round thirty-three, 1). */
-  private incompleteN = $derived.by(() => { let n = 0; for (const m of Object.values(this.kinds)) for (const r of m.values()) if (!r._deleted && !isComplete(r) && !this.missingParked(r)) n++; return n; }); // a record whose missing fields are all parked is listed on Sync with Apply, not counted here (round sixty-two; the clock review's 3)
+  private incompleteN = $derived.by(() => { let n = 0; for (const m of Object.values(this.kinds)) for (const r of m.values()) if (!r._deleted && !isComplete(r) && !this.missingParked(r) && !isAttachmentRecord(r)) n++; return n; }); // an attachment is a photo record with no picture, read whole here (round eighty-seven, t3) // a record whose missing fields are all parked is listed on Sync with Apply, not counted here (round sixty-two; the clock review's 3)
   get incomplete(): number {
     return this.incompleteN; // derived, not a scan of every record on every render (round fifty-four, 2; the second reviewer's finding 27)
   }
@@ -1802,6 +2006,12 @@ class Collection {
   }
   private putChanges(kind: Kind, id: string, fields: Record<string, unknown>): Change[] {
     const current = this.state.get(recKey(kind, id));
+    // A plant growing that still carries a deaccession (round eighty-six's "Mark growing" set the status alone) is held,
+    // and its next edit clears the stale reason, day and note with it (round eighty-seven, the stage 3 fixes; review M3).
+    if (kind === 'accession' && current && !('deacc' in fields) && current.deacc != null && (('status' in fields ? fields.status : current.status) === 'growing')) fields = { ...fields, deacc: null, deaccOn: null, deaccNote: null };
+    // An earlier name the log's rename line records and the plant's identification history does not (a rename made on
+    // round eighty-six, which wrote the line alone) is added by the plant's next edit (review M2): `earlierNames`.
+    if (kind === 'accession' && current && !('idHistory' in fields)) { const h = this.earlierNames(id); if (h.added) fields = { ...fields, idHistory: h.list }; }
     // A notes edit says which text it was based on (the stamp of the notes it saw), so a device that receives it can tell
     // an edit made in sight of its text from one made blind to it, and log only the second (round twenty-five, 2). The
     // caller may say the base itself (an editor opened before a pull); otherwise it is the text on screen now.
@@ -1903,14 +2113,126 @@ class Collection {
     if (!madeSince && !unknown) { await this.commit([back]); return null; }
     const yearIn = /^(\d{4})-/.exec(from)?.[1];
     const taken = this.takenNumbers(kind);
-    const to = kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : new Date(nowMs()).getFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(rec as unknown as Sowing).sown.slice(0, 4)}`, width: 3 });
+    // An item comes back as the accession's next free item, its letter written with its number; a plant holding the bare
+    // number comes back with its items moved to its new number, each with its line, in the same commit (round
+    // eighty-seven, the stage 3 fixes; review S1).
+    const holder = kind === 'accession' && asItem(rec) ? this.state.get(recKey('accession', rec.itemOf as string)) : undefined;
+    const base = holder && isComplete(holder) ? accNo(holder as unknown as Accession) : null;
+    const letter = base ? nextItem(base, (n) => taken.has(n)) : null;
+    const to = base && letter ? itemNumber(base, letter) : kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : new Date(nowMs()).getFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(rec as unknown as Sowing).sown.slice(0, 4)}`, width: 3 });
+    taken.add(to);
     const what = kind === 'accession' ? 'plant' : 'batch';
     const eid = this.eventId();
     const why = unknown ? `another ${what} numbered ${from} is on this device, and which of the two this device received first is not known, so the ${what} that stayed keeps the number.` : `another ${what} numbered ${from} reached this device while this one was removed.`;
     const ev: PlantEvent = { id: eid, acc: id, d: localDate(), t: 'note', note: `Renumbered from ${from} to ${to} when it was brought back: ${why}` };
-    const changes = [back, ...diff(kind, id, kind === 'accession' ? { acc: to } : { no: to }, rec, this.tick), ...diff('event', eid, ev as unknown as Record<string, unknown>, undefined, this.tick)];
+    const fields = kind === 'sowing' ? { no: to } : base && letter ? { acc: to, item: letter } : holder ? { acc: to, item: null, itemOf: null } : { acc: to };
+    const changes = [back, ...diff(kind, id, fields, rec, this.tick), ...diff('event', eid, ev as unknown as Record<string, unknown>, undefined, this.tick)];
+    if (kind === 'accession' && !holder) for (const it of this.itemsOf(id)) {
+      const l = taken.has(itemNumber(to, it.item!)) ? nextItem(to, (n) => taken.has(n)) : it.item!;
+      if (!l) continue;
+      const now = itemNumber(to, l);
+      taken.add(now);
+      const ie = this.eventId();
+      changes.push(...diff('accession', it.id, l === it.item ? { acc: now } : { acc: now, item: l }, this.state.get(recKey('accession', it.id)), this.tick));
+      changes.push(...diff('event', ie, { id: ie, acc: it.id, d: localDate(), t: 'note', note: `Renumbered from ${accNo(it)} to ${now}: the plant it was split from, ${from}, was brought back as ${to}.` }, undefined, this.tick));
+    }
     await this.commit(changes);
     return unknown ? { from, to, unknown } : { from, to };
+  }
+
+  /* ---- items and deaccession (round eighty-seven, t1; $core/identity) ---- */
+
+  /**
+   * The record that holds an accession's bare number, for a plant of it: the plant itself, or the one its `itemOf` names
+   * (removed or not: an item outlives the plant first filed under the number, whose number it still carries).
+   */
+  accessionHolder(id: string): Accession | undefined {
+    const r = this.state.get(recKey('accession', id));
+    if (!r || !isComplete(r)) return undefined;
+    const of = asItem(r) ? this.state.get(recKey('accession', r.itemOf as string)) : undefined;
+    return (of && isComplete(of) ? of : r) as unknown as Accession;
+  }
+  /**
+   * A plant's earlier names: its identification history, with those its own rename lines record and the history does not
+   * (a rename made on round eighty-six; review M2). Read, never written by the reading: the plant's next edit writes them.
+   */
+  earlierNames(id: string): { list: EarlierName[]; added: boolean } {
+    return withRenameLines(this.state.get(recKey('accession', id))?.idHistory, this.events(id));
+  }
+  /** The live items split off this plant (its `itemOf`), by letter. */
+  itemsOf(id: string): Accession[] {
+    return this.accessions.filter((a) => a.itemOf === id && asItem(a)).sort((a, b) => (a.item!.length - b.item!.length) || a.item!.localeCompare(b.item!));
+  }
+  /** The live plants of an accession: the plant holding the number first, then its items by letter. */
+  accessionPlants(id: string): Accession[] {
+    const holder = this.accessionHolder(id);
+    if (!holder) return [];
+    const items = this.accessions.filter((a) => a.itemOf === holder.id && asItem(a)).sort((a, b) => (a.item!.length - b.item!.length) || a.item!.localeCompare(b.item!));
+    const h = this.state.get(recKey('accession', holder.id));
+    return [...(h && !h._deleted ? [holder] : []), ...items];
+  }
+  /**
+   * The changes that carry an edit of shared fields (`SHARED_FIELDS`) to the other plants of an accession, as `putWith`'s
+   * `also`: one commit, so the plants of one accession never differ in their name or provenance by a page closed midway.
+   */
+  sharedWith(id: string, fields: Record<string, unknown>): Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> {
+    const shared = pickShared(fields);
+    if (!Object.keys(shared).length) return [];
+    return this.accessionPlants(id).filter((a) => a.id !== id).map((a) => ({ kind: 'accession' as const, id: a.id, fields: shared }));
+  }
+  /**
+   * Split an item off a plant (round eighty-seven; F1): a new plant record under the accession's number and the next free
+   * letter, "2026-0012/A", with the accession's shared fields as they stand, its own place, and a line on each plant. The
+   * letter is chosen inside the vault's own transaction against every number ever given here, as a new plant's number
+   * is, so two tabs never give one letter twice. Returns the item.
+   */
+  async splitItem(fromId: string, o: { how: string; d: string; locationId?: string | null }): Promise<Accession> {
+    if (!this.ready) await this.untilOpen();
+    const from = this.state.get(recKey('accession', fromId));
+    if (!from || !isComplete(from)) throw new Error('That plant is not on this device.');
+    const holder = this.accessionHolder(fromId)!;
+    const base = accNo(holder);
+    const id = this.newId('r');
+    return this.claim('accession', (issued) => {
+      const taken = this.takenNumbers('accession');
+      const letter = nextItem(base, (no) => issued.has(no) || taken.has(no));
+      if (!letter) throw new Error(`${base} has no free item letter left (A to ZZ).`);
+      const no = itemNumber(base, letter);
+      const shared = pickShared(from as unknown as Record<string, unknown>);
+      const rec: Record<string, unknown> = { ...shared, id, acc: no, item: letter, itemOf: holder.id, status: 'growing', locationId: o.locationId === undefined ? (from.locationId ?? null) : o.locationId };
+      const changes: Change[] = [...diff('accession', id, rec, undefined, this.tick)];
+      const fromNo = accNo(from as unknown as Accession);
+      changes.push(...diff('event', this.eventId(), { acc: id, d: o.d, t: 'note', note: `Split off ${fromNo} as item ${letter} of ${base} (${o.how})` }, undefined, this.tick));
+      changes.push(...diff('event', this.eventId(), { acc: fromId, d: o.d, t: 'note', note: `Item ${no} split off (${o.how})` }, undefined, this.tick));
+      return { changes, result: rec as unknown as Accession };
+    });
+  }
+  /**
+   * A plant no longer held (round eighty-seven; F1), with its reason, day and note: the record stays, with its log and its
+   * photographs, and is listed under "No longer held". Its status follows (dead for died and propagation failed, archived
+   * otherwise), so a version that does not read the reason still takes it off the growing list. One commit with its line.
+   */
+  async deaccession(id: string, o: { reason: DeaccReason; on: string; note?: string | null }): Promise<PlantEvent> {
+    const note = o.note?.trim().slice(0, NOTE_MAX) || null;
+    return this.addEventWith({ acc: id, d: o.on, t: 'note', note: `No longer held: ${DEACC_LABEL[o.reason].toLowerCase()}${note ? `; ${note}` : ''}` }, 'accession', id, { deacc: o.reason, deaccOn: o.on, deaccNote: note, status: deaccStatus(o.reason) });
+  }
+  /** Back in the collection: the deaccession cleared and the plant growing, with a line saying what it had been. */
+  async reaccession(id: string): Promise<void> {
+    const r = this.state.get(recKey('accession', id));
+    const why = r ? deaccOf(r) : null;
+    const on = r && typeof r.deaccOn === 'string' ? r.deaccOn : null;
+    await this.addEventWith({ acc: id, d: localDate(), t: 'note', note: `Held again${why ? ` (it was recorded as ${DEACC_LABEL[why].toLowerCase()}${on ? ` on ${on}` : ''})` : ''}` }, 'accession', id, { deacc: null, deaccOn: null, deaccNote: null, status: 'growing' });
+  }
+  /**
+   * What "No longer held" lists: plants deaccessioned, plants marked dead before deaccession had a reason, and plants
+   * removed, whose records stay in the log. Each kind apart, newest number first.
+   */
+  noLongerHeld(): { deaccessioned: Accession[]; dead: Accession[]; removed: Accession[] } {
+    const deaccessioned: Accession[] = [], dead: Accession[] = [], removed: Accession[] = [];
+    for (const a of this.accessions) { if (deaccOf(a)) deaccessioned.push(a); else if (a.status === 'dead') dead.push(a); }
+    for (const r of this.kinds.accession.values()) if (r._deleted && isComplete(r)) removed.push(r as unknown as Accession);
+    removed.sort((a, b) => byNumberNewest(accNo(a), accNo(b)));
+    return { deaccessioned, dead, removed };
   }
 
   /** The next number, for the year of `acquired` when given: a plant acquired on 31 December filed at 00:05 is a 2026 plant, and the form's preview and the number it gets agree (round twenty-five, 4). */
@@ -1957,7 +2279,8 @@ class Collection {
         if (bad) throw new Error(`Plant number ${no.length > 40 ? `${no.slice(0, 40)}…` : no} cannot be used: ${bad}. Pick another.`);
         if (given[i] && issued.has(no)) throw new Error(`Plant number ${no} is already used. A number is never reused; pick another.`);
         taken.add(no);
-        const r: Accession = { status: 'growing', ...a, ...each?.[i], id, acc: no };
+        // The kind of name filed with the name it describes (round eighty-seven, M1; `withKindOf`).
+        const r: Accession = withKindOf({ status: 'growing', ...a, ...each?.[i], id, acc: no });
         changes.push(...diff('accession', id, r as unknown as Record<string, unknown>, undefined, this.tick));
         if (r.acquired) changes.push(...diff('event', this.eventId(), { acc: id, d: r.acquired, t: 'acquire', note: r.sourceFrom ? `from ${r.sourceFrom}` : null }, undefined, this.tick));
         result.push(r);
@@ -2227,46 +2550,95 @@ class Collection {
       // the record on one and the other number free again, and the next repair gave it out a second time.
       const taken = this.takenNumbers(kind, false);
       for (const n of await this.numbersInLog(kind)) taken.add(n);
+      // An item (2026-0012/A; round eighty-seven, t1) is repaired within its accession: it takes the accession's next free
+      // letter, its number and its letter written together, and a plant holding an accession's bare number takes its
+      // items with it to its new number, in the same commit, each with its line (round eighty-seven, the stage 3 fixes;
+      // review S1). Two devices that each split the same plant offline both made 2026-0012/A: the repair gave the later a
+      // bare 2026-0013 that still said it was item A of 2026-0012, and a holder renumbered left its items under the old
+      // number. Each record's changes are placed and tagged by the record and the number it gets, as before, so every
+      // device derives the same repair; a record that is not an item writes exactly what it wrote before.
+      const freshOf = new Map<string, string>();
+      const moved = new Set<string>();
+      const write = (id: string, no: string, fresh: string, fields: Record<string, unknown>, why: string): void => {
+        const rec = this.state.get(recKey(kind, id))!;
+        const base = hlcDecode(rec._t);
+        // Past a marked stamp (an edit placed past a fast clock's, a year ahead), the repair is placed past it with the
+        // mark too, at its wall, and dated by the record's latest stamp read from a clock: stamped at the wall plus one
+        // without the mark, it was parked here and on every peer by its arrival, and its note was dated a year ahead
+        // (round sixty-two; the clock review's 7). Every device derives the same from the same log.
+        const marked = isPastStamp(rec._t);
+        const wall = marked ? base.wall : base.wall + 1;
+        const when = new Date(marked ? this.lastClockStamp(kind, id, base.wall) : wall);
+        // The tag is a function of the record AND the number chosen, and no real device id starts with 'zz': two devices that
+        // derive the same repair write identical changes (one in the log), and two that chose differently (one of them
+        // repaired from a log still missing a batch) write distinct stamps, which the ordinary merge settles the same way
+        // everywhere, instead of two values under one stamp (round twelve, 3).
+        const device = ('zz' + tag36(kind + ':' + id + ':' + fresh)).slice(0, 16);
+        const stamp = (count: number) => (marked ? markedPast(base, count, device) : hlcEncode({ wall, count, device }));
+        freshOf.set(id, fresh);
+        moved.add(id);
+        // A repair already in the log (folded, or stored and held because its stamp is ahead of this clock) is not
+        // minted again: the store would refuse the repeat stamp on every pull (round thirteen, 7).
+        // The fold's own stamp map and the held inventory too: a snapshot load has not read the stamps it restored (the first reviewer's finding 11).
+        if (this.applied.has(stamp(0)) || this.heldStamps.has(stamp(0)) || this.seen.get(recKey(kind, id) + '\0' + (kind === 'accession' ? 'acc' : 'no')) === stamp(0)) return;
+        let count = 0;
+        for (const [field, value] of Object.entries(fields)) changes.push({ t: stamp(count++), kind, id, field, value });
+        // The note's identity is the repair's own (the record, the number it had and the number it gets), not the stamp's:
+        // two devices that repair from logs that differ (one has seen a later edit of the record) place their stamps
+        // apart, and named by the stamp their two notes were two lines saying the same thing (round sixty-three; round
+        // sixty-two's section 11). The underscore keeps `madeOn` from reading a day out of it.
+        const eid = 'e_' + tag36(`renumber:${kind}:${id}:${no}:${fresh}`);
+        // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
+        const note = { acc: id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: ${why}` };
+        for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
+        renumbered++;
+      };
+      /** The plant holding the bare number of the accession this record is an item of, or null when it is not an item. */
+      const holderOf = (id: string): Record_ | null => {
+        if (kind !== 'accession') return null;
+        const r = this.state.get(recKey('accession', id));
+        const h = r && asItem(r) ? this.state.get(recKey('accession', r.itemOf as string)) : undefined;
+        return h && isComplete(h) ? h : null;
+      };
+      /** The next free item of a base number, or null past ZZ. */
+      const freeItem = (base: string): string | null => nextItem(base, (n) => taken.has(n));
       for (const no of [...byNo.keys()].sort()) {
         if (scope && !scope[kind].has(no)) continue;
-        const recs = byNo.get(no)!;
+        const recs = byNo.get(no)!.filter((r) => !moved.has(r.id));
         if (recs.length < 2) continue;
         recs.sort((a, b) => this.keeperOrder(kind, a, b)); // the one made first keeps the number
         for (const r of recs.slice(1)) {
           const rec = this.state.get(recKey(kind, r.id))!;
-          const base = hlcDecode(rec._t);
-          // Past a marked stamp (an edit placed past a fast clock's, a year ahead), the repair is placed past it with the
-          // mark too, at its wall, and dated by the record's latest stamp read from a clock: stamped at the wall plus one
-          // without the mark, it was parked here and on every peer by its arrival, and its note was dated a year ahead
-          // (round sixty-two; the clock review's 7). Every device derives the same from the same log.
-          const marked = isPastStamp(rec._t);
-          const wall = marked ? base.wall : base.wall + 1;
-          const when = new Date(marked ? this.lastClockStamp(kind, r.id, base.wall) : wall);
-          // The year of the number being replaced, so a plant minted 2026-0007 is repaired to 2026-0008, not into its acquisition year (round fifteen, 14); the stamp's year when the number carries none.
+          const what = kind === 'accession' ? 'plant' : 'batch';
+          const why = `another ${what}, recorded first, had been given ${no} (on another device, or in a file merged in).`;
+          const holder = holderOf(r.id);
+          if (holder) {
+            const base = freshOf.get(holder.id) ?? accNo(holder as unknown as Accession);
+            const letter = freeItem(base);
+            if (letter) {
+              const fresh = itemNumber(base, letter);
+              taken.add(fresh);
+              write(r.id, no, fresh, { acc: fresh, item: letter }, why);
+              continue;
+            }
+            // Past ZZ the item takes a number of its own, as any plant would, and is an item no longer.
+          }
           const yearIn = /^(\d{4})-/.exec(no)?.[1];
-          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+          const b = hlcDecode(rec._t);
+          const stampYear = new Date(isPastStamp(rec._t) ? this.lastClockStamp(kind, r.id, b.wall) : b.wall + 1).getUTCFullYear();
+          // The year of the number being replaced, so a plant minted 2026-0007 is repaired to 2026-0008, not into its acquisition year (round fifteen, 14); the stamp's year when the number carries none.
+          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : stampYear) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
           taken.add(fresh);
-          // The tag is a function of the record AND the number chosen, and no real device id starts with 'zz': two devices that
-          // derive the same repair write identical changes (one in the log), and two that chose differently (one of them
-          // repaired from a log still missing a batch) write distinct stamps, which the ordinary merge settles the same way
-          // everywhere, instead of two values under one stamp (round twelve, 3).
-          const device = ('zz' + tag36(kind + ':' + r.id + ':' + fresh)).slice(0, 16);
-          const stamp = (count: number) => (marked ? markedPast(base, count, device) : hlcEncode({ wall, count, device }));
-          // A repair already in the log (folded, or stored and held because its stamp is ahead of this clock) is not
-          // minted again: the store would refuse the repeat stamp on every pull (round thirteen, 7).
-          // The fold's own stamp map and the held inventory too: a snapshot load has not read the stamps it restored (the first reviewer's finding 11).
-          if (this.applied.has(stamp(0)) || this.heldStamps.has(stamp(0)) || this.seen.get(recKey(kind, r.id) + '\0' + (kind === 'accession' ? 'acc' : 'no')) === stamp(0)) continue;
-          changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
-          // The note's identity is the repair's own (the record, the number it had and the number it gets), not the stamp's:
-          // two devices that repair from logs that differ (one has seen a later edit of the record) place their stamps
-          // apart, and named by the stamp their two notes were two lines saying the same thing (round sixty-three; round
-          // sixty-two's section 11). The underscore keeps `madeOn` from reading a day out of it.
-          const eid = 'e_' + tag36(`renumber:${kind}:${r.id}:${no}:${fresh}`);
-          // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
-          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'}, recorded first, had been given ${no} (on another device, or in a file merged in).` };
-          let count = 1;
-          for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
-          renumbered++;
+          write(r.id, no, fresh, holder ? { acc: fresh, item: null, itemOf: null } : { acc: fresh }, why);
+          // Its items go with it, each to the same letter under the new number (the next free one if that was ever given).
+          if (kind === 'accession') for (const it of this.itemsOf(r.id)) {
+            const was = accNo(it);
+            const letter = taken.has(itemNumber(fresh, it.item!)) ? freeItem(fresh) : it.item!;
+            if (!letter) continue;
+            const now = itemNumber(fresh, letter);
+            taken.add(now);
+            write(it.id, was, now, letter === it.item ? { acc: now } : { acc: now, item: letter }, `the plant it was split from, ${no}, was renumbered to ${fresh}.`);
+          }
         }
       }
     }
@@ -2306,6 +2678,16 @@ class Collection {
     for (const c of await allChanges()) (changeError(c, true) ? unreadable : changes).push(c);
     return { changes, unreadable };
   }
+}
+
+/**
+ * Whether a plant record is an item of the plant its `itemOf` names: a letter, a holder other than itself, and a number
+ * that is a number and that letter ("2026-0012/A"). Round eighty-six's number repair, which knows no items, gives an item
+ * sharing its number a bare number of its own and leaves `item` and `itemOf` as they were; such a plant is a plant of its
+ * own now, not listed with the accession it was split from (round eighty-seven, the stage 3 fixes; review S1).
+ */
+function asItem(r: { id: string; acc?: unknown; item?: unknown; itemOf?: unknown }): boolean {
+  return isItemLetter(r.item) && typeof r.itemOf === 'string' && r.itemOf !== r.id && splitItemNumber(typeof r.acc === 'string' ? r.acc : null)?.item === r.item;
 }
 
 /**

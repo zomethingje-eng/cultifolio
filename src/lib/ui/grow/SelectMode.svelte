@@ -258,4 +258,6 @@
   .small { font-size: var(--fs-md); }
   /* The plain rows give way to the tick rows while selecting. */
   :global(body.grow-selecting #main .rows), :global(body.grow-selecting #main .more) { display: none; }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
 </style>

@@ -70,7 +70,7 @@ test.describe('phone, 390 × 844', () => {
   // them ran out, both times (round sixty-six; the all-engines run). Nothing here is about the worker.
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
 
-  test('the first screen holds the search, every grouping control and one whole catalogue row, with a live-shaped corpus (A10, B1)', async ({ page }) => {
+  test('the first screen holds the lead and the search; the grouping controls and the first row follow the strip, with a live-shaped corpus (A10, B1; round eighty-seven)', async ({ page }) => {
     await servePhotos(page);
     await liveShapedHome(page);
     await page.goto('/about/how');
@@ -84,7 +84,7 @@ test.describe('phone, 390 × 844', () => {
     const m = await page.evaluate(() => {
       const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
       const tab = b('#tabbar').top;
-      return { scrollY, tab, pitchLines: [...document.querySelectorAll('.pitch li')].filter((l) => (l as HTMLElement).offsetParent).length, strip: b('section.featured').height, stripImg: b('section.featured .ftile:nth-child(2) img').height, search: b('.toolrow .searchbar').bottom, group: b('.tools .seg').bottom, chips: b('.tools .chiprow').bottom, az: b('.tools .azbtn').bottom, letters: b('.letters').height, row: b('.rows .grow').bottom };
+      return { scrollY, tab, pitchLines: [...document.querySelectorAll('.pitch li')].filter((l) => (l as HTMLElement).offsetParent).length, strip: b('section.featured').height, stripImg: b('section.featured .ftile:nth-child(2) img').height, lead: b('section.lead h1').bottom, barSearch: b('#topbar .searchicon').bottom, search: b('.toolrow .searchbar').top, group: b('.tools .seg').top, chips: b('.tools .chiprow').top, az: b('.tools .azbtn').top, letters: b('.letters').height, rowTop: b('.rows .grow').top, stripTop: b('section.featured').top };
     });
     expect(m.scrollY).toBe(0);
     expect(m.pitchLines).toBe(0); // the welcome line is the introduction while it is shown, the pitch's one sentence after (round sixty-three, V3 and V4)
@@ -93,7 +93,12 @@ test.describe('phone, 390 × 844', () => {
     // 200 px here; since round seventy-six a credit is whole on as many lines as it takes, so the photograph is what is held.
     expect(m.stripImg).toBeLessThanOrEqual(112.5);
     expect(m.strip).toBeLessThanOrEqual(240);
-    for (const [k, y] of Object.entries({ search: m.search, group: m.group, chips: m.chips, az: m.az, row: m.row })) expect(y, `${k} bottom ${y} against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
+    // Round eighty-seven (plan D1, DESIGN-87): the lead's sentence and the top bar's search are the first screen; the search
+    // button takes the cursor to the catalogue's box, and the box, every grouping control and the first row come after the
+    // strip, in that order, as round seventy-six set them.
+    for (const [k, y] of Object.entries({ lead: m.lead, search: m.barSearch })) expect(y, `${k} bottom ${y} against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);
+    for (const y of [m.search, m.group, m.chips, m.az, m.rowTop]) expect(y).toBeGreaterThan(m.stripTop);
+    expect(m.rowTop).toBeGreaterThan(Math.max(m.search, m.group, m.chips, m.az));
     // The placeholder fits its box: measured in the box's own font.
     const fit = await page.locator('.toolrow .searchbar').evaluate((el: HTMLInputElement) => {
       const cs = getComputedStyle(el);

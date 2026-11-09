@@ -21,6 +21,7 @@
  * (https://techdocs.gbif.org/en/data-use/api-sql-downloads, "Supported SQL").
  */
 import { SQL_SELECT } from '../src/lib/dossier/bulk';
+import { BACKBONE } from '../src/lib/dossier/sources/gbif';
 
 /**
  * GBIF's limit on a download predicate: "A download predicate may contain a maximum of 101,000 items (taxon keys, kingdom
@@ -33,14 +34,18 @@ export const PREDICATE_ITEMS_MAX = 101_000;
 export const INAT_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 
 export type Who = { creator?: string; email?: string };
-type Predicate = { type: string; key?: string; value?: string; values?: string[]; predicate?: Predicate; predicates?: Predicate[] };
+type Predicate = { type: string; key?: string; value?: string; values?: string[]; checklistKey?: string; predicate?: Predicate; predicates?: Predicate[] };
 
-/** The records' filter, as the DWCA route has always asked it. */
+/**
+ * The records' filter, as the DWCA route has always asked it. Since round eighty-seven the keys' `in` names the backbone
+ * (`checklistKey`): GBIF's default for a download's filter is the backbone today, but GBIF names no day it keeps it, and
+ * a backbone key read under the Catalogue of Life selects nothing (docs/COLXR-87.md 1).
+ */
 export function recordsPredicate(keys: readonly number[]): Predicate {
   return {
     type: 'and',
     predicates: [
-      { type: 'in', key: 'TAXON_KEY', values: keys.map(String) },
+      { type: 'in', key: 'TAXON_KEY', values: keys.map(String), checklistKey: BACKBONE },
       { type: 'equals', key: 'HAS_COORDINATE', value: 'true' },
       { type: 'equals', key: 'HAS_GEOSPATIAL_ISSUE', value: 'false' },
       { type: 'equals', key: 'OCCURRENCE_STATUS', value: 'PRESENT' }
@@ -55,9 +60,13 @@ export function predicateItems(p: Predicate): number {
 
 const people = (who: Who) => ({ ...(who.creator ? { creator: who.creator } : {}), ...(who.email ? { notificationAddresses: [who.email] } : {}), sendNotification: false });
 
-/** The DWCA request: the records with their photographs. No checklistKey, so GBIF writes the backbone's keys, which the build reads. */
+/**
+ * The DWCA request: the records with their photographs. The top-level checklistKey names the backbone as the taxonomy of
+ * the output (the `taxonKey`, `speciesKey` and `acceptedTaxonKey` columns the build reads), so GBIF writes the backbone's
+ * keys whatever its default becomes (round eighty-seven; docs/COLXR-87.md 1, "What a download must send").
+ */
 export function dwcaRequest(keys: readonly number[], who: Who = {}) {
-  return { ...people(who), format: 'DWCA', predicate: recordsPredicate(keys) };
+  return { ...people(who), format: 'DWCA', checklistKey: BACKBONE, predicate: recordsPredicate(keys) };
 }
 
 /**
@@ -96,7 +105,7 @@ export function mediaRequest(keys: readonly number[], who: Who = {}, o: { inat?:
   const p = recordsPredicate(keys);
   p.predicates!.push({ type: 'equals', key: 'MEDIA_TYPE', value: 'StillImage' }, { type: 'equals', key: 'BASIS_OF_RECORD', value: 'HUMAN_OBSERVATION' });
   if (o.inat === false) p.predicates!.push({ type: 'not', predicate: { type: 'equals', key: 'DATASET_KEY', value: INAT_DATASET } });
-  return { ...people(who), format: 'DWCA', predicate: p };
+  return { ...people(who), format: 'DWCA', checklistKey: BACKBONE, predicate: p };
 }
 
 /** Keys in `n` parts of nearly equal size, in their order (`--parts`): each part one request, each read by the build. */
@@ -115,12 +124,14 @@ export function partsNeeded(keys: number, extraItems = 3): number {
 
 /**
  * The count API for a batch of keys under the records' filter (`limit=0`: the count alone), with an optional facet. GBIF's
- * occurrence search takes the same filter as the download; 200 keys a request keeps the address short.
+ * occurrence search takes the same filter as the download; 200 keys a request keeps the address short. The backbone's
+ * checklistKey ends it (round eighty-seven), last so the address's start is what it was: a count that named no taxonomy
+ * would read 0 for every key, silently, if GBIF's default moved (docs/COLXR-87.md 2).
  */
 export function countUrl(keys: readonly number[], o: { media?: boolean; facet?: string; facetLimit?: number } = {}): string {
   const media = o.media ? '&mediaType=StillImage&basisOfRecord=HUMAN_OBSERVATION' : '';
   const facet = o.facet ? `&facet=${o.facet}&facetLimit=${o.facetLimit ?? keys.length * 2}` : '';
-  return `https://api.gbif.org/v1/occurrence/search?${keys.map((k) => `taxonKey=${k}`).join('&')}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT${media}&limit=0${facet}`;
+  return `https://api.gbif.org/v1/occurrence/search?${keys.map((k) => `taxonKey=${k}`).join('&')}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT${media}&limit=0${facet}&checklistKey=${BACKBONE}`;
 }
 
 /**

@@ -199,7 +199,7 @@
   .stage :global(.ph-wait) { width: 60vw; height: 40vh; background: rgba(255, 255, 255, 0.06); border-radius: 4px; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 16px 14px; color: #dfe5e2; font-size: var(--fs-md); }
   .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
-  .meta .d { font-family: var(--mono); }
+  .meta .d { font-family: var(--ui); font-variant-numeric: var(--figs); }
   .meta .cap { font-family: var(--serif); font-style: italic; font-size: var(--fs-base); }
   .faint { color: #8a9891; }
   .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -209,7 +209,7 @@
   .lbf { display: grid; gap: 3px; }
   .lbf.grow { flex: 1 1 220px; }
   .lbf .eyebrow { color: #b6c1bc; }
-  .x, .nav { position: absolute; background: rgba(255, 255, 255, 0.08); color: #fff; border: 0; border-radius: 999px; width: max(40px, var(--tap)); height: max(40px, var(--tap)); font-size: 1.625rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+  .x, .nav { position: absolute; background: rgba(255, 255, 255, 0.08); color: #fff; border: 0; border-radius: var(--r); width: max(40px, var(--tap)); height: max(40px, var(--tap)); font-size: 1.625rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
   .x:hover, .nav:hover { background: rgba(255, 255, 255, 0.18); }
   .x { top: 10px; right: 12px; }
   .nav { top: 50%; transform: translateY(-50%); }

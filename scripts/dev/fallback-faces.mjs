@@ -11,41 +11,55 @@
 //   line-gap-override = 0 (every web font here has a line gap of 0)
 //
 // xWidthAvg is capsize's weighted average advance (letter frequencies of English text, @capsizecss/unpack's `latin`
-// weighting). The local faces' figures are @capsizecss/metrics 4.3.0's tables, read from the package in /tmp (not a
-// dependency), except DejaVu's, read from the files on Linux. The web fonts' are the files this site serves
-// (@fontsource-variable/public-sans and /newsreader, the `wght` files, instanced at each weight with fontTools'
-// varLib.instancer; @fontsource/dm-mono 400), weighted the same way; checked against capsize's own figures where it has
-// them (Public Sans 400: 935, Newsreader 400: 857, Liberation Sans: 913 as Arial). The monospace faces need no
-// average: every advance in them is one width (DM Mono 600/1000, Consolas 1126/2048, Menlo and DejaVu Sans Mono
-// 1233/2048, Liberation Mono 1229/2048).
+// weighting). The local faces' figures are @capsizecss/metrics 4.3.0's tables, read from the package in a scratch folder
+// (not a dependency), except Liberation's and DejaVu's, read from the files on Linux.
+//
+// Round eighty-seven (the owner's type, 8 November): the web fonts are Source Sans 3, Source Serif 4 and Source Code Pro,
+// the files in static/fonts/ (@fontsource-variable/source-sans-3 5.3.1, @fontsource-variable/source-serif-4 5.3.1, the
+// optical-size italic, and @fontsource/source-code-pro 5.3.1 at 400), instanced at each weight with fontTools'
+// varLib.instancer and weighted the same way; capsize's own figures agree where it has them (Source Sans 3 400: 418,
+// italic 408, 600: 431). Source Serif 4 is set only in italic, for the scientific names, and only its italic is served,
+// so the serif's faces are italic alone. Its width changes with its optical size, which the browser sets to the text's
+// size in px (449 at 12, 426 at 18, 418 at 20, 400 at 44); the faces are scaled to its instance at 18, within 2.5% of
+// it at every running-text size from 14 to 21 px, where a name in a sentence decides where the line wraps. A display
+// name (the species page's 44 px heading) is one short line in either face. The monospace faces need no average: every
+// advance in them is one width (Source Code Pro 600/1000, Consolas 1126/2048, Menlo and DejaVu Sans Mono 1233/2048,
+// Liberation Mono 1229/2048).
 //
 // Weights: a family with a bold face has two faces, `100 500` and `600 900`; the bold face is scaled to the web font's
-// 600, the weight of the site's buttons, chips, tabs and serif titles (the 700 text is short capitals). Segoe UI has a
-// semibold, so it has three. A local bold face and not the regular one emboldened: Safari and Firefox widen synthetic
-// bold glyphs (a pixel or so each), Chromium does not, so a bold the browser makes is a different width in each.
+// 600, the weight of the site's buttons, section heads and wordmark. Segoe UI has a semibold, so its roman has three.
+// A local bold face and not the regular one emboldened: Safari and Firefox widen synthetic bold glyphs (a pixel or so
+// each), Chromium does not, so a bold the browser makes is a different width in each. The sans has its italic too (it is
+// served, round eighty-seven), each with its own local italic: Segoe UI's italic is 2% narrower than its roman.
 
 const WEB = {
-  sans: { name: 'Public Sans', upm: 2000, ascent: 1900, descent: 450, xw: { 400: 935, 600: 948, 700: 959 } },
-  serif: { name: 'Newsreader', upm: 2000, ascent: 1470, descent: 530, xw: { 400: 857, 600: 900 }, xwi: { 400: 804, 600: 873 } },
-  mono: { name: 'DM Mono', upm: 1000, ascent: 992, descent: 310, adv: 600 }
+  sans: { name: 'Source Sans 3', upm: 1000, ascent: 1024, descent: 400, xw: { 400: 418, 600: 431, 700: 443 }, xwi: { 400: 408, 600: 419 } },
+  serif: { name: 'Source Serif 4', upm: 1000, ascent: 1036, descent: 335, xwi: { 400: 426, 600: 443 } },
+  mono: { name: 'Source Code Pro', upm: 1000, ascent: 984, descent: 273, adv: 600 }
 };
 
 /** [family suffix, [[weight descriptor, style, web weight, locals, local xw, local upm]]] */
 const SANS = [
-  ['Segoe', [['100 500', 'normal', 400, ['Segoe UI', 'SegoeUI'], 908, 2048], ['600', 'normal', 600, ['Segoe UI Semibold', 'SegoeUI-Semibold'], 937, 2048], ['700 900', 'normal', 700, ['Segoe UI Bold', 'SegoeUI-Bold'], 973, 2048]]],
-  ['Roboto', [['100 500', 'normal', 400, ['Roboto Regular', 'Roboto-Regular', 'Roboto'], 911, 2048], ['600 900', 'normal', 600, ['Roboto Bold', 'Roboto-Bold'], 926, 2048]]],
-  ['Helvetica Neue', [['100 500', 'normal', 400, ['Helvetica Neue', 'HelveticaNeue'], 450, 1000], ['600 900', 'normal', 600, ['Helvetica Neue Bold', 'HelveticaNeue-Bold'], 480, 1000]]],
-  ['Arial', [['100 500', 'normal', 400, ['Arial', 'ArialMT'], 913, 2048], ['600 900', 'normal', 600, ['Arial Bold', 'Arial-BoldMT'], 983, 2048]]],
-  ['Liberation', [['100 500', 'normal', 400, ['Liberation Sans', 'LiberationSans'], 913, 2048], ['600 900', 'normal', 600, ['Liberation Sans Bold', 'LiberationSans-Bold'], 983, 2048]]],
-  ['DejaVu', [['100 500', 'normal', 400, ['DejaVu Sans', 'DejaVuSans'], 1041, 2048], ['600 900', 'normal', 600, ['DejaVu Sans Bold', 'DejaVuSans-Bold'], 1176, 2048]]]
+  ['Segoe', [['100 500', 'normal', 400, ['Segoe UI', 'SegoeUI'], 908, 2048], ['600', 'normal', 600, ['Segoe UI Semibold', 'SegoeUI-Semibold'], 937, 2048], ['700 900', 'normal', 700, ['Segoe UI Bold', 'SegoeUI-Bold'], 973, 2048],
+    ['100 500', 'italic', 400, ['Segoe UI Italic', 'SegoeUI-Italic'], 888, 2048], ['600 900', 'italic', 600, ['Segoe UI Semibold Italic', 'SegoeUI-SemiboldItalic'], 927, 2048]]],
+  ['Roboto', [['100 500', 'normal', 400, ['Roboto Regular', 'Roboto-Regular', 'Roboto'], 911, 2048], ['600 900', 'normal', 600, ['Roboto Bold', 'Roboto-Bold'], 926, 2048],
+    ['100 500', 'italic', 400, ['Roboto Italic', 'Roboto-Italic'], 886, 2048], ['600 900', 'italic', 600, ['Roboto Bold Italic', 'Roboto-BoldItalic'], 900, 2048]]],
+  ['Helvetica Neue', [['100 500', 'normal', 400, ['Helvetica Neue', 'HelveticaNeue'], 450, 1000], ['600 900', 'normal', 600, ['Helvetica Neue Bold', 'HelveticaNeue-Bold'], 480, 1000],
+    ['100 500', 'italic', 400, ['Helvetica Neue Italic', 'HelveticaNeue-Italic'], 448, 1000], ['600 900', 'italic', 600, ['Helvetica Neue Bold Italic', 'HelveticaNeue-BoldItalic'], 481, 1000]]],
+  ['Arial', [['100 500', 'normal', 400, ['Arial', 'ArialMT'], 913, 2048], ['600 900', 'normal', 600, ['Arial Bold', 'Arial-BoldMT'], 983, 2048],
+    ['100 500', 'italic', 400, ['Arial Italic', 'Arial-ItalicMT'], 913, 2048], ['600 900', 'italic', 600, ['Arial Bold Italic', 'Arial-BoldItalicMT'], 983, 2048]]],
+  ['Liberation', [['100 500', 'normal', 400, ['Liberation Sans', 'LiberationSans'], 913, 2048], ['600 900', 'normal', 600, ['Liberation Sans Bold', 'LiberationSans-Bold'], 983, 2048],
+    ['100 500', 'italic', 400, ['Liberation Sans Italic', 'LiberationSans-Italic'], 913, 2048], ['600 900', 'italic', 600, ['Liberation Sans Bold Italic', 'LiberationSans-BoldItalic'], 983, 2048]]],
+  ['DejaVu', [['100 500', 'normal', 400, ['DejaVu Sans', 'DejaVuSans'], 1041, 2048], ['600 900', 'normal', 600, ['DejaVu Sans Bold', 'DejaVuSans-Bold'], 1176, 2048],
+    ['100 500', 'italic', 400, ['DejaVu Sans Oblique', 'DejaVuSans-Oblique'], 1041, 2048], ['600 900', 'italic', 600, ['DejaVu Sans Bold Oblique', 'DejaVuSans-BoldOblique'], 1176, 2048]]]
 ];
-const four = (r, b, i, bi, upm) => [['100 500', 'normal', 400, ...r, upm], ['600 900', 'normal', 600, ...b, upm], ['100 500', 'italic', 400, ...i, upm], ['600 900', 'italic', 600, ...bi, upm]];
+const two = (i, bi, upm) => [['100 500', 'italic', 400, ...i, upm], ['600 900', 'italic', 600, ...bi, upm]];
 const SERIF = [
-  ['Georgia', four([['Georgia'], 913], [['Georgia Bold', 'Georgia-Bold'], 1062], [['Georgia Italic', 'Georgia-Italic'], 931], [['Georgia Bold Italic', 'Georgia-BoldItalic'], 1082], 2048)],
-  ['Times', four([['Times New Roman', 'TimesNewRomanPSMT'], 832], [['Times New Roman Bold', 'TimesNewRomanPS-BoldMT'], 886], [['Times New Roman Italic', 'TimesNewRomanPS-ItalicMT'], 836], [['Times New Roman Bold Italic', 'TimesNewRomanPS-BoldItalicMT'], 857], 2048)],
-  ['Noto', four([['Noto Serif Regular', 'NotoSerif-Regular', 'Noto Serif'], 481], [['Noto Serif Bold', 'NotoSerif-Bold'], 512], [['Noto Serif Italic', 'NotoSerif-Italic'], 469], [['Noto Serif Bold Italic', 'NotoSerif-BoldItalic'], 517], 1000)],
-  ['Liberation', four([['Liberation Serif', 'LiberationSerif'], 832], [['Liberation Serif Bold', 'LiberationSerif-Bold'], 886], [['Liberation Serif Italic', 'LiberationSerif-Italic'], 836], [['Liberation Serif Bold Italic', 'LiberationSerif-BoldItalic'], 857], 2048)],
-  ['DejaVu', four([['DejaVu Serif', 'DejaVuSerif'], 1058], [['DejaVu Serif Bold', 'DejaVuSerif-Bold'], 1168], [['DejaVu Serif Italic', 'DejaVuSerif-Italic'], 1058], [['DejaVu Serif Bold Italic', 'DejaVuSerif-BoldItalic'], 1168], 2048)]
+  ['Georgia', two([['Georgia Italic', 'Georgia-Italic'], 931], [['Georgia Bold Italic', 'Georgia-BoldItalic'], 1082], 2048)],
+  ['Times', two([['Times New Roman Italic', 'TimesNewRomanPS-ItalicMT'], 836], [['Times New Roman Bold Italic', 'TimesNewRomanPS-BoldItalicMT'], 857], 2048)],
+  ['Noto', two([['Noto Serif Italic', 'NotoSerif-Italic'], 469], [['Noto Serif Bold Italic', 'NotoSerif-BoldItalic'], 517], 1000)],
+  ['Liberation', two([['Liberation Serif Italic', 'LiberationSerif-Italic'], 836], [['Liberation Serif Bold Italic', 'LiberationSerif-BoldItalic'], 857], 2048)],
+  ['DejaVu', two([['DejaVu Serif Italic', 'DejaVuSerif-Italic'], 1058], [['DejaVu Serif Bold Italic', 'DejaVuSerif-BoldItalic'], 1168], 2048)]
 ];
 /** [suffix, locals, advance, upm] */
 const MONO = [
@@ -67,16 +81,16 @@ function face(family, weight, style, locals, web, webWidth, localWidth, why) {
   css.push(`@font-face { font-family: '${family}';${st}${w} src: ${locals.map((l) => `local('${l}')`).join(', ')}; ascent-override: ${pct(a)}; descent-override: ${pct(d)}; line-gap-override: 0%; size-adjust: ${pct(s)}; }`);
 }
 for (const [suffix, faces] of SANS) for (const [w, st, ww, locals, xw, upm] of faces) {
-  const web = WEB.sans;
-  face(`Public Sans Fallback ${suffix}`, w, st, locals, web, web.xw[ww] / web.upm, xw / upm, `(${web.xw[ww]}/${web.upm}) / (${xw}/${upm}), ${web.name} ${ww} over ${locals[0]}`);
+  const web = WEB.sans; const wx = (st === 'italic' ? web.xwi : web.xw)[ww];
+  face(`Source Sans 3 Fallback ${suffix}`, w, st, locals, web, wx / web.upm, xw / upm, `(${wx}/${web.upm}) / (${xw}/${upm}), ${web.name} ${st === 'italic' ? 'italic ' : ''}${ww} over ${locals[0]}`);
 }
 for (const [suffix, faces] of SERIF) for (const [w, st, ww, locals, xw, upm] of faces) {
-  const web = WEB.serif; const wx = (st === 'italic' ? web.xwi : web.xw)[ww];
-  face(`Newsreader Fallback ${suffix}`, w, st, locals, web, wx / web.upm, xw / upm, `(${wx}/${web.upm}) / (${xw}/${upm}), ${web.name} ${st === 'italic' ? 'italic ' : ''}${ww} over ${locals[0]}`);
+  const web = WEB.serif; const wx = web.xwi[ww];
+  face(`Source Serif 4 Fallback ${suffix}`, w, st, locals, web, wx / web.upm, xw / upm, `(${wx}/${web.upm}) / (${xw}/${upm}), ${web.name} italic ${ww} at optical size 18 over ${locals[0]}`);
 }
 for (const [suffix, locals, adv, upm] of MONO) {
   const web = WEB.mono;
-  face(`DM Mono Fallback ${suffix}`, '400', 'normal', locals, web, web.adv / web.upm, adv / upm, `(${web.adv}/${web.upm}) / (${adv}/${upm}), one advance each`);
+  face(`Source Code Pro Fallback ${suffix}`, '400', 'normal', locals, web, web.adv / web.upm, adv / upm, `(${web.adv}/${web.upm}) / (${adv}/${upm}), one advance each`);
 }
 if (process.argv.includes('--css')) console.log(css.join('\n'));
 else console.log(notes.join('\n') + '\n\n' + css.join('\n'));

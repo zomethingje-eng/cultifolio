@@ -19,6 +19,9 @@
   import { nextAccession, type NumberingScheme } from '$core/accession';
   import { temp, rain } from '$core/units';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
+  import { lock, LOCK_AFTER, passError } from '$lib/ui/lock.svelte';
+  import { getMeta } from '$lib/db/vault';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
 
   $effect(() => {
     setCrumb([{ label: 'Settings' }]);
@@ -97,6 +100,47 @@
       { timeout: 10000 }
     );
   }
+
+  /* ---- the app lock (round eighty-seven, t3; plan F12) ---- */
+  /** When this device last wrote a backup file: the lock is set only with a way back (sync on, or a backup within a day). */
+  let lastBackup = $state<string | null>(null);
+  onMount(() => { void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null)); });
+  const backedUpToday = $derived(!!lastBackup && Date.now() - Date.parse(lastBackup) < 86_400_000);
+  const wayBack = $derived(sync.configured || backedUpToday);
+  let lockPass = $state(''), lockPass2 = $state(''), lockOld = $state('');
+  let lockAfter = $state(5);
+  let lockMsg = $state('');
+  let lockBusy = $state(false);
+  let lockChanging = $state(false);
+  const afterWords = (n: number) => (n === 0 ? 'At once' : `After ${n} minute${n === 1 ? '' : 's'}`);
+  async function setLock() {
+    if (lockBusy) return;
+    lockMsg = '';
+    if (lock.enabled && !(await lock.check(lockOld))) { lockMsg = 'The current passcode is not right.'; return; }
+    const e = passError(lockPass);
+    if (e) { lockMsg = e; return; }
+    if (lockPass !== lockPass2) { lockMsg = 'The two passcodes are not the same.'; return; }
+    if (!wayBack) { lockMsg = 'Turn on sync, or make a backup, first: the sync key or a backup file opens the app if the passcode is forgotten.'; return; }
+    lockBusy = true;
+    try {
+      await lock.set(lockPass, lockAfter);
+      lockMsg = `Set on this device. It asks when the app opens in a new tab, and ${lockAfter === 0 ? 'whenever the app goes out of sight' : `after ${lockAfter} minute${lockAfter === 1 ? '' : 's'} out of sight`}.`;
+      lockPass = lockPass2 = lockOld = '';
+      lockChanging = false;
+    } catch (err) {
+      lockMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      lockBusy = false;
+    }
+  }
+  async function removeLock() {
+    lockMsg = '';
+    if (!(await lock.check(lockOld))) { lockMsg = 'The current passcode is not right.'; return; }
+    lock.remove();
+    lockOld = '';
+    lockMsg = 'The lock is off on this device.';
+  }
+  $effect(() => { if (lock.enabled) lockAfter = lock.after; });
 
   /* ---- numbering ---- */
   let mode = $state<'year' | 'prefix'>('year');
@@ -228,6 +272,39 @@
 
 <h2 class="sec" id="labels">Labels</h2>
 <div class="cult"><div class="body"><p class="small" style="margin: 0">The label stock and what goes on a label are chosen on the <a href="/labels">labels page</a> and remembered on this device.</p></div></div>
+
+<h2 class="sec" id="lock">App lock</h2>
+<div class="cult">
+  <div class="body">
+    {#if PAGE_IN_DEMO}
+      <p class="small" style="margin: 0">The example collection has no lock; a passcode is set on your own collection.</p>
+    {:else}
+      <p class="small" style="margin: 0 0 10px" id="lock-what">A passcode this device asks for before it shows the app, for a device others use too. It is a screen over the app: your collection is kept in this browser as it is, not encrypted (sync encrypts it for the server, not on the device). So it keeps out a casual look, not someone who can read the browser's storage. The passcode stays on this device and is never synced. If it is forgotten, the sync key or a backup file of this collection opens the app and takes it off. <a href="/about/how#lock">What it protects</a>.</p>
+      {#if lock.enabled && !lockChanging}
+        <p class="small" style="margin: 0 0 8px" id="lock-on"><b>A passcode is set on this device.</b></p>
+        <label class="inline"><span>Asks again</span><select id="lock-after" value={lock.after} onchange={(e) => lock.setAfter(Number(e.currentTarget.value))}>{#each LOCK_AFTER as n (n)}<option value={n}>{afterWords(n)}{n ? ' out of sight' : ' the app goes out of sight'}</option>{/each}</select></label>
+        <div class="row">
+          <button class="btn" type="button" id="lock-now" onclick={() => lock.lockNow()}>Lock now</button>
+          <button class="btn" type="button" id="lock-change" onclick={() => { lockChanging = true; lockMsg = ''; }}>Change the passcode</button>
+        </div>
+        <div class="fields" style="margin-top: 12px"><label><span>Current passcode, to take the lock off</span><input id="lock-old-off" type="password" autocomplete="current-password" bind:value={lockOld} /></label></div>
+        <div class="row"><button class="btn" type="button" id="lock-off" onclick={removeLock}>Take the lock off</button></div>
+      {:else}
+        {#if !wayBack}<p class="small" id="lock-wayback" style="margin: 0 0 8px">First turn on <a href="/sync">sync</a> or <a href="/backup">make a backup</a>: one of the two is the way back if the passcode is forgotten.</p>{/if}
+        <form onsubmit={(e) => { e.preventDefault(); void setLock(); }}>
+          <div class="fields">
+            {#if lock.enabled}<label><span>Current passcode</span><input id="lock-old" type="password" autocomplete="current-password" bind:value={lockOld} /></label>{/if}
+            <label><span>{lock.enabled ? 'New passcode' : 'Passcode'} (4 characters or more)</span><input id="lock-pass1" type="password" autocomplete="new-password" bind:value={lockPass} /></label>
+            <label><span>The same again</span><input id="lock-pass2" type="password" autocomplete="new-password" bind:value={lockPass2} /></label>
+          </div>
+          <label class="inline" style="margin-top: 10px"><span>Asks again</span><select id="lock-after-new" bind:value={lockAfter}>{#each LOCK_AFTER as n (n)}<option value={n}>{afterWords(n)}{n ? ' out of sight' : ' the app goes out of sight'}</option>{/each}</select></label>
+          <div class="row"><button class="btn pri" type="submit" id="lock-set" aria-disabled={lockBusy || !wayBack}>{lock.enabled ? 'Change the passcode' : 'Set the passcode'}</button>{#if lockChanging}<button class="btn" type="button" onclick={() => { lockChanging = false; lockMsg = ''; }}>Cancel</button>{/if}</div>
+        </form>
+      {/if}
+      <p class="small muted" role="status" id="lock-msg-set" style="margin: 8px 0 0">{lockMsg}</p>
+    {/if}
+  </div>
+</div>
 
 <h2 class="sec" id="data">Your data</h2>
 <div class="cult">

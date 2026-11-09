@@ -21,6 +21,10 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
+  // Round eighty-seven, F4: a seed batch sown from a cross of the grower's own, and a graft batch's stock.
+  import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
+  import PlantRef from '$lib/ui/grow/PlantRef.svelte';
+  import { crossOf, linkId } from '$lib/db/lineage';
   import { takeDraft, withoutKept, ownPlaceNamed, carriedPlace, startPlace as startFrom, str, num, bool, oneOf, type Draft, type StartPlace } from '$lib/ui/grow/keep-draft';
 
   let name = $state('');
@@ -30,6 +34,25 @@
   let parentage = $state<string | null>(null);
   let method = $state<PropMethod>('seed');
   let parentAcc = $state<string | null>(null);
+  /** The cross the seed came from (a pollinate line's id), for a seed batch; the stock's plant, for a graft batch (round eighty-seven, F4). */
+  let cross = $state<string | null>(null);
+  let stockAcc = $state<string | null>(null);
+  const crosses = $derived(collection.ready ? collection.allCrosses() : []);
+  const crossNow = $derived(cross ? crossOf(collection.event(cross)) : null);
+  const crossLabel = (c: { seed: string; pollen: string; d: string | null }) => { const s = collection.anyAccession(c.seed), p = collection.anyAccession(c.pollen); return `${s ? accNo(s) : 'a plant not here'} × ${p ? accNo(p) : 'a plant not here'}${c.d ? `, ${c.d}` : ''}`; };
+  /**
+   * Choosing a cross takes the seed parent's name, as choosing a parent plant takes its name: the batch is filed under the
+   * reference's species name, and the cross is said beside it, never written in its place (the plant's parentage is the
+   * grower's to state). The seed's source says the cross, and the seed is from cultivated plants.
+   */
+  function takeCross() {
+    const c = cross ? crossOf(collection.event(cross)) : null;
+    if (!c) return;
+    const sp = collection.anyAccession(c.seed);
+    if (sp) { name = sp.taxonName; taxonKey = sp.taxonKey ?? null; cultivar = null; kind = kindOf(sp) === 'hybrid' ? 'hybrid' : 'species'; parentage = kindOf(sp) === 'hybrid' ? (sp.parentage ?? null) : null; nameArmed = true; }
+    if (!sourceFrom.trim()) sourceFrom = `own cross ${crossLabel(c)}`;
+    if (provenance === 'unknown') provenance = 'fn';
+  }
   let sown = $state(day.current); // follows the calendar while the form is open (round twenty-five, 4)
   let sownDefault = day.current;
   $effect(() => { const t = day.current; if (t !== sownDefault) { if (sown === sownDefault) sown = t; sownDefault = t; } });
@@ -167,6 +190,9 @@
     // by number, and never one of two plants that share a number: one picked by load order recorded the wrong parent
     // (round sixty-one; the records review's 4). For two, the method is set and the parent list is filtered to them,
     // so the grower picks one, as the labels page asks.
+    // /propagation/new?cross=<line id> from a plant's page: seed sown from that cross (round eighty-seven, F4).
+    const cx = page.url.searchParams.get('cross');
+    if (cx && crossOf(collection.event(cx))) { method = 'seed'; cross = cx; takeCross(); }
     const p = page.url.searchParams.get('parent');
     const hits = p ? collection.withNumber('accession', p) : [];
     if (p && hits.length > 1) { method = 'offset'; parentQ = p; }
@@ -235,6 +261,9 @@
         parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
         method,
         parentAcc: m.veg ? parentAcc : null,
+        // Each only for its method, as the parent plant is: a batch switched to cuttings does not keep a cross it was not sown from.
+        ...(!m.veg && crossNow ? { cross } : {}),
+        ...(method === 'graft' && linkId(stockAcc) ? { stockAcc } : {}),
         sown,
         count: n,
         sourceFrom: m.veg ? null : sourceFrom.trim() || null,
@@ -291,6 +320,20 @@
       </select>
       {#if parent}<span class="faint small">The species is taken from the parent; its field number and cultivar carry to every plant raised.</span>{/if}
     </div>
+  {/if}
+
+  {#if !m.veg && crosses.length}
+    <!-- Seed from a cross the grower recorded on a plant's page (Record…, Pollinated, with its pollen parent): seed parent first (round eighty-seven, F4). -->
+    <label class="field"><span>From a cross of mine</span>
+      <select id="s-cross" bind:value={cross} onchange={takeCross}>
+        <option value={null}>Not from a cross recorded here</option>
+        {#each crosses as c (c.id)}<option value={c.id}>{crossLabel(c)}</option>{/each}
+      </select>
+      {#if crossNow}<span class="faint small" id="s-cross-help">Seed parent <PlantRef id={crossNow.seed} /> × pollen parent <PlantRef id={crossNow.pollen} />. The batch is filed under the species name; the cross is shown beside it, and its plants list both parents.</span>{/if}
+    </label>
+  {/if}
+  {#if method === 'graft'}
+    <div class="field"><PlantChoice bind:value={stockAcc} id="s-stock" label="Onto which stock" none="Not one of my plants (a bought stock)" exclude={parentAcc} /><span class="faint small">The scion's plant is the one above; the stock's, here, when it is one of yours.</span></div>
   {/if}
 
   <!-- `reserve`: the name check's words arrive in room kept for them, so "Start batch" below does not move under a press (round seventy; P's need 2, as the add form since round sixty-seven, triage-66 P10). -->
@@ -363,4 +406,6 @@
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
   @media (max-width: 640px) { .actions .btn, .pfilter, .field select { min-height: 44px; } }
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
 </style>

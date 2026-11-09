@@ -49,7 +49,11 @@ describe('the sitemap turns over with the corpus (round eighty; review C 2)', ()
     const bare = await fileGet(ev(A.platform, '1'));
     expect(bare.headers.get('cache-control')).toBe('public, max-age=300');
     expect(await bare.text()).toContain('https://cultifolio.com/species/aloe-vera');
-    expect((await caught(fileGet(ev(A.platform, `${A.id}-2`))))?.status).toBe(404);
+    // Round eighty-seven (C2): the file after the species' last is the browse entrance pages', now that the build writes
+    // `browse.json`; the one after that is no file.
+    expect(text).toContain(`<loc>https://cultifolio.com/sitemap-${A.id}-2.xml</loc>`);
+    expect(await (await fileGet(ev(A.platform, `${A.id}-2`))).text()).toContain('https://cultifolio.com/browse<');
+    expect((await caught(fileGet(ev(A.platform, `${A.id}-3`))))?.status).toBe(404);
   });
 
   it('after an upload the index names new addresses, and the old corpus\'s files answer with the new corpus for five minutes', async () => {
@@ -73,6 +77,8 @@ describe('the sitemap turns over with the corpus (round eighty; review C 2)', ()
 
   it('robots.txt still names the index, and the live check reads the first file the index names', () => {
     expect(readFileSync('src/routes/robots.txt/+server.ts', 'utf8')).toContain('Sitemap: https://cultifolio.com/sitemap.xml');
+    // Round eighty-seven (C1): the browse pages' CSV files are not for crawlers.
+    expect(readFileSync('src/routes/robots.txt/+server.ts', 'utf8')).toContain('Disallow: /browse/csv\\n');
     expect(readFileSync('scripts/live-check.mjs', 'utf8')).toContain(String.raw`sitemap-(?:[0-9a-f]+-)?1\.xml`);
   });
 });

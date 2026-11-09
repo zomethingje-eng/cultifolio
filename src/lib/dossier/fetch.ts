@@ -69,7 +69,10 @@ const MIN_GAP_MS: Record<string, number> = {
   // IPNI's own records, asked by the Wikidata proof (round seventy-c; `ipniNames` in sources/wikimedia.ts): at most once a second.
   'www.ipni.org': 1100,
   'power.larc.nasa.gov': 2100,
-  'nominatim.openstreetmap.org': 1100
+  'nominatim.openstreetmap.org': 1100,
+  // The Biodiversity Heritage Library's OpenURL resolver (`--fill bhl`, round eighty-seven, stage 2; links agent's
+  // `bhl.ts`): once a second at most, whatever the fill's own pace, as /about/how says.
+  'www.biodiversitylibrary.org': 1000
 };
 const lastAt = new Map<string, number>();
 
@@ -165,10 +168,32 @@ export const THROTTLED = 'throttled by the host';
 /** Whether a refusal is a host's throttle (429, or a host cooled after a run of them), never the day's allowance. */
 export const isThrottle = (detail: string | undefined): boolean => !!detail && !/allowance/.test(detail) && (detail.includes(THROTTLED) || /\b429\b|throttled|rate-limiting/.test(detail));
 
+/**
+ * Round eighty-seven (docs/COLXR-87.md): the taxonomy each GBIF occurrence search named, by its `checklistKey` ('' when it
+ * named none, which GBIF answers by its default), counted as it is sent, a retry not counted again. The build prints it
+ * (`taxonomyLine` in sources/gbif.ts; rule 6), so its record says which taxonomy its records' keys are.
+ */
+const gbifTaxonomy = new Map<string, number>();
+/** What the GBIF occurrence searches sent so far named as their taxonomy, by checklistKey ('' for none). */
+export function gbifTaxonomyAsked(): ReadonlyMap<string, number> {
+  return new Map(gbifTaxonomy);
+}
+/** For tests, and a run that counts afresh. */
+export function resetGbifTaxonomy(): void {
+  gbifTaxonomy.clear();
+}
+function countTaxonomy(url: URL): void {
+  if (url.host !== 'api.gbif.org' || !/^\/v1\/occurrence\/search\/?$/.test(url.pathname)) return;
+  const k = url.searchParams.get('checklistKey') ?? '';
+  gbifTaxonomy.set(k, (gbifTaxonomy.get(k) ?? 0) + 1);
+}
+
 export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
   return async <T>(url: string, opts: FetchOptions = {}): Promise<FetchResult<T>> => {
-    const host = new URL(url).host;
+    const u = new URL(url);
+    const host = u.host;
     if (hostCooling(host)) return { status: 'refused', detail: `${host} rate-limiting; not asked again for a while` };
+    if (!(opts.attempt ?? 0)) countTaxonomy(u);
     await pace(host);
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 20000);

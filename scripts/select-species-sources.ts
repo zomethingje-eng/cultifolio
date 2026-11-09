@@ -17,6 +17,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { USER_AGENT } from '../src/lib/dossier/fetch';
+import { BACKBONE } from '../src/lib/dossier/sources/gbif';
 import { writeAtomic } from './write-atomic';
 
 export const GBIF = 'https://api.gbif.org/v1';
@@ -26,11 +27,15 @@ export const FACET_LIMIT = 100000;
 /** The pace a host is asked at, in milliseconds between the end of one request and the start of the next. */
 export const GAP_MS: Record<string, number> = { 'api.gbif.org': 1000, 'api.inaturalist.org': 2000 };
 
-export const datasetFacetUrl = () => `${GBIF}/occurrence/search?${LIVING}&limit=0&facet=datasetKey&facetLimit=${FACET_LIMIT}`;
+// The occurrence searches name the backbone (round eighty-seven; docs/COLXR-87.md 2): kingdomKey 6 is the backbone's
+// Plantae and the facet's species keys are matched to the list's backbone keys, so neither may take GBIF's default, which
+// GBIF names no day for keeping. Last in the address; the cache's files are named by dataset and offset, not by address.
+export const ON_BACKBONE = `&checklistKey=${BACKBONE}`;
+export const datasetFacetUrl = () => `${GBIF}/occurrence/search?${LIVING}&limit=0&facet=datasetKey&facetLimit=${FACET_LIMIT}${ON_BACKBONE}`;
 export const datasetUrl = (key: string) => `${GBIF}/dataset/${key}`;
 export const organizationUrl = (key: string) => `${GBIF}/organization/${key}`;
 export const speciesFacetUrl = (key: string, offset: number) =>
-  `${GBIF}/occurrence/search?${LIVING}&datasetKey=${key}&limit=0&facet=speciesKey&facetLimit=${FACET_LIMIT}&facetOffset=${offset}`;
+  `${GBIF}/occurrence/search?${LIVING}&datasetKey=${key}&limit=0&facet=speciesKey&facetLimit=${FACET_LIMIT}&facetOffset=${offset}${ON_BACKBONE}`;
 export const inatPageUrl = (page: number) => `${INAT}/observations/species_counts?captive=true&iconic_taxa=Plantae&per_page=500&page=${page}`;
 
 const lastAt = new Map<string, number>();

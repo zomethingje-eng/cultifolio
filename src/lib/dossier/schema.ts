@@ -68,9 +68,12 @@ export const NameBlock = v.object({
    * heads the page while its id is `k<entry>` (`kew-heading.ts`).
    * `elsewhere` (round eighty-five, the owner's decision 6): GBIF's names on the page (`synonyms`, `infra`) that Kew's file
    * places only in another plant (`kewPlace`): not the page's names, so not searched, shown or an address. `accepted.family`:
-   * Kew's family, which heads a `k` page (A9a).
+   * Kew's family, which heads a `k` page (A9a). `by` (round eighty-seven, derived agent; review D's D13): for each of
+   * `synonyms`, in its place, the authors Kew's rows of that name in the plant write (`taxon_authors`), so an older name
+   * spelt as another page's heading is said by Kew's author (`homonymEntries`). Absent in a record filled before: the
+   * authors not read, never none.
    */
-  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()), accepted: v.optional(v.object({ name: v.string(), authors: v.string(), rank: v.string(), other: v.optional(v.string()), family: v.optional(v.string()) })), elsewhere: v.optional(v.array(v.string())) })),
+  kew: v.optional(v.object({ entry: v.string(), synonyms: v.array(v.string()), acceptedElsewhere: v.array(v.string()), file: v.string(), heldBy: v.optional(v.string()), accepted: v.optional(v.object({ name: v.string(), authors: v.string(), rank: v.string(), other: v.optional(v.string()), family: v.optional(v.string()) })), elsewhere: v.optional(v.array(v.string())), by: v.optional(v.array(v.array(v.string()))) })),
   /**
    * GBIF's name for the page's key, where Kew's accepted name heads the page (round eighty-four, the owner's decision 1;
    * `kew-heading.ts`): what the derivation reads, and what the page gives back if it loses its `k` id. `added`: the older
@@ -197,6 +200,13 @@ export const Occurrences = v.object({
   thin: v.boolean(),
   datasets: v.array(v.object({ key: v.string(), title: v.optional(v.string()), licence: v.string(), n: v.number() })),
   /**
+   * The in-range records that came through GBIF's search API rather than a download, by GBIF's datasetKey, each record
+   * one coordinate as `datasets` counts it (round eighty-seven): a page the download left to the API path, or another key
+   * the download does not hold. GBIF asks a derived dataset of such records (https://www.gbif.org/derived-dataset/about);
+   * `--list-derived` adds them up. Empty: none came so; absent: derived before round eighty-seven, not known.
+   */
+  api: v.optional(v.array(v.object({ key: v.string(), n: v.number() }))),
+  /**
    * The other GBIF keys the records come from, beside the page's own (round seventy-three; `extra-keys.ts`): each key, GBIF's
    * name for it, how Kew's file holds it as this plant, the records it added, whether they came from the download or the
    * search API, and, for a page merged into this one, its old address. Absent: the page's own key alone.
@@ -248,7 +258,14 @@ const Extremes = v.object({
   maxP99: v.number(),
   frostDaysPerYear: v.number(),
   frostNights: v.optional(v.number()),
-  lapseAppliedM: v.number()
+  lapseAppliedM: v.number(),
+  /**
+   * Each calendar year's lowest night at the typical cell, from the same NASA POWER series and by the same lapse correction
+   * (round eighty-seven, derived agent; `$climate/year-lows`): the first year, and a low per year, null for a year with fewer
+   * than 347 of its days. What the habitat's USDA zone is the mean of (`hardiness.ts`). US government data, no licence
+   * restriction. Absent in extremes read before round eighty-seven's walk: not held, never "none".
+   */
+  lows: v.optional(v.object({ from: v.number(), t: v.array(v.nullable(v.number())) }))
 });
 
 export const Climate = v.variant('status', [
@@ -304,6 +321,10 @@ export const Climate = v.variant('status', [
      * ("São Paulo, Brazil"), so a page whose climate rests on few records can say where its figures were read.
      */
     place: v.optional(v.string()),
+    /*
+     * No `wild` (round eighty-seven's review of stage 2, S4): the stage's rule that chose the typical cell among the cells
+     * holding an iNaturalist research-grade record, and said so here, is taken out; the typical cell is every cell's.
+     */
     src: v.object({ normals: v.string(), envelope: v.string(), extremes: v.optional(v.string()), elevation: v.optional(v.string()) })
   }),
   v.object({ status: v.picklist(['pending', 'none', 'refused']), detail: v.optional(v.string()) })
@@ -385,6 +406,169 @@ export const Paper = v.object({
   venue: v.optional(v.string())
 });
 
+/**
+ * Round eighty-seven, stage 2 (the sources agent): four facts read offline from files in bulk/ (and, for CITES, a table
+ * transcribed by hand in the repo), each written by `--fill sources` and by the walk after it builds a page
+ * (`sources-fill.ts`). Every one says how it was read: `ok` (a row was matched), `none` (the file was read and holds
+ * no row for the page: an answer), `undecided` (rows were found that the rules do not decide between, or that the
+ * page's names do not decide; said why), or `skipped` (not asked: the file was not on disk, said why). Absent: a
+ * dossier written before, also not asked. `read` is the day the figure was first read from that file; `file` and
+ * `asOf` the file and the day its publisher gives it. A field that is `ok` holds its figures with their source; the
+ * page never shows a figure of these without the source and the day.
+ */
+const SourceStatus = v.picklist(['ok', 'none', 'undecided', 'skipped']);
+
+/**
+ * Kew's predicted extinction risk (Bachman et al. 2024, New Phytologist 242: 797-808; Zenodo 10605228, CC BY 4.0):
+ * the model's mean probability that the species is threatened (`p`), its 95% credible interval (`lo`, `hi`), the class
+ * the model predicts and whether the model is confident of it. Matched by the page's IPNI id (the file's `ipni_id`),
+ * since the file's `plant_name_id` is an earlier form of WCVP's id ("10-wcs"), not Kew's file's now. IUCN's category is never
+ * read into it (IUCN's terms, CC BY-NC-SA through POWO, do not let it be shown here): `assessed` says only that the
+ * file marks the species as assessed by the Red List, so the page can send the reader to IUCN's own page.
+ */
+export const Risk = v.object({
+  status: SourceStatus,
+  read: v.string(),
+  file: v.optional(v.string()),
+  asOf: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  p: v.optional(v.number()),
+  lo: v.optional(v.number()),
+  hi: v.optional(v.number()),
+  predicted: v.optional(v.picklist(['threatened', 'not threatened'])),
+  confident: v.optional(v.boolean()),
+  assessed: v.optional(v.literal(true)),
+  ipni: v.optional(v.string())
+});
+export type Risk = v.InferOutput<typeof Risk>;
+
+/**
+ * CITES Appendix status, resolved from the plant listings of the Appendices as CITES publishes them, transcribed by hand
+ * (`cites-appendices.tsv`; never Species+, whose terms forbid it): the Appendix, the level of the listing that covers
+ * the page (`family`, `genus`, `species`, `infraspecific`), the listing's words as the Appendices print them, its
+ * annotation and its parenthesis (populations, exceptions), the Party of an Appendix III listing, the name the listing
+ * uses where it is one Kew holds as a synonym of the page's (`via`), the URL of the edition the row was read from, and
+ * the day the Appendices are valid from. `infra`: the page's subspecies or varieties listed apart. `undecided`: the
+ * listing depends on what the page's names do not say (a genus Kew draws wider than the Appendices' reference, a
+ * "succulent species only"); `detail` says what.
+ */
+export const Cites = v.object({
+  status: SourceStatus,
+  read: v.string(),
+  table: v.optional(v.string()),
+  validFrom: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  appendix: v.optional(v.picklist(['I', 'II', 'III'])),
+  level: v.optional(v.picklist(['family', 'genus', 'species', 'infraspecific'])),
+  listed: v.optional(v.string()),
+  annotation: v.optional(v.string()),
+  scope: v.optional(v.string()),
+  party: v.optional(v.string()),
+  via: v.optional(v.string()),
+  url: v.optional(v.string()),
+  infra: v.optional(v.array(v.object({ appendix: v.picklist(['I', 'II', 'III']), listed: v.string() })))
+});
+export type Cites = v.InferOutput<typeof Cites>;
+
+/**
+ * Chromosome counts from ChromoDB's IAPT/IOPB set (Simon, Bosch & Blanché; Zenodo, CC BY 4.0): each count as published
+ * (`n`, gametic; `twoN`, somatic, with its "ca." or B chromosomes), its reference (the short authors and year, the
+ * journal's volume and pages, the DOI or stable URL), and the name the count was published under where it is not the
+ * page's (`as`). Matched by the page's IPNI id (the file's `POWO_ID`) and the page's accepted name together. Counts the
+ * authors retracted and numbers inferred from genome size are left out and counted in `left`. `more`: counts not kept.
+ */
+export const Chromosomes = v.object({
+  status: SourceStatus,
+  read: v.string(),
+  file: v.optional(v.string()),
+  asOf: v.optional(v.string()),
+  version: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  counts: v.optional(v.array(v.object({ n: v.optional(v.string()), twoN: v.optional(v.string()), ref: v.string(), cite: v.optional(v.string()), url: v.optional(v.string()), as: v.optional(v.string()), country: v.optional(v.string()) }))),
+  left: v.optional(v.number()),
+  more: v.optional(v.number())
+});
+export type Chromosomes = v.InferOutput<typeof Chromosomes>;
+
+/**
+ * The WFO Plant List's reading of the page's name (World Flora Online's six-monthly release, CC0): `accepted`, WFO
+ * accepts the same name; `synonym`, WFO holds it as a synonym of `of` (its name and authors, and WFO's id `ofId`);
+ * `unchecked`, WFO holds the name and has not placed it; `none` status, WFO's list does not hold the name. `by`: how the
+ * row was found, by the page's IPNI id (WFO's `scientificNameID`), by the exact name and authors whatever IPNI id WFO
+ * gives them, or (`kew`, round eighty-seven's review of stage 2, B1) the one of several such rows whose `localID` is the
+ * page's Kew id. `release`: WFO's release (YYYY-MM). `spelt`: WFO's spelling, where it differs. `detail` on a found row:
+ * how it was found where not by the IPNI id, and WFO's IPNI id where it is not Kew's; the page says it.
+ */
+export const NameAgreement = v.object({
+  status: SourceStatus,
+  read: v.string(),
+  release: v.optional(v.string()),
+  file: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  by: v.optional(v.picklist(['ipni', 'name', 'kew'])),
+  wfo: v.optional(v.string()),
+  kind: v.optional(v.picklist(['accepted', 'synonym', 'unchecked'])),
+  of: v.optional(v.string()),
+  ofId: v.optional(v.string()),
+  spelt: v.optional(v.string())
+});
+export type NameAgreement = v.InferOutput<typeof NameAgreement>;
+
+/**
+ * Round eighty-seven, stage 2 (links agent; `src/lib/dossier/flowering.ts`): iNaturalist's research-grade observations of
+ * wild plants (not captive) annotated "Flowering" (term 12, value 13), counted by the month they were observed in, January
+ * first, as iNaturalist's histogram answers them for the page's taxon (`taxon`, which includes its subspecies and
+ * varieties), and the day it was read. Written by `--fill flowering`. iNaturalist's data are its observers' (the counts are
+ * facts read from its API, linked to its search, not its observations' text or photographs). Absent: not asked.
+ */
+export const Flowering = v.object({
+  taxon: v.number(),
+  /** January first. Absent with `unanswered`: asked, and iNaturalist did not answer ("not checked", asked again by the next fill). */
+  months: v.optional(v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(0))), v.length(12))),
+  read: v.string(),
+  unanswered: v.optional(v.string())
+});
+
+/**
+ * Round eighty-seven, stage 2 (links agent; `src/lib/dossier/elsewhere.ts`): where else the plant is recorded.
+ *   - `wikidata`: the identifiers the page's own Wikidata item (`ids.wikidata`, CC0) holds for other registers and floras,
+ *     by Wikidata property (`ELSEWHERE_PROPERTIES` names each and its formatter URL), and the day the item was read. Written
+ *     by `--fill elsewhere`. Absent: not asked.
+ *   - `published`: where the page's name was published, as Kew's World Checklist gives it for the page's Kew entry
+ *     (`place_of_publication`, `volume_and_page`, `first_published` of WCVP, CC BY 4.0, RBG Kew), its row and the day of
+ *     Kew's file; written by the walk with `--bulk` and by `--fill kew-published`. `bhl`: Biodiversity Heritage Library's
+ *     page for exactly that citation, by its OpenURL resolver (`--fill bhl`; `src/lib/dossier/bhl.ts`): `page` where BHL
+ *     answered one page whose volume, page number and year are the citation's, else `none` with why; the day asked. A
+ *     citation with no `bhl` was not asked. Never a guessed page.
+ */
+export const Elsewhere = v.object({
+  /** `unanswered`: the item was asked and Wikidata did not answer for it ("not checked"; asked again by the next fill). */
+  wikidata: v.optional(v.object({ item: v.string(), read: v.string(), ids: v.array(v.object({ p: v.string(), v: v.string() })), unanswered: v.optional(v.string()) })),
+  published: v.optional(v.object({
+    place: v.string(),
+    volPage: v.optional(v.string()),
+    year: v.optional(v.string()),
+    row: v.string(),
+    file: v.optional(v.string()),
+    bhl: v.optional(v.object({ page: v.optional(v.number()), none: v.optional(v.string()), read: v.string() }))
+  }))
+});
+
+/**
+ * Round eighty-seven, stage 2 (links agent; `src/lib/dossier/kew-published.ts`): a named hybrid's parents as Kew's World
+ * Checklist states them (WCVP's `hybrid_formula` on the page's Kew entry, CC BY 4.0, RBG Kew), each parent the words Kew
+ * writes (its genus written out where Kew abbreviates the hybrid's own genus), the Kew row the words name exactly
+ * (`row`), the entry Kew accepts for it (`entry`) and the page here that is that entry (`page`), where one is. A parent
+ * whose words name no row, or rows of more than one plant, is listed with why and linked nowhere; where they name the one
+ * row Kew accepts beside other authors' names, that row is taken and `others` counts the rest. `formula`: Kew's words.
+ */
+export const Parents = v.object({
+  formula: v.string(),
+  row: v.string(),
+  file: v.optional(v.string()),
+  of: v.array(v.object({ name: v.string(), row: v.optional(v.string()), entry: v.optional(v.string()), page: v.optional(PageIdSchema), why: v.optional(v.string()), others: v.optional(v.number()) }))
+});
+
 export const Dossier = v.object({
   v: v.literal(DOSSIER_V),
   /** The page's id (round seventy-eight; `$core/page-id`): `k<Kew plant_name_id>`, or `g<GBIF key>` where Kew's file gives no one taxon that is this page's alone. Its GBIF key is `ids.gbif`. */
@@ -404,7 +588,41 @@ export const Dossier = v.object({
   links: v.record(v.string(), v.string()),
   upstream: v.record(v.string(), Upstream),
   /** The day the page's substance last changed and its fingerprint, for the sitemap (src/lib/dossier/changed.ts; round sixty-three). Absent in a dossier built before. */
-  changed: v.optional(v.object({ on: v.string(), h: v.string() }))
+  changed: v.optional(v.object({ on: v.string(), h: v.string() })),
+  /** Round eighty-seven, stage 2 (sources agent): see `Risk`, `Cites`, `Chromosomes` and `NameAgreement` above. Absent: not asked. */
+  risk: v.optional(Risk),
+  cites: v.optional(Cites),
+  chromosomes: v.optional(Chromosomes),
+  nameAgreement: v.optional(NameAgreement),
+  /**
+   * The habitat's hardiness (round eighty-seven, derived agent; `hardiness.ts`): the USDA zone of the mean of the typical
+   * cell's yearly lowest nights and the RHS band of its record low, both from NASA POWER's daily series (US government
+   * data, no licence restriction), USDA's and the RHS's tables cited there. Worked out by the build from `climate`; absent
+   * where the page shows no daily extremes, or in a dossier written before.
+   */
+  hardiness: v.optional(v.object({
+    usda: v.optional(v.object({ years: v.number(), from: v.number(), to: v.number(), meanC: v.number(), meanF: v.number(), zone: v.string() })),
+    usdaWhy: v.optional(v.string()),
+    rhs: v.object({ lowC: v.number(), band: v.picklist(['H1a', 'H1b', 'H1c', 'H2', 'H3', 'H4', 'H5', 'H6', 'H7']), years: v.number() }),
+    src: v.string()
+  })),
+  /**
+   * The habitat's Köppen–Geiger class (round eighty-seven, derived agent; `koppen.ts`), by Peel, Finlayson and McMahon's
+   * (2007) thresholds, from the median year's months (CHELSA V2.1, CC0 1.0), and the
+   * figures it came from. Worked out by the build from `climate`; absent where there is no habitat climate, or in a dossier
+   * written before.
+   */
+  koppen: v.optional(v.object({
+    cls: v.optional(v.string()), why: v.optional(v.string()),
+    mat: v.number(), map: v.number(), thot: v.number(), tcold: v.number(), tmon10: v.number(), pdry: v.number(),
+    summer: v.picklist(['AMJJAS', 'ONDJFM']), psdry: v.number(), pswet: v.number(), pwdry: v.number(), pwwet: v.number(), summerShare: v.number(), pth: v.number(),
+    /** Which threshold the unrounded shares gave (round eighty-seven's review of stage 2; `koppen.ts`). Absent: written before. */
+    pthBy: v.optional(v.picklist(['summer', 'winter', 'neither']))
+  })),
+  /** Round eighty-seven, stage 2 (links agent): `Flowering`, `Elsewhere` and `Parents` above say each. Absent: not asked. */
+  flowering: v.optional(Flowering),
+  elsewhere: v.optional(Elsewhere),
+  parents: v.optional(Parents)
 });
 
 export type Dossier = v.InferOutput<typeof Dossier>;
@@ -413,6 +631,9 @@ export type OccPoint = v.InferOutput<typeof OccPoint>;
 export type Climate = v.InferOutput<typeof Climate>;
 export type Upstream = v.InferOutput<typeof Upstream>;
 export type Box = v.InferOutput<typeof BoxSchema>;
+export type Flowering = v.InferOutput<typeof Flowering>;
+export type Elsewhere = v.InferOutput<typeof Elsewhere>;
+export type Parents = v.InferOutput<typeof Parents>;
 
 /** A URL the page may render as a link: web addresses only. The CSP already blocks `javascript:`; this keeps a `data:` or a relative path out of an href too (round twenty-nine, 10). */
 const webUrl = (u: string | undefined): string | undefined => (u && /^https?:\/\//i.test(u) ? u : undefined);
@@ -424,18 +645,61 @@ const webUrl = (u: string | undefined): string | undefined => (u && /^https?:\/\
  * R1-6). Applied as a dossier is read, so no rebuild is needed, and by the builder, so the files stop carrying it.
  */
 export function unchain(detail: string | undefined): string | undefined {
-  if (!detail || !detail.startsWith('carried from build of')) return detail;
-  const parts = detail.split(/; (?:that|this) build: /);
-  if (parts.length < 2) return detail;
-  let origin = parts[0];
-  let reason: string | null = null;
-  for (let i = 1; i < parts.length; i++) {
-    if (parts[i].startsWith('carried from build of')) origin = parts[i];
-    else reason = parts[i];
+  const p = carriedParts(detail);
+  if (!p) return detail;
+  // Round eighty-seven: what the asking build said ("that build: …") and what the carrying build got ("this build: …")
+  // are both kept, after the build that asked. Before, only the last clause was kept, so a summary carried by a walk
+  // ("carried from build of …; that build: Wikipedia's article X, <its proof>; this build: not asked") lost its proof on
+  // the way: 1,315 of the 1,355 summaries under another title than the page's name showed none.
+  return `${p.origin}${p.that != null ? `; that build: ${p.that}` : ''}${p.now != null ? `; this build: ${p.now}` : ''}`;
+}
+
+/** The build a carried row names, as the builder writes it: its day, a note in brackets, or the range's "as one snapshot". */
+const CARRIED_ORIGIN = /^carried from build of (?:\d{4}-\d{2}-\d{2}|\?)(?: ?\([^)]*\))?(?: as one snapshot)?/;
+const THAT = '; that build: ', THIS = '; this build: ';
+/**
+ * A carried row's three parts (round eighty-seven; review M3): the build that asked (`origin`), the words that build
+ * recorded (`that`) and what the build that carried it got (`now`). The builder writes them in that order, once each,
+ * so the asking build's words run from the first "; that build: " after the origin to the last "; this build: ": a row
+ * whose own words hold "; that build: " ("words; that build: inner") is read whole. Before, every "; that build: " was a
+ * split, and the words before the last were lost when the row was carried again. A that-clause that is itself a carried
+ * row (a chain of re-derivations before round thirty-five) is read down to the build that asked; the latest "this build"
+ * stands. Undefined for a row that is not carried.
+ */
+export function carriedParts(detail: string | undefined): { origin: string; that?: string; now?: string } | undefined {
+  if (!detail?.startsWith('carried from build of')) return undefined;
+  const o = CARRIED_ORIGIN.exec(detail)?.[0];
+  const tail = o != null ? detail.slice(o.length) : '';
+  let origin: string, rest: string;
+  if (o != null && (tail === '' || tail.startsWith(THAT) || tail.startsWith(THIS))) { origin = o; rest = tail; }
+  else {
+    // An origin the builder does not write now (a row of an older round): up to its first clause, as before.
+    const at = detail.search(/; (?:that|this) build: /);
+    if (at < 0) return { origin: detail };
+    origin = detail.slice(0, at);
+    rest = detail.slice(at);
   }
-  // The clause after a chain is the reason the asking build gave ("that build: …") or what this build got ("this build: …"): the words that stood before it are kept.
-  const sep = reason == null ? '' : detail.includes(`; this build: ${reason}`) ? '; this build: ' : '; that build: ';
-  return reason == null ? origin : `${origin}${sep}${reason}`;
+  let that: string | undefined, now: string | undefined;
+  if (rest.startsWith(THAT)) {
+    const body = rest.slice(THAT.length), at = body.lastIndexOf(THIS);
+    if (at >= 0) { that = body.slice(0, at); now = body.slice(at + THIS.length); } else that = body;
+  } else if (rest.startsWith(THIS)) now = rest.slice(THIS.length);
+  if (that?.startsWith('carried from build of')) {
+    const inner = carriedParts(that)!;
+    const latest = now ?? inner.now;
+    return { origin: inner.origin, ...(inner.that != null ? { that: inner.that } : {}), ...(latest != null ? { now: latest } : {}) };
+  }
+  return { origin, ...(that != null ? { that } : {}), ...(now != null ? { now } : {}) };
+}
+
+/**
+ * The words of the build that asked a source, as a row carried from it keeps them (round eighty-seven): the row's own
+ * detail when it is not carried; the "that build: …" clause of a carried one; undefined when a carried row kept none (a
+ * walk before round eighty-seven dropped them). `recordedProof` and `--check-summaries` read a summary's proof here.
+ */
+export function askedDetail(detail: string | undefined): string | undefined {
+  if (!detail?.startsWith('carried from build of')) return detail;
+  return carriedParts(detail)!.that;
 }
 
 /**

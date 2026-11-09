@@ -37,6 +37,10 @@
   import PlantName from '$lib/ui/PlantName.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import type { Sowing } from '$lib/db/types';
+  // Round eighty-seven, F4 and F5: the cross the seed came from, the graft's stock, the checkpoints and the losses by cause.
+  import PlantRef from '$lib/ui/grow/PlantRef.svelte';
+  import { crossOf, linkId } from '$lib/db/lineage';
+  import { checkpointsOf, lossesByCause, LOSS_CAUSES } from '$lib/ui/grow/checkpoints';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
   /** Every live batch the address names: several under one number are listed to choose from, by identity, never one picked by load order (round sixty). */
@@ -65,6 +69,12 @@
   const photos = $derived(collection.photosOfSowing(id));
   let lightbox = $state<number | null>(null);
   const parent = $derived(s?.parentAcc ? collection.accession(s.parentAcc) : undefined);
+  /** The cross the seed was sown from, read through its line (validated on read: a line that is no cross is none). */
+  const crossFrom = $derived(s?.cross ? crossOf(collection.event(s.cross)) : null);
+  const stockOf = $derived(s?.method === 'graft' ? linkId(s.stockAcc) : null);
+  /** Each count with what was in the pot that day, and the losses by what the grower said caused them (round eighty-seven, F5). */
+  const checkpoints = $derived(s ? checkpointsOf(events, s.count) : []);
+  const causes = $derived(lossesByCause(events));
   const today = () => localDate();
   // A batch of cuttings is not sown and does not germinate: the verbs and the count's name follow the method
   // (round twenty-three, 15). The record kinds and event types underneath are unchanged.
@@ -386,6 +396,8 @@
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
         {#if parent}{' '}from <a class="mono" href={plantHref(parent)}>{accNo(parent)}</a>{:else if s.sourceFrom}{' '}from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
+        {#if crossFrom}{' · '}<span id="batch-cross">seed from the cross <PlantRef id={crossFrom.seed} short /> × <PlantRef id={crossFrom.pollen} short />{crossFrom.d ? `, ${crossFrom.d}` : ''}</span>{:else if s.cross && collection.isRemoved('event', s.cross)}{' · '}<span id="batch-cross">from a cross: the line it came from was removed <button class="linkish" type="button" id="batch-cross-back" onclick={() => void collection.restore('event', s.cross!)}>Bring the line back</button></span>{:else if s.cross}{' · '}<span id="batch-cross">from a cross whose line is not on this device</span>{/if}
+        {#if stockOf}{' · '}on stock <PlantRef id={stockOf} short />{/if}
         {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from F1 plants in cultivation' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
@@ -478,13 +490,15 @@
       <div class="fields">
         <!-- round fifty-eight; the accessibility review: visible names, as above -->
         <div class="row"><label class="fl"><span class="eyebrow">Date of loss</span><input id="l-date" type="date" bind:value={ld} /></label><label class="fl"><span class="eyebrow">How many lost</span><input id="l-n" type="number" min="1" bind:value={ln} /></label></div>
-        <label class="fl"><span class="eyebrow">Cause (optional)</span><input id="l-cause" type="text" bind:value={lcause} /></label>
+        <!-- The usual causes offered as the grower types; any words are kept as typed (round eighty-seven, F5). -->
+        <label class="fl"><span class="eyebrow">Cause (optional)</span><input id="l-cause" type="text" list="l-causes" bind:value={lcause} /></label>
+        <datalist id="l-causes">{#each LOSS_CAUSES as c}<option value={c}></option>{/each}</datalist>
         {#if lmsg}<p class="refuse" role="alert">{lmsg}</p>{/if}
         <div class="end"><button class="btn" type="submit" disabled={ln == null || ln === ''}>Record loss</button></div>
       </div>
     </form>
     <div class="cult act">
-      <div class="sum">Pot up <span class="hint">each plant gets its own number</span></div>
+      <div class="sum">Pot up <span class="hint">split the batch into plants, each with its own number</span></div>
       {#if potting}
         <form onsubmit={potUp} class="fields">
           <!-- round fifty-eight; the accessibility review: visible names, as above -->
@@ -499,6 +513,32 @@
       {/if}
     </div>
   </div>
+  {/if}
+
+  {#if checkpoints.length}
+    <!-- Every count as a checkpoint: what was up by then, what was alive in the pot that day, and the share of what went in (round eighty-seven, F5). -->
+    <div class="secrule" id="checkpoints"><h2>Checkpoints</h2><div class="line"></div><span class="n">{checkpoints.length}</span></div>
+    <table class="cp">
+      <caption class="sr">Each count recorded, with what was in the pot that day</caption>
+      <thead><tr><th scope="col">Date</th><th scope="col">Day</th><th scope="col">{m.veg ? 'Struck so far' : 'Up so far'}</th><th scope="col">Of {s.count}</th><th scope="col">Potted by then</th><th scope="col">Lost by then</th><th scope="col">Alive in the pot</th></tr></thead>
+      <tbody>
+        {#each checkpoints as c (c.id)}
+          <tr><th scope="row" data-l="Date">{c.d}</th><td data-l="Day">{s.sown && c.d >= s.sown ? Math.round((Date.parse(c.d) - Date.parse(s.sown)) / 86_400_000) : '–'}</td><td data-l={m.veg ? 'Struck so far' : 'Up so far'}>{c.up}</td><td data-l="Of {s.count}">{c.pct == null ? '–' : `${c.pct}%`}</td><td data-l="Potted by then">{c.potted}</td><td data-l="Lost by then">{c.lost}</td><td data-l="Alive in the pot">{c.alive}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+  {#if causes.length}
+    <div class="secrule" id="losses"><h2>Losses by cause</h2><div class="line"></div><span class="n">{st.lost}</span></div>
+    <table class="cp causes">
+      <caption class="sr">The plants lost, by the cause recorded</caption>
+      <thead><tr><th scope="col">Cause</th><th scope="col">Lost</th><th scope="col">Lines</th><th scope="col">Last</th></tr></thead>
+      <tbody>
+        {#each causes as c (c.cause ?? '')}
+          <tr><th scope="row" data-l="Cause">{c.cause ?? 'not stated'}</th><td data-l="Lost">{c.n}</td><td data-l="Lines">{c.lines}</td><td data-l="Last">{c.last}</td></tr>
+        {/each}
+      </tbody>
+    </table>
   {/if}
 
   {#if raised.length}
@@ -576,6 +616,7 @@
 {/if}
 
 <style>
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
   .hero { margin-top: 14px; }
   .hero .ph { background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--sunk) 70%, var(--accent-soft))); }
   .muted { color: var(--ink3); }
@@ -601,6 +642,19 @@
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: var(--fs-md); }
   .factgrid .wide { grid-column: 1 / -1; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
+  /* Data as data: thin rules, tabular figures; on a phone each row a stack of label and value (round eighty-seven; DESIGN-87). */
+  .cp { width: 100%; border-collapse: collapse; font-size: var(--fs-md); margin: 4px 0 10px; font-variant-numeric: tabular-nums lining-nums; }
+  .cp th, .cp td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  .cp th:first-child, .cp tbody th { text-align: left; padding-left: 0; font-weight: 600; }
+  .cp.causes tbody th { white-space: normal; }
+  .cp thead th { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 600; border-bottom: 1px solid var(--ink); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 640px) {
+    .cp thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .cp tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+    .cp th, .cp td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 2px 0; text-align: left; white-space: normal; }
+    .cp td::before, .cp tbody th::before { content: attr(data-l); color: var(--ink3); font-weight: 400; }
+  }
   .refuse { margin: 6px 0 0; font-size: var(--fs-md); color: var(--bad); }
   /* The count's two meanings, side by side; and the sum it will record, under the figure (round fifty-eight; the grower review). */
   /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
@@ -627,5 +681,16 @@
   .card .val { overflow-wrap: anywhere; }
   .idcard h1.sci { overflow-wrap: break-word; word-break: normal; }
   .idcard .pills .pill { white-space: normal; overflow-wrap: break-word; max-width: 100%; }
+  /* The batch's state as words, a dot between them, not bordered pills (DESIGN-87; round eighty-seven's stage-3 integration). */
+  .idcard .pills { gap: 4px 8px; }
+  .idcard .pills .pill { border: 0; background: none; padding: 0; border-radius: 0; letter-spacing: 0; font-size: var(--fs-md); }
+  .idcard .pills .pill + .pill::before { content: '·'; margin-right: 8px; color: var(--mut); font-weight: 400; }
+  .idcard .pills .pill.a { color: var(--accent); }
+  .idcard .pills .pill.w { color: var(--warm-ink); }
+  .idcard .pills .pill.b { color: var(--bad); }
+  .idcard .pills .pill.c { color: var(--cool); }
+  .idcard .pills a.pill { color: var(--link); text-decoration: underline; display: inline-flex; align-items: center; min-height: var(--tap); }
   @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: minmax(0, 1fr); } .hero { margin-top: 0; } }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
 </style>

@@ -1,0 +1,22 @@
+# Round eighty-seven, stage 2: the two fills that run for days within their daily allowances, for the owner to run once
+# a day after scripts\corpus-plan-r87s2.txt has uploaded:
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r87-daily.txt
+#   --fill flowering   iNaturalist's research-grade wild observations annotated flowering, one request a page with an
+#                      iNaturalist taxon (about 44,000), at most one every 2 seconds, within iNaturalist's 4,000 a UTC
+#                      day: about 11 days. iNaturalist's day is shared: a day that also runs --fill inat or --fill credits
+#                      reads fewer pages.
+#   --fill bhl         BHL's page for each of Kew's citations it can be asked exactly (39,963 of 48,367), once a second,
+#                      at most 4,000 a UTC day: 10 days at the least (BHL answered in about a second, and in over 30 s, on
+#                      2026-11-09).
+# Each fill stops at its day's allowance (exit 3), and the run stops there with "Run the same command again tomorrow,
+# after midnight UTC"; the next day's run carries on with the same fill, which asks only what is left. So the run reaches
+# --fill bhl only once --fill flowering has read every page, and the index and the upload only once both have. BHL's
+# allowance is its own: on a day the run stops at --fill flowering, type npm run dossier -- --fill bhl once as well,
+# after the run has stopped, and the plan's --fill bhl step later asks only what that left. Until a page is read its
+# section says "not asked"; the pages served meanwhile say nothing false.
+dossier --fill flowering
+dossier --fill bhl
+dossier --index
+review Read the two fills' last lines. --fill flowering: "N pages asked of iNaturalist on <day>: R read (Z with no flowering observation of a wild plant), U not answered; B read before and passed by; T with no iNaturalist taxon, not asked; 0 left to ask", R and B together about 44,000 (90.9% of a sample have a taxon), T about 4,400. --fill bhl: "N citations asked of BHL on <day>: L linked to the one page BHL gives for them, X with no page taken (said why), U not answered; B answered before and passed by; Q not in a form BHL can be asked exactly, shown as text", N and B together about 39,963 and Q about 8,400. Then --index: "index: 48375 species". Stop, and paste the end of corpus-step.log back, if either line says more than a few hundred "not answered" (run the plan again in an hour: each fill asks only what is left), if a fill's line still says something is "left to ask" or "stopped", or if the index holds fewer species than 48,375.
+upload
+live-check

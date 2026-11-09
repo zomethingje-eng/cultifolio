@@ -50,7 +50,7 @@ test.describe('phone', () => {
     expect(onTop).toEqual([true, true, true]);
   });
 
-  test('the front page on a phone: the search with its rows on the first screen, and no chart shipped (decision 9, changed at the merge; round seventy-four)', async ({ page }) => {
+  test('the front page on a phone: the lead and the search on the first screen, the rows after the strip, and no chart shipped (decision 9, changed at the merge; round seventy-four; round eighty-seven)', async ({ page }) => {
     const html = await (await page.request.get('/')).text();
     expect(html).not.toMatch(/class="climo[ "]/); // the chart is not in the HTML a phone is sent
     await page.goto('/');
@@ -61,8 +61,11 @@ test.describe('phone', () => {
     // Above the search at every width since round seventy-six (the owner's decision; round sixty-three, V4, had drawn a phone's
     // strip after the first rows). The first screen is measured at Safari's page size in r63v-first-screen.spec.ts.
     expect(await top('section.featured:visible')).toBeLessThan(await top('.toolrow .searchbar'));
-    expect(await top('.toolrow .searchbar')).toBeLessThan(844); // on the first screen
-    expect(await top('.rows .grow')).toBeLessThan(844); // and the first row
+    // Round eighty-seven (plan D1, DESIGN-87): the first screen is the lead's figure and the top bar's search, which takes
+    // the cursor to the catalogue's box; the box and its rows follow the strip.
+    expect(await top('section.lead h1')).toBeLessThan(844);
+    expect(await top('#topbar .searchicon')).toBeLessThan(844);
+    expect(await top('.rows .grow')).toBeGreaterThan(await top('.toolrow .searchbar'));
     // the example first in the welcome line's ways in (round sixty-three, V2)
     const welcome = await page.locator('#welcome').innerText();
     expect(welcome.indexOf('See the example collection')).toBeGreaterThan(-1);
@@ -112,7 +115,13 @@ test.describe('desktop', () => {
     await ready(page);
     const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
     const search = await box('.toolrow .searchbar'), strip = await box('.featured'), row = await box('.rows .grow');
-    expect(strip.y).toBeLessThan(900);
+    // Round eighty-seven (plan D1, DESIGN-87; the integration): the first screen is the lead, its figure and its photograph,
+    // then the facts, Browse and "Changed lately" (LookFront), as the phone's test above has it; the strip follows them,
+    // still before the search and its rows. With "Changed lately" beside Browse the strip is no longer on the first screen.
+    const lead = await box('section.lead h1'), photo = await box('section.lead .leadph img');
+    expect(lead.y).toBeLessThan(900);
+    expect(photo.y + photo.height).toBeLessThan(900);
+    expect(lead.y).toBeLessThan(strip.y);
     expect(strip.y).toBeLessThan(search.y);
     expect(search.y + search.height).toBeLessThanOrEqual(row.y);
     await expect(page.locator('section.feature, #feature-h, .fchart, figure.climo')).toHaveCount(0);

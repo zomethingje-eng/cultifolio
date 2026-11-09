@@ -33,7 +33,8 @@ describe('--fixtures from an empty folder', () => {
       expect(d.ids.gbif).toBe(c.ids.gbif);
       // Round eighty-four (N, decision 1): the build stores Kew's accepted row (`name.kew.accepted`), which heads a `k` page;
       // the committed fixtures were written before it. The rest of the record is the committed one.
-      const { accepted, ...kew } = (d.name.kew ?? {}) as { accepted?: { name: string } };
+      // Round eighty-seven (D13): and the authors of each of Kew's names (`name.kew.by`), which the committed fixtures predate.
+      const { accepted, by: _by, ...kew } = (d.name.kew ?? {}) as { accepted?: { name: string }; by?: string[][] };
       expect(d.name.kew === undefined ? undefined : kew).toEqual(f === 'g999.json' ? undefined : c.name.kew);
       if (f !== 'g999.json') expect(accepted?.name).toBe(d.name.scientific);
       expect(d.name.authorship).toBe(c.name.authorship);

@@ -286,7 +286,7 @@ test('r67v V7, V8: the example offers no calendar file or spreadsheet, says it i
   await expect(page.locator('.today')).toContainText('The example collection is kept nowhere: it is deleted when you leave it.'); // base: "Kept on this device: no backup yet, not synced"
 });
 
-test('r67v V9: on a phone the welcome\'s lead says what the site is, and the strip and the search start above the tab bar (R45-4; round seventy-six)', async ({ browser, baseURL }) => {
+test('r67v V9: on a phone the welcome\'s lead says what the site is, and the lead and the search start above the tab bar (R45-4; round seventy-six; round eighty-seven)', async ({ browser, baseURL }) => {
   for (const viewport of [{ width: 375, height: 548 }, { width: 390, height: 664 }, { width: 360, height: 640 }]) {
     const ctx = await browser.newContext({ baseURL, viewport, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
@@ -296,8 +296,10 @@ test('r67v V9: on a phone the welcome\'s lead says what the site is, and the str
     // first screen is the welcome, the strip and the search, and the catalogue's first row follows them. Before, a whole row
     // was above the tab bar here, with the strip after the first three rows. Now the strip's first photograph is whole and the
     // search box starts above the tab bar, at the smallest of these screens too (an iPhone SE with Safari's bars: 375 by 548).
-    const [tile, search, bar] = await Promise.all([page.locator('.featured .ftile').first().boundingBox(), page.locator('input[type=search]').first().boundingBox(), page.locator('#tabbar').boundingBox()]);
-    expect(tile && bar && tile.y + tile.height <= bar.y + 1, `${JSON.stringify(viewport)}: first photograph ${JSON.stringify(tile)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
+    // Round eighty-seven (plan D1, DESIGN-87): the front page leads with one figure and its photograph, and the search on the
+    // first screen is the top bar's button, which takes the cursor to the catalogue's box; the strip follows the lead.
+    const [lead, search, bar] = await Promise.all([page.locator('section.lead h1').boundingBox(), page.locator('#topbar .searchicon').boundingBox(), page.locator('#tabbar').boundingBox()]);
+    expect(lead && bar && lead.y + lead.height <= bar.y + 1, `${JSON.stringify(viewport)}: the lead ${JSON.stringify(lead)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
     expect(search && bar && search.y < bar.y, `${JSON.stringify(viewport)}: the search ${JSON.stringify(search)} against the tab bar ${JSON.stringify(bar)}`).toBe(true);
     await ctx.close();
   }

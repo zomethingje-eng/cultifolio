@@ -71,7 +71,7 @@
     .hhead.withfew .ins { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
   .hhead a.figs { margin-left: auto; letter-spacing: 0.02em; text-transform: none; font-weight: 600; font-size: var(--fs-sm); }
-  .few { padding: 0 7px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.02em; text-transform: none; }
+  .few { padding: 0 7px; border: 1.5px dashed var(--warm); border-radius: var(--r); color: var(--warm-ink); letter-spacing: 0.02em; text-transform: none; }
   a.few { text-decoration: none; }
   /* "Figures ›" and the few-records mark are controls on their own line: each takes a finger's 44 by 44 px, as an invisible
      margin so the line keeps its height (round eighty-five; P4, outside review B's 4: "Figures ›" was 51 by 19 px). Side by
@@ -87,9 +87,10 @@
   dl > div { min-width: 0; padding: 2px 0 3px; }
   dt { font-size: var(--fs-xs); color: var(--ink3); letter-spacing: 0.02em; }
   dd { margin: 0; line-height: 1.3; overflow-wrap: anywhere; }
-  dd b { display: block; font-family: var(--mono); font-size: var(--fs-md); color: var(--ink); font-weight: 600; }
+  dd b { display: block; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-md); color: var(--ink); font-weight: 600; }
   dd b.w { font-family: var(--ui); font-weight: 700; }
   dd span { display: block; font-size: var(--fs-xs); color: var(--ink3); }
-  /* The source as the cards' small tag, so it reads as the figure's source and not as a word of the line. */
-  dd i { display: inline-block; font-style: normal; letter-spacing: 0.04em; border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 0 4px; margin-left: 2px; line-height: 1.35; }
+  /* The source in plain muted words after the figure (round eighty-seven; the review of stage 2's pages, 8: a bordered tag
+     was the older look's), set a space apart so it reads as the figure's source and not as a word of the line. */
+  dd i { font-style: normal; letter-spacing: 0; color: var(--mut); margin-left: 4px; }
 </style>

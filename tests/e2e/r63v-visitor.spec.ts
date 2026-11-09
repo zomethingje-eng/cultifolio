@@ -14,7 +14,11 @@ import { goneQuiet } from './helpers/settled';
 import { inject, type Row } from './helpers/inject';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
-const FIVE = ['Species', 'My plants', 'My spaces', 'Propagation', 'Today'];
+// Round eighty-seven (DESIGN-87, the owner's look): the tab bar is Reference, My plants, Today and More (the menu), and the
+// top bar's places Reference, My plants, Today and About; the same for everyone, as round sixty-three's five were.
+const TABS = ['Reference', 'My plants', 'Today'];
+const MORE = 'More menu';
+const PLACES = ['Reference', 'My plants', 'Today', 'About'];
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
 test.use({ serviceWorkers: 'block', viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
 test.beforeEach(async ({ context }) => { await context.addInitScript(quiet); });
@@ -39,10 +43,15 @@ async function grower(page: Page, n = 2) {
   await expect(page.locator('.rows > *')).toHaveCount(n);
 }
 const tabs = (page: Page) => page.locator('#tabbar a:visible');
+/** The tab bar's places and its More, the menu: the same four for everyone. */
+async function sameTabs(page: Page) {
+  await expect(tabs(page)).toHaveText(TABS);
+  await expect(page.locator('#tabbar button.moretab')).toHaveAccessibleName(MORE);
+}
 
-test('r63v V1: a visitor and a grower see the same five tabs, and Compare and About are in the menu and the footer', async ({ page }) => {
+test('r63v V1: a visitor and a grower see the same tabs, and Compare and About are in the menu and the footer', async ({ page }) => {
   await page.goto('/'); await ready(page);
-  await expect(tabs(page)).toHaveText(FIVE);
+  await sameTabs(page);
   await expect(page.locator('footer.credits a[href="/compare"]')).toHaveCount(1);
   await expect(page.locator('footer.credits a[href="/about/how"]').first()).toBeVisible();
   await page.getByRole('button', { name: 'Menu' }).click();
@@ -51,16 +60,16 @@ test('r63v V1: a visitor and a grower see the same five tabs, and Compare and Ab
   await expect(page.locator('#menu #menu-example')).toHaveText('See the example collection');
   await page.keyboard.press('Escape');
   await grower(page);
-  await expect(tabs(page)).toHaveText(FIVE);
+  await sameTabs(page);
   await page.goto('/'); await ready(page);
-  await expect(tabs(page)).toHaveText(FIVE);
+  await sameTabs(page);
 });
 
-test('r63v V1: on a desktop the top bar is the same five for a visitor', async ({ browser, baseURL }) => {
+test('r63v V1: on a desktop the top bar is the same places for a visitor', async ({ browser, baseURL }) => {
   const ctx = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 }, locale: 'en-GB', serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await page.goto('/'); await ready(page);
-  await expect(page.locator('#topbar .topseg a')).toHaveText(FIVE);
+  await expect(page.locator('#topbar .topseg a')).toHaveText(PLACES);
   await ctx.close();
 });
 
@@ -87,7 +96,9 @@ test('r63v V2: Today by tab on an empty device does not open the example; its bu
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   // My spaces and Propagation the same: their own empty state, the button, no example.
   for (const [path, own] of [['/places', 'No spaces yet'], ['/propagation', 'Nothing in progress.']] as const) {
-    await page.locator(`#tabbar a[href="${path}"]`).click();
+    // From the menu, the tab bar's More, since round eighty-seven (DESIGN-87).
+    await page.locator('#tabbar button.moretab').click();
+    await page.locator(`#menu a[href="${path}"]`).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await offered(page, own);
   }
@@ -106,8 +117,9 @@ test('r63v V2: Today by tab on an empty device does not open the example; its bu
   await page.locator('#tabbar a[href="/today"]').click();
   await expect(page).toHaveURL(/\/today$/);
   await offered(page, 'No growing plants yet.');
-  // The button on Propagation opens it there.
-  await page.locator('#tabbar a[href="/propagation"]').click();
+  // The button on Propagation opens it there (in the menu since round eighty-seven).
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.locator('#menu a[href="/propagation"]').click();
   await expect(page).toHaveURL(/\/propagation$/);
   await page.locator('#see-example').click();
   await inExample(page, '/propagation');

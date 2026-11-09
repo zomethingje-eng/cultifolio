@@ -31,6 +31,11 @@ const ROOT = resolve('.');
 const builder = (cwd: string, ...args: string[]) => spawnSync(process.execPath, ['--import', pathToFileURL(join(ROOT, 'node_modules/tsx/dist/loader.mjs')).href, join(ROOT, 'scripts/build-dossiers.ts'), ...args], { cwd, encoding: 'utf8', env: { ...process.env, TSX_TSCONFIG_PATH: join(ROOT, 'tsconfig.json') } });
 const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
 const template = JSON.parse(readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8'));
+// The page as round seventy-nine's fixture held it: the stage-2 fields the integration of round eighty-seven gave the
+// fixture (the sourced facts, the habitat's figures, the yearly lows, the fills' fields) are taken off, so the fingerprints
+// below are the ones r79base gave, as the guard says.
+for (const k of ['risk', 'cites', 'chromosomes', 'nameAgreement', 'hardiness', 'koppen', 'flowering', 'elsewhere']) delete template[k];
+delete template.climate.extremes.lows;
 
 const photo = (n: number, shared?: number[]) => ({ ...template.photos[0], id: String(n), url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${n}/large.jpg`, thumb: `https://inaturalist-open-data.s3.amazonaws.com/photos/${n}/medium.jpg`, page: `https://www.inaturalist.org/observations/${n}`, ...(shared ? { shared } : {}) });
 /** The three pages as round seventy-seven's corpus held them (version 2): one photograph of their own, one all three hold. */

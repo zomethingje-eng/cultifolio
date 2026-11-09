@@ -50,7 +50,8 @@ test('r63h phone 1: the front page fits the phone: nothing scrolls sideways, the
   const bar = await tabbar(page);
   expect(bar.height).toBeGreaterThan(0);
   expect(Math.abs(bar.bottom - bar.win)).toBeLessThanOrEqual(1);
-  const search = await page.locator('input.searchbar').boundingBox();
+  // Round eighty-seven (DESIGN-87): the search on the first screen is the top bar's, which takes the cursor to the page's box.
+  const search = await page.locator('#topbar .searchicon').boundingBox();
   expect(search).not.toBeNull();
   expect(search!.y).toBeGreaterThanOrEqual(0);
   expect(search!.y + search!.height).toBeLessThanOrEqual(bar.top);

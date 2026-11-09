@@ -40,13 +40,20 @@
 
 <svelte:window onclick={(e) => { if (open && !(e.target as Element).closest('.plantsmenu')) close(); }} />
 <div class="plantsmenu">
-  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'plants-menu' : undefined} aria-label={PAGE_IN_DEMO ? 'More: import your own list' : 'More: import, download as a spreadsheet'} title={PAGE_IN_DEMO ? 'Import your own list' : 'Import, download as a spreadsheet'} onclick={() => { if (!busy) open = !open; }} aria-disabled={busy}>···</button>
+  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'plants-menu' : undefined} aria-label={PAGE_IN_DEMO ? 'More: import your own list, a photo walk, the plants no longer held, the flowering calendar, print a report' : 'More: import, a photo walk, the plants no longer held, the flowering calendar, download as a spreadsheet, print a report'} title={PAGE_IN_DEMO ? 'Import your own list, a photo walk, the plants no longer held, the flowering calendar, print a report' : 'Import, a photo walk, the plants no longer held, the flowering calendar, download as a spreadsheet, print a report'} onclick={() => { if (!busy) open = !open; }} aria-disabled={busy}>···</button>
   {#if open}
     <div class="menu" id="plants-menu" role="menu" tabindex="-1" aria-label="More for My plants" use:first onkeydown={keys}>
       <!-- In the example, an import is the grower's own and leads out of it first, as every add does; and the example
            offers no spreadsheet of plants that are not the visitor's (round sixty-seven; triage-66 V1, V7; R45-3). -->
       <a role="menuitem" href="/plants/import" onclick={(e) => { close(); addLeavesExample(e, '/plants/import'); }}>{PAGE_IN_DEMO ? 'Import your own list (leaves the example)' : 'Import from a list or a spreadsheet'}</a>
+      <!-- The plants no longer held, kept with their reasons (round eighty-seven, t1). -->
+      <a role="menuitem" href="/plants/gone" onclick={() => close()}>No longer held</a>
+      <!-- Round eighty-seven: a room of plants one photograph at a time (C12), which leads out of the example as every add does; and the flowering calendar (F8). -->
+      <a role="menuitem" href="/plants/walk" id="plants-walk" onclick={(e) => { close(); addLeavesExample(e, '/plants/walk'); }}>{PAGE_IN_DEMO ? 'Photo walk: add your own room of plants (leaves the example)' : 'Photo walk: add a room of plants'}</a>
+      <a role="menuitem" href="/plants/flowering" id="plants-flowering" onclick={() => close()}>Flowering calendar</a>
       {#if !PAGE_IN_DEMO}<button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">{collection.ready ? ': no plants yet' : ': your collection is still opening'}</span>{/if}</button>{/if}
+      <!-- A printable report of the plants with their photographs (round eighty-seven, t3; plan F11). -->
+      <a role="menuitem" href="/plants/report" id="plants-report" onclick={() => close()}>Print a collection report</a>
     </div>
   {/if}
 </div>

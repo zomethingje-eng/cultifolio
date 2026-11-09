@@ -118,11 +118,11 @@
   /* At the window's foot at every width: under the top bar it sat over the page's own heading, the plant's number and name
      on a new plant's page and the backup line on the add form (round eighty; the desktop review's 9). Above the select bar
      by its measured place, and above the compare tray when one is shown. */
-  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 80; background: var(--ink); color: var(--bg); font-family: var(--ui); font-size: var(--fs-md); font-weight: 600; padding: 9px 16px; border-radius: 18px; box-shadow: var(--sh2); animation: toastin 0.18s ease-out; max-width: min(560px, calc(100vw - 32px)); width: max-content; overflow-wrap: anywhere; line-height: 1.35; } /* wraps rather than cutting the sentence off (round fifty-eight) */
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 80; background: var(--ink); color: var(--bg); font-family: var(--ui); font-size: var(--fs-md); font-weight: 600; padding: 9px 16px; border-radius: var(--r); box-shadow: var(--sh2); animation: toastin 0.18s ease-out; max-width: min(560px, calc(100vw - 32px)); width: max-content; overflow-wrap: anywhere; line-height: 1.35; } /* wraps rather than cutting the sentence off (round fifty-eight) */
   .toast { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   /* Nothing to say: folded to nothing, its live region kept in the page for the next sentence (round sixty-one). */
   .toast.quiet { width: 0; height: 0; padding: 0; border: 0; box-shadow: none; animation: none; pointer-events: none; }
-  .undo { margin-left: 10px; background: var(--bg); color: var(--ink); border: 0; border-radius: 999px; padding: 4px 11px; font: inherit; font-weight: 700; cursor: pointer; }
+  .undo { margin-left: 10px; background: var(--bg); color: var(--ink); border: 0; border-radius: var(--r); padding: 4px 11px; font: inherit; font-weight: 700; cursor: pointer; }
   /* The way back for a keyboard: out of sight until it has focus, as the skip link is (round sixty). */
   .skipback { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
   .skipback:focus { position: static; width: auto; height: auto; clip: auto; margin-left: 8px; text-decoration: underline; min-height: var(--tap); }

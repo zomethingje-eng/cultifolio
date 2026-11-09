@@ -111,7 +111,7 @@ test.describe('the page as sent', () => {
     }
     // On paper, in the dark theme: the print palette's accent, as every other mark of the page.
     await page.emulateMedia({ colorScheme: 'dark', media: 'print' });
-    expect((await dot()).stroke).toBe('rgb(18, 121, 90)'); // --accent on paper, #12795a (theme.css)
+    expect((await dot()).stroke).toBe('rgb(29, 92, 69)'); // --accent on paper, the link's green #1d5c45 since round eighty-seven (theme.css; #12795a before)
     await expect(page.locator('.mapbox svg.map-region')).toBeVisible();
   });
 });

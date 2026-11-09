@@ -128,7 +128,7 @@ describe('B: identifiers kept through a lag, and GBIF\'s media', () => {
     const asked: string[] = [];
     const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { results: [{ key: gbifPage(7), basisOfRecord: 'PRESERVED_SPECIMEN', media: [{ type: 'StillImage', identifier: 'https://x/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A' }] }], endOfRecords: true } }; }) as unknown as JsonFetcher;
     const r = await media(f, 3092);
-    expect(asked[0]).toMatch(/&basisOfRecord=HUMAN_OBSERVATION&limit=100$/);
+    expect(asked[0]).toMatch(/&basisOfRecord=HUMAN_OBSERVATION&limit=100&checklistKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c$/);
     expect(r.status === 'ok' && r.data.map((m) => !!m.specimen)).toEqual([true]);
   });
   it('the lead sentence: GBIF\'s media of a record that is not an observation of the living plant is not shown (C)', () => {

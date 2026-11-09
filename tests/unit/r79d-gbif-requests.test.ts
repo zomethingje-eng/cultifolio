@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { dwcaRequest, sqlQuery, sqlRequest, mediaRequest, predicateItems, splitKeys, partsNeeded, countUrl, recordsPredicate, PREDICATE_ITEMS_MAX, INAT_DATASET } from '../../scripts/gbif-request-lib';
 import { downloadKeysOf, parseSpeciesList } from '../../scripts/select-species-lib';
 import { SQL_SELECT } from '$dossier/bulk';
+import { BACKBONE } from '$dossier/sources/gbif';
 
 const { keys } = downloadKeysOf(parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8')));
 
@@ -23,24 +24,28 @@ describe('the Darwin Core Archive request at full size', () => {
     expect(predicateItems(body.predicate)).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
     expect(partsNeeded(keys.length)).toBe(1);
   });
-  it('is the body round seventy-eight sent: DWCA, no checklistKey (the backbone\'s keys), the same four filters', () => {
+  // Round eighty-seven: the backbone named, at the top for the output's keys and on the keys' `in` for the filter, where
+  // round seventy-eight's body named none and took GBIF's default, the backbone today with no day given for how long
+  // (docs/COLXR-87.md 1). The same records and the same keys while that default holds.
+  it('is the body round seventy-eight sent, with the backbone named: DWCA, checklistKey the backbone\'s at the top and on the keys, the same four filters', () => {
     const body = dwcaRequest([5384013, 3084426], { creator: 'grower', email: 'grower@example.org' });
     expect(body).toEqual({
       creator: 'grower',
       notificationAddresses: ['grower@example.org'],
       sendNotification: false,
       format: 'DWCA',
+      checklistKey: BACKBONE,
       predicate: {
         type: 'and',
         predicates: [
-          { type: 'in', key: 'TAXON_KEY', values: ['5384013', '3084426'] },
+          { type: 'in', key: 'TAXON_KEY', values: ['5384013', '3084426'], checklistKey: BACKBONE },
           { type: 'equals', key: 'HAS_COORDINATE', value: 'true' },
           { type: 'equals', key: 'HAS_GEOSPATIAL_ISSUE', value: 'false' },
           { type: 'equals', key: 'OCCURRENCE_STATUS', value: 'PRESENT' }
         ]
       }
     });
-    expect(body).not.toHaveProperty('checklistKey');
+    expect(BACKBONE).toBe('d7dddbf4-2cf0-4f39-9b2a-bb099caae36c');
   });
   it('a list past the limit is split into parts, every key once, in order', () => {
     expect(partsNeeded(250_000)).toBe(3);
@@ -86,6 +91,7 @@ describe('the images\' download, for beside an SQL download', () => {
   it('the records\' filter, with a still image, human observations, iNaturalist\'s dataset left out by default in bulk-fetch', () => {
     const without = mediaRequest([7], {}, { inat: false });
     expect(without.format).toBe('DWCA');
+    expect(without.checklistKey).toBe(BACKBONE);
     expect(without.predicate.predicates).toEqual([...recordsPredicate([7]).predicates!, { type: 'equals', key: 'MEDIA_TYPE', value: 'StillImage' }, { type: 'equals', key: 'BASIS_OF_RECORD', value: 'HUMAN_OBSERVATION' }, { type: 'not', predicate: { type: 'equals', key: 'DATASET_KEY', value: INAT_DATASET } }]);
     expect(mediaRequest([7]).predicate.predicates).toHaveLength(6);
     expect(predicateItems(mediaRequest(keys, {}, { inat: false }).predicate)).toBeLessThanOrEqual(PREDICATE_ITEMS_MAX);
@@ -93,9 +99,9 @@ describe('the images\' download, for beside an SQL download', () => {
 });
 
 describe('the count API and the commands', () => {
-  it('counts a batch under the records\' filter, and its images', () => {
-    expect(countUrl([1, 2])).toBe('https://api.gbif.org/v1/occurrence/search?taxonKey=1&taxonKey=2&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&limit=0');
-    expect(countUrl([1], { media: true, facet: 'datasetKey', facetLimit: 5 })).toBe('https://api.gbif.org/v1/occurrence/search?taxonKey=1&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&mediaType=StillImage&basisOfRecord=HUMAN_OBSERVATION&limit=0&facet=datasetKey&facetLimit=5');
+  it('counts a batch under the records\' filter, and its images, on the backbone (round eighty-seven: its checklistKey last)', () => {
+    expect(countUrl([1, 2])).toBe('https://api.gbif.org/v1/occurrence/search?taxonKey=1&taxonKey=2&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&limit=0&checklistKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c');
+    expect(countUrl([1], { media: true, facet: 'datasetKey', facetLimit: 5 })).toBe('https://api.gbif.org/v1/occurrence/search?taxonKey=1&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT&mediaType=StillImage&basisOfRecord=HUMAN_OBSERVATION&limit=0&facet=datasetKey&facetLimit=5&checklistKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c');
   });
   it('bulk-fetch sends these bodies, writes each to bulk/request-<route>.json first, and knows the new commands', () => {
     const src = readFileSync('scripts/bulk-fetch.ts', 'utf8');

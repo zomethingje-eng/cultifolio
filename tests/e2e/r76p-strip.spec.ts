@@ -57,6 +57,8 @@ const placement = (page: Page) => page.evaluate(() => {
     stripBottom: s ? y(s) + s.getBoundingClientRect().height : NaN,
     searchTop: y(search),
     searchBottom: search.getBoundingClientRect().bottom,
+    // The top bar's search (round eighty-seven): the box on a desktop, the button on a phone; each takes the cursor to the page's box.
+    barSearchBottom: [...document.querySelectorAll<HTMLElement>('#topbar .site-search, #topbar .searchicon')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().bottom)[0] ?? NaN,
     rowTop: y(document.querySelector('.rows .grow')!),
     tabTop: tab && getComputedStyle(tab).display !== 'none' ? tab.getBoundingClientRect().top : innerHeight,
     // Rows drawn between the strip and the search, and whether the strip sits inside the list.
@@ -79,8 +81,9 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
     expect(m.stripBottom).toBeLessThanOrEqual(m.searchTop);
     expect(m.between).toBe(0);
     expect(m.searchTop).toBeLessThan(m.rowTop);
-    // The search is still on the owner's first screen: Safari's page on an iPhone 12 to 15.
-    expect(m.searchBottom, `the search's foot against the tab bar at ${m.tabTop}`).toBeLessThanOrEqual(m.tabTop);
+    // The search is still on the owner's first screen: Safari's page on an iPhone 12 to 15. Since round eighty-seven (plan D1,
+    // DESIGN-87) the front page leads with one figure, and the search on the first screen is the top bar's.
+    expect(m.barSearchBottom, `the top bar's search against the tab bar at ${m.tabTop}`).toBeLessThanOrEqual(m.tabTop);
     // No image in the strip is a placeholder pixel for a hidden copy: what a phone fetches is what it shows.
     expect(await page.locator('section.featured picture, section.featured source').count()).toBe(0);
     await ctx.close();
@@ -94,13 +97,21 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
  */
 // Round eighty-two moved these on purpose: the welcome's example is a button (the second review's 6) and the desktop's
 // running text is 15 px (the independent review's 24), the tile's lines among it.
-// Round seventy-six's figures were 307, 496, 510, 655 (654 at 1024) and a tile 155 × 179.
+// Round seventy-six's figures were 307, 496, 510, 655 (654 at 1024) and a tile 155 × 179; round eighty-six's 311, 502, 516,
+// 662 and 155 × 181. Round eighty-seven's (DESIGN-87, plan D1): the lead, the plain facts and Browse above the strip, and
+// the page's column 1,080 px wide (980 before), so the strip's tiles are 172 px at 1280. The strip itself is as it was.
+// The look measured 899, 1102, 1116, 1257 (900, 1091, 1105, 1247 at 1024) in its own branch, where the changes page's
+// module was not in the build and Browse stood alone; merged, "Changed lately" stands beside it (four lines of the rounds'
+// records, `changedLately`), taller than the Browse table, and everything under it is 192 px lower at 1280 (214 at
+// 1024, where its lines wrap more). The strip, its tiles and the gaps between strip, search and first row are unchanged.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 311, stripBottom: 502, searchTop: 516, rowTop: 662, tile: [155, 181] },
-  '1024': { stripTop: 311, stripBottom: 501, searchTop: 515, rowTop: 662, tile: [155, 181] }
+  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
+  '1024': { stripTop: 1114, stripBottom: 1305, searchTop: 1319, rowTop: 1461, tile: [155, 182] }
 };
 
-test('r76p strip 2: the desktop is unchanged: the same strip at the same place, its photographs fetched as before, and no second copy in the page', async ({ browser, baseURL }) => {
+// Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put
+// it, under the lead, and is no longer "unchanged" from r76base; and the image preloaded is the lead's (S6).
+test('r76p strip 2: the desktop\'s strip, search and first row where round eighty-seven puts them under the lead, its tiles fetched at once, the lead\'s photograph preloaded, and no second copy in the page', async ({ browser, baseURL }) => {
   for (const [w, h] of [[1280, 800], [1024, 768]] as const) {
     const ctx = await context(browser, baseURL, w, h);
     const page = await ctx.newPage();
@@ -124,7 +135,9 @@ test('r76p strip 2: the desktop is unchanged: the same strip at the same place, 
     const img = page.locator('section.featured .ftile img').first();
     await expect.soft(img).toHaveAttribute('loading', 'eager');
     await expect.soft(img).toHaveAttribute('fetchpriority', 'high');
-    await expect.soft(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', /\/small\.jpe?g$/);
+    // The lead's photograph, the first screen's largest, is the one preloaded (round eighty-seven, S6): the strip starts
+    // past a desktop's first screen. It was the strip's first tile, at its small size.
+    await expect.soft(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', (await page.locator('section.lead .leadph img').getAttribute('src'))!);
     await ctx.close();
   }
 });

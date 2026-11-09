@@ -1,141 +1,167 @@
 /*
- * The italic face (botanical names), from the weight-only Latin file, 64 KB, not the optical-size one at 147 KB: the
- * difference is invisible at text sizes and the file is on every first visit. Declared here, in the stylesheet Vite
- * builds, not in an inline <style> the layout wrote with {@html}, whose font request carried the page's address as its
- * Referer (round sixty-two; A1, rule 4). The url is resolved by Vite to the hashed asset.
+ * The three faces (round eighty-seven; the owner's choice of 8 November, in place of Public Sans, Newsreader and DM Mono,
+ * which read as a template): Source Sans 3 for all text and every control, its tabular lining figures for every figure in
+ * a table; Source Serif 4 italic, with its optical sizes, for the scientific names alone; Source Code Pro for keys and
+ * identifiers (a plant's number, a revision, a key) and the "/" hint. All three are Adobe's, under the SIL Open Font
+ * Licence 1.1; the files are this site's own, in static/fonts/<family>/ beside each family's OFL.txt (the Latin and
+ * Latin-extended subsets as Fontsource cuts them), so a font is asked of this origin and no other (the policy's
+ * `font-src 'self'`). Declared here, in the stylesheet Vite builds, so each url is the hashed build file and a font
+ * request carries no page's address (round sixty-two; A1, rule 4). The service worker installs the Latin files and leaves
+ * the Latin-extended ones until a name needs them (its `isLazyFont`).
  */
-@font-face { font-family: 'Newsreader Variable'; font-style: italic; font-display: swap; font-weight: 200 800; src: url('@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-/* Cultifolio — the "Bench" look, carried over from v2 as tokens. */
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-sans-3/source-sans-3-latin-wght-normal.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-sans-3/source-sans-3-latin-ext-wght-normal.woff2') format('woff2-variations'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-sans-3/source-sans-3-latin-wght-italic.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: italic; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-sans-3/source-sans-3-latin-ext-wght-italic.woff2') format('woff2-variations'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+/* The serif's italic alone: it is set only in italic, so its roman is never asked for. */
+@font-face { font-family: 'Source Serif 4'; font-style: italic; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-serif-4/source-serif-4-latin-opsz-italic.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Serif 4'; font-style: italic; font-display: swap; font-weight: 200 900; src: url('../../../static/fonts/source-serif-4/source-serif-4-latin-ext-opsz-italic.woff2') format('woff2-variations'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Code Pro'; font-style: normal; font-display: swap; font-weight: 400; src: url('../../../static/fonts/source-code-pro/source-code-pro-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Code Pro'; font-style: normal; font-display: swap; font-weight: 400; src: url('../../../static/fonts/source-code-pro/source-code-pro-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 /*
- * The fallback faces, with the web fonts' metrics. The three faces every page sets in arrive after the first paint on a
- * phone's network, and text set in the system's font until then reflowed when they landed. Each local face the stacks
- * fall back to is declared again, scaled so that its average letter is as wide as the web font's at the weight it stands
+ * The fallback faces, with the web fonts' metrics. The faces every page sets in arrive after the first paint on a phone's
+ * network, and text set in the system's font until then reflowed when they landed. Each local face the stacks fall back
+ * to is declared again, scaled so that its average letter is as wide as the web font's at the weight and style it stands
  * in for, and with the web font's ascent and descent, so a line set in it wraps at the same words and is the same height
- * (round forty-four, 1; Linux's faces, round sixty-two, N10).
- *
- * Round sixty-three (the review of round sixty-two, 11): Windows still shifted 0.107 on the front page at 390 px. Not the
- * Segoe UI face: the count beside the title is monospace, Windows set it in Consolas (an advance of 0.550 em against DM
- * Mono's 0.600), it fitted beside "Cultifolio", and when DM Mono came it wrapped under it and pushed the page down 24 px.
- * Linux's DejaVu Sans Mono is 0.602 em, so Linux never saw it. Measured here with open faces of the same widths under the
- * Windows names (Selawik for Segoe UI, Gelasio for Georgia, Inconsolata SemiExpanded for Consolas; each one's capsize
- * average equals the Windows face's): 0.1066 before, as the PC measured. Now every family also has its own bold and
- * italic faces, not the regular one emboldened or slanted by the browser: Safari and Firefox widen a synthetic bold by
- * about a pixel a letter, and Newsreader's italic is 6% narrower than its roman.
+ * (round forty-four, 1; Linux's faces, round sixty-two, N10; Windows' and the monospace faces, round sixty-three, 11).
  *
  * The arithmetic, for each face (scripts/dev/fallback-faces.mjs prints every line of it and this block):
  *   size-adjust = (web average / web em) / (local average / local em); ascent and descent = the web font's / size-adjust;
  *   line gap 0. Averages are capsize's weighted advance (English letter frequencies); local faces' from
- *   @capsizecss/metrics 4.3.0 (DejaVu's from its files), the web fonts' from the files served here at each weight.
- *   Public Sans 400 over Segoe UI: (935/2000) / (908/2048) = 105.4449%; ascent 0.95 / 1.05445 = 90.0944%,
- *     descent 0.225 / 1.05445 = 21.3382%. Its 600 over Segoe UI Semibold (937): 103.6021%; 700 over Bold (973): 100.9266%.
- *   Newsreader 400 over Georgia: (857/2000) / (913/2048) = 96.1192%; ascent 0.735 / 0.96119 = 76.4676%. Its 600 over
- *     Georgia Bold (1062): 86.7797%; its italic 400 (804) over Georgia Italic (931): 88.4314%; italic 600 (873) over
- *     Georgia Bold Italic (1082): 82.6203%.
- *   DM Mono over Consolas: (600/1000) / (1126/2048) = 109.1297%; ascent 0.992 / 1.0913 = 90.901%. Over Menlo and DejaVu
- *     Sans Mono (1233/2048): 99.6594%; over Liberation Mono (1229/2048): 99.9837%.
- * A family with a bold face has two, `100 500` and `600 900`, the bold scaled to the web font's 600 (the weight of the
- * buttons, chips, tabs and serif titles; the 700 text is short capitals); Segoe UI has a semibold, so three. A device
- * without a local face skips its entry. Safari takes size-adjust (17 and later); where it ignores the three overrides,
- * the widths still match and a line's height is still its set line-height, as nearly every line here has one.
+ *   @capsizecss/metrics 4.3.0 (Liberation's and DejaVu's from their files), the web fonts' from the files served here,
+ *   instanced at each weight (round eighty-seven).
+ *   Source Sans 3 400 over Segoe UI: (418/1000) / (908/2048) = 94.2802%; ascent 1.024 / 0.9428 = 108.6124%, descent
+ *     0.4 / 0.9428 = 42.4267%. Its 600 over Segoe UI Semibold (937): 94.2006%; 700 over Bold (973): 93.2399%; its italic
+ *     400 (408) over Segoe UI Italic (888): 94.0973%.
+ *   Source Serif 4 italic 400 at optical size 18 (426) over Georgia Italic (931): 93.7057%; ascent 1.036 / 0.93706 =
+ *     110.5589%. The serif's width follows its optical size (449 at 12 px, 418 at 20, 400 at 44): the faces are scaled
+ *     at 18, within 2.5% of every running-text size, where a name in a sentence decides the line's wrap.
+ *   Source Code Pro over Consolas: (600/1000) / (1126/2048) = 109.1297%; ascent 0.984 / 1.0913 = 90.168%. Over Menlo and
+ *     DejaVu Sans Mono (1233/2048): 99.6594%; over Liberation Mono (1229/2048): 99.9837%.
+ * A family with a bold face has two, `100 500` and `600 900`, the bold scaled to the web font's 600 (buttons, section
+ * heads, the wordmark); Segoe UI has a semibold, so its roman has three. A device without a local face skips its entry.
+ * Safari takes size-adjust (17 and later); where it ignores the three overrides, the widths still match and a line's
+ * height is still its set line-height, as nearly every line here has one.
  */
-@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 100 500; src: local('Segoe UI'), local('SegoeUI'); ascent-override: 90.0944%; descent-override: 21.3382%; line-gap-override: 0%; size-adjust: 105.4449%; }
-@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 600; src: local('Segoe UI Semibold'), local('SegoeUI-Semibold'); ascent-override: 91.697%; descent-override: 21.7177%; line-gap-override: 0%; size-adjust: 103.6021%; }
-@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 700 900; src: local('Segoe UI Bold'), local('SegoeUI-Bold'); ascent-override: 94.1278%; descent-override: 22.2934%; line-gap-override: 0%; size-adjust: 100.9266%; }
-@font-face { font-family: 'Public Sans Fallback Roboto'; font-weight: 100 500; src: local('Roboto Regular'), local('Roboto-Regular'), local('Roboto'); ascent-override: 90.3921%; descent-override: 21.4087%; line-gap-override: 0%; size-adjust: 105.0977%; }
-@font-face { font-family: 'Public Sans Fallback Roboto'; font-weight: 600 900; src: local('Roboto Bold'), local('Roboto-Bold'); ascent-override: 90.6205%; descent-override: 21.4627%; line-gap-override: 0%; size-adjust: 104.8328%; }
-@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; font-weight: 100 500; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 91.4439%; descent-override: 21.6578%; line-gap-override: 0%; size-adjust: 103.8889%; }
-@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; font-weight: 600 900; src: local('Helvetica Neue Bold'), local('HelveticaNeue-Bold'); ascent-override: 96.2025%; descent-override: 22.7848%; line-gap-override: 0%; size-adjust: 98.75%; }
-@font-face { font-family: 'Public Sans Fallback Arial'; font-weight: 100 500; src: local('Arial'), local('ArialMT'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
-@font-face { font-family: 'Public Sans Fallback Arial'; font-weight: 600 900; src: local('Arial Bold'), local('Arial-BoldMT'); ascent-override: 96.1986%; descent-override: 22.7839%; line-gap-override: 0%; size-adjust: 98.754%; }
-@font-face { font-family: 'Public Sans Fallback Liberation'; font-weight: 100 500; src: local('Liberation Sans'), local('LiberationSans'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
-@font-face { font-family: 'Public Sans Fallback Liberation'; font-weight: 600 900; src: local('Liberation Sans Bold'), local('LiberationSans-Bold'); ascent-override: 96.1986%; descent-override: 22.7839%; line-gap-override: 0%; size-adjust: 98.754%; }
-@font-face { font-family: 'Public Sans Fallback DejaVu'; font-weight: 100 500; src: local('DejaVu Sans'), local('DejaVuSans'); ascent-override: 103.2911%; descent-override: 24.4637%; line-gap-override: 0%; size-adjust: 91.9731%; }
-@font-face { font-family: 'Public Sans Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold'); ascent-override: 115.086%; descent-override: 27.2572%; line-gap-override: 0%; size-adjust: 82.5469%; }
-@font-face { font-family: 'Newsreader Fallback Georgia'; font-weight: 100 500; src: local('Georgia'); ascent-override: 76.4676%; descent-override: 27.5699%; line-gap-override: 0%; size-adjust: 96.1192%; }
-@font-face { font-family: 'Newsreader Fallback Georgia'; font-weight: 600 900; src: local('Georgia Bold'), local('Georgia-Bold'); ascent-override: 84.6973%; descent-override: 30.5371%; line-gap-override: 0%; size-adjust: 86.7797%; }
-@font-face { font-family: 'Newsreader Fallback Georgia'; font-style: italic; font-weight: 100 500; src: local('Georgia Italic'), local('Georgia-Italic'); ascent-override: 83.1153%; descent-override: 29.9667%; line-gap-override: 0%; size-adjust: 88.4314%; }
-@font-face { font-family: 'Newsreader Fallback Georgia'; font-style: italic; font-weight: 600 900; src: local('Georgia Bold Italic'), local('Georgia-BoldItalic'); ascent-override: 88.9612%; descent-override: 32.0744%; line-gap-override: 0%; size-adjust: 82.6203%; }
-@font-face { font-family: 'Newsreader Fallback Times'; font-weight: 100 500; src: local('Times New Roman'), local('TimesNewRomanPSMT'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
-@font-face { font-family: 'Newsreader Fallback Times'; font-weight: 600 900; src: local('Times New Roman Bold'), local('TimesNewRomanPS-BoldMT'); ascent-override: 70.6608%; descent-override: 25.4763%; line-gap-override: 0%; size-adjust: 104.0181%; }
-@font-face { font-family: 'Newsreader Fallback Times'; font-style: italic; font-weight: 100 500; src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'); ascent-override: 74.6342%; descent-override: 26.9089%; line-gap-override: 0%; size-adjust: 98.4804%; }
-@font-face { font-family: 'Newsreader Fallback Times'; font-style: italic; font-weight: 600 900; src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'); ascent-override: 70.4618%; descent-override: 25.4046%; line-gap-override: 0%; size-adjust: 104.3118%; }
-@font-face { font-family: 'Newsreader Fallback Noto'; font-weight: 100 500; src: local('Noto Serif Regular'), local('NotoSerif-Regular'), local('Noto Serif'); ascent-override: 82.5053%; descent-override: 29.7468%; line-gap-override: 0%; size-adjust: 89.0852%; }
-@font-face { font-family: 'Newsreader Fallback Noto'; font-weight: 600 900; src: local('Noto Serif Bold'), local('NotoSerif-Bold'); ascent-override: 83.6267%; descent-override: 30.1511%; line-gap-override: 0%; size-adjust: 87.8906%; }
-@font-face { font-family: 'Newsreader Fallback Noto'; font-style: italic; font-weight: 100 500; src: local('Noto Serif Italic'), local('NotoSerif-Italic'); ascent-override: 85.75%; descent-override: 30.9167%; line-gap-override: 0%; size-adjust: 85.7143%; }
-@font-face { font-family: 'Newsreader Fallback Noto'; font-style: italic; font-weight: 600 900; src: local('Noto Serif Bold Italic'), local('NotoSerif-BoldItalic'); ascent-override: 87.055%; descent-override: 31.3872%; line-gap-override: 0%; size-adjust: 84.4294%; }
-@font-face { font-family: 'Newsreader Fallback Liberation'; font-weight: 100 500; src: local('Liberation Serif'), local('LiberationSerif'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
-@font-face { font-family: 'Newsreader Fallback Liberation'; font-weight: 600 900; src: local('Liberation Serif Bold'), local('LiberationSerif-Bold'); ascent-override: 70.6608%; descent-override: 25.4763%; line-gap-override: 0%; size-adjust: 104.0181%; }
-@font-face { font-family: 'Newsreader Fallback Liberation'; font-style: italic; font-weight: 100 500; src: local('Liberation Serif Italic'), local('LiberationSerif-Italic'); ascent-override: 74.6342%; descent-override: 26.9089%; line-gap-override: 0%; size-adjust: 98.4804%; }
-@font-face { font-family: 'Newsreader Fallback Liberation'; font-style: italic; font-weight: 600 900; src: local('Liberation Serif Bold Italic'), local('LiberationSerif-BoldItalic'); ascent-override: 70.4618%; descent-override: 25.4046%; line-gap-override: 0%; size-adjust: 104.3118%; }
-@font-face { font-family: 'Newsreader Fallback DejaVu'; font-weight: 100 500; src: local('DejaVu Serif'), local('DejaVuSerif'); ascent-override: 88.6119%; descent-override: 31.9485%; line-gap-override: 0%; size-adjust: 82.9459%; }
-@font-face { font-family: 'Newsreader Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Serif Bold'), local('DejaVuSerif-Bold'); ascent-override: 93.151%; descent-override: 33.5851%; line-gap-override: 0%; size-adjust: 78.9041%; }
-@font-face { font-family: 'Newsreader Fallback DejaVu'; font-style: italic; font-weight: 100 500; src: local('DejaVu Serif Italic'), local('DejaVuSerif-Italic'); ascent-override: 94.4533%; descent-override: 34.0546%; line-gap-override: 0%; size-adjust: 77.8163%; }
-@font-face { font-family: 'Newsreader Fallback DejaVu'; font-style: italic; font-weight: 600 900; src: local('DejaVu Serif Bold Italic'), local('DejaVuSerif-BoldItalic'); ascent-override: 96.032%; descent-override: 34.6238%; line-gap-override: 0%; size-adjust: 76.537%; }
-@font-face { font-family: 'DM Mono Fallback Consolas'; src: local('Consolas'); ascent-override: 90.901%; descent-override: 28.4066%; line-gap-override: 0%; size-adjust: 109.1297%; }
-@font-face { font-family: 'DM Mono Fallback Menlo'; src: local('Menlo Regular'), local('Menlo-Regular'), local('Menlo'); ascent-override: 99.5391%; descent-override: 31.106%; line-gap-override: 0%; size-adjust: 99.6594%; }
-@font-face { font-family: 'DM Mono Fallback Liberation'; src: local('Liberation Mono'), local('LiberationMono'); ascent-override: 99.2161%; descent-override: 31.005%; line-gap-override: 0%; size-adjust: 99.9837%; }
-@font-face { font-family: 'DM Mono Fallback DejaVu'; src: local('DejaVu Sans Mono'), local('DejaVuSansMono'); ascent-override: 99.5391%; descent-override: 31.106%; line-gap-override: 0%; size-adjust: 99.6594%; }
+@font-face { font-family: 'Source Sans 3 Fallback Segoe'; font-weight: 100 500; src: local('Segoe UI'), local('SegoeUI'); ascent-override: 108.6124%; descent-override: 42.4267%; line-gap-override: 0%; size-adjust: 94.2802%; }
+@font-face { font-family: 'Source Sans 3 Fallback Segoe'; font-weight: 600; src: local('Segoe UI Semibold'), local('SegoeUI-Semibold'); ascent-override: 108.7007%; descent-override: 42.4612%; line-gap-override: 0%; size-adjust: 94.2036%; }
+@font-face { font-family: 'Source Sans 3 Fallback Segoe'; font-weight: 700 900; src: local('Segoe UI Bold'), local('SegoeUI-Bold'); ascent-override: 109.8194%; descent-override: 42.8982%; line-gap-override: 0%; size-adjust: 93.244%; }
+@font-face { font-family: 'Source Sans 3 Fallback Segoe'; font-style: italic; font-weight: 100 500; src: local('Segoe UI Italic'), local('SegoeUI-Italic'); ascent-override: 108.8235%; descent-override: 42.5092%; line-gap-override: 0%; size-adjust: 94.0973%; }
+@font-face { font-family: 'Source Sans 3 Fallback Segoe'; font-style: italic; font-weight: 600 900; src: local('Segoe UI Semibold Italic'), local('SegoeUI-SemiboldItalic'); ascent-override: 110.6205%; descent-override: 43.2111%; line-gap-override: 0%; size-adjust: 92.5687%; }
+@font-face { font-family: 'Source Sans 3 Fallback Roboto'; font-weight: 100 500; src: local('Roboto Regular'), local('Roboto-Regular'), local('Roboto'); ascent-override: 108.9713%; descent-override: 42.5669%; line-gap-override: 0%; size-adjust: 93.9697%; }
+@font-face { font-family: 'Source Sans 3 Fallback Roboto'; font-weight: 600 900; src: local('Roboto Bold'), local('Roboto-Bold'); ascent-override: 107.4246%; descent-override: 41.9627%; line-gap-override: 0%; size-adjust: 95.3227%; }
+@font-face { font-family: 'Source Sans 3 Fallback Roboto'; font-style: italic; font-weight: 100 500; src: local('Roboto Italic'), local('Roboto-Italic'); ascent-override: 108.5784%; descent-override: 42.4134%; line-gap-override: 0%; size-adjust: 94.3097%; }
+@font-face { font-family: 'Source Sans 3 Fallback Roboto'; font-style: italic; font-weight: 600 900; src: local('Roboto Bold Italic'), local('Roboto-BoldItalic'); ascent-override: 107.3986%; descent-override: 41.9526%; line-gap-override: 0%; size-adjust: 95.3458%; }
+@font-face { font-family: 'Source Sans 3 Fallback Helvetica Neue'; font-weight: 100 500; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 110.2392%; descent-override: 43.0622%; line-gap-override: 0%; size-adjust: 92.8889%; }
+@font-face { font-family: 'Source Sans 3 Fallback Helvetica Neue'; font-weight: 600 900; src: local('Helvetica Neue Bold'), local('HelveticaNeue-Bold'); ascent-override: 114.0418%; descent-override: 44.5476%; line-gap-override: 0%; size-adjust: 89.7917%; }
+@font-face { font-family: 'Source Sans 3 Fallback Helvetica Neue'; font-style: italic; font-weight: 100 500; src: local('Helvetica Neue Italic'), local('HelveticaNeue-Italic'); ascent-override: 112.4392%; descent-override: 43.9216%; line-gap-override: 0%; size-adjust: 91.0714%; }
+@font-face { font-family: 'Source Sans 3 Fallback Helvetica Neue'; font-style: italic; font-weight: 600 900; src: local('Helvetica Neue Bold Italic'), local('HelveticaNeue-BoldItalic'); ascent-override: 117.5523%; descent-override: 45.9189%; line-gap-override: 0%; size-adjust: 87.1102%; }
+@font-face { font-family: 'Source Sans 3 Fallback Arial'; font-weight: 100 500; src: local('Arial'), local('ArialMT'); ascent-override: 109.2105%; descent-override: 42.6604%; line-gap-override: 0%; size-adjust: 93.7639%; }
+@font-face { font-family: 'Source Sans 3 Fallback Arial'; font-weight: 600 900; src: local('Arial Bold'), local('Arial-BoldMT'); ascent-override: 114.0371%; descent-override: 44.5458%; line-gap-override: 0%; size-adjust: 89.7953%; }
+@font-face { font-family: 'Source Sans 3 Fallback Arial'; font-style: italic; font-weight: 100 500; src: local('Arial Italic'), local('Arial-ItalicMT'); ascent-override: 111.8873%; descent-override: 43.706%; line-gap-override: 0%; size-adjust: 91.5207%; }
+@font-face { font-family: 'Source Sans 3 Fallback Arial'; font-style: italic; font-weight: 600 900; src: local('Arial Bold Italic'), local('Arial-BoldItalicMT'); ascent-override: 117.3031%; descent-override: 45.8215%; line-gap-override: 0%; size-adjust: 87.2952%; }
+@font-face { font-family: 'Source Sans 3 Fallback Liberation'; font-weight: 100 500; src: local('Liberation Sans'), local('LiberationSans'); ascent-override: 109.2105%; descent-override: 42.6604%; line-gap-override: 0%; size-adjust: 93.7639%; }
+@font-face { font-family: 'Source Sans 3 Fallback Liberation'; font-weight: 600 900; src: local('Liberation Sans Bold'), local('LiberationSans-Bold'); ascent-override: 114.0371%; descent-override: 44.5458%; line-gap-override: 0%; size-adjust: 89.7953%; }
+@font-face { font-family: 'Source Sans 3 Fallback Liberation'; font-style: italic; font-weight: 100 500; src: local('Liberation Sans Italic'), local('LiberationSans-Italic'); ascent-override: 111.8873%; descent-override: 43.706%; line-gap-override: 0%; size-adjust: 91.5207%; }
+@font-face { font-family: 'Source Sans 3 Fallback Liberation'; font-style: italic; font-weight: 600 900; src: local('Liberation Sans Bold Italic'), local('LiberationSans-BoldItalic'); ascent-override: 117.3031%; descent-override: 45.8215%; line-gap-override: 0%; size-adjust: 87.2952%; }
+@font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-weight: 100 500; src: local('DejaVu Sans'), local('DejaVuSans'); ascent-override: 124.5215%; descent-override: 48.6412%; line-gap-override: 0%; size-adjust: 82.2348%; }
+@font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold'); ascent-override: 136.4269%; descent-override: 53.2918%; line-gap-override: 0%; size-adjust: 75.0585%; }
+@font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-style: italic; font-weight: 100 500; src: local('DejaVu Sans Oblique'), local('DejaVuSans-Oblique'); ascent-override: 127.5735%; descent-override: 49.8334%; line-gap-override: 0%; size-adjust: 80.2674%; }
+@font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-style: italic; font-weight: 600 900; src: local('DejaVu Sans Bold Oblique'), local('DejaVuSans-BoldOblique'); ascent-override: 140.3341%; descent-override: 54.818%; line-gap-override: 0%; size-adjust: 72.9687%; }
+@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 100 500; src: local('Georgia Italic'), local('Georgia-Italic'); ascent-override: 110.5528%; descent-override: 35.7483%; line-gap-override: 0%; size-adjust: 93.7108%; }
+@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 600 900; src: local('Georgia Bold Italic'), local('Georgia-BoldItalic'); ascent-override: 123.553%; descent-override: 39.952%; line-gap-override: 0%; size-adjust: 83.8506%; }
+@font-face { font-family: 'Source Serif 4 Fallback Times'; font-style: italic; font-weight: 100 500; src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'); ascent-override: 99.2719%; descent-override: 32.1005%; line-gap-override: 0%; size-adjust: 104.3598%; }
+@font-face { font-family: 'Source Serif 4 Fallback Times'; font-style: italic; font-weight: 600 900; src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'); ascent-override: 97.8604%; descent-override: 31.644%; line-gap-override: 0%; size-adjust: 105.8651%; }
+@font-face { font-family: 'Source Serif 4 Fallback Noto'; font-style: italic; font-weight: 100 500; src: local('Noto Serif Italic'), local('NotoSerif-Italic'); ascent-override: 114.0573%; descent-override: 36.8815%; line-gap-override: 0%; size-adjust: 90.8316%; }
+@font-face { font-family: 'Source Serif 4 Fallback Noto'; font-style: italic; font-weight: 600 900; src: local('Noto Serif Bold Italic'), local('NotoSerif-BoldItalic'); ascent-override: 120.9056%; descent-override: 39.0959%; line-gap-override: 0%; size-adjust: 85.6867%; }
+@font-face { font-family: 'Source Serif 4 Fallback Liberation'; font-style: italic; font-weight: 100 500; src: local('Liberation Serif Italic'), local('LiberationSerif-Italic'); ascent-override: 99.2719%; descent-override: 32.1005%; line-gap-override: 0%; size-adjust: 104.3598%; }
+@font-face { font-family: 'Source Serif 4 Fallback Liberation'; font-style: italic; font-weight: 600 900; src: local('Liberation Serif Bold Italic'), local('LiberationSerif-BoldItalic'); ascent-override: 97.8604%; descent-override: 31.644%; line-gap-override: 0%; size-adjust: 105.8651%; }
+@font-face { font-family: 'Source Serif 4 Fallback DejaVu'; font-style: italic; font-weight: 100 500; src: local('DejaVu Serif Italic'), local('DejaVuSerif-Italic'); ascent-override: 125.6336%; descent-override: 40.6248%; line-gap-override: 0%; size-adjust: 82.462%; }
+@font-face { font-family: 'Source Serif 4 Fallback DejaVu'; font-style: italic; font-weight: 600 900; src: local('DejaVu Serif Bold Italic'), local('DejaVuSerif-BoldItalic'); ascent-override: 133.3733%; descent-override: 43.1275%; line-gap-override: 0%; size-adjust: 77.6767%; }
+@font-face { font-family: 'Source Code Pro Fallback Consolas'; src: local('Consolas'); ascent-override: 90.168%; descent-override: 25.0161%; line-gap-override: 0%; size-adjust: 109.1297%; }
+@font-face { font-family: 'Source Code Pro Fallback Menlo'; src: local('Menlo Regular'), local('Menlo-Regular'), local('Menlo'); ascent-override: 98.7363%; descent-override: 27.3933%; line-gap-override: 0%; size-adjust: 99.6594%; }
+@font-face { font-family: 'Source Code Pro Fallback Liberation'; src: local('Liberation Mono'), local('LiberationMono'); ascent-override: 98.416%; descent-override: 27.3044%; line-gap-override: 0%; size-adjust: 99.9837%; }
+@font-face { font-family: 'Source Code Pro Fallback DejaVu'; src: local('DejaVu Sans Mono'), local('DejaVuSansMono'); ascent-override: 98.7363%; descent-override: 27.3933%; line-gap-override: 0%; size-adjust: 99.6594%; }
 
+/*
+ * The tokens (round eighty-seven; the look the owner chose on 7 November, docs/REVIEW-ROUND-87.md): white paper, warm
+ * greys, one green for links, thin rules in place of cards and shadows, corners of 4 px at most. Every text colour is 4.5:1
+ * or more on every ground it is set on, in both themes: --mut on --bg 5.6:1 (6.7:1 in dark), on --sunk 5.0:1 (6.1:1);
+ * --link on --bg 7.9:1 (10.1:1). --edge, a field's and a control's edge, is 3:1 against --field and --bg (WCAG 1.4.11):
+ * the plan's #9a968c is 2.95:1 on white, so the light theme's is a step darker, #949086 (3.2:1).
+ *
+ * The older names stay, each pointing at its new token, so every page and component that reads them takes the look
+ * without a rename: --card is the paper (no cards), --ink3 the muted ink, --accent the link's green, --sh none, the radii
+ * 4 px. --sunk is a placeholder's ground and a pressed row's, the one fill the look keeps.
+ */
 :root {
-  --bg: #f3f5f4; --card: #fff; --sunk: #e8ecea;
-  --ink: #16211d; --ink2: #44524c; --ink3: #5f6d67; /* --ink3 is every hint and source line: 5.4:1 on the card, 4.6:1 on the sunk field; --ink2, secondary text, a step darker so the two read apart (round fifty-eight) */
-  --rule: #dfe5e2; --rule2: #c6cfcb; --line: var(--rule); /* --line was used and never defined (round fifty-eight) */
-  --accent: #12795a; --accent-soft: #e2f1eb; --on-accent: #fff;
-  --warm: #a8702a; --warm-soft: #f7ecdc; --warn: var(--warm); /* --warn too */
+  --bg: #ffffff; --ink: #1b1d1c; --ink2: #4a4842; --mut: #6b685f;
+  --rule: #d9d6cf; --rule2: #ebebe8; --edge: #949086; --kbd: #cfcbc1; --field: #fff;
+  --link: #1d5c45; --hov: #123d2e;
+  --card: var(--bg); --sunk: #f3f2ee; --ink3: var(--mut); --line: var(--rule);
+  --accent: var(--link); --accent-soft: #e4eee8; --on-accent: #fff;
+  --warm: #a8702a; --warm-soft: #f7ecdc; --warn: var(--warm);
   --cool: #3f6d8c; --cool-soft: #e4eef4;
   --bad: #a3402f; --bad-soft: #fbeae7;
   --map-sea: #d3e1e7; --map-land: #e7e2d4; --map-coast: #a89f8d;
-  --r: 10px;
-  --sh: 0 1px 2px rgba(16, 33, 29, 0.055), 0 3px 10px rgba(16, 33, 29, 0.04);
-  --sh2: 0 3px 7px rgba(16, 33, 29, 0.08), 0 12px 24px rgba(16, 33, 29, 0.07);
+  --r: 4px;
+  --sh: none;
+  --sh2: none;
   /* The UI face's metric-matched stand-ins alone, without the web font: for a line drawn above content after the first
      paint, which the web font's arrival would otherwise reflow (round eighty-five; outside review A16f). */
-  --ui-local: 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', 'Newsreader Fallback Liberation', 'Newsreader Fallback DejaVu', Georgia, 'Times New Roman', serif;
-  --mono: 'DM Mono', 'DM Mono Fallback Consolas', 'DM Mono Fallback Menlo', 'DM Mono Fallback Liberation', 'DM Mono Fallback DejaVu', ui-monospace, Menlo, Consolas, monospace;
-  --maxw: 1180px;
+  --ui-local: 'Source Sans 3 Fallback Segoe', 'Source Sans 3 Fallback Roboto', 'Source Sans 3 Fallback Helvetica Neue', 'Source Sans 3 Fallback Arial', 'Source Sans 3 Fallback Liberation', 'Source Sans 3 Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ui: 'Source Sans 3', 'Source Sans 3 Fallback Segoe', 'Source Sans 3 Fallback Roboto', 'Source Sans 3 Fallback Helvetica Neue', 'Source Sans 3 Fallback Arial', 'Source Sans 3 Fallback Liberation', 'Source Sans 3 Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Source Serif 4', 'Source Serif 4 Fallback Georgia', 'Source Serif 4 Fallback Times', 'Source Serif 4 Fallback Noto', 'Source Serif 4 Fallback Liberation', 'Source Serif 4 Fallback DejaVu', Georgia, 'Times New Roman', serif;
+  --mono: 'Source Code Pro', 'Source Code Pro Fallback Consolas', 'Source Code Pro Fallback Menlo', 'Source Code Pro Fallback Liberation', 'Source Code Pro Fallback DejaVu', ui-monospace, Menlo, Consolas, monospace;
+  /* Figures: the text face's tabular lining figures, never a monospace (round eighty-seven). */
+  --figs: tabular-nums lining-nums;
+  --maxw: 1080px;
   /* The type scale (round fifty-eight; the accessibility review): seven steps in rem, so the browser's own text size
      applies (every size was in px, and the setting did nothing), and nothing smaller than 11 px at the default. Display
-     figures (a card's value, a page title) are rem too, outside the steps. */
-  --fs-xs: 0.6875rem; --fs-sm: 0.75rem; --fs-md: 0.84375rem; --fs-base: 0.9375rem; --fs-lg: 1.03125rem; --fs-xl: 1.125rem; --fs-2xl: 1.5rem;
+     figures (a card's value, a page title) are rem too, outside the steps. Round eighty-seven keeps the steps; the look's
+     section heads (13 px) and captions (12 px) are --fs-head and --fs-sm. */
+  --fs-xs: 0.6875rem; --fs-sm: 0.75rem; --fs-md: 0.84375rem; --fs-base: 0.9375rem; --fs-lg: 1.03125rem; --fs-xl: 1.125rem; --fs-2xl: 1.5rem; --fs-head: 0.8125rem;
+  /* The look's 14 px (a table's sources, the browse rail and its tools), in rem like the rest: the stage-2 sections and
+     the browse pages were set in px and stayed 12 to 14 px when the reader's text was 200% (the review of stage 2's
+     pages, 2). */
+  --fs-ui: 0.875rem;
   /* A finger's target where the pointer is a finger, a mouse's elsewhere (round fifty-eight). */
   --tap: 36px;
-  /* Field and chip edges at 3:1 or better against the card in both themes (the rule colour was 1.2:1). */
-  --field-edge: #7d8a85;
+  /* Field and chip edges at 3:1 or better against the paper in both themes. */
+  --field-edge: var(--edge);
   /* Warm text on a warm ground at 4.5:1 or better (the warm accent was 3.6:1 as text in the light theme). */
   --warm-ink: #8a5a1c;
-  /* Radii: three, and the pill. */
-  --r-sm: 6px; --r-lg: 14px;
-  --section-gap: 36px; /* one gap between sections on every page */
+  /* Radii: 4 px at most (round eighty-seven); 2 px on a photograph. */
+  --r-sm: 3px; --r-lg: 4px;
+  --section-gap: 30px; /* one gap between sections on every page */
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #121614; --card: #1a201d; --sunk: #0d1211;
-    --ink: #e8eeeb; --ink2: #b6c1bc; --ink3: #8c9a94;
-    --rule: #28302d; --rule2: #3a4440;
-    --accent: #5fb894; --accent-soft: #17332a; --on-accent: #0d1211;
+    --bg: #141615; --ink: #e8e6e1; --ink2: #c3bfb6; --mut: #a19d94;
+    --rule: #3a3d3b; --rule2: #2c2f2d; --edge: #6b6e6b; --kbd: #4a4d4a; --field: #1d201e;
+    --link: #8fcfb0; --hov: #b5e3cc;
+    --sunk: #1d201e;
+    --accent-soft: #1a2a23; --on-accent: #141615;
     --warm: #d3a05e; --warm-soft: #2e2718;
     --cool: #7fb0cd; --cool-soft: #1a2833;
     --bad: #e08a76; --bad-soft: #31201c;
     --map-sea: #15201f; --map-land: #2e3630; --map-coast: #5b6862;
-    --field-edge: #7c8a84; --warm-ink: #e0b57c;
-    --sh: 0 1px 2px rgba(0, 0, 0, 0.4); --sh2: 0 6px 22px rgba(0, 0, 0, 0.5);
+    --warm-ink: #e0b57c;
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --bg: #121614; --card: #1a201d; --sunk: #0d1211;
-  --ink: #e8eeeb; --ink2: #b6c1bc; --ink3: #8c9a94;
-  --rule: #28302d; --rule2: #3a4440;
-  --accent: #5fb894; --accent-soft: #17332a; --on-accent: #0d1211;
+  --bg: #141615; --ink: #e8e6e1; --ink2: #c3bfb6; --mut: #a19d94;
+  --rule: #3a3d3b; --rule2: #2c2f2d; --edge: #6b6e6b; --kbd: #4a4d4a; --field: #1d201e;
+  --link: #8fcfb0; --hov: #b5e3cc;
+  --sunk: #1d201e;
+  --accent-soft: #1a2a23; --on-accent: #141615;
   --warm: #d3a05e; --warm-soft: #2e2718;
   --cool: #7fb0cd; --cool-soft: #1a2833;
   --bad: #e08a76; --bad-soft: #31201c;
   --map-sea: #15201f; --map-land: #2e3630; --map-coast: #5b6862;
-  --field-edge: #7c8a84; --warm-ink: #e0b57c;
-  --sh: 0 1px 2px rgba(0, 0, 0, 0.4); --sh2: 0 6px 22px rgba(0, 0, 0, 0.5);
+  --warm-ink: #e0b57c;
   color-scheme: dark;
 }
 @media (max-width: 700px) { :root { --tap: 40px; } } /* a narrow window is likely a finger even when the pointer says not */
@@ -144,7 +170,7 @@
 @media (min-width: 701px) { :root { --fs-md: 0.9375rem; } }
 @media (pointer: coarse) { :root { --tap: 44px; } }
 
-/* Fonts are self-hosted via @fontsource packages (OFL), imported in the root layout. */
+/* Fonts are this site's own files (static/fonts/, SIL OFL 1.1), declared at the head of this sheet (round eighty-seven). */
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; font-size: 100%; } /* a long page and a short one share one column: the scrollbar's width is always reserved */
@@ -307,7 +333,7 @@ h2.sec:first-child { margin-top: 14px; }
 
 /* section tabs under the ID card */
 /* Opaque like the top bar: headings must not ghost through a sticky row. */
-nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 0 5px; position: sticky; top: 44px; z-index: 50; background: var(--bg); border-bottom: 1px solid var(--rule); }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 0 5px; position: sticky; top: var(--bar-h, 53px); z-index: 50; background: var(--bg); border-bottom: 1px solid var(--rule); }
 nav.tabs a { white-space: nowrap; color: var(--ink2); font-weight: 600; font-size: var(--fs-md); padding: 0 13px; min-height: 40px; display: inline-flex; align-items: center; border-radius: 999px; }
 nav.tabs a:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
 nav.tabs a.on { background: var(--ink); color: var(--bg); }
@@ -351,7 +377,7 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .links a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
 /* list-page furniture */
-.toolrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 6px; padding: 10px 0; position: sticky; top: 44px; z-index: 40; background: var(--bg); }
+.toolrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 6px; padding: 10px 0; position: sticky; top: var(--bar-h, 53px); z-index: 40; background: var(--bg); }
 .searchbar { flex: 1; min-width: 190px; border: 1px solid var(--field-edge); background: var(--card); border-radius: var(--r); padding: 9px 13px; font: inherit; font-size: var(--fs-md); color: var(--ink); box-shadow: var(--sh); }
 .searchbar::placeholder { color: var(--ink3); }
 .searchbar:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -586,15 +612,15 @@ html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
    - A card, a chart or a table row is not cut across two sheets, and a heading stays with what it heads. */
 @media print {
   :root:root:root {
-    --bg: #fff; --card: #fff; --sunk: #eef1ef;
-    --ink: #16211d; --ink2: #44524c; --ink3: #5f6d67;
-    --rule: #dfe5e2; --rule2: #c6cfcb;
-    --accent: #12795a; --accent-soft: #e2f1eb; --on-accent: #fff;
+    --bg: #ffffff; --ink: #1b1d1c; --ink2: #4a4842; --mut: #6b685f;
+    --rule: #d9d6cf; --rule2: #ebebe8; --edge: #949086; --kbd: #cfcbc1; --field: #fff;
+    --link: #1d5c45; --hov: #123d2e; --sunk: #f3f2ee;
+    --accent-soft: #e4eee8; --on-accent: #fff;
     --warm: #a8702a; --warm-soft: #f7ecdc;
     --cool: #3f6d8c; --cool-soft: #e4eef4;
     --bad: #a3402f; --bad-soft: #fbeae7;
     --map-sea: #d3e1e7; --map-land: #e7e2d4; --map-coast: #a89f8d;
-    --field-edge: #7d8a85; --warm-ink: #8a5a1c;
+    --warm-ink: #8a5a1c;
     --sh: none; --sh2: none;
     color-scheme: light;
   }
@@ -630,8 +656,12 @@ html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
 .skeleton[aria-busy='true'] { min-height: 100vh; }
 /* A device that knows its grower (`data-grower`, set before paint) never paints the visitor's head and welcome while the
    scripts load: they stood on screen, "Grow some of these?", until hydration swapped them for the skeleton. Hidden, not
-   removed, so nothing moves; shown again once the app is drawn (`data-ready`) for whatever page the grower then has. */
-html[data-grower]:not([data-ready]) :is(.headwrap, #welcome, .featured) { visibility: hidden; }
+   removed, so nothing moves; shown again once the app is drawn (`data-ready`) for whatever page the grower then has.
+   The front page's lead, its facts line and its Browse and Changed lately are the visitor's too since round eighty-seven,
+   and were painted on a grower's device before hydration took them away (the review of stage 1, S2): /about/how says a
+   device that holds plants of its own is shown no such figure, which holds from the first paint now. Named as the front
+   page's sections, so no other page's `.lead` paragraph is hidden. */
+html[data-grower]:not([data-ready]) :is(.headwrap, #welcome, .featured, section.lead, section.factsline, section.browselate) { visibility: hidden; }
 /* A link among a fact grid's figures (the plant page's Source) is told apart by an underline, not by colour alone: 2.03:1
    against its text in the dark theme (round sixty-two; the accessibility review of round sixty-one, 12; WCAG 1.4.1). */
 .factgrid > div > a:not(.btn) { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -647,3 +677,172 @@ html[data-grower]:not([data-ready]) :is(.headwrap, #welcome, .featured) { visibi
    line wraps between its words; one that fits is as it was, and in a row of buttons none is squeezed to wrap, as with its
    words on one line none could be (round sixty-two; the self-review's N10; WCAG 1.4.10). */
 @media (max-width: 480px) { .btn { white-space: normal; max-width: 100%; flex-shrink: 0; } }
+
+/* =====================================================================
+   Round eighty-seven: the look (the owner's choice of 7 November; DESIGN-87).
+   Data looks like data: thin rules and tables, no cards, no shadows, corners
+   of 4 px at most, figures in the text face's tabular lining figures. The
+   rules above keep their places and their reasons; these restate how they
+   are drawn, after them, so the cascade takes these.
+   ===================================================================== */
+/* Headings in the text face: the serif is the scientific names' alone. */
+h1, h2, h3, h4 { font-family: var(--ui); }
+h1 { font-weight: 400; font-size: 2rem; line-height: 1.2; letter-spacing: 0; }
+h2 { font-weight: 400; font-size: 1.375rem; line-height: 1.25; }
+.prose, .sumbody p, .cult .body, .cult .none, .empty, .paper a { font-family: var(--ui); }
+.cult .none, .empty { font-style: normal; }
+/* A scientific name: the serif's italic, at its optical size (the browser sets it by the text's size). */
+/* The Latin of a name in the serif's italic; a rank word ("var.", "subsp."), a cultivar and the author stay in the text
+   face, upright, as botanical convention sets them (SpeciesName marks the italic parts; round eighty-five, W12). The
+   containers that hold a SpeciesName are set in the text face, so its upright parts are upright: the serif has no roman. */
+.sciname i, i.sciname, .hitrow .im .ini { font-family: var(--serif); font-style: italic; font-optical-sizing: auto; }
+h1.sci, .tile .nm, .azrow .nm { font-family: var(--ui); font-style: normal; }
+/* Every figure in a table or a row of figures: tabular, lining, in the text face, never a monospace. */
+table, .seccount, .card .val, .grouphead .st, .tile .fig, .azrow .fig, .tlrow .d, .secrule .n, .chipbtn .n, .mwords .mscale, .num { font-variant-numeric: var(--figs); }
+.card .val, .seccount, .grouphead .st, .tile .fig, .azrow .fig, .tlrow .d, .secrule .n, .chipbtn .n, .mwords .mscale, .hero .ph, .tile .im.ph, table.data th, table.wx td, .k { font-family: var(--ui); letter-spacing: 0; }
+/* Keys and identifiers keep the monospace: a plant's number, a field number, code. */
+.accno, .fnchip, .ownchip, code, .mono, kbd { font-family: var(--mono); }
+kbd { display: inline-block; font-size: 0.6875rem; line-height: 1.5; color: var(--mut); border: 1px solid var(--kbd); border-radius: 3px; padding: 0 5px; }
+@media (hover: none) { kbd { display: none; } }
+
+/* Links: underlined in running text, the line in the link's own colour; plain in navigation and lists (`.plain`), the
+   underline on hover. The hover is a darker green (a lighter one in dark). */
+a:hover { color: var(--hov); text-underline-offset: 2px; }
+p a, li a, .sub a, .small a, .muted a, .foot a, .secsub a, .mapcap a, .credits a, .whybody a, dd a, td a, .none a, .empty a, .ph a, .notice a, .emptybox a, .hint a, figcaption a, blockquote a { text-decoration-color: currentColor; text-underline-offset: 2px; }
+.plain a, a.plain { text-decoration: none; }
+.plain a:hover, a.plain:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* The section head, one style wherever it stands: 13 px, 600, capitals spaced .08em, in the muted ink. */
+.eyebrow, .kick, .toollab, h2.sec, .secrule h2, .secrule h4, .sechead { font-size: var(--fs-head); letter-spacing: 0.08em; font-weight: 600; color: var(--mut); text-transform: uppercase; font-family: var(--ui); }
+.card .lab, .factgrid b, .field > label, .field > .lbl, .field > span:first-child, table.wx th, .tile .fam, .azrow .fam { font-weight: 600; letter-spacing: 0.06em; color: var(--mut); }
+h2.sec { margin: var(--section-gap) 0 8px; }
+.secrule .line { background: var(--rule); }
+
+/* No cards: a block of figures is its rules. */
+.card, .mapbox, .factgrid, .cult, .paper, .grouphead, .tl, .emptybox, .idcard { box-shadow: none; border-radius: 0; background: transparent; }
+.card { border-top: 1px solid var(--rule); }
+.cards { gap: 0 24px; }
+.cards .card, .stat { padding: 10px 0 12px; }
+.card .val { font-size: 1.5rem; font-weight: 400; letter-spacing: 0; }
+.card .val .u { color: var(--mut); }
+.mapbox { border: 1px solid var(--rule); border-radius: 2px; }
+.mapcap { color: var(--mut); padding: 7px 10px; }
+.map { border-radius: 2px; }
+.factgrid { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.factgrid > div { padding: 8px 12px 8px 0; border-right: 0; border-bottom: 1px solid var(--rule2); }
+.factgrid b { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); font-weight: 400; }
+.cult { border-top: 1px solid var(--rule); margin: 0; }
+.cult .sum { padding: 10px 0; border-bottom: 1px solid var(--rule2); font-weight: 600; }
+.cult .body { padding: 10px 0 14px; font-size: var(--fs-base); }
+.cult .none { padding: 12px 0; color: var(--mut); }
+.cult .foot { padding: 0 0 10px; }
+.paper { border-top: 1px solid var(--rule2); padding: 10px 0; margin: 0; }
+.paper a { color: var(--link); font-weight: 400; }
+.tl { border-top: 1px solid var(--rule); padding: 0; }
+.emptybox { border: 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); border-radius: 0; padding: 16px 0 12px; }
+.grouphead { border-top: 1px solid var(--ink); padding: 12px 0; }
+/* A notice is words between two thin rules, on the paper (the review of stage 2's pages, 8: a warm ground and a warm bar
+   down its left were the older look's). A fault's rule above is the fault's colour; its words stay ink. */
+.notice { border-radius: 0; border: 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: transparent; padding: 10px 0; }
+.notice.err, .notice.bad { border-top-color: var(--bad); }
+.notice.ok { border-top-color: var(--accent); }
+
+/* Controls: a 1 px edge, 4 px corners, no shadow. The primary is ink on paper turned round. */
+.btn { border-radius: var(--r); box-shadow: none; border-color: var(--ink); background: var(--bg); color: var(--ink); font-weight: 600; }
+.btn:hover { border-color: var(--ink); color: var(--ink); background: var(--sunk); }
+.btn.primary, .btn.pri { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.btn.primary:hover, .btn.pri:hover { background: var(--ink2); border-color: var(--ink2); color: var(--bg); }
+.btn.danger { color: var(--bad); border-color: var(--bad); }
+.pill { border-radius: 3px; background: transparent; border: 1px solid var(--rule); color: var(--ink2); font-weight: 600; letter-spacing: 0.02em; padding: 2px 7px; }
+.pill.ok, .pill.a { background: transparent; color: var(--accent); border-color: currentColor; }
+.pill.warn, .pill.w { background: transparent; color: var(--warm-ink); border-color: currentColor; }
+.pill.bad, .pill.b { background: transparent; color: var(--bad); border-color: currentColor; }
+.pill.cool, .pill.c { background: transparent; color: var(--cool); border-color: currentColor; }
+.chipbtn { border-radius: var(--r); box-shadow: none; border-color: var(--edge); background: var(--bg); color: var(--ink2); font-weight: 400; }
+.chipbtn:hover { color: var(--ink); border-color: var(--ink); }
+.chipbtn.on { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600; }
+.seg { border-radius: var(--r); box-shadow: none; border-color: var(--edge); background: var(--bg); }
+.seg > a, .seg > button { font-weight: 400; color: var(--ink2); border-right-color: var(--rule); }
+.seg > .on, .seg > .on:hover { background: var(--ink); color: var(--bg); font-weight: 600; }
+/* The register links: plain links in a row, as the look's lines of links are (the review of stage 2's pages, 8). */
+.links { gap: 4px 18px; }
+.links a { border: 0; border-radius: 0; box-shadow: none; background: none; padding: 0; color: var(--link); font-weight: 400; font-size: var(--fs-md); }
+.links a:hover { color: var(--hov); text-decoration: underline; text-underline-offset: 2px; }
+.searchbar { border-radius: var(--r); box-shadow: none; background: var(--field); border-color: var(--edge); }
+.searchbar::placeholder { color: var(--mut); }
+.searchbar:focus { border-color: var(--ink); box-shadow: none; }
+.field input, .field textarea, .field select { border-radius: var(--r); background: var(--field); }
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--ink); box-shadow: none; }
+/* A plant's number is an identifier in the monospace, set as text: no filled chip (the review of stage 2's pages, 8). */
+.accno { border-radius: 0; background: none; padding: 0; color: var(--ink2); }
+.accno.big { padding: 0; }
+.fnchip { border-radius: 3px; }
+/* "You grow" on a tile: the plant's number as a line of the tile's words, not a green chip over its photograph (the
+   review of stage 2's pages, 8). The front page sets it under the name. */
+.ownchip { position: static; display: block; background: none; color: var(--ink2); box-shadow: none; border-radius: 0; padding: 0; margin-top: 2px; font-size: var(--fs-sm); font-weight: 400; line-height: 1.35; }
+.statedot { border-radius: 50%; }
+details.why > summary { color: var(--mut); font-weight: 400; }
+details.why > summary:hover { color: var(--link); }
+
+/* The site's search in the top bar (the browse pages' component takes `.site-search` and these too). */
+.site-search-box { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--edge); border-radius: var(--r); background: var(--field); font-size: 0.875rem; min-width: 0; }
+.site-search-box:focus-within { border-color: var(--ink); }
+.site-search-box input { flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; color: var(--ink); outline: none; padding: 0; }
+.site-search-box input::placeholder { color: var(--mut); }
+.site-search-box input::-webkit-search-cancel-button { display: none; }
+.site-search-box:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The fields' edge rule above outranks a class: the box's input has no edge of its own. */
+:is(.site-search-box input):not(:focus):not(#\#) { border-color: transparent; }
+
+/* Tiles and rows: a photograph and words under it, no card. */
+.tile { background: transparent; box-shadow: none; border-radius: 0; transition: none; }
+.tile:hover { transform: none; box-shadow: none; }
+.tile:hover .nm { text-decoration: underline; text-underline-offset: 2px; }
+.tile .im { border-radius: 2px; background: var(--sunk); }
+.tile:hover .im img { transform: none; }
+.tile .tx { padding: 7px 0 4px; }
+.tile .nm { font-weight: 400; color: var(--ink); }
+.tile .fam { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); color: var(--mut); }
+.tile .fig { color: var(--ink2); }
+.hgrid { gap: 18px 14px; }
+.azrow { border-radius: 0; border-top: 1px solid var(--rule2); padding: 8px 4px; }
+.azrow:hover { background: var(--sunk); box-shadow: none; }
+.azrow .im { border-radius: 2px; }
+.azrow .nm { font-weight: 400; }
+.azrow .fam { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: var(--fs-sm); color: var(--mut); }
+.tlrow { border-top-color: var(--rule2); }
+
+/* Tables of numbers: a rule of ink under the head, thin rules between rows, the figures right and tabular. */
+table.data th, table.data td { border-bottom-color: var(--rule2); }
+table.data thead th { border-bottom: 1px solid var(--ink); text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); font-weight: 500; color: var(--mut); }
+table.wx { background: transparent; box-shadow: none; border-radius: 0; border-collapse: collapse; }
+table.wx > :first-child > tr:first-child > :first-child, table.wx > :first-child > tr:first-child > :last-child, table.wx > :last-child > tr:last-child > :first-child, table.wx > :last-child > tr:last-child > :last-child { border-radius: 0; }
+table.wx th { border-bottom: 1px solid var(--ink); text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); font-weight: 500; }
+table.wx td { border-bottom: 1px solid var(--rule2); font-size: var(--fs-md); }
+table.wx td:first-child, table.wx th:first-child { background: var(--bg); font-weight: 400; }
+table.wx tr:last-child td { border-bottom: 1px solid var(--rule2); }
+
+/* The species page's hero, the section row and the ID card: a photograph with its credit, a line of links, the name. */
+.hero { border-radius: 2px; background: var(--sunk); }
+.hero .cred { border-radius: 3px; }
+.idcard { margin: 0; padding: 0; }
+nav.tabs { gap: 2px 16px; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+nav.tabs a { border-radius: 0; color: var(--link); font-weight: 400; padding: 0; font-size: var(--fs-md); }
+nav.tabs a:hover { background: none; color: var(--hov); text-decoration: underline; text-underline-offset: 2px; }
+nav.tabs a.on { background: none; color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+@media (max-width: 640px) { nav.tabs a { padding: 0; font-size: var(--fs-md); } }
+
+/* Paper keeps round sixty-three's edge around each block (an outline, which every browser prints, where a shadow is
+   left off), and the paper's white under it: on screen the blocks are their rules (round eighty-seven). */
+@media print {
+  :is(.card, .idcard) { background: var(--bg); }
+}
+/* The species page's name: the serif's italic at display size, the author in the text face beside it (round eighty-seven). */
+h1.sci { font-weight: 400; font-size: 2.75rem; line-height: 1.1; letter-spacing: 0; }
+h1.sci .auth { font-size: 1.25rem; color: var(--ink2); }
+.vern { color: var(--ink2); }
+@media (max-width: 640px) { h1.sci { font-size: 1.75rem; } h1.sci .auth { font-size: var(--fs-md); } }
+/* A page's own title in the text face: the serif's italic is the scientific names' alone (round eighty-seven). */
+h1.q, h3.q, h2.q { font-family: var(--ui); font-weight: 400; letter-spacing: 0; }
+h1.q { font-size: 2rem; }
+@media (max-width: 640px) { h1.q { font-size: 1.625rem; } }

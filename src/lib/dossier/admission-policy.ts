@@ -24,6 +24,7 @@
  *
  * Pure: no file is read here.
  */
+import { STATE_UNREAD } from './state-aliases';
 
 /** Why a record counts for a native region: the four reasons each dossier counts (`occurrences.admitted`). */
 export type Admission = 'strict' | 'buffer' | 'coast' | 'island';
@@ -33,11 +34,16 @@ export const ADMISSIONS: ReadonlyArray<Admission> = ['strict', 'buffer', 'coast'
  * Within a reason, which clause took the record (round eighty-six): said by the dry run and the walk's tallies, never
  * stored apart in a dossier (the border allowance is counted with the margin, `buffer`, as the drawing's own tolerance).
  */
-export type AdmissionBy = 'border' | 'border-state' | 'minor-island' | 'country-reach' | 'box';
+export type AdmissionBy = 'border' | 'border-state' | 'border-unmatched' | 'minor-island' | 'country-reach' | 'box';
 
 export interface AdmissionPolicy {
   /** The rule's name, written in every page derived by it (`occurrences.rangeRule`, "shapes rule r86"). */
   rule: string;
+  /**
+   * The rule of the shapes file the policy reads (`meta.rule`; round eighty-seven): round eighty-seven's policy reads round
+   * eighty-six's file, its shapes unchanged, and only how a record's stated state is read is new.
+   */
+  shapes: string;
   /** How far beyond a native shape's drawn edge a record on no region's land still counts for it, in degrees. */
   marginDeg: number;
   /** How far off a drawn coast a record on no region's land counts for the region whose coast is nearest, in degrees. */
@@ -66,8 +72,13 @@ export interface AdmissionPolicy {
   /**
    * Review D4: a border inside one country is decided by the record's stated state or province, where it names one of the
    * two regions; `unnamed` is what a record that names neither gets (`'admit'`: the line cannot tell within its tolerance).
+   * Round eighty-seven (round eighty-six's final review M2): `aliases`, a state read by its ISO 3166-2 code ("ZA-KZN",
+   * "KZN", "TX") or an old province's name (Natal, Transvaal) as well as by Natural Earth's name (`state-aliases.ts`); an old
+   * province that held land on both sides of the border names neither for certain, and the drawing decides (the record lies
+   * in the neighbour's shape, so it is the neighbour's). `unmatched`, what a record gets whose state is none the shapes or
+   * the aliases can match (`'admit'`, the owner's setting: it is read as naming none).
    */
-  borderState: { read: boolean; unnamed: 'admit' | 'refuse' };
+  borderState: { read: boolean; unnamed: 'admit' | 'refuse'; aliases: boolean; unmatched: 'admit' | 'refuse' };
   /**
    * What a record that states no country is let in by. Inside a shape, inside a shapeless region's box and on a minor
    * island are always in: those are where the record lies, not a guess.
@@ -80,20 +91,22 @@ export interface AdmissionPolicy {
 /** Round eighty-five's rule, as the corpus of 5 November 2026 was derived by it: the dry run's "before". */
 export const POLICY_R85: AdmissionPolicy = {
   rule: 'r85',
+  shapes: 'r85',
   marginDeg: 0.05,
   coastDeg: 0.15,
   islandDeg: 0.5,
   islandBox: 'whole',
   islandStopsAt: 'none',
   borderDeg: 0,
-  borderState: { read: false, unnamed: 'refuse' },
+  borderState: { read: false, unnamed: 'refuse', aliases: false, unmatched: 'refuse' },
   missingCountry: { margin: true, coast: true, island: true },
   shapeless: 'box'
 };
 
-/** Round eighty-six's rule (the module's comment says each part and why). */
+/** Round eighty-six's rule (the module's comment says each part and why), live from 8 November 2026: the dry run's "before". */
 export const POLICY_R86: AdmissionPolicy = {
   rule: 'r86',
+  shapes: 'r86',
   marginDeg: 0.05,
   coastDeg: 0.15,
   islandDeg: 0.5,
@@ -103,13 +116,30 @@ export const POLICY_R86: AdmissionPolicy = {
   islandBox: 'whole',
   islandStopsAt: 'other-country',
   borderDeg: 0.02,
-  borderState: { read: true, unnamed: 'admit' },
+  // A state the shapes could not match (an old province's name, a code) was read as naming none, and so admitted.
+  borderState: { read: true, unnamed: 'admit', aliases: false, unmatched: 'admit' },
   missingCountry: { margin: false, coast: false, island: false },
   shapeless: 'box'
 };
 
+/**
+ * Round eighty-seven's rule (round eighty-six's final review M2: 26 records on 11 pages in its dry run named a state the
+ * shapes could not match): round eighty-six's, on the same shapes file, with the stated state read by its aliases too, and
+ * a state still not matched admitted, as the owner set it, and said so (`policyWords`).
+ */
+export const POLICY_R87: AdmissionPolicy = {
+  ...POLICY_R86,
+  rule: 'r87',
+  shapes: 'r86',
+  borderState: { read: true, unnamed: 'admit', aliases: true, unmatched: 'admit' }
+};
+
 /** The rule the builder derives by and the check reads every page against. */
-export const ADMISSION_POLICY: AdmissionPolicy = POLICY_R86;
+export const ADMISSION_POLICY: AdmissionPolicy = POLICY_R87;
+/** The rule the dry run compares with (round eighty-seven): the one live, round eighty-six's; `--policy-before` names another. */
+export const POLICY_BEFORE: AdmissionPolicy = POLICY_R86;
+/** Every rule by its name, for `--policy-before`. */
+export const POLICIES: Readonly<Record<string, AdmissionPolicy>> = { r85: POLICY_R85, r86: POLICY_R86, r87: POLICY_R87 };
 
 /** Kilometres for a number of degrees of latitude, as the pages say them ("about 5.6 km"). */
 export const kmOf = (deg: number): string => {
@@ -118,6 +148,8 @@ export const kmOf = (deg: number): string => {
 };
 /** "0.05°", as the pages write a reach. */
 export const degWords = (deg: number): string => `${deg}°`;
+/** "a", "a and b", "a, b and c". */
+const listWords = (xs: readonly string[]): string => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /**
  * A state or province's name as the border allowance compares it (review D4): lower case, without accents, the words
@@ -139,7 +171,7 @@ export function stateKey(s: string | null | undefined): string {
  */
 export function recordWords(p: AdmissionPolicy): string {
   if (p.rule < 'r86') return 'a record within the margin or off a coast counted only on no other region\'s land and in the region\'s own country';
-  return `a record within the margin, off a coast or on an island too small to draw counted only when it states the region's country, and only on no other region's land but within ${degWords(p.borderDeg)} of a native shape across a border${p.borderState.read ? ', where its stated state or province does not name the other region' : ''}`;
+  return `a record within the margin, off a coast or on an island too small to draw counted only when it states the region's country, and only on no other region's land but within ${degWords(p.borderDeg)} of a native shape across a border${p.borderState.read ? `, where its stated state or province does not name the other region${p.borderState.aliases ? " (read by Natural Earth's name, its ISO 3166-2 code or an old province's name)" : ''}` : ''}`;
 }
 
 /**
@@ -149,10 +181,10 @@ export function recordWords(p: AdmissionPolicy): string {
 export function policyWords(p: AdmissionPolicy): { summary: string; margin: string; border: string; coast: string; islands: string; missing: string; glossBuffer: string; glossCoast: string } {
   const none = !p.missingCountry.margin && !p.missingCountry.coast && !p.missingCountry.island;
   return {
-    summary: `Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border, off a coast or on an island too small to draw counts only when it states that region's country, unless it lies on one of Natural Earth's minor islands placed in that region and states no other country${p.borderDeg ? `. A record ${degWords(p.borderDeg)} or less inside a neighbouring region's shape counts for the native one only by its stated country and, where it names a state or province the shapes can match to one of the two regions, by that state` : ''}.`,
+    summary: `Each record is tested against Kew's native regions, drawn from Natural Earth's provinces. A record just over a border, off a coast or on an island too small to draw counts only when it states that region's country, unless it lies on one of Natural Earth's minor islands placed in that region and states no other country${p.borderDeg ? `. A record ${degWords(p.borderDeg)} or less inside a neighbouring region's shape counts for the native one only by its stated country and, ${p.borderState.aliases ? 'where it names a state or province of one of the two regions (by its name, its ISO 3166-2 code or an old name)' : 'where it names a state or province the shapes can match to one of the two regions'}, by that state` : ''}.`,
     margin: `A record in no region's shape counts for a native region within the buffer of ${degWords(p.marginDeg)} beyond its edge (about ${kmOf(p.marginDeg)} km), or off its coast within the coast reach. That is only when it states the country of the region it would count for.`,
     border: p.borderDeg
-      ? `The shapes are simplified to about 2 km (${degWords(p.borderDeg)}), so a border is drawn no closer than that. A record inside a neighbouring region's shape but within ${degWords(p.borderDeg)} of a native one counts for the native region when its stated country is that region's and not the neighbour's. Where both are of its country (the Free State and KwaZulu-Natal), the state or province the record names decides: it counts when that is the native region's, and not when it is the neighbour's. A record that names no state or province the shapes can match to either region counts, since within the drawing's own accuracy the line cannot tell. That includes a name the shapes do not hold, such as an old province's (Natal) or a postal code.`
+      ? `The shapes are simplified to about 2 km (${degWords(p.borderDeg)}), so a border is drawn no closer than that. A record inside a neighbouring region's shape but within ${degWords(p.borderDeg)} of a native one counts for the native region when its stated country is that region's and not the neighbour's. Where both are of its country (the Free State and KwaZulu-Natal), the state or province the record names decides: it counts when that is the native region's, and not when it is the neighbour's. ${p.borderState.aliases ? `A state is read by its name, by its ISO 3166-2 code (KZN, TX, CN-YN) or by an old province's name (Natal, Transvaal). A code is read where ISO's subdivision is matched to one of Natural Earth's provinces, by its name or by hand: ${STATE_UNREAD.subdivisions} of ISO's subdivisions are not, among them every one of ${listWords(STATE_UNREAD.countries.map((c) => `${c}'s`))}. An old province that held land on both sides decides nothing, and the drawing does: the record lies in the neighbour's shape, so it is the neighbour's. A record that names no state or province, or a third region's, counts, since within the drawing's own accuracy the line cannot tell. ` : "A record that names no state or province the shapes can match to either region counts, since within the drawing's own accuracy the line cannot tell. "}${!p.borderState.aliases ? 'That includes a name the shapes do not hold, such as an old province\'s (Natal) or a postal code.' : p.borderState.unmatched === 'admit' ? 'So does a record whose state neither the shapes\' names nor those codes and old names can match: it is read as naming none.' : 'A record whose state neither the shapes\' names nor those codes and old names can match does not count.'}`
       : `A record inside another region's shape is that region's, native or not, however near the native one.`,
     coast: `The coast reach is ${degWords(p.coastDeg)} (about ${kmOf(p.coastDeg)} km). A record in no region's shape, at sea or on an islet the shapes do not draw, counts for the region whose drawn coast is nearest within it, when it states that region's country. A record on another region's land never does: Belgium is no part of France's range, however near.`,
     islands: `A record beyond the coast reach, in no shape, counts for a native region where a source puts land there. That is an island of Natural Earth's minor islands, each given to the region of the nearest shape. Or the record states that region's country and lies within ${degWords(p.islandDeg)} of its shape (about ${kmOf(p.islandDeg)} km)${p.islandBox === 'whole' ? ', or inside its box' : p.islandBox === 'beyond-drawing' ? ", or inside TDWG's box for the region where the drawn shape does not reach (the Kermadecs' Macauley Island)" : ''}${p.islandStopsAt === 'none' ? '' : `, and no ${p.islandStopsAt === 'other-country' ? "other country's" : "other region's"} drawn land lies nearer`}.`,

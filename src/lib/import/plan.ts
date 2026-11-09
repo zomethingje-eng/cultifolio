@@ -7,6 +7,7 @@ import { PLANT_NUMBER_DIGITS, type NumberingScheme } from '$core/accession';
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
 import { parseName } from '$core/names';
 import { yearOf } from '$core/year';
+import type { IdentFields } from '$core/identity';
 
 export interface ImportRow {
   /** Stable for the review list. */
@@ -33,6 +34,15 @@ export interface ImportRow {
   status: AccStatus;
   lot: string | null;
   form: string | null;
+  /** The identity and provenance fields the sheet gave, each read (round eighty-seven, t1; $core/identity's readIdentCells). */
+  ident?: IdentFields;
+  /**
+   * The number of the plant this one was taken from, as the sheet gave it, and how (one of `MOTHER_HOW`), from the
+   * backup's "taken from" and "taken as" (round eighty-seven, F4). The number is read as a plant's after the plants land:
+   * one of this import's, else one already here; a number that names no plant is kept in the notes and said.
+   */
+  mother?: string | null;
+  motherHow?: string | null;
   /** What was not read as given, said on the row. */
   problems: string[];
   drop: boolean;

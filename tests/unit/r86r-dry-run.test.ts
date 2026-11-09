@@ -112,11 +112,12 @@ describe('--dry-run, end to end on the real builder', () => {
     const dir = folder();
     const before = files(dir);
     const disk = readFileSync(join(dir, 'static/s/v3/k361567.json'), 'utf8');
-    const r = builder(dir, '--dry-run', '--offline', '--bulk', 'bulk', '--keys', 'list.txt');
+    // Round eighty-seven: the dry run compares with the live rule (r86) unless told otherwise; round eighty-five's, here.
+    const r = builder(dir, '--dry-run', '--offline', '--bulk', 'bulk', '--keys', 'list.txt', '--policy-before', 'r85');
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toContain('dry run: nothing is written');
     expect(r.stdout).toMatch(/Δ k361567 Begonia faustinoi: records in range 16 → \d+, \+1 admitted \(out → by the margin \(across a border; a state stated\): 1\)/);
-    expect(r.stdout).toContain('Dry run, rule r86 against the dossiers on disk (nothing written but dry-run-records.txt):');
+    expect(r.stdout).toContain('Dry run, rule r87 against the dossiers on disk (nothing written but dry-run-records.txt):');
     expect(r.stdout).toContain('1 pages derived, nothing written; 1 change under this rule');
     expect(r.stdout).toContain('climates: not derived in this run (no --grid)');
     // Nothing else is written: the dossier, the index, the report, walk.json, the caches.

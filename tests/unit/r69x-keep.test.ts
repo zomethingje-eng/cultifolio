@@ -101,7 +101,7 @@ describe('every field the add forms bind is carried (X3; S-C2\'s list)', () => {
   }
   it('the plant form: name, place, date, source, price, form, count, provenance, field number, own number, last watered, notes', () => {
     const f = 'src/routes/plants/new/+page.svelte';
-    const fields = bound(f, ['locationId']);
+    const fields = bound(f, ['locationId', 'motherAcc']); // the plant it was taken from is the example's, as a batch's parent plant is (round eighty-seven, F4)
     expect(fields.length).toBeGreaterThan(10);
     const c = carried(f);
     expect(fields.filter((n) => !new RegExp(`\\b${n}\\b`).test(c))).toEqual([]); // base: no draft; the address carried the species alone
@@ -109,7 +109,7 @@ describe('every field the add forms bind is carried (X3; S-C2\'s list)', () => {
   });
   it('the batch form, but its parent plant, which is the example\'s', () => {
     const f = 'src/routes/propagation/new/+page.svelte';
-    const fields = bound(f, ['locationId', 'parentAcc', 'parentQ']);
+    const fields = bound(f, ['locationId', 'parentAcc', 'parentQ', 'cross', 'stockAcc']); // the cross and the stock name the example's own records (round eighty-seven, F4)
     const c = carried(f);
     expect(c).not.toBe('');
     expect(fields.filter((n) => !new RegExp(`\\b${n}\\b`).test(c))).toEqual([]);

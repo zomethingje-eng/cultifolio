@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { regionTester, grownBox, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE, type ShapesFile } from '../../src/lib/dossier/tdwg-shapes';
 import { TDWG3 } from '../../src/lib/dossier/tdwg';
+import { ADMISSION_POLICY } from '../../src/lib/dossier/admission-policy';
 
 const file = JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile;
 const t = regionTester(file);
@@ -20,7 +21,8 @@ describe("round eighty-four's shapes", () => {
   it('366 of the 369 regions have a shape; the file names its rule', () => {
     expect(Object.keys(file.shapes).length).toBe(366);
     expect(file.meta.regions).toBe(366);
-    expect(file.meta.rule).toBe(RANGE_RULE);
+    // Round eighty-seven: the policy's rule (r87) reads the file of r86, and the tester names the policy's.
+    expect(file.meta.rule).toBe(ADMISSION_POLICY.shapes);
     expect(t.rule).toBe(RANGE_RULE);
     // The three left: no state or province of Natural Earth draws Cocos (Keeling) or Christmas Is.; TDWG gives the Spratly Is. no country.
     expect(Object.keys(TDWG3).filter((c) => !t.hasShape(c)).sort()).toEqual(['CKI', 'SCS', 'XMS']);

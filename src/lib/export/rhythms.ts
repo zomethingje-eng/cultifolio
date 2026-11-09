@@ -7,7 +7,8 @@
 import { addDays, allDry, buildIcs, wholeDays, DEFAULT_EVERY, type Rhythm } from './ics';
 import { monthRuns, everyWords } from '$lib/ui/today-words';
 
-export interface RhythmPlant { id: string; no: string; name: string; placeId: string | null; ownDays: number | null }
+/** `ownRest`: the plant's own rest months by its growing season (round eighty-seven, t3; plan F7), added to its place's dry months; null or empty for none. */
+export interface RhythmPlant { id: string; no: string; name: string; placeId: string | null; ownDays: number | null; ownRest?: number[] | null }
 export interface RhythmSource {
   plants: RhythmPlant[];
   placeName(id: string): string;
@@ -40,9 +41,14 @@ export function rhythmsOf(src: RhythmSource): Rhythm[] {
   const groups = new Map<string | null, RhythmPlant[]>();
   for (const p of src.plants) {
     const own = wholeDays(p.ownDays, 0);
-    if (own) {
+    // A plant that rests by its own season is a series of its own too, at its own rhythm or its place's, kept dry in its
+    // place's months and its own (round eighty-seven, t3), as Today counts it.
+    const rest = (p.ownRest ?? []).filter((m) => Number.isInteger(m) && m >= 1 && m <= 12);
+    if (own || rest.length) {
       const at = rule(p.placeId);
-      out.push({ uid: `water-plant-${p.id}.${tag}@cultifolio`, what: `${p.no} ${p.name}`, summary: `Water ${p.no} ${p.name} (${everyWords(own)})`, description: `This plant's own rhythm, from Cultifolio.${dryWords(at.dry)}`, start: next([p], own), every: own, dry: at.dry });
+      const every = own || at.every;
+      const dry = [...new Set([...at.dry, ...rest])].sort((a, b) => a - b);
+      out.push({ uid: `water-plant-${p.id}.${tag}@cultifolio`, what: `${p.no} ${p.name}`, summary: `Water ${p.no} ${p.name} (${everyWords(every)})`, description: `${own ? "This plant's own rhythm" : "Its space's rhythm, with this plant's own rest months"}, from Cultifolio.${dryWords(dry)}`, start: next([p], every), every, dry });
       continue;
     }
     const g = groups.get(p.placeId) ?? [];

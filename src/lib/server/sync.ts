@@ -636,6 +636,16 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
 
 /** A generous per-vault ceiling until quotas are real: 2 GB. */
 export const MAX_BYTES = 2 * 1024 * 1024 * 1024;
+/**
+ * The room under the ceiling kept for log batches: a photograph or a paper (both are photo objects, and the server cannot
+ * tell them apart) is refused once the vault holds `MAX_BYTES - LOG_RESERVE`, so the changes themselves still sync when
+ * photographs and papers have filled the rest (round eighty-seven, the stage 3 fixes; S2). Before, a vault filled by
+ * photographs and papers refused the next ordinary edit's batch with 507, and the edit waited on the device for good.
+ * 64 MB is about two hundred thousand changes in sealed batches, years of a large collection's edits.
+ */
+export const LOG_RESERVE = 64 * 1024 * 1024;
+/** The ceiling an object is checked against: a log batch the whole vault's, a photograph's or a paper's the vault's less the log's reserve. */
+export const vaultLimit = (key: string): number => (key.includes('/photo/') ? MAX_BYTES - LOG_RESERVE : MAX_BYTES);
 /** Bytes one address may store in one UTC day, across all its vaults: 3 GB. */
 export const MAX_IP_BYTES_PER_DAY = 3 * 1024 * 1024 * 1024;
 
@@ -839,7 +849,7 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
 async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array, quota: Quota | undefined, put: () => Promise<boolean>): Promise<boolean> {
   const kv = quota?.kv;
   if (!kv) {
-    if (meta.bytes + body.length > MAX_BYTES) throw new VaultFull(meta.bytes, MAX_BYTES);
+    if (meta.bytes + body.length > vaultLimit(key)) throw new VaultFull(meta.bytes, vaultLimit(key));
     meta.bytes += body.length;
     await writeMeta(r2, id, meta);
     let stored = false;
@@ -882,7 +892,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
     try {
       // Photographs and log batches each have the hour's writes of their own (round seventy; triage-69 W6, R47-18).
       const of = key.includes('/photo/') ? 'photo' : 'log';
-      v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now, null, VAULT_WRITES_PER_HOUR, of);
+      v = await objs.vault.take('vault', body.length, vaultLimit(key), today, null, now, null, VAULT_WRITES_PER_HOUR, of);
       // A day's first upload passes a listing, with the generation read before it: a landing or a removal that crossed
       // the listing has it refused, and it is listed again, once (round sixty; B7); the second listing is checked too,
       // and a second crossing asks the device to try again (round sixty-one; B11).
@@ -892,9 +902,9 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
         // 5: up to four whole-vault listings were made and thrown away). The live upload is often a first upload of the day
         // that has just put today's total right, so the take is asked again without one; if it still needs a listing,
         // the device asks again shortly.
-        if (g.busy) { v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now, null, VAULT_WRITES_PER_HOUR, of); continue; }
+        if (g.busy) { v = await objs.vault.take('vault', body.length, vaultLimit(key), today, null, now, null, VAULT_WRITES_PER_HOUR, of); continue; }
         const listed = await recount(r2, id, meta);
-        v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen, VAULT_WRITES_PER_HOUR, of);
+        v = await objs.vault.take('vault', body.length, vaultLimit(key), today, listed, now, g.gen, VAULT_WRITES_PER_HOUR, of);
       }
       if ('recount' in v) throw new RecountCrossed();
       // The vault's hour of writes is spent (round sixty-nine; triage-68 W5): nothing was taken, and the address's bytes go back below.
@@ -906,7 +916,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
     }
     if ('recount' in v || 'spent' in v || !v.ok) {
       await giveAddress().catch(() => 0);
-      throw new VaultFull('before' in v ? v.before : 0, MAX_BYTES);
+      throw new VaultFull('before' in v ? v.before : 0, vaultLimit(key));
     }
     let stored = false;
     try {
@@ -929,7 +939,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
   if (daily && ipBytes + body.length > MAX_IP_BYTES_PER_DAY) throw new DayQuota(ipBytes, MAX_IP_BYTES_PER_DAY, untilMidnight(now));
   // The vault.
   const before = await vaultBytes(r2, kv, id, meta, now);
-  if (before + body.length > MAX_BYTES) throw new VaultFull(before, MAX_BYTES);
+  if (before + body.length > vaultLimit(key)) throw new VaultFull(before, vaultLimit(key));
   const after = before + body.length;
   const bytesKey = `bytes:${id}`;
   await kv.put(bytesKey, JSON.stringify({ bytes: after, day: today } satisfies BytesRow)).catch(() => { /* a total not raised before the write is caught by the next recount; the write itself still decides the answer */ });

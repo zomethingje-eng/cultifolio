@@ -38,9 +38,13 @@ const dotFile = (p: string) => p.split('/').some((s) => s.startsWith('.'));
 const FILES = new Set(files.filter((f) => !dotFile(f)));
 /**
  * Cached at install: the scripts and styles, the shells, the front page (the start URL), and only the Latin subsets of
- * the three fonts, which is every glyph the pages set in them. The Latin-extended and Vietnamese subsets (84 kB) are
- * fetched by the browser only when a name needs them, and the fetch handler caches them then (improvements, 9). The
- * corpus is kept out of `files` by svelte.config.js.
+ * the fonts, which is every glyph the pages set in them. The Latin-extended subsets are fetched by the browser only when
+ * a name needs them, and the fetch handler caches them then (improvements, 9). The corpus is kept out of `files` by
+ * svelte.config.js. Round eighty-seven (the owner's type): the fonts are the site's own files in static/fonts/, built
+ * into hashed assets, so the Latin files installed are these four (about 200 kB): Source Sans 3's roman and italic
+ * (`source-sans-3-latin-wght-normal`, `-italic`), Source Serif 4's italic with its optical sizes
+ * (`source-serif-4-latin-opsz-italic`) and Source Code Pro's 400 (`source-code-pro-latin-400-normal`); the four
+ * `-latin-ext-` files wait. Public Sans, Newsreader and DM Mono are no longer in the build.
  */
 // And no `.woff`, in any subset: it is the fallback for browsers without WOFF2, which every browser the app supports has (round eighty).
 const isLazyFont = (p: string) => /\.woff$/.test(p) || (/\.woff2$/.test(p) && !/-latin-(?!ext)/.test(p));

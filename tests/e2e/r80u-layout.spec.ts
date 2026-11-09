@@ -162,5 +162,6 @@ test('r80u layout 13: a page of the collection, drawn on the device, raises no w
   await page.waitForTimeout(5000); // a negative, by the browser's own timer: it warns a few seconds after the load, or not at all, and the page shows nothing of it
   expect(warned).toEqual([]);
   const html = await (await request.get('/species/copiapoa-cinerea')).text();
-  expect(html.match(/<link rel="preload" as="font"/g)?.length).toBe(2);
+  // One since round eighty-seven (DESIGN-87): Source Sans 3's roman, the face every page sets its text in; the serif is the names' alone.
+  expect(html.match(/<link rel="preload" as="font"[^>]*>/g)).toEqual([expect.stringMatching(/source-sans-3-latin-wght-normal/)]);
 });

@@ -126,3 +126,15 @@ export async function readRevision(f: JsonFetcher, d: RevisionPage, day: string,
   await readLeadsAll(f, [d], day, c, (_, x) => { changed = x; });
   return changed;
 }
+
+/**
+ * The summaries `--fill summary-leads` leaves for `--fill summaries` (round eighty-seven): every summary not read as its
+ * article's opening paragraph (`from` not `'lead'`), as the fill leaves those whose title moved or holds no lead, and
+ * those not yet read. One "<id> <name>\t<why>" a line, as `--keys` reads it. Read from the dossiers alone: the fill's own
+ * lines are in its log only.
+ */
+export function summariesLeft(pages: Iterable<RevisionPage & { key: unknown }>): string[] {
+  const out: string[] = [];
+  for (const d of pages) if (revisionWanted(d)) out.push(`${String(d.key)} ${d.name.scientific}\tsummary of ${d.summary!.title} not read as its opening paragraph${d.summary!.revision ? `, revision ${d.summary!.revision} recorded before` : ''}`);
+  return out.sort();
+}

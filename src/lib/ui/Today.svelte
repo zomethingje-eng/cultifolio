@@ -237,6 +237,14 @@
   .line.warn { border-left-color: var(--warn, #b8692a); }
   .line.ok { border-left-color: var(--accent); }
   .line.doneline { border-left-color: var(--accent); }
+  /* The round's look (the review of stage 2's pages, 8): each line between thin rules, flush with the page, no coloured bar
+     down its left; a line that warns says so in the warm ink (6.2:1 on the paper, 9.7:1 in dark), a fault's in the
+     fault's colour. */
+  .today { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); border-radius: 0; }
+  .line { border-left: 0; padding-left: 0; padding-right: 0; }
+  .line.bad { color: var(--bad); }
+  .line.warn { color: var(--warm-ink); }
+  .today > .small { padding-left: 0; padding-right: 0; }
   .donetext { flex: 1; min-width: 0; }
   .waitwhy { flex: none; font-size: var(--fs-sm); }
   .donetext a { color: inherit; text-decoration: underline; }
@@ -249,5 +257,6 @@
     .line { padding: 8px 12px; font-size: var(--fs-md); line-height: 1.4; }
     .today > .small { padding: 6px 12px; font-size: var(--fs-sm); }
     .withact .btn { min-height: var(--tap); padding: 4px 12px; font-size: var(--fs-md); }
+    .line, .today > .small { padding-left: 0; padding-right: 0; }
   }
 </style>

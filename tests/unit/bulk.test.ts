@@ -208,7 +208,8 @@ describe('the bulk fetcher', () => {
     await f('https://api.gbif.org/v1/occurrence/search?taxonKey=100&mediaType=StillImage&limit=100');
     // a species the files lack falls through too
     await f('https://api.gbif.org/v1/species/200/distributions?limit=200');
-    expect(f.stats).toEqual({ wcvp: 1, occ: 1, media: 0, through: 3 }); // species/100, media, species/200/distributions (its name lookup goes to base directly)
+    // Round eighty-seven: and what became of them (`occApi`, `unasked`): none was an occurrence search, none not asked.
+    expect(f.stats).toEqual({ wcvp: 1, occ: 1, media: 0, through: 3, occApi: 0, unasked: 0 }); // species/100, media, species/200/distributions (its name lookup goes to base directly)
     expect(calls.filter((u) => /\/species\/200$/.test(u))).toHaveLength(1);
     expect(calls.filter((u) => u.includes('/species/100/distributions'))).toHaveLength(0);
   });

@@ -45,7 +45,11 @@ export interface IndexEntry {
    * another author's name. Absent in an index built before, and where there is none.
    */
   hom?: string[];
-  /** For each of `hom`, the authors the record writes after it, as written (none where the record has none). */
+  /**
+   * For each of `hom`, the authors the record writes after it, as written (none where the record has none); or, since round
+   * eighty-seven (review D's D13), Kew's authors for the name in this plant (`name.kew.by`), where the record writes none
+   * or Kew's rows file the name here by another author than the other page's.
+   */
   homBy?: string[][];
   /**
    * The names of the pages merged into this one by the owner's decision (`scripts/merged-pages.txt`), as binomials: the
@@ -72,6 +76,23 @@ export interface IndexEntry {
    * photographs ("saffron" is Crocus sativus). Absent in an index built before, and for a page the list does not count.
    */
   grown?: number;
+  /**
+   * The record low at the typical cell, °C to one decimal (round eighty-seven, derived agent; the plan's C5): the dossier's
+   * `climate.extremes.minAbs` as the page shows it (NASA POWER's daily series, lapse-corrected; `setAsideExtremes`: none
+   * where the extremes were read at sea or beyond a lapse correction). Absent where the page shows no record low, and in
+   * an index built before.
+   */
+  low?: number;
+  /**
+   * The day the page was first seen, as whole days since 1970-01-01 like `changed` (round eighty-seven, derived agent; the
+   * plan's C5; `firstSeen`): the earliest day the dossier records (its build, a source's reading, a carried row's build, a
+   * photograph's or the summary's reading), or the day an index before gave, whichever is earlier. A dossier keeps no
+   * first build of its own, so for a page built before round eighty-seven this is the earliest day it still records, no
+   * earlier than the day it was first built and perhaps later (every day a dossier records is a build's or a later
+   * reading's; the integration put "no later" right); from round eighty-seven each index carries it to the next. Absent in an index
+   * built before.
+   */
+  first?: number;
 }
 
 /** One vernacular name as a dossier holds it (src/lib/dossier/schema.ts `Vernacular`); `preferred`, `sources` and `alsoFrom` are absent in a dossier whose names were fetched before, and read as "not preferred" and "one source". */
@@ -705,10 +726,10 @@ function recordTexts(n: string, synonyms: readonly string[]): { formula: boolean
  * the index given is not changed, so the photograph judgement reads the names it read before. `pages`: entries
  * changed; `names`: names moved; `kept`: names the record holds by the other page's own author, left as older names.
  */
-export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn' | 'older' | 'hom' | 'homBy'> & { kew?: string[] }>(index: readonly E[], recordOf: (key: E['key']) => { authorship?: string | null; synonyms?: readonly string[] | null } | undefined): { index: E[]; pages: number; names: number; kept: number } {
+export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn' | 'older' | 'hom' | 'homBy'> & { kew?: string[] }>(index: readonly E[], recordOf: (key: E['key']) => HomonymRecord | undefined): { index: E[]; pages: number; names: number; kept: number; byKew: number } {
   const accepted = new Map<string, E>();
   for (const e of index) { const k = plainOf(e.name); if (!accepted.has(k)) accepted.set(k, e); }
-  let pages = 0, names = 0, kept = 0;
+  let pages = 0, names = 0, kept = 0, byKew = 0;
   const out = index.map((e) => {
     const rec = recordOf(e.key);
     const hom: string[] = [], homBy: string[][] = [];
@@ -719,8 +740,19 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
       if (texts.length && texts.every((t) => t.formula)) return false;
       const authors = [...new Set(texts.filter((t) => !t.formula && t.author).map((t) => t.author))];
       const other = recordOf(o.key)?.authorship ?? undefined;
-      if (authors.some((a) => !!authorKey(a) && !!authorKey(other) && !plainlyAnother(other, a))) { kept++; return false; }
-      if (!hom.includes(n)) { hom.push(n); homBy.push(authors); names++; }
+      // Kew's authors of the name in this page's plant (round eighty-seven; review D's D13: `name.kew.by`, written by
+      // `--fill kew-names`), where Kew's rows were read with them.
+      const kewBy = kewAuthorsOf(rec, n);
+      const another = (a: string) => !!authorKey(a) && !!authorKey(other) && plainlyAnother(other, a);
+      if (authors.some((a) => !!authorKey(a) && !!authorKey(other) && !plainlyAnother(other, a))) {
+        // GBIF writes it by the other page's own author, so it was kept as an older name (round eighty-two). Kew's rows file
+        // it in this plant by another author than that page's (Cordia collococca on Bourreria succulenta): it is that
+        // author's name, a homonym, said by Kew's author. Kew decides which plant a name by an author is.
+        if (!(kewBy.length && kewBy.every(another))) { kept++; return false; }
+        if (!hom.includes(n)) { hom.push(n); homBy.push(kewBy); names++; byKew++; }
+        return true;
+      }
+      if (!hom.includes(n)) { hom.push(n); homBy.push(authors.length ? authors : kewBy); names++; if (!authors.length && kewBy.length) byKew++; }
       return true;
     };
     const syn = (e.syn ?? []).filter((n) => !moved(n));
@@ -730,7 +762,8 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
     // has its page): Kew files the other author's name here, so it is another author's name, said as one. Kew's list
     // carries no author, and Kew never files a name under one entry and accepts it by the same author as another.
     const kewHom = (e.kew ?? []).filter((n) => { const o = accepted.get(plainOf(n)); return !!o && o.key !== e.key && !hom.includes(n); });
-    for (const n of kewHom) { hom.push(n); homBy.push([]); names++; }
+    // Said by Kew's authors where Kew's rows were read with them (round eighty-seven; D13), else with none, as before.
+    for (const n of kewHom) { const by = kewAuthorsOf(rec, n); hom.push(n); homBy.push(by); names++; if (by.length) byKew++; }
     const kew = (e.kew ?? []).filter((n) => !kewHom.includes(n));
     if (!hom.length) return e;
     pages++;
@@ -749,5 +782,79 @@ export function homonymEntries<E extends Pick<IndexEntry, 'key' | 'name' | 'syn'
     place();
     return o as E;
   });
-  return { index: out, pages, names, kept };
+  return { index: out, pages, names, kept, byKew };
+}
+
+/**
+ * What `homonymEntries` reads of a page's record: its own author, GBIF's older names as its record writes them, and Kew's
+ * names for its plant with each one's authors (`name.kew.synonyms` and `name.kew.by`; round eighty-seven, D13), where
+ * Kew's rows were read with them.
+ */
+export interface HomonymRecord { authorship?: string | null; synonyms?: readonly string[] | null; kew?: { synonyms?: readonly string[] | null; by?: ReadonlyArray<readonly string[]> | null } | null }
+
+/** The authors Kew's rows of a name in the page's plant write (`name.kew.by`), the name compared as `plainOf` reads it; none where not read. */
+export function kewAuthorsOf(rec: HomonymRecord | undefined, n: string): string[] {
+  const syn = rec?.kew?.synonyms, by = rec?.kew?.by;
+  if (!Array.isArray(syn) || !Array.isArray(by) || by.length !== syn.length) return [];
+  const want = plainOf(n);
+  const out = new Set<string>();
+  syn.forEach((s, i) => { if (typeof s === 'string' && plainOf(s) === want) for (const a of by[i] ?? []) if (typeof a === 'string' && a.trim()) out.add(a.trim()); });
+  return [...out];
+}
+
+/**
+ * The record low the index carries (`low`; round eighty-seven, C5): the climate's shown `extremes.minAbs`, one decimal,
+ * or undefined. `climate` is the dossier's as shown (`setAsideExtremes` applied by the caller).
+ */
+export function recordLowOf(climate: { status?: string; extremes?: { minAbs?: unknown } | null } | null | undefined): number | undefined {
+  const m = climate?.status === 'ok' ? climate.extremes?.minAbs : undefined;
+  return typeof m === 'number' && Number.isFinite(m) ? Math.round(m * 10) / 10 : undefined;
+}
+
+const ISO_DAY = /^(\d{4}-\d{2}-\d{2})/;
+const dayOf = (x: unknown): string | null => {
+  if (typeof x !== 'string') return null;
+  const m = ISO_DAY.exec(x);
+  return m && Number.isFinite(Date.parse(`${m[1]}T00:00:00Z`)) ? m[1] : null;
+};
+/** The day of the build a carried row names ("carried from build of 2026-09-29 (rederive); that build: …"). */
+const CARRIED_DAY = /carried from build of (\d{4}-\d{2}-\d{2})/g;
+
+/**
+ * The earliest day a dossier records anything of itself (round eighty-seven, C5): its build, the day its substance last
+ * changed, each source's reading (`upstream.*.at`), the build each carried row names, each photograph's credit reading
+ * (`read`) and the summary's (`summary.read`). Never a photograph's or a record's own observation day, which is the
+ * plant's, not the page's. Null where it records none.
+ */
+export function earliestDay(d: { built?: unknown; changed?: { on?: unknown } | null; upstream?: Record<string, { at?: unknown; detail?: unknown } | null> | null; photos?: ReadonlyArray<{ read?: unknown }> | null; summary?: { read?: unknown } | null }): string | null {
+  const days: string[] = [];
+  const add = (x: unknown) => { const t = dayOf(x); if (t) days.push(t); };
+  add(d.built);
+  add(d.changed?.on);
+  for (const u of Object.values(d.upstream ?? {})) {
+    add(u?.at);
+    if (typeof u?.detail === 'string') for (const m of u.detail.matchAll(CARRIED_DAY)) add(m[1]);
+  }
+  for (const p of d.photos ?? []) add(p?.read);
+  add(d.summary?.read);
+  return days.length ? days.sort()[0] : null;
+}
+
+/**
+ * The index's `first` for a page (round eighty-seven, C5): the earlier of what the index before gave it (`before`, a day
+ * number) and the earliest day its dossier records, as a day number; undefined where neither is known.
+ */
+export function firstSeen(before: number | null | undefined, d: Parameters<typeof earliestDay>[0]): number | undefined {
+  const day = earliestDay(d);
+  const n = day ? Math.round(Date.parse(`${day}T00:00:00Z`) / 86_400_000) : undefined;
+  const b = typeof before === 'number' && Number.isInteger(before) && before > 0 ? before : undefined;
+  return n === undefined ? b : b === undefined ? n : Math.min(n, b);
+}
+
+/** Each page's `first` in an index read back (an earlier index on disk), by id; an entry with none is left out. */
+export function firstsOf(index: unknown): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!Array.isArray(index)) return out;
+  for (const e of index) if (e && typeof e === 'object' && typeof (e as IndexEntry).key === 'string' && Number.isInteger((e as IndexEntry).first) && (e as IndexEntry).first! > 0) out.set((e as IndexEntry).key, (e as IndexEntry).first!);
+  return out;
 }

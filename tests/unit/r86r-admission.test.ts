@@ -29,7 +29,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { regionTester, SHAPES_FILE, RANGE_RULE, type ShapesFile } from '$dossier/tdwg-shapes';
-import { ADMISSION_POLICY, POLICY_R85, POLICY_R86, policyWords, recordWords, stateKey } from '$dossier/admission-policy';
+import { ADMISSION_POLICY, POLICY_R85, POLICY_R86, POLICY_R87, policyWords, recordWords, stateKey } from '$dossier/admission-policy';
 import { cellTester, checkPage } from '$dossier/range-check';
 import { rangeTest, readRecords } from '$dossier/build';
 import { occHeader, parseOccRow, OccIndex, OCC_TERMS, SQL_SELECT } from '$dossier/bulk';
@@ -43,9 +43,11 @@ const R = JSON.parse(readFileSync('tests/unit/fixtures/r86r-records.json', 'utf8
 const rec = (page: string, key: number) => R.records[page].find((r) => r.key === key)!;
 
 describe('1. one admission policy', () => {
-  it('is typed, named r86, and the tester, the check and the words read it', () => {
-    expect(ADMISSION_POLICY).toBe(POLICY_R86);
-    expect(RANGE_RULE).toBe('r86');
+  it('is typed, named r86 (round eighty-seven: r87, on the same shapes), and the tester, the check and the words read it', () => {
+    // Round eighty-seven: r87 is r86's on the same file, with the stated state read by its aliases (r87d-state-aliases.test.ts).
+    expect(ADMISSION_POLICY).toBe(POLICY_R87);
+    expect({ ...POLICY_R87, rule: 'r86', borderState: POLICY_R86.borderState }).toEqual(POLICY_R86);
+    expect(RANGE_RULE).toBe('r87');
     expect(file.meta.rule).toBe('r86');
     expect(t.policy).toBe(ADMISSION_POLICY);
     expect(POLICY_R86.missingCountry).toEqual({ margin: false, coast: false, island: false });
@@ -56,7 +58,7 @@ describe('1. one admission policy', () => {
     expect(cellTester(file).policy.borderDeg).toBe(POLICY_R86.borderDeg);
     expect(cellTester(file).policy.marginDeg).toBeGreaterThan(POLICY_R86.marginDeg);
     // Each page's record of its sources says the policy's words.
-    expect(rangeTest([{ code: 'OMA', box: TDWG3.OMA }], t)!.words).toContain(recordWords(POLICY_R86));
+    expect(rangeTest([{ code: 'OMA', box: TDWG3.OMA }], t)!.words).toContain(recordWords(POLICY_R87));
   });
   it('/about/how says the policy: every sentence of it is on the page, so the page changes when the rule does', () => {
     const how = aboutText('how');
@@ -65,7 +67,8 @@ describe('1. one admission policy', () => {
     // Round eighty-six (final review): a record on a native minor island needs no country, so the summary says so; the
     // coast reach takes only a record stating the region's country, so the glossary says so.
     expect(w.summary).toContain("unless it lies on one of Natural Earth's minor islands placed in that region and states no other country");
-    expect(w.summary).toContain('where it names a state or province the shapes can match to one of the two regions, by that state');
+    expect(w.summary).toContain('where it names a state or province of one of the two regions (by its name, its ISO 3166-2 code or an old name), by that state'); // round eighty-seven's words
+    expect(policyWords(POLICY_R86).summary).toContain('where it names a state or province the shapes can match to one of the two regions, by that state');
     expect(w.glossCoast).toContain("Only for a record that states that region's country.");
     expect(how).not.toContain('only by its stated country and, where it names one, its state'); // base
   });
@@ -123,9 +126,14 @@ describe('1. review D4: within the drawing\'s tolerance across a border, by the 
     // Naming neither (a record with no state): the line cannot tell within its tolerance, so it counts.
     const r = recs[0];
     expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', null)?.by).toBe('border');
-    // A state the shapes cannot match to either side (an old province's name) is read as none, as /about/how says (final review M2).
-    expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', 'Natal')?.by).toBe('border');
-    expect(policyWords(ADMISSION_POLICY).border).toContain('A record that names no state or province the shapes can match to either region counts');
+    // A state the shapes cannot match to either side (an old province's name) was read as none, as /about/how said (final
+    // review M2). Round eighty-seven: "Natal" is KwaZulu-Natal's old name, the neighbour's, so the record is not counted; a
+    // name nothing matches is counted, said apart.
+    expect(regionTester(file, POLICY_R86).admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', 'Natal')?.by).toBe('border');
+    expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', 'Natal')).toBeNull();
+    expect(t.admit(r.decimalLatitude!, r.decimalLongitude!, ['CPP', 'OFS'], 'ZA', 'Xanadu')?.by).toBe('border-unmatched');
+    expect(policyWords(POLICY_R86).border).toContain('A record that names no state or province the shapes can match to either region counts');
+    expect(policyWords(ADMISSION_POLICY).border).toContain("A record that names no state or province, or a third region's, counts"); // round eighty-seven
     expect(stateKey('Free State Province')).toBe(stateKey('Free State'));
     expect(stateKey('Kwazulu Natal')).toBe(stateKey('KwaZulu-Natal'));
   });

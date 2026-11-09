@@ -30,8 +30,8 @@
 //
 // It stops, with one sentence and the command to type next, when:
 //   - a source did not answer (the builder says "run --fill X again"): run the same command later (exit 3);
-//   - a build lost what the build before had (drops.txt), or the plan says `review`: read what it names, then
-//     `--go-on` (exit 2);
+//   - a build lost what the build before had (drops.txt), or the plan says `review`, or a check could not read every
+//     page (the builder's exit 4: --check-summaries' summaries not checked): read what it names, then `--go-on` (exit 2);
 //   - a dossier on disk cannot be read, or the index holds fewer species than before: never passed by `--go-on`; put it
 //     right, and the next run runs that step again (exit 2);
 //   - the upload of a corpus holding a page without a GBIF key, while the live Worker does not say it reads one (round
@@ -118,6 +118,9 @@ export function classify({ code, output, dropsWritten, speciesBefore }) {
   if (code !== 0 && dropsWritten) return { status: 'review', why: 'drops' };
   // A fill that stopped before every dossier was answered exits 3 (D7); its own sentence says which source.
   if (code === 3) return { status: 'unfinished', why: (collapse(output).split('\n').find((l) => UNFINISHED.test(l)) ?? 'a source did not answer').replace(/[;:]?\s*run (?:--fill [a-z-]+|this) again.*$|\s*\(run again\).*$/i, '').trim() };
+  // A check that read part and could not read the rest (round eighty-seven's review, S5: --check-summaries, its summaries
+  // with no proof recorded) exits 4: a stop to read what it says was not checked, passed by --go-on.
+  if (code === 4) return { status: 'review', why: (collapse(output).split('\n').reverse().find((l) => /\bnot checked\b/.test(l)) ?? 'some pages were not checked').trim().replace(/\.$/, '') };
   if (code !== 0) return { status: 'failed', why: `exit ${code}` };
   if (UNFINISHED.test(output)) return { status: 'unfinished', why: (collapse(output).split('\n').find((l) => UNFINISHED.test(l)) ?? '').replace(/[;:]?\s*run (?:--fill [a-z-]+|this) again.*$|\s*\(run again\).*$/i, '').trim() };
   if (index && speciesBefore && Number(index[1]) < speciesBefore) return { status: 'blocked', why: `index ${index[1]} < ${speciesBefore}` };

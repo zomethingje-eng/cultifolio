@@ -15,7 +15,7 @@ describe('GBIF media', () => {
     const asked: string[] = [];
     const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { results: [{ key: 7, basisOfRecord: 'MACHINE_OBSERVATION', media: [{ type: 'StillImage', identifier: 'https://x/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'A' }] }, { key: 8, basisOfRecord: 'HUMAN_OBSERVATION', media: [{ type: 'StillImage', identifier: 'https://x/2.jpg', license: 'http://creativecommons.org/licenses/by/4.0/', creator: 'B' }] }], endOfRecords: true } }; }) as unknown as JsonFetcher;
     const r = await media(f, 3092);
-    expect(asked[0]).toMatch(/&basisOfRecord=HUMAN_OBSERVATION&limit=100$/); // r71base: …&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION
+    expect(asked[0]).toMatch(/&basisOfRecord=HUMAN_OBSERVATION&limit=100&checklistKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c$/); // r71base: …&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION
     expect(r.status === 'ok' && r.data.map((m) => !!m.specimen)).toEqual([true, false]); // r71base: [false, false]
   });
 });

@@ -370,11 +370,11 @@ test('r62a A40: in forced colours the toast is drawn whole from its first frame 
  * fit to have run.
  */
 async function growerTabs(page: Page) {
-  await expect(page.locator('#tabbar a:visible')).toHaveCount(5);
+  await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveCount(4); // the owner's four since round eighty-seven (DESIGN-87)
   await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
 }
 async function tabWords(page: Page) {
-  return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar a')].filter((a) => a.offsetParent).map((a) => {
+  return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar :is(a, button.moretab)')].filter((a) => a.offsetParent).map((a) => {
     const s = a.querySelector('span')!;
     const shown = s.getClientRects().length > 0 && s.getBoundingClientRect().width > 2;
     // Each line the label is drawn in: a word broken across two lines has a line that starts mid-word.
@@ -397,7 +397,7 @@ test('r62a A11: at 320 px with 200% text no tab label breaks inside a word; when
     await seeded(page, plants(1), '/plants');
     await growerTabs(page);
     const tabs = await tabWords(page);
-    expect(tabs.length).toBe(5);
+    expect(tabs.length).toBe(4);
     for (const t of tabs) {
       expect(t.breaks, t.name).toEqual([]);
       expect(t.icon, t.name).toBe(true);
@@ -405,7 +405,8 @@ test('r62a A11: at 320 px with 200% text no tab label breaks inside a word; when
     }
     // Labels too long for their column: the bar shows icons, each tab still named by its label.
     expect(tabs.some((t) => !t.shown)).toBe(true);
-    await expect(page.locator('#tabbar').getByRole('link', { name: 'Propagation' })).toBeAttached();
+    await expect(page.locator('#tabbar').getByRole('link', { name: 'Reference' })).toBeAttached();
+    await expect(page.locator('#tabbar').getByRole('button', { name: 'More menu' })).toBeAttached();
     await expect(page.locator('#tabbar').getByRole('link', { name: 'My plants' })).toBeAttached();
   });
 });
@@ -419,7 +420,7 @@ test('r62a A11: at 390 px with 100% text every tab shows its label whole, beside
   await seeded(page, plants(1), '/plants');
   await growerTabs(page);
   const tabs = await tabWords(page);
-  expect(tabs.length).toBe(5);
+  expect(tabs.length).toBe(4);
   for (const t of tabs) { expect(t.shown, t.name).toBe(true); expect(t.breaks, t.name).toEqual([]); expect(t.overflow, t.name).toBe(false); expect(t.icon, t.name).toBe(true); }
   await ctx.close();
 });

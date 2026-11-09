@@ -15,7 +15,7 @@ test.beforeEach(async ({ context }) => {
   await context.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => r.abort());
 });
 
-const LIGHT_INK = 'rgb(22, 33, 29)'; // --ink of the light theme
+const LIGHT_INK = 'rgb(27, 29, 28)'; // --ink of the light theme (#1b1d1c since round eighty-seven, DESIGN-87; #16211d before)
 
 for (const how of ['system', 'chosen'] as const) {
   test(`r63u U3: in the dark theme (${how === 'system' ? 'the system\'s' : 'chosen in Settings'}), a species page prints in the light theme's colours`, async ({ page }) => {

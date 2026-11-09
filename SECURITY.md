@@ -22,4 +22,9 @@ What is in scope, and what the design promises:
   no analytics. A change that adds either is a bug.
 
 Out of scope: the third-party data sources the corpus is built from, and
-rate limits on the public APIs it reads.
+rate limits on the public APIs it reads. Also the app lock (Settings, App
+lock): it is a screen over the app for a device others use, not encryption.
+The collection, its photographs and papers, and the sync key are kept
+unencrypted in the browser's storage, so reading them through developer
+tools or the device's files, lock or no lock, is as designed
+(`/about/how#lock`).

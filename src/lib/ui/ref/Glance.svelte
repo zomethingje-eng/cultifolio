@@ -158,12 +158,12 @@
     a.help::after, a.few::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, var(--tap)); height: max(100%, var(--tap)); transform: translate(-50%, -50%); }
   }
   a.few:hover { text-decoration: underline; }
-  .few { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1.5px dashed var(--warm); border-radius: 999px; color: var(--warm-ink); letter-spacing: 0.04em; text-transform: none; font-weight: 700; }
+  .few { display: inline-block; margin-left: 8px; padding: 1px 8px; border: 1.5px dashed var(--warm); border-radius: var(--r); color: var(--warm-ink); letter-spacing: 0.04em; text-transform: none; font-weight: 700; }
   /* The switch works by script: with scripts off it stood pressed and did nothing (round eighty-four; A13). Hidden, not
      removed, until the app is drawn, so nothing moves when it appears. */
   :global(html:not([data-ready])) .useg { visibility: hidden; }
-  .useg { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--field-edge); border-radius: 999px; overflow: hidden; background: var(--card); color: var(--ink3); }
-  .useg button { min-width: var(--tap); min-height: var(--tap); padding: 0 10px; border: 0; background: none; color: var(--ink2); font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+  .useg { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--field-edge); border-radius: var(--r); overflow: hidden; background: var(--card); color: var(--ink3); }
+  .useg button { min-width: var(--tap); min-height: var(--tap); padding: 0 10px; border: 0; background: none; color: var(--ink2); font-family: var(--ui); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
   .useg button.on { background: var(--accent); color: var(--on-accent, #fff); }
   .useg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
   @media (forced-colors: active) { .useg button.on { forced-color-adjust: none; background: Highlight; color: HighlightText; } }
@@ -190,4 +190,35 @@
   .hemi { margin-top: 4px; font-size: var(--fs-sm); color: var(--ink3); }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 640px) { .gcards .card .sub { font-size: var(--fs-sm); line-height: 1.35; } }
+  /* Round eighty-seven (the owner's look): from 641 px the four figures are a table, each a row of what it is, the figure,
+     and where it came from (with its bar), under a rule of ink; a phone keeps the cards two by two. */
+  .gt { font-size: var(--fs-head); letter-spacing: 0.08em; font-weight: 600; color: var(--mut); }
+  .few, .useg { border-radius: var(--r); }
+  .useg button.on { background: var(--ink); color: var(--bg); }
+  /* The look's own controls and marks (the review of stage 2's pages, 8). The unit switch is the theme's segmented
+     control: a 3:1 edge, the paper, a thin rule between its two halves where the "|" stood, the chosen half ink on paper
+     turned round. A figure's source is plain muted words beside it, not a bordered tag. The year's months are cells
+     under a thin rule; the months the line names take a light tint of the cool colour and a rule of it over them, with
+     the text in ink (16:1 on the tint, 12:1 in dark), in place of grey filled boxes. */
+  .useg { border-color: var(--edge); background: var(--bg); }
+  .useg button { font-weight: 400; color: var(--ink2); }
+  .useg button.on { font-weight: 600; }
+  .useg > span { align-self: stretch; width: 1px; background: var(--rule); font-size: 0; color: transparent; }
+  .src { display: inline; border: 0; border-radius: 0; padding: 0; margin-left: 4px; font-size: var(--fs-sm); letter-spacing: 0; color: var(--mut); }
+  .strip { gap: 0 2px; }
+  .strip li { border-radius: 0; background: none; border-top: 1px solid var(--rule); padding: 6px 0 10px; color: var(--ink2); }
+  .strip li.on { background: color-mix(in srgb, var(--cool) 12%, var(--bg)); border-top: 2px solid var(--cool); padding-top: 5px; color: var(--ink); font-weight: 600; }
+  .sw.on { background: color-mix(in srgb, var(--cool) 12%, var(--bg)); border: 0; border-top: 2px solid var(--cool); border-radius: 0; }
+  @media (min-width: 641px) {
+    .gcards { display: block; border-top: 1px solid var(--ink); margin: 0 0 14px; }
+    .gcards .card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7.5em, auto) minmax(0, 1.25fr); column-gap: 24px; align-items: baseline; border-top: 1px solid var(--rule2); padding: 8px 0; }
+    .gcards .card:first-child { border-top: 0; }
+    .gcards .card :global(.lab) { grid-column: 1; grid-row: 1 / span 3; font-size: var(--fs-base); text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink); }
+    .gcards .card :global(.val) { grid-column: 2; grid-row: 1 / span 3; margin: 0; font-size: var(--fs-base); text-align: right; white-space: nowrap; }
+    .gcards .card :global(.val .u) { font-size: inherit; color: inherit; margin-left: 0.2em; }
+    .gcards .card :global(.gauge), .gcards .card :global(.gscale), .gcards .card :global(.sub) { grid-column: 3; }
+    .gcards .card :global(.gauge) { height: 3px; margin: 6px 0 2px; max-width: 220px; }
+    .gcards .card :global(.gscale) { margin: 0 0 2px; }
+    .gcards .card :global(.sub) { color: var(--ink2); }
+  }
 </style>

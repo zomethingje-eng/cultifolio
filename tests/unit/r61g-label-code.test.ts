@@ -8,7 +8,7 @@
  * Run: npx vitest run tests/unit/records--label-code.test.ts
  */
 import { describe, it, expect } from 'vitest';
-import { plantQrUrl, labelFromHash, QR_NAME_MAX } from '$lib/ui/grow/qr';
+import { plantQrUrl, labelFromHash, QR_NAME_MAX, idTag } from '$lib/ui/grow/qr';
 import { planNumbers, blankRow } from '$lib/import/plan';
 import { DEFAULT_SCHEME } from '$core/accession';
 
@@ -18,18 +18,18 @@ describe('plantQrUrl', () => {
     expect(() => plantQrUrl('https://cultifolio.com', a)).not.toThrow();
   });
   it('PASSES: the address is the plant\'s identity; a cross carries its name only', () => {
-    expect(plantQrUrl('https://x', { id: 'r1', taxonName: 'Copiapoa cinerea', cultivar: null, nameKind: 'species' })).toBe('https://x/plants/r1#s=copiapoa-cinerea&n=Copiapoa%20cinerea');
-    expect(plantQrUrl('https://x', { id: 'r2', taxonName: 'Echinopsis', cultivar: 'Flying Saucer', nameKind: 'hybrid' })).toBe("https://x/plants/r2#n=Echinopsis%20'Flying%20Saucer'");
+    expect(plantQrUrl('https://x', { id: 'r1', taxonName: 'Copiapoa cinerea', cultivar: null, nameKind: 'species' })).toBe(`https://x/plants/r1#i=${idTag('r1')}&s=copiapoa-cinerea&n=Copiapoa%20cinerea`);
+    expect(plantQrUrl('https://x', { id: 'r2', taxonName: 'Echinopsis', cultivar: 'Flying Saucer', nameKind: 'hybrid' })).toBe(`https://x/plants/r2#i=${idTag('r2')}&n=Echinopsis%20'Flying%20Saucer'`);
   });
 });
 
 describe('labelFromHash, with hostile values', () => {
   it('PASSES: markup stays text, a javascript: or traversal slug is refused, controls and length are taken off, a broken escape is skipped', () => {
-    expect(labelFromHash('#s=javascript:alert(1)&n=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E')).toEqual({ slug: null, name: '<img src=x onerror=alert(1)>' });
+    expect(labelFromHash('#s=javascript:alert(1)&n=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E')).toEqual({ slug: null, name: '<img src=x onerror=alert(1)>', tag: null });
     expect(labelFromHash('#s=../../api/sync&n=x').slug).toBeNull();
     expect(labelFromHash('#n=a%00b%0Ac%1Bd').name).toBe('a b c d');
     expect(labelFromHash('#n=' + 'a'.repeat(5000)).name).toHaveLength(QR_NAME_MAX);
-    expect(labelFromHash('#n=%E0%A4%A&s=copiapoa-cinerea')).toEqual({ slug: 'copiapoa-cinerea', name: null });
+    expect(labelFromHash('#n=%E0%A4%A&s=copiapoa-cinerea')).toEqual({ slug: 'copiapoa-cinerea', name: null, tag: null });
   });
   it('finding 15: bidi overrides and C1 controls are taken off, so a forged code cannot show reversed or disguised text as "the label\'s name"', () => {
     const n = labelFromHash('#n=' + encodeURIComponent('Copiapoa ‮niarg‬ \u0085 ⁦x⁩')).name ?? '';

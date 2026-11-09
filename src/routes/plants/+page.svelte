@@ -109,7 +109,7 @@
     return words.every((w) => hay.includes(w));
   };
   const hayOf = (a: (typeof collection.accessions)[number]) => {
-    return fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : ''} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
+    return fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : ''} ${a.notes ?? ''} ${a.sourceFrom ?? ''} ${a.collector ?? ''} ${a.clone ?? ''} ${Array.isArray(a.exChain) ? a.exChain.join(' ') : ''}`); // the collector, a clone and earlier holders too (round eighty-seven, t1)
   };
   const byName = (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => a.taxonName.localeCompare(b.taxonName) || (a.cultivar ?? '').localeCompare(b.cultivar ?? '') || accNo(a).localeCompare(accNo(b));
   const sorters: Record<Sort, (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => number> = {
@@ -371,7 +371,7 @@
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
+  .im.own { box-shadow: none; outline: 2px solid var(--accent); outline-offset: -2px; } /* a ring, not a shadow (DESIGN-87; round eighty-seven's stage-3 integration) */
   .im .ini { font-family: var(--ui); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.04em; color: var(--ink3); }
   .accline { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
   .wbtn { min-height: var(--tap); min-width: var(--tap); } /* the tap token: 44 px under a finger (round fifty-nine) */
@@ -382,10 +382,11 @@
   .accrow .nm :global(i) { overflow-wrap: break-word; }
   .rows.nopic .azrow { grid-template-columns: minmax(0, 1fr) auto; }
   .figphone { display: none; }
-  .firststeps .steps { list-style: none; padding: 0; margin: 12px 0 14px; display: grid; gap: 8px; }
-  .firststeps .steps a { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; padding: 10px 12px; min-height: 56px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: inherit; text-decoration: none; }
-  .firststeps .steps a:hover { border-color: var(--accent); }
-  .firststeps .n { grid-row: span 2; font-family: var(--mono); font-size: var(--fs-md); color: var(--ink3); }
+  .firststeps .steps { list-style: none; padding: 0; margin: 12px 0 14px; display: grid; gap: 0; border-bottom: 1px solid var(--rule2); }
+  .firststeps .steps a { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; padding: 10px 0; min-height: 56px; border-top: 1px solid var(--rule2); color: inherit; text-decoration: none; }
+  .firststeps .steps a:hover { background: var(--sunk); }
+  .firststeps .steps a:hover .t { text-decoration: underline; text-underline-offset: 2px; }
+  .firststeps .n { grid-row: span 2; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-md); color: var(--ink3); }
   .firststeps .t { font-weight: 600; color: var(--accent); }
   .firststeps .w { font-size: var(--fs-md); color: var(--ink3); }
   .small { font-size: var(--fs-md); }
@@ -411,7 +412,13 @@
     .accrow .fam { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
     .accrow .fam > :global(*) { flex: none; }
     .accrow .fam .where { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .figphone { display: inline; font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink2); }
+    .figphone { display: inline; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); color: var(--ink2); }
     .figphone.due { color: var(--bad); font-weight: 600; }
   }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
+  /* A kind and a field number as words in a row, not a pill or a chip. */
+  .pill { border: 0; background: none; padding: 0; border-radius: 0; letter-spacing: 0; }
+  .pill.c { color: var(--cool); }
+  .fnchip { background: none; border: 0; padding: 0; border-radius: 0; }
 </style>

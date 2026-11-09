@@ -34,6 +34,6 @@
   .replaced { margin: 10px 0 0; font-size: var(--fs-md); color: var(--ink2); }
   .replaced summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
   .was { border-left: 2px solid var(--rule); padding: 2px 0 2px 10px; margin: 8px 0; }
-  .when { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); }
+  .when { font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); color: var(--ink3); }
   .was p { margin: 4px 0 0; white-space: pre-wrap; color: var(--ink); }
 </style>

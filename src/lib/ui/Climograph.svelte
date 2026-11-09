@@ -134,14 +134,14 @@
 </figure>
 
 <style>
-  .climo { margin: 14px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 10px 8px; }
-  .cal { margin: 0 6px 6px; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; color: var(--ink2); }
+  .climo { margin: 14px 0 0; background: transparent; border-radius: 0; border-top: 1px solid var(--ink); padding: 12px 0 8px; }
+  .cal { margin: 0 0 6px; font-size: var(--fs-sm); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--mut); }
   svg { width: 100%; height: auto; display: block; font-family: var(--ui); }
   .grid { stroke: var(--rule); stroke-width: 1; }
   .axis { stroke: var(--rule2); stroke-width: 1; }
   /* Nothing under 11 px (round fifty-nine): the ticks and the extremes were 10. */
   /* The chart's words at 11 units, which the drawing's width scales to the reader's text size (round eighty-five; P6). */
-  .tick { fill: var(--ink3); font-size: 11px; text-anchor: end; font-family: var(--mono); }
+  .tick { fill: var(--ink3); font-size: 11px; text-anchor: end; font-family: var(--ui); font-variant-numeric: var(--figs); }
   .month { fill: var(--ink2); font-size: 11px; text-anchor: middle; letter-spacing: 0.04em; }
   .panel { fill: var(--ink3); text-anchor: start; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
   .zero { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.75; }
@@ -163,7 +163,7 @@
   .spark { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
   .spark.dli { stroke: var(--accent); }
   .spark.rh { stroke: var(--ink3); stroke-dasharray: 3 3; }
-  .sparklab { font-size: 11px; text-anchor: end; font-family: var(--mono); }
+  .sparklab { font-size: 11px; text-anchor: end; font-family: var(--ui); font-variant-numeric: var(--figs); }
   .sparklab.dli { fill: var(--accent); }
   .sparklab.rh { fill: var(--ink3); text-anchor: start; } /* the attribute alone lost to the rule above, and "RH" was cut off at the left edge (round fifty-nine) */
   figcaption { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 6px 2px; font-size: var(--fs-sm); color: var(--ink2); }

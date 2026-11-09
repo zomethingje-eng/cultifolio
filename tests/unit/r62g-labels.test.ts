@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { plantQrUrl, labelFromHash, QR_NAME_MAX } from '$lib/ui/grow/qr';
+import { plantQrUrl, labelFromHash, QR_NAME_MAX, idTag } from '$lib/ui/grow/qr';
 
 const qr = (taxonName: string, cultivar: string | null = null, nameKind: 'species' | 'cultivar' | 'hybrid' = 'species') => plantQrUrl('https://x', { id: 'r1', taxonName, cultivar, nameKind });
 const nameOf = (url: string) => labelFromHash(url.slice(url.indexOf('#'))).name ?? '';
@@ -46,7 +46,7 @@ describe('the name in the code (A36)', () => {
 
 describe('an open name in the code (the records review, 13)', () => {
   it('an "sp." plant carries no species slug; a cf. plant carries the compared species\'', () => {
-    expect(qr('Lithops sp. C 036')).toBe('https://x/plants/r1#n=Lithops%20sp.%20C%20036'); // base: s=lithops, and "Its species has no page"
-    expect(qr('Copiapoa cf. cinerea')).toMatch(/#s=copiapoa-cinerea&n=/);
+    expect(qr('Lithops sp. C 036')).toBe(`https://x/plants/r1#i=${idTag('r1')}&n=Lithops%20sp.%20C%20036`); // base: s=lithops, and "Its species has no page"
+    expect(qr('Copiapoa cf. cinerea')).toMatch(/#i=[0-9a-z]{6}&s=copiapoa-cinerea&n=/);
   });
 });

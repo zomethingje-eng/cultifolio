@@ -76,7 +76,9 @@ test('r63fv 3: the Places tab tapped with the add form open keeps the form, not 
   await page.locator('.firststeps a[href="/places#add"]').click();
   await expect(page.locator('#loc-name')).toBeVisible();
   await page.fill('#loc-name', 'Greenhouse');
-  await page.locator('#tabbar a[href="/places"]').click();
+  // My spaces is in the menu since round eighty-seven (DESIGN-87): opened from there, as a phone reader now does.
+  await page.locator('#tabbar button.moretab').click();
+  await page.locator('#menu a[href="/places"]').click();
   await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page).toHaveURL(/\/places(#add)?$/);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();

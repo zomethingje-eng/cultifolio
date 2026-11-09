@@ -54,6 +54,18 @@
   import { fewRecords, fewRecordsSentence } from '$core/few-records';
   import { rangeCaption, UNITS_NOTE } from '$lib/ui/ref/range-words';
   import { readerWords, describedBy } from '$lib/ui/ref/words';
+  // Round eighty-seven, stage 2: each agent's section, mounted where the owner's look puts it (the integration).
+  import Hardiness from '$lib/ui/ref/Hardiness.svelte';
+  import Koppen from '$lib/ui/ref/Koppen.svelte';
+  import AtHome from '$lib/ui/ref/AtHome.svelte';
+  import { atHomeRows } from '$lib/ui/ref/at-home';
+  import Flowering from '$lib/ui/ref/Flowering.svelte';
+  import Elsewhere from '$lib/ui/ref/Elsewhere.svelte';
+  import Parents from '$lib/ui/ref/Parents.svelte';
+  import RiskLine from '$lib/ui/ref/RiskLine.svelte';
+  import CitesLine from '$lib/ui/ref/CitesLine.svelte';
+  import ChromosomeLine from '$lib/ui/ref/ChromosomeLine.svelte';
+  import NameAgreement from '$lib/ui/ref/NameAgreement.svelte';
   let { data } = $props();
   let allPapers = $state(false);
   const u = $derived(units.current);
@@ -143,6 +155,20 @@
    * suggests", which the sheet does not give (round sixty; self-review 14, the round forty-two review A5, product 6).
    */
   const climateOk = $derived(d.climate.status === 'ok');
+  /**
+   * Round eighty-seven, stage 2 (the integration): which of the habitat's derived sections the page shows, for the section
+   * row. The hardiness while the page shows its daily extremes (as the section itself decides), the climate class with a
+   * habitat climate of twelve months, At home where its rows can be worked out.
+   */
+  const extremesShown = $derived(d.climate.status === 'ok' && !!d.climate.extremes);
+  const koppenShown = $derived(d.climate.status === 'ok' && d.climate.months.length === 12);
+  const atHomeShown = $derived(!!atHomeRows(d.climate as never, u));
+  /**
+   * The IUCN Red List's and Species+'s ids for the risk and CITES lines (Wikidata P627 and P2040), from the page's own
+   * Wikidata item as the links agent's fill read it (`elsewhere.wikidata`): only an item read for this page's item now, and
+   * answered. Without them the lines link neither.
+   */
+  const wdValue = (p: string) => { const w = d.elsewhere?.wikidata; return w && !w.unanswered && w.item === d.ids.wikidata ? (w.ids.find((x) => x.p === p)?.v ?? null) : null; };
   /** A climate read from few records (round eighty-two; `$core/few-records`): marked on the figures and in the climate section, nothing removed. */
   const few = $derived(fewRecords(d.climate as { status: string; records?: number; cells?: number }));
   // Round eighty-six (the plan's B16): a range Kew gives only as a level-2 region or a continent ("Mexico"), said as Kew's.
@@ -271,7 +297,8 @@
     replaceState(`#${id}`, page.state);
   }
   onMount(() => {
-    const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id]')].filter((h) => ['s-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
+    // The stage-2 sections are each a <section> with its id, its heading inside it (round eighty-seven, stage 2).
+    const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id], section#hardiness, section#climate-class, section#at-home')].filter((h) => ['hardiness', 'climate-class', 'at-home', 's-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
     if (!heads.length) return;
     // The line a heading counts as passed at: where a tab's jump puts it, the page's scroll padding (the top bar) and the
     // headings' scroll margin (this row), and a little more. At 110 px, a heading a tab or a #s-climate address put at
@@ -557,6 +584,9 @@
          GBIF's below-species answer is said from its cached answer, never from the link (round seventy-one; S-F8). -->
     <p class="notice" id="was-synonym"><b>{data.was}</b> {#each wasParts as p, i (i)}{#if p.href}<a href={p.href}>{#if p.i}<i>{p.t}</i>{:else}{p.t}{/if}</a>{:else if p.i}<i>{p.t}</i>{:else}{p.t}{/if}{/each}</p>
   {/if}
+  <!-- The trail of the reference (round eighty-seven; the owner's look): the family, the genus, and where the species stands
+       in the genus's row of the catalogue. Each a link to its row of the catalogue. -->
+  <p class="spcrumb plain">{#if d.name.family}<a href="/?by=family&open={slugify(d.name.family)}">{d.name.family}</a>{' › '}{/if}<a href="/?by=genus&open={genusSlug}"><i>{genusName}</i></a>{#if data.genusAt && data.genusAt.of > 1}{' › '}{data.genusAt.n} of {data.genusAt.of}{/if}</p>
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
     <!-- The one placeholder, in the photograph's own box, so nothing below moves; the credit and its page stay (round sixty; visitor 12). -->
@@ -574,6 +604,15 @@
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{heroCredit.whoAlone}<span class="xtra">{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{#if hero.observedOn}{' · '}<span class="nobr">observed {hero.observedOn}</span>{/if}<!-- the observation's day, named apart from the credits' "as read" day (round eighty-six; review W's W11) --></span></span></a>
     </div>
   {/if}
+  {#if hero && (data.siblingCount || data.near.length)}
+    <!-- More from here, beside the name on a desktop (round eighty-seven; the owner's look): the genus's row and the species
+         nearest in habitat climate, each a link to what the page already lists. -->
+    <nav class="morehere plain" aria-label="More from here">
+      <p class="sechead">More from here</p>
+      {#if data.siblingCount}<a href="/?by=genus&open={genusSlug}">All {data.siblingCount + 1} <i>{genusName}</i></a>{/if}
+      {#if data.near.length}<a href="#s-related">Species of a similar habitat climate</a>{/if}
+    </nav>
+  {/if}
   <!-- No photograph: no grey box of text where one would be; the card takes the width, with the one placeholder as a small
        thumbnail, and the sentence saying why is under Photographs, where rule 2 needs it (round sixty; visitor 12). -->
   <div class="idcard" class:nophoto={!hero}>
@@ -588,6 +627,19 @@
       <!-- The group is the archetype table's listing of the genus, said as that, never as what the plant is (round
            seventy-one; S-F7: Euphorbia peplus, a weedy annual, read "· cactus or succulent"). -->
       <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') + asCultigen : null].filter(Boolean).join(' · ')}{#if sheet.arch}{' · '}<a class="grouped" id="group-chip" href="#s-cultivation">{groupLine(sheet.arch)}</a>{/if}</p>
+      <!-- Its other names, as the record holds them: GBIF's name for it where Kew's heads the page, then the older names;
+           the whole list under Names and registers (round eighty-seven; the owner's look). -->
+      {#if (gbifOwn && d.name.gbif) || synonyms.length}<p class="also">Also called {#if gbifOwn && d.name.gbif}<i class="sciname">{d.name.gbif.scientific}</i> (GBIF's name){#if synonyms.length}, {/if}{/if}{#each synonyms.slice(0, 2) as n, i (n)}{i ? ', ' : ''}<i class="sciname">{n}</i>{/each}{#if synonyms.length > 2}, and <a href="#s-registers">{synonyms.length - 2} more</a>{/if}.</p>{/if}
+      <!-- The facts a reader looks for first, as a table (round eighty-seven): the family, where it is native by Kew's file,
+           the group the list files its genus under, and the reader's own plants of it. A phone folds them into one line. -->
+      <table class="spfacts">
+        <tbody>
+          {#if d.name.family}<tr><th scope="row">Family</th><td><a href="/?by=family&open={slugify(d.name.family)}">{d.name.family}</a></td></tr>{/if}
+          <tr><th scope="row">Native to</th><td>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{asCultigen}{#if (d.name as { kew?: { file?: string } }).kew?.file}<span class="src">{' · '}Kew's World Checklist, file of {(d.name as { kew?: { file?: string } }).kew?.file}</span>{:else}<span class="src">{' · '}{d.distribution.source}</span>{/if}{:else}<span class="src">{distWords}</span>{/if}</td></tr>
+          {#if sheet.arch}<tr><th scope="row">Group</th><td><a class="grouped" href="#s-cultivation">{groupLine(sheet.arch)}</a></td></tr>{/if}
+          <tr><th scope="row">Your plants</th><td>{#if collection.ready && mine.length}{mine.length} in your record{:else}<a href="/plants/new?{addQuery}" onclick={(e) => addLeavesExample(e, `/plants/new?${addQuery}`)}>Add one</a>{/if}{#if data.siblings.length || data.near.length}{' · '}<a href="#s-related">related species</a>{/if}</td></tr>
+        </tbody>
+      </table>
       <!-- On a phone the optional names and the classification fold into one line that opens (round eighty-five; outside
            review B's 3, P3): the habitat's figures come before them, on the first screen of a 320 by 568 phone. The same
            facts as the two lines above, which a wider screen shows as they are. -->
@@ -650,6 +702,11 @@
   {/if}
   <!-- The section menu under the card, where a phone reader still is (round fifty-eight); it stays pinned as the page scrolls. -->
   <nav class="tabs" aria-label="Sections">
+    <span class="otp" aria-hidden="true">On this page:</span>
+    <!-- The habitat's derived sections, where the page shows them (round eighty-seven, stage 2). -->
+    {#if extremesShown}<a href="#hardiness" class:on={active === 'hardiness'} onclick={(e) => goTab(e, 'hardiness')}>Hardiness</a>{/if}
+    {#if koppenShown}<a href="#climate-class" class:on={active === 'climate-class'} onclick={(e) => goTab(e, 'climate-class')}>Climate class</a>{/if}
+    {#if atHomeShown}<a href="#at-home" class:on={active === 'at-home'} onclick={(e) => goTab(e, 'at-home')}>At home</a>{/if}
     <a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>Cultivation</a>
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Habitat</a>
@@ -672,6 +729,14 @@
         <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
       {/if}
     </section>
+  {/if}
+  {#if d.climate.status === 'ok'}
+    <!-- Under the figures, the habitat's hardiness and its climate class with the Walter–Lieth reading, then "At home, aim
+         for", the section after them in the owner's look (round eighty-seven, stage 2; LookSpecies). Each renders nothing
+         where its figures cannot exist, and says so where its record predates them. -->
+    <Hardiness hardiness={d.hardiness} {extremesShown} units={u} />
+    <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} src={d.climate.src.normals} />
+    <AtHome climate={d.climate} units={u} />
   {/if}
 
   <!-- The quoted summary comes after the figures: a phone reader reached At a glance only after a screen of Wikipedia (round forty, R2 design 1; R1 R12). -->
@@ -860,6 +925,8 @@
     <!-- The other GBIF keys the records come from, each named with its Kew reading and its source (round seventy-three; K). -->
     {#if otherKeys.length}<div class="wide" id="other-keys"><b>Other GBIF keys</b>{#each otherKeys as k (k.key)}<span class="otherkey">Records also from GBIF's key <a href="https://www.gbif.org/species/{k.key}" rel="noopener">{k.key}</a> ({k.name}): {readerWords(k.kew)}; {k.n.toLocaleString('en-US')} record{k.n === 1 ? '' : 's'}, from {fromWords(k.from)}.</span>{/each}</div>{/if}
   </div>
+  <!-- When wild plants were seen in flower, by month (round eighty-seven, stage 2; the links agent's section). -->
+  <Flowering dossier={d} />
   {#if d.centroid}
     <details class="why">
       <summary>How this section is made</summary>
@@ -947,6 +1014,8 @@
   {#if synonyms.length}
     <p class="small muted names"><b>Also known as</b> {synonyms.slice(0, 5).join('; ')}{synonyms.length > 5 ? ` and ${synonyms.length - 5} more` : ''}{synonyms.slice(0, 5).join('; ').endsWith('.') && synonyms.length <= 5 ? '' : '.'} <span class="faint">({gbifless ? 'WCVP, RBG Kew' : 'GBIF Backbone'})</span></p>
   {/if}
+  <!-- WFO's reading of the name, beside Kew's (round eighty-seven, stage 2; the sources agent), after "Also known as". -->
+  <div class="srclines"><NameAgreement agreement={d.nameAgreement} /></div>
   <!-- Where the English names came from, under the names and not under the heading: the first screen is the plant's (round
        eighty-four; W12, P7, A10: "Wikidata's item Q1280651 gives “Cactus” … which the search finds" was the second thing a
        phone reader met). -->
@@ -967,6 +1036,11 @@
     {/each}
     {#if hybrid?.kewLinked}<span class="faint small" id="hybrid-links">POWO and IPNI by the numbers of Kew's entry for this hybrid</span>{/if}
   </div>
+  <!-- Where the name was published and the other registers the page's Wikidata item names, the chromosome counts, and a
+       hybrid's parents (round eighty-seven, stage 2; the links and sources agents' sections). -->
+  <Elsewhere dossier={d} />
+  <div class="srclines"><ChromosomeLine chromosomes={d.chromosomes} /></div>
+  {#if d.parents}<Parents parents={d.parents} pages={data.parentPages} units={u} />{/if}
 
   </div>
   <!-- The facts that led the page until round fifty, and the sentence about derivation: here, where someone checking the page looks. -->
@@ -978,6 +1052,10 @@
     <!-- "Wild" only of records the rule tested against a native range (round sixty; words 20). -->
     <div class="fact"><div class="lab">{d.occurrences.rangeTested === false || !d.distribution.native.length || cultigen ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if unchecked || ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}{#if unchecked}<span class="muted">not asked</span><span class="small muted">{' · '}<a href="#records-unchecked">see under the name</a></span>{:else}<span class="muted">not checked</span>{/if}{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range{d.occurrences.nOutsideRange ? ` · ${d.occurrences.nOutsideRange} outside it` : ''}</span>{/if}</div></div>
   </div>
+  <!-- Kew's predicted extinction risk and the CITES status, in a short block of their own under the facts (round
+       eighty-seven, stage 2; the sources agent's lines), each linking IUCN's or Species+'s page by the ids the page's own
+       Wikidata item gives. -->
+  <div class="srclines conserve" id="conservation"><RiskLine risk={d.risk} iucnId={wdValue('P627')} /><CitesLine cites={d.cites} speciesPlusId={wdValue('P2040')} /></div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing about this species is written for its page by a person or by AI, apart from the marked, credited quotations. <a class="help" href="/about/how#written">How&nbsp;→</a></p>
   <Provenance dossier={d} datasets={data.datasets} />
 </article>
@@ -989,10 +1067,33 @@
   /* One centred run of text: the sentence and its link were two flex columns, the link's words stacked, so the placeholder's
      text is one span and the flex box centres that (round fifty, 3). */
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
-  .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 2px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; }
   .myph .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
-  .species { max-width: 980px; }
+  .species { max-width: var(--maxw); }
+  /* The page's trail, its other names and its facts (round eighty-seven; the owner's look). */
+  .spcrumb { margin: 16px 0 0; font-size: var(--fs-sm); color: var(--mut); }
+  .spcrumb a { color: var(--link); }
+  .spcrumb i { font-family: var(--serif); }
+  .also { margin: 8px 0 0; color: var(--ink2); }
+  .spfacts { margin-top: 14px; border-collapse: collapse; width: 100%; font-size: var(--fs-base); }
+  .spfacts tr { border-top: 1px solid var(--rule); }
+  .spfacts tr:first-child { border-top-color: var(--ink); }
+  .spfacts tr:last-child { border-bottom: 1px solid var(--rule); }
+  .spfacts th { text-align: left; font-weight: 400; color: var(--mut); width: 130px; padding: 7px 12px 7px 0; vertical-align: top; }
+  .spfacts td { padding: 7px 0; }
+  .spfacts .src { color: var(--mut); }
+  .idcard .vern.meta { display: none; }
+  .morehere { margin-top: 20px; font-size: var(--fs-md); display: flex; flex-direction: column; }
+  .morehere .sechead { margin: 0 0 6px; }
+  .morehere a { border-top: 1px solid var(--rule); padding: 7px 0; }
+  .morehere a:last-child { border-bottom: 1px solid var(--rule); }
+  .morehere i { font-family: var(--serif); }
+  @media (max-width: 859px) { .morehere { display: none; } }
+  nav.tabs .otp { color: var(--mut); font-size: var(--fs-md); display: inline-flex; align-items: center; }
+  /* On a phone the facts are the one folded line, and the other names under it (round eighty-five, B3): the first screen
+     keeps the name, the one action and the habitat's figures. */
+  @media (max-width: 640px) { .spfacts, .also, nav.tabs .otp { display: none; } .spcrumb { margin-top: 12px; } }
   .hero { margin-top: 14px; }
   .glance { margin-top: 12px; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -1001,38 +1102,40 @@
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
   .idcard .acts2 { margin-top: 0; gap: 0 14px; }
   .idcard .mine { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; } /* chips with a gap, no separators to strand (round fifty-two, 6) */
-  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
+  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); min-width: max(40px, var(--tap)); justify-content: center; color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
   .idcard .acts2 :global(.btn:hover) { text-decoration: underline; }
-  .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: var(--fs-md); text-decoration: none; }
-  .placeline.warn { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--card)); }
+  .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 9px 0 9px 12px; background: none; border-left: 2px solid var(--accent); border-radius: 0; color: var(--ink); font-size: var(--fs-md); text-decoration: none; }
+  .placeline.warn { border-left-color: var(--bad); background: none; }
   .placeline .chev { color: var(--accent); font-weight: 700; }
-  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 16px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
-  .fact { padding: 12px 16px; border-right: 1px solid var(--rule); min-width: 0; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 12px 0 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); overflow: hidden; }
+  .fact { padding: 8px 16px 8px 0; min-width: 0; }
   .fact:last-child { border-right: 0; }
-  .fact .lab { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .fact .lab { font-size: var(--fs-sm); color: var(--mut); font-weight: 400; }
   .fact .v { font-size: var(--fs-base); margin-top: 4px; overflow-wrap: anywhere; }
   @media (max-width: 640px) { .fact { border-right: 0; border-bottom: 1px solid var(--rule); } .fact:last-child { border-bottom: 0; } }
   .relhead { margin: 12px 0 6px; font-size: var(--fs-md); }
   .relstrip { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; }
-  .reltile { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; color: inherit; scroll-snap-align: start; }
-  .reltile:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
-  .reltile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .reltile { display: block; overflow: hidden; color: inherit; scroll-snap-align: start; }
+  .reltile:hover { text-decoration: none; color: inherit; }
+  .reltile:hover .rn { text-decoration: underline; text-underline-offset: 2px; }
+  .reltile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); border-radius: 2px; }
   .relim { display: block; position: relative; background: var(--sunk); }
   .relph { aspect-ratio: 1; }
-  .relim:global(.failed)::after { content: 'did not load'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--fs-xs); color: var(--ink3); }
-  .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); line-height: 1.25; font-weight: 600; }
+  .relim:global(.failed)::after { content: 'did not load'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--ui); font-size: var(--fs-xs); color: var(--ink3); }
+  .reltile .rn { display: block; padding: 7px 0 0; font-family: var(--ui); font-style: normal; font-size: var(--fs-md); line-height: 1.25; font-weight: 400; }
   .reltile .rf.common { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: var(--fs-sm); color: var(--ink2); }
-  .reltile .rf { display: block; padding: 3px 9px 9px; font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reltile .rf { display: block; padding: 3px 0 9px; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Whole, on as many lines as it takes: one line cut the licence at 200% text (round sixty-seven, triage-66 N13), and two
      cut the author (round seventy-six; rule 4). The strip's tiles share one grid row, so each takes the tallest one's height. */
-  .reltile .rc { display: block; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
+  .reltile .rc { display: block; padding: 0 0 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow-wrap: anywhere; }
   .reltile.more { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
   @media (min-width: 860px) {
-    /* The first screen answers: the photograph beside the name and the actions, the four figures and the note under them. */
-    .top.withhero { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 14px; }
-    .top.withhero .hero { margin: 0; aspect-ratio: 4 / 3; }
-    .top.withhero .hero img { height: 100%; max-height: none; }
-    .top.withhero .idcard { margin: 0; flex-direction: column; gap: 14px; }
+    /* The first screen answers: the name, its facts and the actions, the photograph beside them on the right with its
+       credit under it, and what else the reference holds near it (round eighty-seven; the owner's look). */
+    .top.withhero { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: 'card hero' 'card more'; grid-template-rows: auto 1fr; gap: 0 40px; align-items: start; margin-top: 10px; }
+    .top.withhero .hero { grid-area: hero; margin: 0; }
+    .top.withhero .idcard { grid-area: card; margin: 0; flex-direction: column; gap: 14px; }
+    .top.withhero .morehere { grid-area: more; }
     .top.withhero .idcard .who { flex: 0 0 auto; }
   }
   .muted { color: var(--ink3); }
@@ -1046,6 +1149,9 @@
   .sheet { white-space: normal; }
   .mine { margin-top: 8px; white-space: normal; overflow-wrap: anywhere; line-height: 1.9; } /* six numbers on a phone wrap rather than widen the page (round seventeen, 11) */
   .sumbody .more { font-family: var(--ui); font-size: var(--fs-md); white-space: nowrap; }
+  /* The quoted summary as a quotation: a rule of ink at its left, its credit under it (round eighty-seven). */
+  .sumbody { border-left: 2px solid var(--ink); padding-left: 14px; }
+  .sumbody p { margin: 0; font-size: 1rem; }
   .notesline { margin: 2px 0 12px; }
   .notesline.hold { visibility: hidden; }
   .figures { margin: 10px 0 0; }
@@ -1054,16 +1160,16 @@
   .figures table.wx { margin-top: 6px; }
   .figures table.bymonth { width: auto; min-width: min(100%, 640px); }
   .mine .accno { margin-right: 2px; }
-  .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
-  .fields textarea { width: 100%; font: inherit; font-size: 0.9375rem; font-family: var(--serif); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); min-height: 96px; }
+  .fields { display: grid; gap: 8px; padding: 10px 0 14px; }
+  .fields textarea { width: 100%; font: inherit; font-size: 0.9375rem; font-family: var(--ui); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); min-height: 96px; }
   .end { display: flex; justify-content: flex-end; gap: 8px; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
   .acc { margin: 8px 0 0; }
-  .acc > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 14px; align-items: center; padding: 13px 17px; font-family: var(--ui); }
+  .acc > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 14px; align-items: center; padding: 10px 0; font-family: var(--ui); }
   .acc > summary::-webkit-details-marker { display: none; }
-  .acc > summary .t { font-weight: 700; font-size: var(--fs-base); color: var(--ink); }
+  .acc > summary .t { font-weight: 600; font-size: var(--fs-base); color: var(--ink); }
   .acc > summary .pm { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
-  .acc > summary .pm::after { content: '+'; font-family: var(--mono); font-size: var(--fs-xl); color: var(--ink3); }
+  .acc > summary .pm::after { content: '+'; font-family: var(--ui); font-size: var(--fs-xl); color: var(--ink3); }
   .acc[open] > summary .pm::after { content: '–'; }
   .acc > summary .pmw { display: none; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .acc[open] > summary .pmw { display: none; }
@@ -1072,12 +1178,12 @@
   .acc > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--r); }
   .acc .body { border-top: 1px solid var(--rule); }
   @media (max-width: 640px) { .acc > summary { grid-template-columns: minmax(0, 1fr) 64px; } .acc > summary .pm { grid-column: 2; grid-row: 1; } .acc:not([open]) > summary .pmw { display: inline; } }
-  .sheet .rowk { font-size: var(--fs-xs); letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 14px 0 4px; font-family: var(--ui); }
+  .sheet .rowk { font-size: var(--fs-sm); letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); font-weight: 600; margin: 14px 0 4px; font-family: var(--ui); }
   .sheet .rowk:first-child { margin-top: 0; }
   .sheet p { margin: 0 0 6px; }
   .thumbstrip { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; overflow-x: auto; text-decoration: none; color: var(--ink2); scrollbar-width: none; }
-  .thumbstrip .tb { width: 72px; height: 72px; border-radius: var(--r); flex: none; background: var(--sunk); overflow: hidden; }
-  .thumbstrip img { display: block; width: 72px; height: 72px; object-fit: cover; border-radius: var(--r); flex: none; background: var(--sunk); }
+  .thumbstrip .tb { width: 72px; height: 72px; border-radius: 2px; flex: none; background: var(--sunk); overflow: hidden; }
+  .thumbstrip img { display: block; width: 72px; height: 72px; object-fit: cover; border-radius: 2px; flex: none; background: var(--sunk); }
   /* A thumbnail not yet given its address takes no room of its own: its square (.tb, 72 by 72) is the room (round eighty-six). */
   .thumbstrip img:not([src]) { display: none; }
   .thumbstrip .more { flex: none; font-size: var(--fs-md); padding: 0 6px; }
@@ -1119,16 +1225,30 @@
   /* On a phone the band is 150 px, or as tall as its credit needs: the photograph is laid over the band and the credit is
      in its flow, so a credit of several lines (a long name, 200% text) makes the band taller instead of being cut by its
      edge, and its foot margin keeps it clear of the name card's 44 px over the band (round seventy-six; rule 4). */
+  /* The photograph in its box, its credit under it as a caption, licence first (round eighty-seven: the credit laid over
+     the photograph, white on a dark band, is a caption now; the box keeps its height, so nothing moves when it lands). */
+  /* Room under the caption: the name's italic rises past its line box, and its first line met the credit's foot. */
+  .hero.photo:not(.failed) { background: transparent; overflow: visible; border-radius: 0; margin-bottom: 12px; }
+  .hero.photo:not(.failed) > a:first-child { display: block; position: relative; height: 300px; background: var(--sunk); border-radius: 2px; overflow: hidden; }
+  .hero.photo picture { display: block; height: 100%; }
+  .hero.photo img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
+  .hero.photo:not(.failed) .cred { position: static; display: block; margin: 6px 0 0; padding: 0; background: none; color: var(--mut); font-size: 0.75rem; letter-spacing: 0; line-height: 1.45; max-width: none; border-radius: 0; text-decoration: none; }
+  .hero.photo:not(.failed) .cred:hover { color: var(--ink2); text-decoration: underline; }
+  .hero.photo:not(.failed) .cred .lic::after { content: ', '; }
   @media (max-width: 640px) {
     .hero { margin-top: 0; }
     .hero.photo.failed { height: 150px; }
-    .hero.photo:not(.failed) { min-height: 150px; display: flow-root; }
-    .hero.photo:not(.failed) > a:first-child { position: absolute; inset: 0; }
-    .hero.photo picture { display: block; height: 100%; }
-    .hero.photo img { height: 100%; max-height: none; }
-    .hero.photo:not(.failed) .cred { position: relative; top: auto; right: auto; width: fit-content; margin: 10px 12px 54px auto; }
+    .hero.photo:not(.failed) > a:first-child { height: 150px; }
+    /* Two lines on a phone, the licence first and whole (round sixty-two; outside review A12). */
+    .hero.photo:not(.failed) .cred { display: flex; flex-direction: column; }
+    .hero.photo:not(.failed) .cred .lic::after { content: none; }
   }
   .otherkey { display: block; }
+  /* The stage-2 lines (round eighty-seven): each its own paragraph, styled by its component; a long reference wraps. */
+  .srclines { margin: 0 0 8px; overflow-wrap: anywhere; }
+  .conserve { margin-top: 12px; }
+  /* The stage-2 sections are reached by the section row as the page's own headings are (round eighty-seven). */
+  :global(section#hardiness), :global(section#climate-class), :global(section#at-home) { scroll-margin-top: 64px; }
   /* The phone's one line for the names and classification (round eighty-five; B3, P3): a disclosure a finger can open. */
   .pmore { display: none; }
   @media (max-width: 640px) {
@@ -1149,21 +1269,31 @@
   }
   /* A short phone (an iPhone SE's 568 or 667 px): a shallower band, so the name, the one action and the habitat's figures
      are on the first screen (round eighty-five; outside review B's 3: 320 by 568, 320 by 700, 375 by 667). */
+  /* A short phone (an iPhone SE's 568 or 667 px): the trail is the top bar's, and the credit lies over the photograph's
+     foot as it did before round eighty-seven, so the name, the one action and the habitat's figures are on the first
+     screen (round eighty-five; outside review B's 3: 320 by 568, 320 by 700, 375 by 667). */
   @media (max-width: 640px) and (max-height: 740px) {
-    .hero.photo:not(.failed) { min-height: 96px; }
-    .hero.photo:not(.failed) .cred { margin-top: 8px; margin-bottom: 40px; }
+    .hero.photo:not(.failed) > a:first-child { height: 96px; }
     .hero.photo.failed { height: 96px; min-height: 96px; }
+  }
+  /* At the browser's own text size only (30em is 480 px at 16 px text, 960 at 32): at 200% text the credit is too many lines
+     to lie over the photograph, and stays its caption, whole (r76p strip 4). */
+  @media (max-width: 640px) and (max-height: 740px) and (min-height: 30em) {
+    .spcrumb { display: none; }
+    /* The photograph fills the box and the credit lies in its flow at the foot, so a credit of many lines (200% text, a long
+       name) makes the box taller rather than running out of it (round seventy-six's rule 4, kept). */
+    .hero.photo:not(.failed) { position: relative; margin: 8px 0 10px; min-height: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
+    .hero.photo:not(.failed) > a:first-child { position: absolute; inset: 0; height: auto; }
+    .hero.photo:not(.failed) .cred { position: relative; top: auto; right: auto; z-index: 1; align-self: flex-start; max-width: calc(100% - 16px); margin: 6px 8px; padding: 3px 8px; background: rgba(8, 10, 9, 0.66); color: #fff; border-radius: 3px; line-height: 1.45; } /* the face's own height (1.424 em): at 1.3 each line overflowed its box by 2 px */
+    .hero.photo:not(.failed) .cred:hover { color: #fff; }
   }
   @media (max-width: 640px) {
     .idcard .acts { margin-top: 0; }
   }
   .nobr { white-space: nowrap; }
-  /* An upright lead whole in its box, over a blurred fill of itself (round eighty-five; A9g, A16c; \`lead-shape.ts\`). */
-  .hero.photo:global(.tall)::before { content: ''; position: absolute; inset: -12px; background: var(--lead) center / cover no-repeat; filter: blur(14px) brightness(0.8); }
-  .hero.photo:global(.tall) > a:first-child { position: relative; z-index: 1; display: block; height: 100%; }
+  /* An upright lead whole in its box (round eighty-five; A9g, A16c; \`lead-shape.ts\`), on the placeholder's ground: the
+     blurred fill of itself behind it is gone with the look (round eighty-seven; DESIGN-87, no blurred photograph). */
   .hero.photo:global(.tall) img { object-fit: contain; }
-  .hero.photo:global(.tall) .cred { z-index: 2; }
-  @media (max-width: 640px) { .hero.photo:global(.tall) > a:first-child { position: absolute; inset: 0; } }
   #records-unchecked p { margin: 0; }
   #records-unchecked .unchecked-why { margin: 2px 0 -6px; }
   /* Paper (round eighty-four; W10, A11): the page's figures and sheets, not the screen's controls. The actions, the unit
@@ -1176,6 +1306,8 @@
     .hero.photo.failed { display: none !important; }
     .top.withhero:has(> .hero.photo.failed) { display: block; }
     .idcard .acts, nav.tabs, .thumbstrip, .notesline, .placeline, :global(.useg), .acc > summary .pm, .pmore { display: none !important; }
+    /* At home's hours are the screen's choice; the sheet prints the row for the hours chosen (round eighty-seven, stage 2). */
+    :global(section#at-home .hours) { display: none !important; }
     /* The table whole on the sheet, not cut at a scroll box's edge (W5, A16e); the phone's folded lines as a wide screen shows them. */
     .figures .scroll-x { overflow: visible !important; }
     /* The related strips wrap on paper rather than run off the sheet's edge. */

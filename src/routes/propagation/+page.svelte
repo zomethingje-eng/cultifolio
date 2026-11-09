@@ -97,8 +97,17 @@
   .bcard { display: grid; gap: 4px; min-height: 44px; padding: 12px 15px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); color: var(--ink); text-decoration: none; }
   .bcard:hover { text-decoration: none; }
   .bcard .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .bcard .nm { font-family: var(--serif); font-size: var(--fs-lg); line-height: 1.3; } /* SpeciesName sets the italics: the rank word and a cultivar stay roman */
+  .bcard .nm { font-family: var(--ui); font-size: var(--fs-lg); line-height: 1.3; } /* SpeciesName sets the italics: the rank word and a cultivar stay roman */
   .bcard .meta, .bcard .figs { font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; }
-  .bcard .figs { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+  .bcard .figs { font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); }
   @media (max-width: 640px) { .bcards { display: grid; } .wide { display: none; } }
+  /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
+  .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
+  /* A batch's state as a word in its colour, not a bordered pill. */
+  .pill { border: 0; background: none; padding: 0; border-radius: 0; letter-spacing: 0; }
+  .pill.ok { color: var(--accent); }
+  .pill.bad { color: var(--bad); }
+  /* A phone's batches as stacked rows between thin rules, not cards. */
+  .bcards { gap: 0; }
+  .bcard { background: none; border-radius: 0; box-shadow: none; padding: 12px 0; border-bottom: 1px solid var(--rule2); }
 </style>
