@@ -85,7 +85,14 @@ if (!skip.has('names')) {
   const q = `/api/names?q=${genus.slice(0, Math.max(4, genus.length - (Math.floor(minute / GENERA.length) % 3)))}`;
   const a = await get(q);
   if (a.status !== 200) fail(`${q} first answer`, a);
-  if (!new RegExp(genus, 'i').test(a.text)) fail(`${q} did not name ${genus}`, a);
+  // The order is GBIF's, and it moves: on 10 November 2026 "litho" ranked twelve other plant genera above Lithops (the
+  // other eighty-nine prefixes still named their genus). A prefix's answer without the genus is said, and the genus asked
+  // by its whole name; only that answer without it fails (round eighty-seven, the corpus step's live check).
+  if (!new RegExp(genus, 'i').test(a.text)) {
+    console.log(`  note  ${q}: GBIF's twelve for the prefix do not include ${genus}; asking for the whole name`);
+    const whole = await get(`/api/names?q=${genus}`);
+    if (whole.status !== 200 || !new RegExp(genus, 'i').test(whole.text)) fail(`/api/names?q=${genus} did not name ${genus}`, whole);
+  }
   // A fixed case as well as the rotating one: "gaster" unfiltered is twelve weevils, fishes and fungi and no Gasteria, so
   // this proves the plants-only filter is on the deployed Worker, whatever the minute (round twenty-nine, R2-2).
   const g = await get('/api/names?q=gaster');

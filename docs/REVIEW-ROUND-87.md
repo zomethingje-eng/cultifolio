@@ -297,3 +297,9 @@ them (500 on the deployed code, 200 now), and the live check asks forty species 
 The browse pages (/browse, the region, family and genus pages) say "could not be read" until the corpus step that builds
 their files (scripts/corpus-plan-r87s1.txt) has uploaded them: a not-read, said as one, not an absence.
 
+Stage 1's corpus (f85909532efab35e, 48,375 species, browse.json and browse-counts.json with the same count) went up on
+10 November; the browse pages read it at once. Its live check stopped at /api/names?q=litho: GBIF's suggestion service
+now ranks twelve other plant genera above Lithops for that prefix (the other 89 of the check's 90 prefixes still name
+their genus; the route itself answered "lithops" with Lithops). The check now says a prefix's answer without the genus
+and asks the whole name, failing only when that answer lacks it; every other check passed against the new corpus.
+
