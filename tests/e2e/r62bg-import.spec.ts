@@ -124,7 +124,9 @@ test('r62bg 4: a cf. plant\'s label says whose care it borrows (A21, which had n
   await expect(page.locator('#imp-done')).toContainText('2 plants added');
   await page.getByRole('link', { name: 'Labels for these' }).click();
   await ready(page);
-  const cares = page.locator('.sheets .label .care');
+  // Each care line's room is held, empty, while it is asked (`.care.held`, round eighty-seven): counted with them, the two
+  // empty rooms were read as the lines in WebKit (the owner's second predeploy).
+  const cares = page.locator('.sheets .label .care:not(.held)');
   await expect(cares).toHaveCount(2, { timeout: 20_000 });
   const lines = await cares.allTextContents();
   const cf = lines.filter((l) => l.startsWith('care as for C. cinerea: '));

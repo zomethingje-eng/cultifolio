@@ -1155,8 +1155,11 @@ test('round forty-two: the species photograph is preloaded from the head, one si
   await expect(page.locator('head link[rel="preload"][as="image"][media="(min-width: 641px)"]')).toHaveAttribute('imagesrcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
   await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://inaturalist-open-data.s3.amazonaws.com');
   // The photograph's own box (round eighty-seven: its credit is a caption under it, in the same block).
+  // To within 0.01 px (round eighty-seven, the owner's predeploy): Firefox gives a box's corners in single precision, so
+  // a 150 px box whose top is at a fraction of a pixel reads as 150.0000076. The trail above it is a whole number of px
+  // high now, so its top is whole too; this says the box's height and not where Firefox's rounding falls.
   const box = await page.locator('.hero.photo > a:first-child').boundingBox();
-  expect(box?.height).toBe(150);
+  expect(Math.abs((box?.height ?? 0) - 150)).toBeLessThan(0.01);
   // the phone's source is the medium file alone; the wide screen's img chooses between medium and large for a 480 px box
   await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/1000\/medium\.jpg$/);
   await expect(page.locator('.hero.photo source')).toHaveAttribute('media', '(max-width: 640px)');

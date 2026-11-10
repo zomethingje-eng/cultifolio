@@ -33,9 +33,11 @@
  *   Source Sans 3 400 over Segoe UI: (418/1000) / (908/2048) = 94.2802%; ascent 1.024 / 0.9428 = 108.6124%, descent
  *     0.4 / 0.9428 = 42.4267%. Its 600 over Segoe UI Semibold (937): 94.2006%; 700 over Bold (973): 93.2399%; its italic
  *     400 (408) over Segoe UI Italic (888): 94.0973%.
- *   Source Serif 4 italic 400 at optical size 18 (426) over Georgia Italic (931): 93.7057%; ascent 1.036 / 0.93706 =
- *     110.5589%. The serif's width follows its optical size (449 at 12 px, 418 at 20, 400 at 44): the faces are scaled
- *     at 18, within 2.5% of every running-text size, where a name in a sentence decides the line's wrap.
+ *   Source Serif 4 italic 400 at optical size 18 (426) over Georgia Italic (936.5, measured): 93.1605%; ascent 1.036 /
+ *     0.93160 = 111.2059%. The serif's width follows its optical size (449 at 12 px, 418 at 20, 400 at 44): the faces are
+ *     scaled at 18, within 2.5% of every running-text size, where a name in a sentence decides the line's wrap. Georgia's
+ *     averages are measured on the owner's PC, not capsize's 931 and 1082, which set the sentences 0.6% and 1% wider than
+ *     Times New Roman's faces do (round eighty-seven; scripts/dev/fallback-faces.mjs says how).
  *   Source Code Pro over Consolas: (600/1000) / (1126/2048) = 109.1297%; ascent 0.984 / 1.0913 = 90.168%. Over Menlo and
  *     DejaVu Sans Mono (1233/2048): 99.6594%; over Liberation Mono (1229/2048): 99.9837%.
  * A family with a bold face has two, `100 500` and `600 900`, the bold scaled to the web font's 600 (buttons, section
@@ -68,8 +70,8 @@
 @font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold'); ascent-override: 136.4269%; descent-override: 53.2918%; line-gap-override: 0%; size-adjust: 75.0585%; }
 @font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-style: italic; font-weight: 100 500; src: local('DejaVu Sans Oblique'), local('DejaVuSans-Oblique'); ascent-override: 127.5735%; descent-override: 49.8334%; line-gap-override: 0%; size-adjust: 80.2674%; }
 @font-face { font-family: 'Source Sans 3 Fallback DejaVu'; font-style: italic; font-weight: 600 900; src: local('DejaVu Sans Bold Oblique'), local('DejaVuSans-BoldOblique'); ascent-override: 140.3341%; descent-override: 54.818%; line-gap-override: 0%; size-adjust: 72.9687%; }
-@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 100 500; src: local('Georgia Italic'), local('Georgia-Italic'); ascent-override: 110.5528%; descent-override: 35.7483%; line-gap-override: 0%; size-adjust: 93.7108%; }
-@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 600 900; src: local('Georgia Bold Italic'), local('Georgia-BoldItalic'); ascent-override: 123.553%; descent-override: 39.952%; line-gap-override: 0%; size-adjust: 83.8506%; }
+@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 100 500; src: local('Georgia Italic'), local('Georgia-Italic'); ascent-override: 111.2059%; descent-override: 35.9594%; line-gap-override: 0%; size-adjust: 93.1605%; }
+@font-face { font-family: 'Source Serif 4 Fallback Georgia'; font-style: italic; font-weight: 600 900; src: local('Georgia Bold Italic'), local('Georgia-BoldItalic'); ascent-override: 124.7634%; descent-override: 40.3434%; line-gap-override: 0%; size-adjust: 83.0372%; }
 @font-face { font-family: 'Source Serif 4 Fallback Times'; font-style: italic; font-weight: 100 500; src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'); ascent-override: 99.2719%; descent-override: 32.1005%; line-gap-override: 0%; size-adjust: 104.3598%; }
 @font-face { font-family: 'Source Serif 4 Fallback Times'; font-style: italic; font-weight: 600 900; src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'); ascent-override: 97.8604%; descent-override: 31.644%; line-gap-override: 0%; size-adjust: 105.8651%; }
 @font-face { font-family: 'Source Serif 4 Fallback Noto'; font-style: italic; font-weight: 100 500; src: local('Noto Serif Italic'), local('NotoSerif-Italic'); ascent-override: 114.0573%; descent-override: 36.8815%; line-gap-override: 0%; size-adjust: 90.8316%; }

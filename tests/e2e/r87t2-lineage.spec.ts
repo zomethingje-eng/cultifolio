@@ -195,8 +195,11 @@ test('the photo walk: a photograph, a name, next; a plant each with its photogra
     const add = page.locator('#walk-add');
     await add.click();
     // A name the reference does not answer for here is asked about once, as the add form asks; the second press keeps it.
+    // The question is the button enabled and saying "as typed": while the plant is being added it says the same, disabled,
+    // and Safari's engine was met there and waited on a press of a button that had done its work (the owner's second predeploy).
     const done = page.locator('#walk-added li', { hasText: name });
-    await Promise.race([done.waitFor(), page.locator('#walk-add', { hasText: 'as typed' }).waitFor()]);
+    const asks = async () => (await add.isEnabled()) && /as typed/.test(await add.innerText());
+    await expect.poll(async () => ((await done.isVisible()) ? 'added' : (await asks()) ? 'asks' : 'neither'), { timeout: 20_000 }).not.toBe('neither');
     if (!(await done.isVisible())) await add.click();
     await expect(page.locator('#walk-last')).toContainText('added with its photograph. Next plant.');
     await expect(page.locator('#walk-added li', { hasText: name })).toBeVisible();

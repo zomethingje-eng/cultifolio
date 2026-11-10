@@ -12,7 +12,7 @@
   import { accNo, type Accession } from '$lib/db/types';
   import { plantHref as hrefOf } from '$lib/db/links';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
-  import type { LensState } from './lens.svelte';
+  import type { LensState } from './lens-state.svelte';
 
   let { state: ls, total, here, next = [] }: { state: LensState; total: number; here: string; next?: Array<{ key: string; label: string; slug: string; n: number }> } = $props();
   const fmt = (n: number) => n.toLocaleString('en-GB');

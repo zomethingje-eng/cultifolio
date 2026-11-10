@@ -54,6 +54,9 @@ test('r80u offline 1: with the network gone, Compare and the other pages that ar
 
 test('r80u offline 2: the install fetches what offline use needs, not the share image, the large icons, the region map files or the WOFF fallbacks @phone', async ({ browser }) => {
   const { ctx, page } = await fresh(browser);
+  // The worker may start before the page is ready, so the files it asks first came before `before` and were not counted
+  // (57 to 126 in Chromium on one build, round eighty-seven): what must never be asked is read from the page's first request.
+  const opened = net.seen.length;
   await page.goto('/plants'); await ready(page);
   const before = net.seen.length;
   await installed(page);
@@ -64,13 +67,23 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   const all = asked.filter((u) => u !== '/service-worker.js');
   const files = [...new Set(all)];
   const report = `${files.length} files (${all.length} requests): ${files.join(' ')}`;
-  for (const not of ['/og.png', '/icon-512.png', '/icon-maskable-512.png']) expect(files, report).not.toContain(not);
+  console.log(`r80u offline 2, ${test.info().project.name}: the install asked ${files.length} files (${all.length} requests) of the server`);
+  const ever = [...new Set(net.seen.slice(opened).map((u) => u.split('?')[0]))];
+  for (const not of ['/og.png', '/icon-512.png', '/icon-maskable-512.png']) expect(ever, report).not.toContain(not);
   // Round eighty-six (review C's C4): the two coastlines every species page's maps draw on, and no region's file.
-  expect(files.filter((u) => u.startsWith('/maps/')).sort(), report).toEqual(['/maps/land110.svg', '/maps/land50.svg']);
-  expect(files.filter((u) => /\.woff$/.test(u)), report).toEqual([]);
+  expect(ever.filter((u) => u.startsWith('/maps/')).sort(), report).toEqual(['/maps/land110.svg', '/maps/land50.svg']);
+  expect(ever.filter((u) => /\.woff$/.test(u)), report).toEqual([]);
+  // Nor a page of the reference's browse pages or the about pages (round eighty-seven, the owner's predeploy): the front
+  // page and the layout ask the build whether those pages are in it, and the install followed the question into their
+  // components (the browse view, its trail, the about pages' nav), 21 files (scripts/offline-files.mjs).
+  expect(ever.filter((u) => /\/(BrowseView|Crumbs|AboutNav)\.[\w-]+\.(js|css)$/.test(u)), report).toEqual([]);
   // The base's install was 170 files; this one leaves out the species, about and compare pages' own scripts besides.
-  // Round eighty-six adds the two coastlines (above): WebKit on the owner's PC counted 156.
-  expect(files.length, report).toBeLessThan(158);
+  // Round eighty-six adds the two coastlines (above): WebKit on the owner's PC counted 156. Round eighty-seven's
+  // collection pages (a plant's flowering, the plants no longer held, the report, the photo walk), the lock and the
+  // round's faces make it 180, the install's whole list: WebKit asks the server for every file of it, and Chromium only
+  // for those its page has not loaded already (its HTTP cache answers the rest), 144 here before the browse pages were
+  // left out. So the ceiling is WebKit's count, with the margin of two it had.
+  expect(files.length, report).toBeLessThan(182);
   await ctx.close();
 });
 
@@ -84,7 +97,12 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
   await installed(page);
   // A species page read online, once the worker is in control: its scripts are kept as it asks for them.
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  const maps = await page.evaluate(() => [...new Set([...document.querySelectorAll('use')].map((u) => (u.getAttribute('data-href') ?? u.getAttribute('href') ?? '').split('#')[0]).filter((h) => h.startsWith('/maps/')))]);
+  expect(maps.filter((u) => /^\/maps\/[wr]\//.test(u)).length, maps.join(' ')).toBeGreaterThan(0); // its region's files
   await page.goto('/plants'); await ready(page);
+  // Left at once, before the browser was idle: the page hands its map files over as it goes (round eighty-seven, the
+  // owner's second predeploy; Safari has no idle callback and waited two seconds, so the region was not kept).
+  await expect.poll(() => page.evaluate(async (us) => (await Promise.all(us.map((u) => caches.match(u)))).filter((r) => !r).length, maps), { timeout: 10_000 }).toBe(0);
   net.cut();
   const pages: Array<[string, RegExp]> = [['/plants', /plants/i], [`/plants/${acc}`, /Copiapoa cinerea/], ['/plants/new', /Add a plant/], ['/places', /space/i], ['/propagation', /Propagation/], ['/propagation/new', /./], ['/today', /Today/], ['/labels', /Labels/], ['/backup', /Backup/i], ['/settings', /Settings/], ['/', /Species/], ['/species/copiapoa-cinerea', /Copiapoa cinerea/]];
   for (const [to, h] of pages) {

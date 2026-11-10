@@ -52,6 +52,12 @@
    */
   const KEPT_HERE = 'Not searched: it is shaped like one of your plant numbers, which stay on this device.';
   $effect(() => { if (waiting !== null && (collection.ready || collection.failed)) { const t = waiting; waiting = null; ask(t); } });
+  // The pinned views, read again when the collection opens with the box already open (round eighty-seven, the owner's
+  // third predeploy: in Safari's engine a press on the box as the page came read them before the collection had opened,
+  // found none, and the list stayed without them; r87b 2). Read once more, at that moment only, so the list does not
+  // change under the reader after.
+  let pinsRead = false;
+  $effect(() => { if (focused && collection.ready && !pinsRead) { pinsRead = true; pinned = pinnedViews(); } });
 
   const listId = $derived(`${id}-list`);
   const fold = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/×/g, ' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -137,7 +143,7 @@
     } else if (e.key === 'Tab') { open = false; }
   }
   function oninput() { open = true; active = -1; ask(q); }
-  function onfocus() { focused = true; recent = recentSearches(); pinned = pinnedViews(); open = true; }
+  function onfocus() { focused = true; recent = recentSearches(); pinned = pinnedViews(); pinsRead = collection.ready; open = true; }
   function onblur() { focused = false; setTimeout(() => { if (!focused) open = false; }, 120); }
 
   const groupLabel: Record<Group, string> = { pinned: 'Pinned', recent: 'Recent searches', browse: 'Browse', species: 'Species', all: '', clear: '' };

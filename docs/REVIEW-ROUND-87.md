@@ -218,3 +218,60 @@ says the stage-2 fixes' matching.
 ## The stage 3 fixes, by commit
 
 7f8830e and 6e120e8 (B1 labels with the identity tag, S1 items in the number repair, restore and import, M2, M3, M4), 88b1afd (S2 the backup reader's views, the vault's 64 MB for the log, the papers' 300 MB; S3 the lock and stopping sync; M5 tries kept, the locked title, PBKDF2 at 600,000), ea32c95 (the tag in $core/tag; about pages), 880370b (the owner's notes), 6eb37de (two tests follow the tag). Log format: no new kind and no new field; an item repair writes `acc` and `item` together, a holder's items move with it, the next edit may clear a stale `deacc*` and add an `idHistory` line; labels carry `#i=<tag>`; device storage `cultifolio.lock` may hold `key`, and `cultifolio.lock.tries` is new; FOLD_RULES 8, the fold hash re-recorded (pushBatch only).
+
+
+## The owner's predeploy, and what it put right
+
+The first predeploy on the PC stopped at the build: `lens.svelte.ts` and `Lens.svelte` differ by case alone, and
+Windows read the component for the module (MISSING_EXPORT LensState). d049a10 was pushed but `npm run deploy` stopped
+at svelte-check, so nothing of round 87 went live. The module is now `lens-state.svelte.ts`, and
+tests/unit/r87z-case-names.test.ts refuses two paths that differ by case alone, and `x.svelte.ts` beside `X.svelte`.
+
+The second predeploy (every engine) had 10 failures and 4 flaky, none in Chromium. Each was read from the PC's traces and
+is now shown in Chromium by tests/e2e/r87pd-predeploy.spec.ts and tests/unit/r87pd-predeploy.test.ts, which fail on
+r87final (b0c34d3) and pass after:
+
+- 7564be5: the Georgia italic fallback faces were scaled by Times's error, not Georgia's (102.7% and 103.1% at 20 px,
+  measured on the PC); scripts/dev/fallback-faces.mjs writes them from the measurement.
+- 4442505: the species trail is a whole 1.25rem, so the photograph's box starts on a whole pixel (Firefox read
+  150.0000076 px); the strip's thumbnails are asked for at once when let go, not lazily (WebKit's phone asked for none).
+- 980793d: the install list no longer follows a glob's import into another page's component (21 files of the browse
+  pages, /changes and /about/data); r80u offline 2's ceiling is WebKit's count of the whole list, 180, with its margin.
+- 2b7f06e: the phone's filters sheet is clipped across (a tip's 44 px target made the page 391 px wide); the pin's room
+  is held until the collection opens (the results map's table moved 48 px); r87s2u 8 takes Safari's phone for a phone.
+- 56b941e: Back to the catalogue holds the tile for four seconds against the page above changing size, and lets go at
+  the reader's first wheel, touch, key or press (WebKit has no scroll anchoring: 71.7 px).
+- b96082e: the add form holds the next number's room until the collection opens ("More" moved 23 px under a press).
+- 97ab722, 89c34ec, b8bcca1: three tests read what they meant to (a clause's line box; the tile once wholly in view,
+  with anchoring off as WebKit has it; the install's forbidden files from the page's first request).
+- ff77f07: svelte-check reports no warnings.
+
+In the sandbox after these: svelte-check 0 errors and 0 warnings; 6,138 unit tests, none failed; and 170 browser tests in Chromium and
+its phone (the smoke specs and every spec the predeploy failed). WebKit and Firefox run only on the PC.
+
+The third predeploy (every engine, with the fixes above) had 5 failed and 5 flaky of 2,729; strict, both fail it:
+
+- c819907: a species page hands the worker its map files as it is left, once, as well as when the browser is idle.
+  Safari has no idle callback and waited two seconds, so a page left sooner opened offline with its region missing from
+  both maps (r80u offline 3 in the WebKit phone; the range is said in words beside the maps either way). The worker
+  answers a build file it cannot fetch offline with a network error, as it answers a bucket, not a rejected answer.
+- The same commit, four tests: r87pd 4 and 5 recorded from the first frame and counted the web font's arrival (the CSV
+  link 3 px sideways at 213 to 560 ms, a second before the collection opened); they now watch from the fonts' arrival to
+  the collection's opening, which comes 3 s late. r62bg 4 counted the care line's held room (round 87's `.care.held`) as
+  the line (WebKit, Firefox). The photo walk's test pressed "Add as typed" while it was disabled mid-save, and waited two
+  minutes on a plant already added (the WebKit phone).
+- The next commit, from the same run's end: the backup page holds its notice's room ("Your plants live only in this
+  browser") while the browser's answer is awaited. In Safari's engine that answer came after the collection had opened,
+  and the notice arrived during the press on "Merge into this device", moved it down and lost the press (smoke-1's backup,
+  twice; read from the trace's page before and after the press). The search box reads the pinned views again when the
+  collection opens with the box already open: pressed as the page came, it had read none and kept none (r87b 2).
+  r87pd 7 and 8 show each in Chromium, by holding the browser's answer and the collection back; both fail on the code
+  before. Two tests: r87pd 1 waits for its two faces by name, as Safari's engine resolves `document.fonts.ready` only
+  with the page's load, which the photograph held there never lets come; r79f steady 1 measures once the fonts are in
+  (the heading's sans and serif moved the bar 0.5 px in WebKit as the fonts came).
+
+The fourth predeploy (every engine): 2,711 passed and 1 flaky, smoke-1's path from species to bench in WebKit. Its trace
+showed the press on Move aimed while the new space's card was still open and landing after the card had closed and Move
+had risen by its height. The test now presses once the new space is chosen, as a reader sees it; a press on Move while
+the space is still being made is r67h places 7's case, which holds the write open and passes.
+

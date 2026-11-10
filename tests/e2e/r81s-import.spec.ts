@@ -44,6 +44,11 @@ test('r81s import 1: older names are said as older names, and one press files ev
   await page.click('#imp-check');
   await page.locator('#imp-review-h').waitFor();
   const summary = page.locator('#imp-summary');
+  // The names are checked against the reference (a bucket of entries, then a search for each name not in it) before
+  // anything is said of them: waited for as a network answer is, not within an assertion's 5 s. On the owner's PC, with
+  // Chromium's four workers beside WebKit's and Firefox's on one wrangler dev, it was still checking at 5 s and done by
+  // 3.6 s on the retry (round eighty-seven, the owner's predeploy); the check makes the requests it made in round 86.
+  await expect(summary).not.toContainText('still checking', { timeout: 20_000 });
   await expect(summary).toContainText("an older name, the reference's name for it suggested: 4");
   await expect(summary).not.toContainText('ambiguous'); // base: "ambiguous, another name suggested: 4"
   const line1 = page.locator('.rvrow').first();

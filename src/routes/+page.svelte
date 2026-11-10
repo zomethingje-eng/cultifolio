@@ -431,18 +431,38 @@
   /**
    * What is drawn just after the rows (the tiles' last lines, the opened row's fold) moved the tile by up to 40 px after it
    * was placed: it is held where it was for a moment, until the reader moves the page themselves.
+   *
+   * And after that moment, for a few seconds more, whenever the page changes size (round eighty-seven, the owner's
+   * predeploy: r80u back 1 in Safari's engine, the tile 71.7 px off). Round eighty-seven put the lead, the facts line and
+   * Browse above the catalogue, and the strip's photograph that failed after Back turned into its placeholder a second
+   * after the tile was placed, past the 900 ms: the page above changed and the engine's own scroll moved it 63 px besides.
+   * Held on the page's size changing, not every frame and not on a scroll (a scroll bar dragged sends no press), and let
+   * go at the reader's first wheel, touch, key or press, as before.
    */
+  const SETTLE_MS = 4000;
   function holdPlace(el: HTMLElement, top: number): Promise<void> {
     return new Promise((done) => {
-      const until = performance.now() + 900;
+      const t0 = performance.now();
+      const until = t0 + 900;
       let theirs = false;
       const mine = () => { theirs = true; };
       const kinds = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
       for (const k of kinds) addEventListener(k, mine, { passive: true });
+      const fix = () => { const off = el.getBoundingClientRect().top - top; if (Math.abs(off) > 1) window.scrollBy(0, off); };
+      // The few seconds after the first moment: each change of the page's size, read once it is laid out.
+      const settle = () => {
+        const main = el.closest('main') ?? document.body;
+        let frame = 0;
+        const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (!theirs && el.isConnected) fix(); }); };
+        const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(soon) : null;
+        ro?.observe(main);
+        const stop = () => { ro?.disconnect(); if (frame) cancelAnimationFrame(frame); for (const k of kinds) removeEventListener(k, mine); clearInterval(watch); };
+        const watch = setInterval(() => { if (theirs || !el.isConnected || performance.now() > t0 + SETTLE_MS) stop(); }, 250);
+      };
       const step = () => {
-        if (theirs || !el.isConnected || performance.now() > until) { for (const k of kinds) removeEventListener(k, mine); done(); return; }
-        const off = el.getBoundingClientRect().top - top;
-        if (Math.abs(off) > 1) window.scrollBy(0, off);
+        if (theirs || !el.isConnected) { for (const k of kinds) removeEventListener(k, mine); done(); return; }
+        if (performance.now() > until) { settle(); done(); return; }
+        fix();
         requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
@@ -1388,7 +1408,6 @@
   /* The lead (round eighty-seven; plan D1): the figure in a sentence, its trail as a table, the photograph beside it. */
   .lead { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; padding: 40px 0 28px; border-bottom: 1px solid var(--rule); }
   .lead h1 { margin: 10px 0 0; font-weight: 400; font-size: 2.375rem; line-height: 1.2; text-wrap: pretty; }
-  .lead h1 .sciname { font-weight: 400; }
   .leadfig { font-variant-numeric: var(--figs); font-weight: 500; white-space: nowrap; }
   .leadkick { margin: 0; }
   .leadwhat { display: none; }

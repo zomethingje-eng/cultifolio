@@ -31,6 +31,14 @@
 // A local bold face and not the regular one emboldened: Safari and Firefox widen synthetic bold glyphs (a pixel or so
 // each), Chromium does not, so a bold the browser makes is a different width in each. The sans has its italic too (it is
 // served, round eighty-seven), each with its own local italic: Segoe UI's italic is 2% narrower than its roman.
+//
+// Georgia's averages are measured, not capsize's (round eighty-seven, the owner's predeploy on Windows): with capsize's
+// 931 and 1082, r63u U1 set the site's sentences in the Georgia faces at 102.7% and 103.1% of the web font's width at its
+// 20 px, in Chromium and Firefox alike, where the Times New Roman faces measured 102.1%. That 2.1% is the optical size and
+// not an error: the test sets 20 px, where the serif is narrower than at 18 (Liberation Serif, Times's metric twin,
+// measures 100.2% at 18 px and 102.1% at 20 here). So Georgia's own error was the rest, 0.6% and 1.0%, and its averages
+// are capsize's times that: 931 x 102.7/102.1 = 936.5, 1082 x 103.1/102.1 = 1092.6. Scaled by the whole of the 20 px
+// figure, Georgia would have been exact at 20 px and 4% narrow at 15, the size of a name in a sentence.
 
 const WEB = {
   sans: { name: 'Source Sans 3', upm: 1000, ascent: 1024, descent: 400, xw: { 400: 418, 600: 431, 700: 443 }, xwi: { 400: 408, 600: 419 } },
@@ -55,7 +63,7 @@ const SANS = [
 ];
 const two = (i, bi, upm) => [['100 500', 'italic', 400, ...i, upm], ['600 900', 'italic', 600, ...bi, upm]];
 const SERIF = [
-  ['Georgia', two([['Georgia Italic', 'Georgia-Italic'], 931], [['Georgia Bold Italic', 'Georgia-BoldItalic'], 1082], 2048)],
+  ['Georgia', two([['Georgia Italic', 'Georgia-Italic'], 936.5], [['Georgia Bold Italic', 'Georgia-BoldItalic'], 1092.6], 2048)],
   ['Times', two([['Times New Roman Italic', 'TimesNewRomanPS-ItalicMT'], 836], [['Times New Roman Bold Italic', 'TimesNewRomanPS-BoldItalicMT'], 857], 2048)],
   ['Noto', two([['Noto Serif Italic', 'NotoSerif-Italic'], 469], [['Noto Serif Bold Italic', 'NotoSerif-BoldItalic'], 517], 1000)],
   ['Liberation', two([['Liberation Serif Italic', 'LiberationSerif-Italic'], 836], [['Liberation Serif Bold Italic', 'LiberationSerif-BoldItalic'], 857], 2048)],

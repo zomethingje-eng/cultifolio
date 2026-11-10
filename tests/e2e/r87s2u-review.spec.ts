@@ -129,7 +129,9 @@ test('r87s2u 6: a pin of a region the reference no longer holds says so, and its
 test('r87s2u 8: no chips, tags or filled cells outside the tracker; even footer links; 44 px under a finger @phone', async ({ page }) => {
   await noThirdParty(page);
   await grower(page);
-  const phone = test.info().project.name === 'phone';
+  // A phone in either engine (round eighty-seven, the owner's predeploy): the project's name was asked, and Safari's
+  // phone, `phone-webkit`, was taken for a desktop, so its filters sheet was never opened and the rail's "?" was hidden.
+  const phone = !!test.info().project.use.isMobile;
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const css = (sel: string, props: string[]) => page.locator(sel).first().evaluate((e, props) => { const c = getComputedStyle(e); return Object.fromEntries(props.map((p) => [p, c.getPropertyValue(p)])); }, props);
   // The register links: plain links in a row (9311e8b: a 1 px edge, rounded, padded).

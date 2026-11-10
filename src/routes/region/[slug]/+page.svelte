@@ -5,7 +5,7 @@
   import { photoAt } from '$dossier/photo-size';
   import { REGIONS_CITED_PAGE } from '$lib/browse/words';
   import Lens from '$lib/browse/Lens.svelte';
-  import { LensState } from '$lib/browse/lens.svelte';
+  import { LensState } from '$lib/browse/lens-state.svelte';
   let { data } = $props();
   const fmt = (n: number) => n.toLocaleString('en-GB');
   const r = $derived(data.region);

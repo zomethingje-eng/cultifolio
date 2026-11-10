@@ -36,6 +36,20 @@ export function offlineBuild(manifest, routeOf) {
   const out = new Set();
   const seen = new Set();
   const isApp = (key) => /client-optimized\/app\.js$/.test(key) || /(^|\/)generated\/client\/app\.js$/.test(key);
+  // Another page's own component is not an on-demand import of an offline page, though the build lists it as one (round
+  // eighty-seven, the owner's predeploy): the front page and the layout ask `import.meta.glob` whether the browse pages,
+  // /changes and /about/data are in the build, and the build counts each glob as a dynamic import of that page. Followed,
+  // the install fetched those five pages' components and what they import (the browse view, its trail, the about pages'
+  // heads and counts), 21 files, though nothing calls the glob and those pages need the network.
+  // A page's component is the chunk a page's node imports under the name `_page` (Rollup's for `+page.svelte`); one of an
+  // offline page's node is walked from that node, as before, and one of any other page is kept when that page is read.
+  const otherPages = new Set();
+  for (const [key, e] of Object.entries(manifest)) {
+    if (!/\/nodes\/\d+\.js$/.test(key)) continue;
+    const route = routeOf(key);
+    if (route && OFFLINE_ROUTE.test(route)) continue;
+    for (const k of e.imports ?? []) if (manifest[k]?.name === '_page') otherPages.add(k);
+  }
   const walk = (key) => {
     if (seen.has(key)) return;
     seen.add(key);
@@ -45,7 +59,7 @@ export function offlineBuild(manifest, routeOf) {
     for (const f of e.css ?? []) out.add(f);
     for (const f of e.assets ?? []) out.add(f);
     for (const k of e.imports ?? []) walk(k);
-    if (!isApp(key)) for (const k of e.dynamicImports ?? []) walk(k);
+    if (!isApp(key)) for (const k of e.dynamicImports ?? []) if (!otherPages.has(k)) walk(k);
   };
   // The stylesheets of a node and of everything it imports statically, and nothing else of them.
   const styled = new Set();

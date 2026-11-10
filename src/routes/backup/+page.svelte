@@ -188,8 +188,11 @@
   <!-- Skipped and counted (round sixty-seven; triage-66 R10): the change stays in the log and in a backup, and is not folded. -->
   <p class="notice" id="bk-malformed">{collection.malformed === 1 ? 'One change' : `${collection.malformed} changes`} in this device's log could not be read and {collection.malformed === 1 ? 'is' : 'are'} not shown. {collection.malformed === 1 ? 'It stays' : 'They stay'} in the log, and in a backup.</p>
 {/if}
-{#if collection.persisted === false && collection.ready && collection.accessions.length}<!-- nothing to keep, nothing to ask (round eighty-two; the independent review's 15) -->
-  <div class="cult warn"><div class="body"><!-- The outcome first, warmly; the browser's rule kept (round sixty; the grower review, §3). --><b>Your plants live only in this browser.</b> Take a backup now and install the app to your home screen so they are safe: a browser can clear storage for sites you rarely open, and has not promised to keep this one's.</div></div>
+{#if collection.persisted !== true && collection.ready && collection.accessions.length}<!-- nothing to keep, nothing to ask (round eighty-two; the independent review's 15) -->
+  <!-- Its room held, unseen, while the browser's answer is awaited (round eighty-seven, the owner's third predeploy): the
+       collection opened first and the answer came after, and the notice arriving moved the whole page down under a press
+       on "Merge into this device" in Safari's engine, which lost the press (smoke-1's backup). -->
+  <div class="cult warn" class:hold={collection.persisted === null} aria-hidden={collection.persisted === null ? 'true' : undefined}><div class="body"><!-- The outcome first, warmly; the browser's rule kept (round sixty; the grower review, §3). --><b>Your plants live only in this browser.</b> Take a backup now and install the app to your home screen so they are safe: a browser can clear storage for sites you rarely open, and has not promised to keep this one's.</div></div>
 {/if}
 
 <div class="secrule"><h2>Take a backup</h2><div class="line"></div><span class="n">{lastBackup ? `last ${ago(lastBackup)}${lastFrom === 'restore' ? ', restored from a file' : ''}` : 'never'}</span></div>
@@ -285,6 +288,7 @@
   .bad { color: var(--bad); font-size: var(--fs-md); }
   .faint { color: var(--ink3); }
   .warn { margin-top: 14px; border-bottom: 1px solid var(--rule); }
+  .warn.hold { visibility: hidden; }
   .warn .body { padding: 10px 0; font-size: var(--fs-md); color: var(--ink2); font-family: var(--ui); }
   .warn .body b { color: var(--ink); }
   .preview { border-top: 1px solid var(--rule); padding: 0 0 14px; }

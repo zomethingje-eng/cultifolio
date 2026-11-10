@@ -22,7 +22,7 @@
   import ResultsMap from './ResultsMap.svelte';
   import Tip from './Tip.svelte';
   import { PinState } from './pinned.svelte';
-  import type { LensState } from './lens.svelte';
+  import type { LensState } from './lens-state.svelte';
   import { photoAt } from '$dossier/photo-size';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import type { BrowseView } from './view';
@@ -317,6 +317,12 @@
     .filters { min-height: 44px; padding: 0 14px; border: 1px solid var(--edge, var(--field-edge)); border-radius: 4px; background: var(--field, var(--bg)); color: var(--ink); font: inherit; }
     .rail { display: none; padding: 8px 0 16px; border-bottom: 1px solid var(--ink); }
     .rail.open { display: block; }
+    /* A tip's 44 px target is centred on its "?" (Tip.svelte), and the last "?" of a line sits at the rail's right edge:
+       its target reached 391.4 px on a 390 px phone, so the open sheet made the page a pixel wider than the screen.
+       Chromium widened its viewport to match; Safari's engine scrolled sideways (round eighty-seven, the owner's predeploy:
+       r87b 4). Clipped across, not down, so a target keeps its height and a tip's words, which open leftwards inside the
+       rail, are whole. */
+    .rail { overflow-x: clip; }
     .choices label, .modes label { min-height: 44px; }
     .into { min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
     .acts { margin-left: 0; }

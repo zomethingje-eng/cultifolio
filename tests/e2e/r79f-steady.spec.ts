@@ -41,6 +41,9 @@ for (const size of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'phon
     await expect(page.locator('.hero.hold')).toBeAttached(); // the hero's room, unseen
     await expect(page.locator('.hero.hold')).toBeHidden();
     await expect(page.locator('.hero.hold')).toHaveAttribute('aria-hidden', 'true');
+    // Measured once the web fonts are in: the heading holds the number in the sans and the name in the serif, and in Safari's
+    // engine, which keeps line metrics to the fraction, the fonts' arrival moved the bar 0.5 px (the owner's third predeploy).
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const bar = await top(page, '.quickbar'), card = await top(page, '.idcard');
     release();
     await expect(page.locator('#species-link')).toBeVisible();

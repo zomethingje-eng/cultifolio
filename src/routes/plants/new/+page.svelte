@@ -339,9 +339,14 @@
   <!-- Worded by cause: a number already used is not a full phone (round sixteen, 14) -->
   <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if collection.lastWriteError === CLOSED_WORDS}.<!-- the example closed in another tab: not a full phone (round sixty-seven; triage-66 V3) -->{:else if !numberClash}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
+<!-- The number's room is held until the collection has opened (round eighty-seven, the owner's predeploy): "…" was a
+     character wide and the number nine, so the line wrapped to two when the number came and moved the form 23 px down;
+     in Safari's engine, whose collection opens a second or two after the page, a press on "More: …" met the row above
+     (smoke-1). Held as the year scheme's shape, figures being of one width; another scheme's number may still differ. -->
+{#snippet no(n: string)}{#if collection.ready}<span class="accno">{n}</span>{:else}<span class="accno pending"><span class="dots">…</span><span class="room" aria-hidden="true">0000-0000</span></span>{/if}{/snippet}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
-    {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused; its year is the year acquired.{/snippet}
+    {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from {@render no(nextNo)}.{:else}They will be numbered from {@render no(nextNo)}, one each.{/if}{:else}It will be numbered {#if useOwnNumber && ownNumber}<span class="accno">{ownNumber}</span>{:else}{@render no(nextNo)}{/if}.{/if} A number is never reused; its year is the year acquired.{/snippet}
   </PageHead>
   <!-- In the example: the plant joins it and goes with it; "Keep it as my own" leaves with everything typed, the place included, and no "Leave site?" (round sixty-seven; triage-66 V1; round sixty-nine, triage-68 X3). -->
   <ExampleAddLine what="plant" draft={draftOf} hold={(on) => (saved = on)} />
@@ -469,4 +474,8 @@
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
   /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
   .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
+  /* The "…" at the start of the number's held room. */
+  .accno.pending { position: relative; }
+  .accno.pending .dots { position: absolute; left: 0; top: 0; }
+  .accno.pending .room { visibility: hidden; }
 </style>

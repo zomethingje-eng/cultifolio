@@ -37,11 +37,20 @@ test('r81a W6: a label\'s care line is whole clauses, the last ones left off, ne
   const care = page.locator('.page .label .care').first();
   await expect(care.locator('.cl')).toHaveCount(3); // careLine's three clauses, each its own element
   const all = ['cooler six months Nov–Apr', 'floor 6.5 °C (1 in 100, NASA POWER)', 'open sky 30–65 DLI (CHELSA)'];
-  // Fitted after layout: wait until what shows is whole clauses that end inside the box.
+  // Fitted after layout: wait until what shows is whole clauses that end inside the box. A clause's line is measured, not
+  // its rectangle: an inline's rectangle is its font's ascent and descent, which for Source Sans 3 (1.424 em, round
+  // eighty-seven) is taller than the care line's 1.2, and Safari's and Firefox's engines keep it to the fraction, so the
+  // second line's rectangle hung 0.9 px below a box that holds the line exactly (the owner's predeploy: "overflowing",
+  // with the fitter's two clauses shown and the third hidden); Chromium rounds the metrics and it hung 0.08 px. The box's
+  // first line starts at its top, so the first rectangle's offset from it is every line's.
   await expect.poll(async () => care.evaluate((el) => {
     const box = el.getBoundingClientRect();
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
     const shown = [...el.querySelectorAll<HTMLElement>(':scope > .cl')].filter((c) => !c.hidden);
-    const inside = shown.every((c) => [...c.getClientRects()].every((r) => r.bottom <= box.bottom + 0.5 && r.right <= box.right + 0.5));
+    const first = shown[0]?.getClientRects()[0];
+    if (!first) return 'nothing shown';
+    const off = first.top - box.top; // where a rectangle starts against its line, the same on every line of one font and size
+    const inside = shown.every((c) => [...c.getClientRects()].every((r) => r.top - off + lh <= box.bottom + 0.5 && r.right <= box.right + 0.5));
     return inside && el.scrollHeight <= el.clientHeight + 1 ? (el as HTMLElement).innerText.replace(/\s+/g, ' ').trim() : 'overflowing';
   })).toMatch(new RegExp(`^(${[1, 2, 3].map((n) => all.slice(0, n).join(' · ').replace(/[()]/g, '\\$&')).join('|')})$`));
   // On this stock the three do not fit in two lines: the light is left off whole, the floor kept whole.

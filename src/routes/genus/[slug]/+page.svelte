@@ -7,7 +7,7 @@
   import { notAnswered } from '$lib/ui/ref/upstream';
   import { RANGE_SOURCE } from '$lib/browse/sources';
   import Lens from '$lib/browse/Lens.svelte';
-  import { LensState } from '$lib/browse/lens.svelte';
+  import { LensState } from '$lib/browse/lens-state.svelte';
   let { data } = $props();
   const fmt = (n: number) => n.toLocaleString('en-GB');
   const f = $derived(data.figures);

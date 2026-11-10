@@ -696,7 +696,12 @@
       <!-- Each thumbnail's address is given once the lead photograph has come (`stripGo`, round eighty-six); until then its
            square is kept, empty. With no script the address never comes, so each is also written in a <noscript>, which a
            browser running scripts does not read. -->
-      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={stripGo ? photoAt(p.thumb, 'small') : undefined} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /><noscript><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" /></noscript></span>{/each}
+      <!-- Asked for at once when the address comes, not lazily (round eighty-seven, the owner's predeploy): the wait for the
+           lead is the strip's own, and a lazy image waits again on the browser's own rule. With the lead never answered, so
+           that the page's load event never fires, Safari's engine asked for none of the six in the 5.5 s after the page was
+           ready, though they were on the first screen and the 2.5 s wait had passed; Chromium asked for all six, and a
+           lead that failed (the load event fired) let Safari's ask too. The <noscript> copy, with no wait of its own, stays lazy. -->
+      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={stripGo ? photoAt(p.thumb, 'small') : undefined} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="eager" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /><noscript><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" /></noscript></span>{/each}
       <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
   {/if}
@@ -1072,9 +1077,13 @@
   .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
   .species { max-width: var(--maxw); }
   /* The page's trail, its other names and its facts (round eighty-seven; the owner's look). */
-  .spcrumb { margin: 16px 0 0; font-size: var(--fs-sm); color: var(--mut); }
+  /* A whole number of px high (round eighty-seven, the owner's predeploy): at the body's 1.55 the trail was 18.6 px, and
+     the genus in the serif, whose ascent and descent sit otherwise on the baseline, made its line 19.6, so the photograph's
+     box under it started at a fraction of a pixel, and Firefox, which measures a box's corners in single precision, read
+     its 150 px as 150.0000076. The line is 1.25rem (20 px, 40 at 200%), and the genus's own line box adds nothing to it. */
+  .spcrumb { margin: 16px 0 0; font-size: var(--fs-sm); line-height: 1.25rem; color: var(--mut); }
   .spcrumb a { color: var(--link); }
-  .spcrumb i { font-family: var(--serif); }
+  .spcrumb i { font-family: var(--serif); line-height: 0; }
   .also { margin: 8px 0 0; color: var(--ink2); }
   .spfacts { margin-top: 14px; border-collapse: collapse; width: 100%; font-size: var(--fs-base); }
   .spfacts tr { border-top: 1px solid var(--rule); }

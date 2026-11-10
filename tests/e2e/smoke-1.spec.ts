@@ -315,6 +315,11 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await page.fill('#mv-loc-new-name', 'Cold frame');
   await page.selectOption('#mv-loc-new-kind', 'coldframe');
   await page.getByRole('button', { name: 'Add space' }).click();
+  // Pressed once the new space is made and chosen, as a reader sees it: its card closes then and Move rises by the card's
+  // height, and in Safari's engine, whose write took a moment, a press aimed while the card was open met the page below
+  // where Move had been (the owner's fourth predeploy). A press on Move with the space still being made is Move's own case
+  // (it waits for the space, r67h places 7), not this test's.
+  await expect(page.locator('#mv-loc option:checked')).toHaveText('Cold frame');
   await page.getByRole('button', { name: 'Move', exact: true }).last().click();
   await expect(page.locator('.idcard .place', { hasText: 'Cold frame' })).toBeVisible();
   await expect(page.locator('.tlrow', { hasText: 'Cold frame' })).toBeVisible();

@@ -4,7 +4,7 @@
    * query in the collection's log with its species now, so the front page and the empty search box can say what a
    * reference update adds to it or takes from it. Pinned, it says so, with the view's changes since it was pinned or
    * last seen (a press opens them, under the row), and offers Unpin. Drawn once the page's scripts run and the collection
-   * has opened: without them a pin cannot be written.
+   * has opened: without them a pin cannot be written. Until then its room is held, unseen, so nothing moves when it comes.
    */
   import { collection } from '$lib/db/collection.svelte';
   import type { PinState } from './pinned.svelte';
@@ -27,10 +27,17 @@
     <span class="sr" aria-live="polite">{ps.said ?? ''}</span>
     {#if ps.said}<span class="note" aria-hidden="true">{ps.said}</span>{/if}
   </span>
+{:else}
+  <!-- Its room, held unseen until the collection has opened (round eighty-seven, the owner's predeploy): arriving, the
+       button took a line of the phone's row of actions and moved everything under it 48 px down, the results map's table
+       among them, so a press on a region there in Safari's engine, whose collection opens a second or two after the page,
+       met the line above it (r87b 5). Not in the accessibility tree and not focusable while hidden. -->
+  <span class="pin hold" aria-hidden="true"><button type="button" class="linkish" tabindex="-1" disabled>Pin this view</button></span>
 {/if}
 
 <style>
   .pin { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .hold { visibility: hidden; }
   .on { color: var(--ink2); }
   .w { color: var(--mut, var(--ink3)); }
   .linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--link, var(--accent)); cursor: pointer; }

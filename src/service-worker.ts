@@ -240,7 +240,10 @@ self.addEventListener('fetch', (e) => {
         const hit = await cache.match(request);
         if (hit) return hit;
         // A build file not cached at install (a font subset fetched for one name): kept once it has been asked for.
-        const r = await fetch(request);
+        // Offline, one not kept is a network error, as a bucket's is (below), not a rejected answer: a region's map file
+        // a page asked for offline was the page's error in Safari's engine (round eighty-seven, the owner's second predeploy).
+        let r: Response;
+        try { r = await fetch(request); } catch { return Response.error(); }
         if (r.ok && r.type === 'basic') e.waitUntil(cache.put(request, r.clone()).catch(() => { /* the file was answered; one not kept (storage full) is fetched again next time it is asked for */ }));
         return r;
       }

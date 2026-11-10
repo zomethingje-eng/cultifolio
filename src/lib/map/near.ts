@@ -70,14 +70,21 @@ export function filesIn(root: Element | Document): string[] {
  * for it to keep: before round eighty-six every map file was fetched as the page was read, and so kept, and a page read
  * online and not scrolled to its maps would otherwise open offline without them. Nothing is asked for without a worker.
  * Returns the undo.
+ *
+ * And as the page is left, if they were not handed over yet (round eighty-seven, the owner's second predeploy: r80u
+ * offline 3 in the WebKit phone). Safari has no idle callback, so the files waited two seconds after the load, and a
+ * reader who moved on sooner left a page that opened offline with its region missing from both maps. Leaving, by a link
+ * inside the app (the undo) or out of the page (`pagehide`), the network is the page's no longer.
  */
 export function keepForOffline(root: Element | Document, win: Window & typeof globalThis = window): () => void {
   const sw = win.navigator?.serviceWorker;
   if (!sw?.controller) return () => {};
   let stopped = false;
+  let sent = false;
   let idle: number | undefined;
   const send = () => {
-    if (stopped) return;
+    if (stopped || sent) return;
+    sent = true;
     const files = filesIn(root);
     if (files.length) sw.controller?.postMessage({ type: 'keep-maps', files });
   };
@@ -87,9 +94,12 @@ export function keepForOffline(root: Element | Document, win: Window & typeof gl
   };
   if (win.document.readyState === 'complete') later();
   else win.addEventListener('load', later, { once: true });
+  win.addEventListener('pagehide', send);
   return () => {
+    send();
     stopped = true;
     win.removeEventListener('load', later);
+    win.removeEventListener('pagehide', send);
     if (idle !== undefined) (typeof win.cancelIdleCallback === 'function' ? win.cancelIdleCallback(idle) : win.clearTimeout(idle));
   };
 }

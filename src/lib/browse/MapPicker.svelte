@@ -179,7 +179,8 @@
     <div class="body">
       <div class="mapcol">
         <div class="frame">
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <!-- The map is one keyboard control (role application, arrows move between regions, Enter chooses), so its svg takes focus and keys. -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
           <svg bind:this={svg} class="map" viewBox={viewBoxOf(frame)} preserveAspectRatio="xMidYMid meet" role="application" aria-roledescription="map" tabindex="0" aria-label="Map of TDWG's level-3 regions" aria-describedby="mp-keys" onkeydown={onkey}>
             <rect class="sea" x="-180" y="-90" width="360" height="180" />
             <use class="land" href="{LAND_FILE}#land" />
