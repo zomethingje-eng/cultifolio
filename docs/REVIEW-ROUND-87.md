@@ -281,3 +281,19 @@ imported module"), with all 674 test files starting at once on the PC; it passes
 sandbox under load. The component tests' harness now asks Vite again, up to four times and each said on the log, when a
 module's request fails or answers 5xx (tests/unit/helpers/mount.ts); a module Vite cannot transform still fails.
 
+## Live, and the species pages that answered 500
+
+85fe670 deployed (version 302a1404) and the live check passed. A sample of 300 species pages from the sitemap then
+answered 39 times 500, about one page in eight: every one a record that lists names under the species' varieties
+(`name.infra`). The page read those names against `?was=`, the old name an address carries, with a rank test that read
+the absent `was` on a plain visit and threw (`ranksClash(x, was!)`, src/routes/species/[slug]/+page.server.ts). The line
+is round 86's, unchanged, so round 86 most likely answered the same since its corpus put `name.infra` in the records; no
+fixture record held such names, and the live check asked one species page, which held none. Reproduced with the live
+record of Copiapoa cinerea in a local build. Put right: the names are read only for an old name the address carries.
+k2735933's fixture now holds the live record's three names under varieties, r87pd 9 asks its page plainly and by one of
+them (500 on the deployed code, 200 now), and the live check asks forty species pages spread across the sitemap, each a
+200 or a redirect to its species (the deployed build failed it on 9 of 40).
+
+The browse pages (/browse, the region, family and genus pages) say "could not be read" until the corpus step that builds
+their files (scripts/corpus-plan-r87s1.txt) has uploaded them: a not-read, said as one, not an absence.
+

@@ -252,7 +252,9 @@ const loadPage = async ({ params, platform, fetch, setHeaders, cookies, request,
   // GBIF's answer, which a data centre that had not answered the redirect did not hold, and the page then said nothing of
   // why the grower was there (round eighty-six; review-c C3).
   const listedHere = ownNames.has(wasPlain) || asVariety || ofOlder;
-  const infraNames = new Set((d.name.infra ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && !ranksClash(x, was!)).map(plain));
+  // Read only for an old name the address carries: with none, `was` is null, and the rank test read it (round eighty-seven,
+  // the deploy: every species page whose record lists names under its varieties answered 500 to a plain visit).
+  const infraNames = new Set(was ? (d.name.infra ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && !ranksClash(x, was)).map(plain) : []);
   const wasBelow = wellFormed && !listedHere && infraNames.has(wasPlain);
   const shownWas = wellFormed && (listedHere || wasBelow) ? was : null;
   // A name the record says Kew's file places in another plant (`name.kew.elsewhere`): the line says so, and names that

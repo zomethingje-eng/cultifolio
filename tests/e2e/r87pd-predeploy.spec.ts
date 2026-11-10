@@ -18,10 +18,13 @@
  *    awaited (smoke-1's backup in WebKit, the third predeploy: the notice came as Merge was pressed, and the press was lost).
  * 8. The search box pressed before the collection has opened lists the pinned views once it has (r87b 2 in WebKit, the
  *    third predeploy: the pins were read at the press, found none, and the list stayed without them).
+ * 9. A species page whose record lists names under its varieties (`name.infra`) opens on a plain visit (the deploy: about
+ *    half of the live species pages answered 500, the rank test reading the absent `?was=`; no fixture had such names,
+ *    and k2735933's now has the live record's three).
  *
  * The collection is opened 3 s late in 4 and 5, and they watch from the fonts' arrival to its opening (fromFontsToCollection).
  * On r87final (b0c34d3): 1 FAILED (19.59 px); 2 FAILED (391 px); 3 FAILED (lazy); 4 FAILED (the table moved 48 px);
- * 5 FAILED (the summary moved 23 px); 6 FAILED (the tile moved by the block put above it); 7 FAILED (Merge moved down); 8 FAILED (no pinned row).
+ * 5 FAILED (the summary moved 23 px); 6 FAILED (the tile moved by the block put above it); 7 FAILED (Merge moved down); 8 FAILED (no pinned row); 9 FAILED (500).
  */
 import { test, expect, type Page } from '@playwright/test';
 import { ready, addPlant } from './helpers/smoke';
@@ -185,4 +188,16 @@ test('r87pd 8: the search box pressed before the collection has opened lists the
   await page.locator('#site-search').click(); // before the collection opens, 3 s late
   await expect(page.locator('#site-search-list .opt.pinned')).toHaveCount(1, { timeout: 10_000 });
   await expect(page.locator('#site-search-list .opt.pinned')).toContainText('Species native to Namibia');
+});
+
+test('r87pd 9: a species page whose record lists names under its varieties opens on a plain visit, and by one of those names', async ({ page }) => {
+  const plain = await page.request.get('/species/copiapoa-cinerea');
+  expect(plain.status()).toBe(200);
+  await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  await expect(page.locator('h1').first()).toContainText('Copiapoa cinerea');
+  // By a name GBIF files under one of its varieties: the page says why the reader is here (round eighty-six; review-c C3).
+  const by = await page.request.get('/species/copiapoa-cinerea?was=Copiapoa%20scopa');
+  expect(by.status()).toBe(200);
+  await page.goto('/species/copiapoa-cinerea?was=Copiapoa%20scopa'); await ready(page);
+  await expect(page.locator('main')).toContainText('Copiapoa scopa');
 });

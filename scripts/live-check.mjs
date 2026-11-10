@@ -359,4 +359,28 @@ if (!skip.has('weight') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   ok('vault route: a JSON null is a 400');
 }
 
+// A spread of species pages, not one (round eighty-seven, the deploy): the one page the headers check asks held no names
+// under its varieties, and every page whose record did (about one in eight; 39 of 300 sampled) answered 500 to every
+// visitor while this check passed. Forty pages spread through the sitemap's files, each a 200 or a redirect to its species,
+// asked past the Worker's hold.
+{
+  const ix = await get(`/sitemap.xml?${fresh}`);
+  const files = [...ix.text.matchAll(/<loc>[^<]*\/(sitemap-[^<]+\.xml)<\/loc>/g)].map((m) => m[1]);
+  const slugs = [];
+  for (const f of files) {
+    const sm = await get(`/${f}?${fresh}`);
+    for (const m of sm.text.matchAll(/<loc>[^<]*\/species\/([a-z0-9-]+)<\/loc>/g)) slugs.push(m[1]);
+  }
+  if (!slugs.length) fail('the sitemap names no species pages to sample', ix);
+  const step = Math.max(1, Math.floor(slugs.length / 40));
+  const sample = slugs.filter((_, i) => i % step === 0).slice(0, 40);
+  const bad = [];
+  for (let i = 0; i < sample.length; i += 8) {
+    const got = await Promise.all(sample.slice(i, i + 8).map(async (s) => [s, await get(`/species/${s}?${fresh}`, { headers: { accept: 'text/html' } })]));
+    for (const [s, r] of got) if (r.status !== 200 && !(r.status === 302 && /\/species\//.test(r.h('location')))) bad.push(`${s} ${r.status}`);
+  }
+  if (bad.length) fail(`species pages that did not answer: ${bad.join(', ')} (of ${sample.length} spread across the sitemap)`);
+  ok(`species pages: ${sample.length} spread across the sitemap's ${slugs.length}, each a 200 or a redirect to its species`);
+}
+
 console.log(`live check passed (${n} checks)`);

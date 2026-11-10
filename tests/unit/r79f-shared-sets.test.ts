@@ -84,7 +84,8 @@ describe('the corpus step across the change of ids, on the two pages of the owne
 
 describe('the order of a `shared` list is no change of the page', () => {
   // The fixture page as r79base hashed it: round eighty-one gave it Kew's words (`distribution.kew`), which these guards leave out.
-  const r79Page = (() => { const t = JSON.parse(JSON.stringify(template)); delete t.distribution.kew; return t; })();
+  // The page as round seventy-nine had it: without the Kew distribution, and without the names under its varieties the fixture took in round eighty-seven (r87pd 9).
+  const r79Page = (() => { const t = JSON.parse(JSON.stringify(template)); delete t.distribution.kew; delete t.name.infra; return t; })();
   const d = (shared: PageId[]) => ({ ...JSON.parse(JSON.stringify(r79Page)), key: 'k2505106', photos: [photo(77, shared as unknown as number[])] });
   it('the fingerprint reads it as a set, so the index does not restamp a page whose list came in another order', () => {
     const a = d(['k1', 'k73814']), b = d(['k73814', 'k1']);
