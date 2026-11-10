@@ -105,7 +105,9 @@ export class CitesIndex {
     for (const r of table.rows) {
       const lv = levelOf(r.taxon);
       if (lv === 'family') this.byFamily.set(r.taxon.split(' ')[0], r);
-      else if (lv === 'genus') this.byGenus.set(r.taxon.split(' ')[0], r);
+      // A genus listing's braces may include another genus ("Anacampseros spp. {Includes Avonia spp.}", the edition of
+      // 5 March 2026, where Avonia spp. had a row of its own before): that genus is read as the listing's.
+      else if (lv === 'genus') { this.byGenus.set(r.taxon.split(' ')[0], r); for (const n of r.includes) if (levelOf(n) === 'genus') this.byGenus.set(n.split(' ')[0], r); }
       else for (const n of [r.taxon, ...r.includes]) { const k = citesKey(n), a = this.byName.get(k); if (a) a.push(r); else this.byName.set(k, [r]); }
       for (const x of r.except) if (!/ spp\.$/.test(x)) this.excepted.set(citesKey(x), r);
     }

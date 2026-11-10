@@ -303,3 +303,19 @@ now ranks twelve other plant genera above Lithops for that prefix (the other 89 
 their genus; the route itself answered "lithops" with Lithops). The check now says a prefix's answer without the genus
 and asks the whole name, failing only when that answer lacks it; every other check passed against the new corpus.
 
+## The CITES check
+
+The owner downloaded the edition in force from cites.org on 10 November 2026: "Appendices I, II and III valid from 5
+March 2026" (E-Appendices-2026-03-05.pdf, 2,003,006 bytes, md5 086b5973883787a25d32400b8a966cf2; its PDF title still
+reads "valid from 21.05.2023", the Word template's, while its pages and its date of 13 March 2026 are this edition's).
+Its FLORA pages were read against src/lib/dossier/cites-appendices.tsv, every row and every field: 233 of 244 rows as
+they were, and no Appendix III row changed. Corrected to the edition, each citing its page (the table's header lists
+them): CoP20's aloe segregates by name (Aloidendron pillansii and Aloestrela suzannae in I for the Aloe names; Aloe
+rugosquamosa in I, out of Aloe compressa's braces; Aloiampelos, Aloidendron, Aristaloe, Gonialoe and Kumara spp. in II),
+the four Aloe species of the Notification no longer apart (Aloe spp. holds them), Anacampseros spp. under
+ANACAMPSEROTACEAE with {Includes Avonia spp.} (the Avonia row gone), Nardostachys jatamansi for N. grandiflora, and
+Podocarpus parlatorei without the parenthesis the edition does not print. The reader takes a genus a genus listing's
+braces include as that listing's (cites.ts), so a page Kew heads in Avonia keeps the listing its own row gave it. The
+table's `checked:` line names the day and the md5; the tests that read the unchecked state make their own unchecked
+copy. Applied by the walk's `--fill sources` (corpus-plan-r87s2), as the walk had not begun.
+

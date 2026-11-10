@@ -70,7 +70,8 @@ describe('B1: WFO holds the page\'s name and authors under another IPNI id', () 
   });
 });
 
-const TABLE = readFileSync(CITES_TABLE_FILE, 'utf8');
+// The table as it stood before the owner's check, whatever its `checked:` line now says: these tests read both states.
+const TABLE = readFileSync(CITES_TABLE_FILE, 'utf8').replace(/^# checked: .*$/m, '# checked: no');
 const CHECKED = TABLE.replace(/^# checked: no$/m, '# checked: 2026-11-10 md5 0123456789abcdef0123456789abcdef');
 
 describe('S1: a Kew synonym spelt as another page\'s accepted name is that plant\'s listing, not this one\'s', () => {
@@ -96,9 +97,11 @@ describe('S1: a Kew synonym spelt as another page\'s accepted name is that plant
       expect(citesOf(new CitesIndex(parseCitesTable(CHECKED)), page, TODAY)).toMatchObject({ status: 'ok', via: said.split(' ').slice(0, 2).join(' ') });
     });
   }
-  it('the listed plant keeps its own listing; a synonym no page heads is still read (Aloe pillansii)', () => {
+  it('the listed plant keeps its own listing; a synonym no page heads is still read (Mammillaria pectinifera subsp. solisioides)', () => {
     expect(citesOf(idx, { name: 'Taxus chinensis', family: 'Taxaceae' }, TODAY)).toMatchObject({ status: 'ok', appendix: 'II', listed: 'Taxus chinensis' });
-    expect(citesOf(idx, { name: 'Aloidendron pillansii', family: 'Asphodelaceae', synonyms: ['Aloe pillansii'] }, TODAY)).toMatchObject({ status: 'ok', appendix: 'I', via: 'Aloe pillansii' });
+    // The edition of 5 March 2026 lists Aloidendron pillansii by that name (Aloe pillansii before): its own listing now.
+    expect(citesOf(idx, { name: 'Aloidendron pillansii', family: 'Asphodelaceae', synonyms: ['Aloe pillansii'] }, TODAY)).toMatchObject({ status: 'ok', appendix: 'I', listed: 'Aloidendron pillansii' });
+    expect(citesOf(idx, { name: 'Mammillaria solisioides', family: 'Cactaceae', synonyms: ['Mammillaria pectinifera subsp. solisioides'] }, TODAY)).toMatchObject({ status: 'ok', appendix: 'I', via: 'Mammillaria pectinifera subsp. solisioides' });
   });
   it('the fill reads every page\'s name for the rule, not only the pages of the run', async () => {
     const s = await loadSources(mkdtempSync(join(tmpdir(), 'r87y-')), [{ name: 'Podocarpus macrophyllus', synonyms: ['Taxus chinensis'] }], { checkMd5: false, citesTable: writeTable(CHECKED), headings });

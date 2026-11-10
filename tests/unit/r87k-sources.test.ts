@@ -186,7 +186,8 @@ describe('nameAgreement: the WFO Plant List, by IPNI id, else by the exact name 
   });
 });
 
-const TABLE = readFileSync(CITES_TABLE_FILE, 'utf8');
+// The table as it stood before the owner's check, whatever its `checked:` line now says: these tests read both states.
+const TABLE = readFileSync(CITES_TABLE_FILE, 'utf8').replace(/^# checked: .*$/m, '# checked: no');
 const checked = () => new CitesIndex(parseCitesTable(TABLE.replace(/^# checked: no$/m, '# checked: 2026-11-10 md5 0123456789abcdef0123456789abcdef')));
 const cp = (name: string, family: string, synonyms: string[] = [], lifeform?: string): CitesPage => ({ name, family, synonyms, ...(lifeform ? { lifeform } : {}) });
 
@@ -210,7 +211,10 @@ describe('cites: the plant listings of the Appendices, by the page\'s names', ()
     ['a species excepted by name', cp('Aloe vera', 'Asphodelaceae', ['Aloe barbadensis']), { status: 'none' }],
     ['a species listing', cp('Aloe polyphylla', 'Asphodelaceae'), { status: 'ok', appendix: 'I', level: 'species' }],
     ['under a name Kew holds as a synonym', cp('Mammillaria solisioides', 'Cactaceae', ['Mammillaria pectinifera subsp. solisioides']), { status: 'ok', appendix: 'I', via: 'Mammillaria pectinifera subsp. solisioides' }],
-    ['a genus only a synonym is in', cp('Aloidendron dichotomum', 'Asphodelaceae', ['Aloe dichotoma']), { status: 'undecided' }],
+    ['a genus only a synonym is in', cp('Gasteria carinata', 'Asphodelaceae', ['Aloe carinata']), { status: 'undecided' }],
+    ['a genus CoP20 lists by its own name (the edition of 5 March 2026)', cp('Aloidendron dichotomum', 'Asphodelaceae', ['Aloe dichotoma']), { status: 'ok', appendix: 'II', listed: 'Aloidendron spp.' }],
+    ['an Avonia, which the Anacampseros listing includes', cp('Avonia albissima', 'Anacampserotaceae', ['Anacampseros albissima']), { status: 'ok', appendix: 'II', listed: 'Anacampseros spp.' }],
+    ['Nardostachys by the name of the edition of 5 March 2026', cp('Nardostachys jatamansi', 'Caprifoliaceae'), { status: 'ok', appendix: 'II', listed: 'Nardostachys jatamansi' }],
     ['a genus Kew draws wider than the listing', cp('Pelecyphora vivipara', 'Cactaceae', ['Escobaria vivipara', 'Coryphantha vivipara']), { status: 'undecided' }],
     ['the listed genus\'s own species', cp('Pelecyphora aselliformis', 'Cactaceae', ['Anhalonium aselliforme']), { status: 'ok', appendix: 'I', listed: 'Pelecyphora spp.' }],
     ['a family Kew draws wider than the listing', cp('Portulacaria afra', 'Didiereaceae'), { status: 'undecided' }],
@@ -238,7 +242,10 @@ const asPage = (d: Dossier, name: string, authorship: string, ipni: string, fami
 
 describe('the fill: "not asked" without the files, a figure kept, its day kept', () => {
   it('no file in the folder: every field "not asked", never "none"', async () => {
-    const s = await loadSources(empty, [sourcePage(dossier())]);
+    // The table unchecked, as it stood before the owner's check: a checked one would answer CITES from the table alone.
+    const unchecked = join(mkdtempSync(join(tmpdir(), 'r87k-cites-')), 'cites-appendices.tsv');
+    writeFileSync(unchecked, TABLE);
+    const s = await loadSources(empty, [sourcePage(dossier())], { citesTable: unchecked });
     expect([s.risk, s.chromo, s.wfo]).toEqual([null, null, null]);
     const d = dossier();
     applySources(d, s, TODAY);

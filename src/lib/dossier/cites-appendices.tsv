@@ -16,13 +16,24 @@
 # Rows from the Notification say so in `source`. Appendix III changes between the two editions are not in the
 # Notification: the owner's check below is what finds them.
 #
+# The check (10 November 2026): the edition in force, "valid from 5 March 2026", downloaded by the owner from cites.org
+# (E-Appendices-2026-03-05.pdf, 2,003,006 bytes, md5 below), its FLORA pages (pp. 61-79) read row by row against this
+# table, every field (Appendix, name, annotation, parenthesis, braces, Party): 233 rows as they were. Corrected to the
+# edition, each citing its page: the aloe segregates of CoP20 printed by name (Aloidendron pillansii and Aloestrela
+# suzannae in Appendix I for Aloe pillansii and Aloe suzannae; Aloe rugosquamosa in Appendix I, no longer a variety of
+# Aloe compressa; Aloiampelos, Aloidendron, Aristaloe, Gonialoe and Kumara spp. in Appendix II), the four Aloe species
+# the Notification moved to Appendix II no longer printed apart (Aloe spp. holds them), Anacampseros spp. under
+# ANACAMPSEROTACEAE including Avonia spp. (whose own row is gone), Nardostachys jatamansi for N. grandiflora, and
+# Podocarpus parlatorei's parenthesis, which the edition does not print (its P7 says the zero quota). No Appendix III row
+# changed.
+#
 # The table is applied to the pages only when the line `checked:` below names the edition in force it was checked
 # against, row by row, and that file's md5 (the owner's step, docs/STAGE2-OWNER-87.md). Until then every page says
 # "not asked", never "not listed".
 #
 # valid-from: 2026-03-05
 # edition: https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf
-# checked: no
+# checked: 2026-11-10 md5 086b5973883787a25d32400b8a966cf2
 #
 # Columns (tab-separated): appendix, taxon as the Appendices print it, annotation signs, the listing's parenthesis or
 # braces verbatim, the Party of an Appendix III listing, names excepted (";"), names included (";"), a rule this code
@@ -164,17 +175,13 @@ II	Pterocarpus spp.	#17	(Except Pterocarpus santalinus which is included in Appe
 II	Pterocarpus santalinus	#7						LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 II	Senna meridionalis							LEGUMINOSAE (FABACEAE)	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 II	Aloe spp.	#4	(Except the species included in Appendix I and Aloe vera, also referenced as Aloe barbadensis, which is not included in the Appendices)		Aloe vera; Aloe barbadensis			LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
-II	Aloe bergeriana	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
-II	Aloe jeppeae	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
-II	Aloe subspicata	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
-II	Aloe welwitschii	#4						LILIACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
 I	Aloe albida							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe albiflora							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe alfredii							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe bakeri							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe bellatula							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe calcairophila							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
-I	Aloe compressa		{Includes the vars. paucituberculata, rugosquamosa and schistophila}			Aloe compressa var. paucituberculata; Aloe compressa var. rugosquamosa; Aloe compressa var. schistophila		LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
+I	Aloe compressa		{Includes the vars. paucituberculata and schistophila}			Aloe compressa var. paucituberculata; Aloe compressa var. schistophila		LILIACEAE	Appendices of 5 March 2026, p. 71	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=71
 I	Aloe delphinensis							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe descoingsii							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
 I	Aloe fragilis							LILIACEAE	Appendices of 7 February 2025, p. 70	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=70
@@ -183,12 +190,18 @@ I	Aloe helenae							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cite
 I	Aloe laeta		{Includes the var. maniaensis}			Aloe laeta var. maniaensis		LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 I	Aloe parallelifolia							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 I	Aloe parvula							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
-I	Aloe pillansii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloidendron pillansii							LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
 I	Aloe polyphylla							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 I	Aloe rauhii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
-I	Aloe suzannae							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloestrela suzannae							LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
 I	Aloe versicolor							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 I	Aloe vossii							LILIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
+I	Aloe rugosquamosa							LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
+II	Aloiampelos spp.	#4						LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
+II	Aloidendron spp.	#4	(Except the species included in Appendix I)					LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
+II	Aristaloe spp.	#4						LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
+II	Gonialoe spp.	#4						LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
+II	Kumara spp.	#4						LILIACEAE	Appendices of 5 March 2026, p. 72	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=72
 III	Magnolia liliifera var. obovata	#1		Nepal				MAGNOLIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 II	Adansonia grandidieri	#16						MALVACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
 II	Cedrela spp.	#6	(Only the populations of the Neotropics; no other population is included in the Appendices)					MELIACEAE	Appendices of 7 February 2025, p. 71	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=71
@@ -232,10 +245,9 @@ II	Uncarina stellulifera							PEDALIACEAE	Appendices of 7 February 2025, p. 74	
 I	Abies guatemalensis							PINACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
 III	Pinus koraiensis	#5		Russian Federation				PINACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
 III	Podocarpus neriifolius	#1		Nepal				PODOCARPACEAE	Appendices of 7 February 2025, p. 74	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=74
-II	Podocarpus parlatorei	P7	(zero export quota for wild-taken specimens for commercial purposes)					PODOCARPACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
-II	Anacampseros spp.	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
-I	Anacampseros quinaria					Avonia quinaria		PORTULACACEAE	Notification 2026/005	https://cites.org/sites/default/files/notifications/E-Notif-2026-005.pdf
-II	Avonia spp.	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
+II	Podocarpus parlatorei	P7						PODOCARPACEAE	Appendices of 5 March 2026, p. 76	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=76
+II	Anacampseros spp.	#4	{Includes Avonia spp.} (Except the species included in Appendix I)			Avonia spp.		ANACAMPSEROTACEAE	Appendices of 5 March 2026, p. 61	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=61
+I	Anacampseros quinaria					Avonia quinaria		ANACAMPSEROTACEAE	Appendices of 5 March 2026, p. 61	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=61
 II	Lewisia serrata	#4						PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
 III	Portulacaria pygmaea			South Africa				PORTULACACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
 II	Cyclamen spp.	P5 #4						PRIMULACEAE	Appendices of 7 February 2025, p. 75	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=75
@@ -260,7 +272,7 @@ II	Aquilaria spp.	#14						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 Februar
 II	Gonystylus spp.	#4						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
 II	Gyrinops spp.	#14						THYMELAEACEAE (AQUILARIACEAE)	Appendices of 7 February 2025, p. 77	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=77
 III	Tetracentron sinense	#1		Nepal				TROCHODENDRACEAE (TETRACENTRACEAE)	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
-II	Nardostachys grandiflora	#2						VALERIANACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
+II	Nardostachys jatamansi	#2						VALERIANACEAE	Appendices of 5 March 2026, p. 79	https://cites.org/sites/default/files/eng/app/2026/E-Appendices-2026-03-05.pdf#page=79
 II	Cyphostemma elephantopus							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
 II	Cyphostemma laza							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
 II	Cyphostemma montagnacii							VITACEAE	Appendices of 7 February 2025, p. 78	https://cites.org/sites/default/files/eng/app/2025/E-Appendices-2025-02-07.pdf#page=78
