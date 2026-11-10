@@ -32,6 +32,28 @@ function local(url: string): Promise<{ status: number; headers: Record<string, s
   });
 }
 
+/**
+ * A module from Vite, asked again when the asking failed (round eighty-seven, the owner's deploy: with all 674 test files
+ * starting at once on the PC, one request for src/lib/ui/Climograph.svelte failed and the page said "Failed to fetch
+ * dynamically imported module"; the same test passed alone, here and there). Up to four tries, each said on the log; a
+ * module Vite cannot transform answers 500 every time, and that answer is passed on, so a real error still fails.
+ */
+async function fromVite(url: string): Promise<{ status: number; headers: Record<string, string>; body: Buffer }> {
+  let last: unknown = null;
+  for (let i = 0; i < 4; i++) {
+    if (i) { console.warn(`mount: ${url} asked again (${i + 1} of 4) after ${last instanceof Error ? last.message : `status ${(last as { status: number }).status}`}`); await new Promise((r) => setTimeout(r, 250 * i)); }
+    try {
+      const r = await local(url);
+      if (r.status < 500) return r;
+      last = r;
+    } catch (e) {
+      last = e;
+    }
+  }
+  if (last instanceof Error) throw last;
+  return last as { status: number; headers: Record<string, string>; body: Buffer };
+}
+
 const root = resolve(__dirname, '../../..');
 const ORIGIN = 'http://component.test';
 
@@ -127,7 +149,7 @@ export async function mount(component: string, props: Record<string, unknown> = 
       if (opts.answer) return opts.answer(route, url);
       return route.abort('internetdisconnected');
     }
-    const r = await local(base + url.pathname + url.search);
+    const r = await fromVite(base + url.pathname + url.search);
     return route.fulfill({ status: r.status, headers: r.headers, body: r.body });
   });
   const errors: string[] = [];

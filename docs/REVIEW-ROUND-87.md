@@ -275,3 +275,9 @@ showed the press on Move aimed while the new space's card was still open and lan
 had risen by its height. The test now presses once the new space is chosen, as a reader sees it; a press on Move while
 the space is still being made is r67h places 7's case, which holds the write open and passes.
 
+The fifth predeploy passed in every engine, first time, and 1647296 was committed and pushed. `npm run deploy` then
+stopped at its unit tests: r85q-behaviour 1 could not load src/lib/ui/Climograph.svelte ("Failed to fetch dynamically
+imported module"), with all 674 test files starting at once on the PC; it passes alone, and failed the same way in the
+sandbox under load. The component tests' harness now asks Vite again, up to four times and each said on the log, when a
+module's request fails or answers 5xx (tests/unit/helpers/mount.ts); a module Vite cannot transform still fails.
+
