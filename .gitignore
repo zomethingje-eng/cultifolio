@@ -47,3 +47,8 @@ extra-keys-kew-refused.txt
 
 # a unit test's scratch folder (tests/unit/r75h-harness.test.ts), left behind when a run is stopped
 tests/.r75h-harness-*/
+
+# round eighty-eight (the speed round): the walk's report and the owner's proof (scripts/dev/r88-prove.mjs)
+/walk-changes.jsonl
+/walk-ranges.txt
+/r88-prove/
