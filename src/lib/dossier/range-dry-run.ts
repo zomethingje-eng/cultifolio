@@ -148,9 +148,10 @@ export class DryRunTotals {
     if (c.spot) { this.spotsMoved++; if (c.spot.km >= 10) this.spotsMoved10++; }
     for (const [w, k] of c.by) this.by.set(w, (this.by.get(w) ?? 0) + k);
   }
-  lines(withClimate: boolean): string[] {
+  /** `written`: the walk's report (round eighty-eight), whose pages were written, where the dry run's were not. */
+  lines(withClimate: boolean, written = false): string[] {
     const out = [
-      `${n(this.pages)} pages derived, nothing written; ${n(this.changedPages)} change under this rule`,
+      `${n(this.pages)} pages derived, ${written ? 'each written' : 'nothing written'}; ${n(this.changedPages)} change under this rule`,
       `records: +${n(this.gained)} admitted on ${n(this.pagesGaining)} pages, −${n(this.dropped)} dropped on ${n(this.pagesDropping)} pages, ${n(this.moved)} in by another reason`,
       ...[...this.by].sort((a, b) => b[1] - a[1]).map(([w, k]) => `    ${w}: ${n(k)}`),
       `native ranges read otherwise: ${n(this.regionsChanged)} pages`

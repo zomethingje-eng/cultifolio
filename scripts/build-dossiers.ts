@@ -190,7 +190,7 @@
  * This script is the only builder: no Worker route builds a dossier (round sixty-nine; triage-68 M10), and it exists
  * so you see every dossier before anyone else does.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync, createReadStream } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, rmSync, renameSync, createReadStream } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { loadKewNames, kewFileDay } from './kew-names-load';
@@ -206,7 +206,7 @@ import { regionTester, outsideShapes, SHAPES_FILE, SHAPE_BUFFER_DEG, RANGE_RULE,
 import { listingStore, readEach, unreadSentence, type ListingStore } from '../src/lib/dossier/listing-store';
 import { walkList, checkPage, caseLine, reasonWords, NAMED_CASES, cellTester, type CheckPage } from '../src/lib/dossier/range-check';
 import { POLICY_BEFORE, POLICIES } from '../src/lib/dossier/admission-policy';
-import { pageChange, changeLine, tallyInto, DryRunTotals, type DryPage, type RangeTally } from '../src/lib/dossier/range-dry-run';
+import { pageChange, changeLine, tallyInto, DryRunTotals, type DryPage, type RangeTally, type PageChange } from '../src/lib/dossier/range-dry-run';
 import { carriesCore } from '../src/lib/dossier/carry-core';
 import { offlinePages, offlineWhy, type OfflinePage } from '../src/lib/dossier/offline-list';
 import { buildDossier, sharedOf, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, withoutGivenMedia, type SkippableSource } from '../src/lib/dossier/build';
@@ -397,6 +397,16 @@ const WALK_LIST = 'rebuild-walk.txt';
  */
 const OFFLINE_LIST = 'rebuild-offline.txt';
 const WALK_FILE = 'walk.json';
+/**
+ * Round eighty-eight (the speed round, 2): the walk reports what the dry run reports, as it writes, so a round needs one
+ * derivation, not two. Each page's change under the rule is kept here, a JSON line a page, before its dossier is written,
+ * so a walk that stopped and was resumed reports every page of the walk at its end (the last line of a page wins: one
+ * derived again after a stop). A walk begun anew starts the file anew.
+ */
+const WALK_CHANGES = 'walk-changes.jsonl';
+const WALK_RANGES = 'walk-ranges.txt';
+/** The walk's start (walk.json's `since`), set by `listWalk`: the lines of this walk in WALK_CHANGES carry it. */
+let walkSince: string | undefined;
 const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
@@ -1598,10 +1608,35 @@ function listWalk(): number {
   const store = listingStore(diskStore());
   const { lines, done } = walkList(readEach<CheckPage>(store), since);
   refuseUnread(store, WALK_LIST);
-  if (began) writeFileSync(WALK_FILE, JSON.stringify({ since, rule: RANGE_RULE }) + '\n');
+  if (began) { writeFileSync(WALK_FILE, JSON.stringify({ since, rule: RANGE_RULE }) + '\n'); writeFileSync(WALK_CHANGES, ''); }
+  walkSince = since;
   writeFileSync(WALK_LIST, lines.join('\n') + (lines.length ? '\n' : ''));
   console.log(`  the walk ${began ? 'begins' : 'began'} ${since.replace('T', ' ').slice(0, 16)} UTC (${WALK_FILE}): ${done} page${done === 1 ? '' : 's'} derived since, ${lines.length} to derive → ${WALK_LIST}${lines.length ? (args.includes('--walk') ? '' : `; run --keys ${WALK_LIST} --offline --grid climate --bulk bulk (if it stops, run these two lines again: the list is then what is left)`) : '; the walk is done: run --index, then --check-ranges'}`);
   return lines.length;
+}
+/**
+ * The walk's report at its end (round eighty-eight, 2): the totals of every page of this walk (walk-changes.jsonl, this
+ * walk's lines, the last of each page), and the pages that change, one a line, in WALK_RANGES, as the dry run writes
+ * dry-run-ranges.txt.
+ */
+function walkReportLines(withClimate: boolean): void {
+  const last = new Map<string, PageChange>();
+  const figs = new Map<string, Parameters<FiguresTally['add']>[0]>();
+  for (const l of (existsSync(WALK_CHANGES) ? readFileSync(WALK_CHANGES, 'utf8') : '').split('\n')) {
+    if (!l.trim()) continue;
+    try {
+      const x = JSON.parse(l) as { since?: string; key: string; c: PageChange; f?: Parameters<FiguresTally['add']>[0] };
+      if (x.since === walkSince) { last.set(x.key, x.c); figs.set(x.key, x.f ?? ({} as Parameters<FiguresTally['add']>[0])); }
+    } catch { /* a line cut by a stop: its page is derived again, and its line written again */ }
+  }
+  const totals = new DryRunTotals();
+  const lines: string[] = [];
+  for (const c of last.values()) { totals.add(c); const line = changeLine(c); if (line) lines.push(line); }
+  writeFileSync(WALK_RANGES, lines.sort().join('\n') + (lines.length ? '\n' : ''));
+  console.log(`\nThe walk, rule ${RANGE_RULE} against the dossiers before it (every page this walk has written, since ${walkSince?.replace('T', ' ').slice(0, 16)} UTC):`);
+  for (const l of totals.lines(withClimate, true)) console.log(`  ${l}`);
+  if (withClimate) { const ft = new FiguresTally(); for (const f of figs.values()) ft.add(f); for (const l of ft.lines()) console.log(`  ${l}`); }
+  console.log(`  the ${lines.length} pages that change, one a line → ${WALK_RANGES}`);
 }
 /** A folder's dossiers to read (a listing's: the corpus, or a backup's copy). */
 function dirStore(dir: string): Pick<DossierStore, 'files' | 'read'> {
@@ -3293,7 +3328,9 @@ async function main() {
   // round eighty-seven did not change; `--shapes-before` still names another file.
   const policyBefore = (() => { const i = args.indexOf('--policy-before'); return i >= 0 ? POLICIES[args[i + 1]] : POLICY_BEFORE; })();
   if (dryRun && !policyBefore) { console.error(`--policy-before: one of ${Object.keys(POLICIES).join(', ')}`); process.exit(2); }
-  const beforeRegions = dryRun && regions ? regionTester(shapesBefore ? (JSON.parse(readFileSync(shapesBefore, 'utf8')) as ShapesFile) : (JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile), policyBefore) : undefined;
+  // The walk reports its changes as the dry run does (round eighty-eight, 2): offline, with the shapes, by the rule before.
+  const walkReport = !dryRun && offline && !!walkSince && args.includes('--walk');
+  const beforeRegions = (dryRun || walkReport) && regions ? regionTester(shapesBefore ? (JSON.parse(readFileSync(shapesBefore, 'utf8')) as ShapesFile) : (JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile), policyBefore) : undefined;
   if (dryRun) console.log(`  dry run: nothing is written; each record is tested by rule ${RANGE_RULE} and by rule ${policyBefore.rule}${policyBefore === POLICY_BEFORE ? ', the one live,' : ''} on ${shapesBefore ? `${shapesBefore} (shapes rule ${beforeRegions?.rule ?? 'none'})` : `this shapes file${policyBefore === POLICY_BEFORE ? " (the shapes are the same; only how a record's stated state is read differs: its ISO 3166-2 code and old provinces' names)" : ''}`}`);
   const dryTotals = new DryRunTotals();
   const dryLines: string[] = [];
@@ -3542,6 +3579,17 @@ async function main() {
       built++;
       continue;
     }
+    // The walk's report (round eighty-eight, 2): the same change, measured at the same point as the dry run measures it,
+    // kept before the page is written (a page written and not yet kept would be missing from the report after a stop).
+    if (walkReport) {
+      deriveFigures(d);
+      const c = pageChange(prevFile as unknown as DryPage | null, d as unknown as DryPage, pageTally, !!gridDir);
+      // And the habitat's figures (Köppen, hardiness), so the walk's figures are counted over every page of the walk too.
+      const f = { ...(d.koppen ? { koppen: { cls: d.koppen.cls } } : {}), ...(d.hardiness ? { hardiness: { usda: d.hardiness.usda, usdaWhy: d.hardiness.usdaWhy } } : {}) };
+      appendFileSync(WALK_CHANGES, JSON.stringify({ since: walkSince, key: d.key, c, f }) + '\n');
+      const line = changeLine(c);
+      if (line) { say(`Δ ${line.replace('\t', ': ')}`); if (gridDir) say(`    ${dryLine(prevFile as never, d as never)}`); }
+    }
     // The day the page last changed in substance: the previous file's when this build changed nothing it shows, else this
     // build's (round sixty-three; src/lib/dossier/changed.ts), so a refresh that changes nothing does not move the sitemap.
     // What this build lost that the last had: the run fails at its end, so the corpus is read before it is uploaded (round sixty-seven; triage-66 N4).
@@ -3593,6 +3641,8 @@ async function main() {
     sayUnreadable();
     return;
   }
+  // The walk's report (round eighty-eight, 2): every page of this walk, its earlier parts too, as the dry run says it.
+  if (walkReport) walkReportLines(!!gridDir);
   // The pages this build wrote, for the summaries' owners below (round eighty-seven), before Kew's names clear the list.
   const builtNow = !fixtures && thisRun.size ? new Set<string>(thisRun.keys()) : null;
   // A build given Kew's files reads Kew's names for what it built, as `--fill kew-names` does (round seventy-two, A); the
