@@ -75,6 +75,38 @@ const MIN_GAP_MS: Record<string, number> = {
   'www.biodiversitylibrary.org': 1000
 };
 const lastAt = new Map<string, number>();
+/**
+ * Hosts whose gap follows their throttle (round eighty-eight, the speed round): GBIF's occurrence search answers a 429
+ * with a Retry-After of 3 s when asked too fast, and the fixed 250 ms walked the next request straight into it again: the
+ * owner's dry run of 11 November 2026 waited out 3,663 of them, about three hours. A first try met with a 429 doubles the
+ * host's gap (at least 500 ms, at most `most`); every `EASE_AFTER` first tries answered take a fifth off it, never below
+ * its MIN_GAP_MS. Only the time between requests changes: what is asked, and what is kept, is the same.
+ */
+const ADAPTIVE: Record<string, { most: number }> = { 'api.gbif.org': { most: 4000 } };
+const EASE_AFTER = 20;
+const gapNow = new Map<string, number>();
+const easyRun = new Map<string, number>();
+const gapOf = (k: string): number => gapNow.get(k) ?? MIN_GAP_MS[k] ?? 100;
+/** The gap now kept between two requests to a host (for tests and the log). */
+export const gapFor = (host: string): number => gapOf(paceKey(host));
+function widen(host: string): void {
+  const k = paceKey(host), a = ADAPTIVE[k];
+  if (!a) return;
+  const was = gapOf(k), to = Math.min(a.most, Math.max(was * 2, 500));
+  gapNow.set(k, to);
+  easyRun.set(k, 0);
+  if (to !== was && typeof process !== 'undefined' && (process.stdout?.isTTY || process.env?.CORPUS_STEP)) process.stdout.write(`\n  ${host}: asked too fast; one request every ${to} ms from here`);
+}
+function ease(host: string): void {
+  const k = paceKey(host);
+  if (!ADAPTIVE[k] || !gapNow.has(k)) return;
+  const n = (easyRun.get(k) ?? 0) + 1;
+  if (n < EASE_AFTER) { easyRun.set(k, n); return; }
+  easyRun.set(k, 0);
+  const base = MIN_GAP_MS[k] ?? 100, to = Math.max(base, Math.round(gapOf(k) * 0.8));
+  if (to <= base) gapNow.delete(k);
+  else gapNow.set(k, to);
+}
 
 /**
  * A host that has refused us through every retry, several times running, is
@@ -118,6 +150,8 @@ export function resetPacing(): void {
   strikes.clear();
   coolUntil.clear();
   throttledRun.clear();
+  gapNow.clear();
+  easyRun.clear();
 }
 /** For tests: pretend a host finished cooling a moment ago. */
 export function markCooledRecently(host: string): void {
@@ -135,7 +169,7 @@ export const paceKey = (host: string) => (host !== 'query.wikidata.org' && /(^|\
 export const alsoPacedAs = (host: string): string[] => (host === 'query.wikidata.org' ? ['wikimedia'] : []);
 async function pace(host: string): Promise<void> {
   const keys = [paceKey(host), ...alsoPacedAs(host)];
-  const slot = Math.max(Date.now(), ...keys.map((k) => (lastAt.get(k) ?? 0) + (MIN_GAP_MS[k] ?? 100)));
+  const slot = Math.max(Date.now(), ...keys.map((k) => (lastAt.get(k) ?? 0) + gapOf(k)));
   for (const k of keys) lastAt.set(k, slot);
   const wait = slot - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -232,6 +266,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
       // Up to five polite retries: GBIF's occurrence search answers 429 with a Retry-After of 3 s under load, and three
       // tries at that were giving up on a host that was about to answer.
       if ((res.status === 429 || res.status === 503) && (opts.attempt ?? 0) < RETRIES) {
+        if (!(opts.attempt ?? 0) && res.status === 429) widen(host);
         if (!(opts.attempt ?? 0)) {
           const run = (throttledRun.get(host) ?? 0) + 1;
           throttledRun.set(host, run);
@@ -263,7 +298,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
       }
       if (!res.ok) return { status: 'error', detail: `${host} ${res.status}` };
       strikes.set(host, 0);
-      if (!(opts.attempt ?? 0)) throttledRun.set(host, 0); // answered first time: the host is not throttling
+      if (!(opts.attempt ?? 0)) { throttledRun.set(host, 0); ease(host); } // answered first time: the host is not throttling
       const data = (await res.json()) as T;
       return { status: 'ok', data };
     } catch (e) {
