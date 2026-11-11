@@ -402,6 +402,18 @@ const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
 const offline = args.includes('--offline');
 /**
+ * Round eighty-eight (the speed round, 4): how many pages an offline build derives at once: `--pages N` (1 to 32), else 8.
+ * An online build derives one at a time, whatever is asked: Wikidata's and Commons' lag, read from one page's answer,
+ * decides how the next page waits (`lag`).
+ */
+function pagesInFlight(): number {
+  const i = args.indexOf('--pages');
+  const asked = i >= 0 ? Number(args[i + 1]) : undefined;
+  if (asked !== undefined && !(Number.isInteger(asked) && asked >= 1 && asked <= 32)) { console.error('--pages takes a whole number from 1 to 32'); process.exit(2); }
+  if (!offline) { if (asked && asked > 1) console.log(`  --pages ${asked}: an online build derives one page at a time (Wikidata's lag is read page by page)`); return 1; }
+  return asked ?? 8;
+}
+/**
  * `--dry-run` (round eighty-six): one flag, "write nothing", everywhere. A build (outside review B's 6, the plan's B2)
  * derives as `--keys … --offline` derives and says what the range rule changes, without `--keys` every page of the index
  * on disk; a fill whose rule changes data (cultigens, summary-leads, gbif-media-day, wikidata-names) reads and counts,
@@ -503,7 +515,11 @@ function diskPowerCache(dir: string): PowerCache {
     },
     async set(id, s) {
       if (dryRun) return;
-      writeFileSync(`${dir}/${id}.json`, JSON.stringify(s));
+      // Written whole, then renamed (round eighty-eight): pages derived at once may ask for the same cell, and one must never
+      // read another's half-written file.
+      const tmp = `${dir}/${id}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+      writeFileSync(tmp, JSON.stringify(s));
+      renameSync(tmp, `${dir}/${id}.json`);
     }
   };
 }
@@ -3285,69 +3301,102 @@ async function main() {
   // The stated-wild typical cell is out (the review of stage 2, S4).
   const figuresTally = new FiguresTally();
   let pageTally: RangeTally = new Map();
-  const rangeAudit = beforeRegions ? { regions: beforeRegions, tally: (...a: Parameters<ReturnType<typeof tallyInto>>) => tallyInto(pageTally)(...a) } : undefined;
-  for (const [ji, j] of jobs.entries()) {
-    pageTally = new Map();
-    // The next chunk's batches, asked when the chunk is reached (`batch.ts`; round seventy-eight), for the species to be built.
-    if (batch && ji % BATCH_CHUNK === 0) await batch.prefetch(jobs.slice(ji, ji + BATCH_CHUNK).filter((x) => !kept(x)).map((x) => ({ key: x.key, name: x.name, ...(x.kew ? { kew: { ipni: kewSpecies.get(x.kew)?.ipni, powo: kewSpecies.get(x.kew)?.powo } } : {}) })));
+  // Round eighty-eight (the speed round, 4): the pages of an offline build are derived ahead, up to `inFlight` at once, so a
+  // page waiting on GBIF's occurrence search (a species the download left to the API path) or on NASA POWER no longer holds
+  // up every page after it. Only the derivation runs ahead: what follows it (the page on disk read, the tallies, the file
+  // written, the log's line) is done in the jobs' order, one page at a time, as before. An online build asks Wikidata and
+  // Commons, whose lag one page's answer decides for the next (`lag`), so it derives one page at a time.
+  const inFlight = pagesInFlight();
+  if (inFlight > 1) console.log(`  ${inFlight} pages derived at once (offline; --pages sets another number, --pages 1 one at a time)`);
+  const derive = async (j: (typeof jobs)[number]) => {
+    // Each page's range audit counts into its own tally (the dry run), so a page derived ahead counts only its own records.
+    const tally: RangeTally = new Map();
     const t0 = Date.now();
-    if (kept(j)) {
+    // CULTIFOLIO_TRACE_PAGES (round eighty-eight): each derivation's start and end on stderr, for the test that pages overlap.
+    const trace = process.env.CULTIFOLIO_TRACE_PAGES ? (w: string) => process.stderr.write(`trace ${w} ${j.name}\n`) : null;
+    trace?.('begin');
+    const rangeAudit = beforeRegions ? { regions: beforeRegions, tally: tallyInto(tally) } : undefined;
+    let r;
+    try {
+        const prevTaxon = offline && j.key ? readPrev(j.key) : null;
+        if (j.kew) {
+          // Round seventy-nine: from Kew's file, by its plant_name_id (`build-kew.ts`); GBIF's records are not asked.
+          // Round seventy-nine (the owner's decision on K's offer): the records under the keys Kew's synonymy gives it.
+          r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, sharedBefore: sharedOf(readKewPrev(`k${j.kew}` as PageId)), heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined, climate, places, regions, defaults, genera: kewGenera, kewSameType: kewSameTypeOf?.(j.kew), ...(rangeAudit ? { rangeAudit } : {}) });
+        } else if (offline && !prevTaxon) {
+          return { r: undefined, tally, ms: Date.now() - t0, note: `✗ ${j.name}: no previous dossier to carry the name from; build it online first` };
+        } else r = await buildDossier(j.key ?? j.name, {
+          fetcher: j.fetcher,
+          builtBy: 'node',
+          quick,
+          climate,
+          skip,
+          mediaFirst: mediaFromFiles,
+          taxon: prevTaxon ? { key: prevTaxon.ids.gbif ?? j.key!, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], species: prevTaxon.upstream?.['gbif.species'], synonyms: prevTaxon.upstream?.['gbif.synonyms'], builtOn: prevTaxon.built, ...(prevTaxon.upstream?.['wikidata.names'] ? { wdNames: prevTaxon.upstream['wikidata.names'] } : {}) } : undefined,
+          // Kept when Wikidata does not answer, with the day they were read (round sixty-eight; round sixty-nine, triage-68 M5).
+          ...prevIdsFor(prevOf(j.key)),
+          heldElsewhere: heldFor(j),
+          // The reference's species, so an iNaturalist taxon GBIF holds as another of them is not taken (round seventy; triage-69 B5).
+          reference,
+          held,
+          // The photographs the last --index marked shared on the page (round eighty-seven): not counted towards Commons' twelve.
+          sharedBefore: sharedOf(prevOf(j.key)),
+          kewInfra,
+          // The other GBIF keys of this page (round seventy-three); the builder reads only those listed for the key it builds.
+          extraKeys: extraKeys.get(j.key ?? existing.get(j.name.toLowerCase()) ?? -1),
+          // The records another page reads by Kew's synonymy (round eighty-six, D6; only with --infra-keys).
+          givenAway: givenAwayOf.get(j.key ?? existing.get(j.name.toLowerCase()) ?? -1),
+          // Kew's name, where it heads the page on disk (round eighty-five, decision 6; D3): the name-filing sources are asked by it first.
+          kewHeading: kewHeadingOf(prevOf(j.key)),
+          // The page's id (round seventy-eight): the page on disk under the GBIF key the build ends on keeps its id; a new
+          // page is `g<key>` until `--index` gives it the id by the rule.
+          pageIdOf: idOfGbif,
+          // The botanic gardens, herbaria and zoos (round seventy-nine, Q).
+          places,
+          regions,
+          ...(rangeAudit ? { rangeAudit } : {}),
+          defaults,
+          // A page of the list with a Kew id is matched on Wikidata by its identifiers alone (round eighty, A).
+          kewEntryOf: entryOfKey,
+          // And, failing those, by Kew's identifiers for the names Kew holds with its entry's type (round eighty-five, H).
+          kewSameType: kewSameTypeOf
+        });
+    } catch (e) {
+      const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
+      const where = issues?.map((i) => (i.path ?? []).map((p) => String(p.key)).join('.') + ': ' + i.message).join('; ');
+      return { r: undefined, tally, ms: Date.now() - t0, note: `✗ ${j.name}: build crashed — ${where ?? (e instanceof Error ? e.message : String(e))}` };
+    }
+    trace?.('end');
+    // The page's own time, from its derivation's start to its end (with pages derived at once, not the wait for its turn).
+    return { r, tally, ms: Date.now() - t0, note: undefined as string | undefined };
+  };
+  const ahead = new Map<number, ReturnType<typeof derive> | null>();
+  let started = 0;
+  const startTo = async (upto: number) => {
+    while (started < jobs.length && started <= upto) {
+      const jj = started++;
+      // The next chunk's batches, asked when the chunk is reached (`batch.ts`; round seventy-eight), for the species to be built.
+      if (batch && jj % BATCH_CHUNK === 0) await batch.prefetch(jobs.slice(jj, jj + BATCH_CHUNK).filter((x) => !kept(x)).map((x) => ({ key: x.key, name: x.name, ...(x.kew ? { kew: { ipni: kewSpecies.get(x.kew)?.ipni, powo: kewSpecies.get(x.kew)?.powo } } : {}) })));
+      ahead.set(jj, kept(jobs[jj]) ? null : derive(jobs[jj]));
+    }
+  };
+  for (const [ji, j] of jobs.entries()) {
+    await startTo(ji + inFlight - 1);
+    const pending = ahead.get(ji);
+    ahead.delete(ji);
+    if (!pending) {
+      pageTally = new Map();
       say(`· ${j.name}: kept (clean)`);
       keptN++;
       continue;
     }
-    let r;
-    try {
-      const prevTaxon = offline && j.key ? readPrev(j.key) : null;
-      if (j.kew) {
-        // Round seventy-nine: from Kew's file, by its plant_name_id (`build-kew.ts`); GBIF's records are not asked.
-        // Round seventy-nine (the owner's decision on K's offer): the records under the keys Kew's synonymy gives it.
-        r = await buildKewDossier(kewSpecies.get(j.kew)!, { fetcher: j.fetcher, builtBy: 'node', quick, skip, held, sharedBefore: sharedOf(readKewPrev(`k${j.kew}` as PageId)), heldElsewhere: heldFor(j), kewInfra, extraKeys: kewExtra.get(`k${j.kew}`), noKey: kewNoKey.has(`k${j.kew}`) ? { line: kewNoKey.get(`k${j.kew}`)!, pageOf: idOfGbif } : undefined, climate, places, regions, defaults, genera: kewGenera, kewSameType: kewSameTypeOf?.(j.kew), ...(rangeAudit ? { rangeAudit } : {}) });
-      } else if (offline && !prevTaxon) {
-        say(`✗ ${j.name}: no previous dossier to carry the name from; build it online first`);
-        continue;
-      } else r = await buildDossier(j.key ?? j.name, {
-        fetcher: j.fetcher,
-        builtBy: 'node',
-        quick,
-        climate,
-        skip,
-        mediaFirst: mediaFromFiles,
-        taxon: prevTaxon ? { key: prevTaxon.ids.gbif ?? j.key!, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], species: prevTaxon.upstream?.['gbif.species'], synonyms: prevTaxon.upstream?.['gbif.synonyms'], builtOn: prevTaxon.built, ...(prevTaxon.upstream?.['wikidata.names'] ? { wdNames: prevTaxon.upstream['wikidata.names'] } : {}) } : undefined,
-        // Kept when Wikidata does not answer, with the day they were read (round sixty-eight; round sixty-nine, triage-68 M5).
-        ...prevIdsFor(prevOf(j.key)),
-        heldElsewhere: heldFor(j),
-        // The reference's species, so an iNaturalist taxon GBIF holds as another of them is not taken (round seventy; triage-69 B5).
-        reference,
-        held,
-        // The photographs the last --index marked shared on the page (round eighty-seven): not counted towards Commons' twelve.
-        sharedBefore: sharedOf(prevOf(j.key)),
-        kewInfra,
-        // The other GBIF keys of this page (round seventy-three); the builder reads only those listed for the key it builds.
-        extraKeys: extraKeys.get(j.key ?? existing.get(j.name.toLowerCase()) ?? -1),
-        // The records another page reads by Kew's synonymy (round eighty-six, D6; only with --infra-keys).
-        givenAway: givenAwayOf.get(j.key ?? existing.get(j.name.toLowerCase()) ?? -1),
-        // Kew's name, where it heads the page on disk (round eighty-five, decision 6; D3): the name-filing sources are asked by it first.
-        kewHeading: kewHeadingOf(prevOf(j.key)),
-        // The page's id (round seventy-eight): the page on disk under the GBIF key the build ends on keeps its id; a new
-        // page is `g<key>` until `--index` gives it the id by the rule.
-        pageIdOf: idOfGbif,
-        // The botanic gardens, herbaria and zoos (round seventy-nine, Q).
-        places,
-        regions,
-        ...(rangeAudit ? { rangeAudit } : {}),
-        defaults,
-        // A page of the list with a Kew id is matched on Wikidata by its identifiers alone (round eighty, A).
-        kewEntryOf: entryOfKey,
-        // And, failing those, by Kew's identifiers for the names Kew holds with its entry's type (round eighty-five, H).
-        kewSameType: kewSameTypeOf
-      });
-    } catch (e) {
-      const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
-      const where = issues?.map((i) => (i.path ?? []).map((p) => String(p.key)).join('.') + ': ' + i.message).join('; ');
-      say(`✗ ${j.name}: build crashed — ${where ?? (e instanceof Error ? e.message : String(e))}`);
+    const got = await pending;
+    pageTally = got.tally;
+    if (got.note) {
+      say(got.note);
       continue;
     }
+    const r = got.r!;
     if (!r.ok) {
       say(`✗ ${j.name}: ${r.reason}${r.detail ? ' (' + r.detail + ')' : ''}`);
       continue;
@@ -3527,7 +3576,7 @@ async function main() {
     const inRange = d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange;
     // Every record outside it, one or more, as the page says it (round seventy-two, B10: 49 of 64 such pages never reached the log).
     const disagree = !inRange && d.occurrences.rangeTested && d.occurrences.nOutsideRange ? outsideLog(d.occurrences.nOutsideRange) : '';
-    say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
+    say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${got.ms} ms)`);
     thisRun.set(d.key, indexEntry(d, held));
     built++;
     if (skip.includes('inat') && !d.ids.inat) inatLeft++;
