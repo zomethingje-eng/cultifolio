@@ -654,6 +654,15 @@ class Strings {
     return i;
   }
   at(i: number): string { return this.list[i]; }
+  /** Round eighty-eight (the bulk cache): the table as written, in number order. */
+  get values(): readonly string[] { return this.list; }
+  /** A table read back from the cache: the same numbers for the same strings. */
+  static from(what: string, max: number, list: readonly string[]): Strings {
+    const t = new Strings(what, max);
+    t.list = [...list];
+    t.ids = new Map(t.list.map((x, i) => [x, i]));
+    return t;
+  }
 }
 
 /**
@@ -681,6 +690,23 @@ class Rows {
     r.n = this.n;
     this.room = to; this.f = r.f; this.u = r.u;
   }
+}
+
+/** The sealed occurrence index as the bulk cache keeps it (round eighty-eight; `OccIndex.dump`). */
+export interface OccDump {
+  cap: number;
+  doi?: string;
+  day?: string;
+  parts: Array<{ doi?: string; day?: string }>;
+  part: number;
+  strings: Record<'cc' | 'ds' | 'est' | 'st' | 'basis' | 'lic', readonly string[]>;
+  worst: Array<[number, number]>;
+  keys: number[];
+  rows: (k: number) => Uint8Array;
+  withMedia: Array<[number, number]>;
+  mediaRank: Array<[number, number]>;
+  mediaTaxon: Array<[number, number]>;
+  mediaBy: Array<[number, Array<[number, number]>]>;
 }
 
 export class OccIndex {
@@ -872,6 +898,57 @@ export class OccIndex {
     }
     return out;
   }
+  /**
+   * Round eighty-eight (the bulk cache, `scripts/bulk-cache.ts`): the sealed index as it is held, to be written once and read
+   * back by the next build of the same files, code and wanted keys, instead of the files. Each key's rows are its buffer's
+   * first `n * Rows.BYTES` bytes, exactly; the string tables in number order; the photographs' marks as kept.
+   */
+  dump(): OccDump {
+    return {
+      cap: this.cap,
+      doi: this.doi,
+      day: this.day,
+      parts: this.parts.map((p) => ({ ...p })),
+      part: this.part,
+      strings: { cc: this.cc.values, ds: this.ds.values, est: this.est.values, st: this.st.values, basis: this.basis.values, lic: this.lic.values },
+      worst: [...this.worst],
+      keys: [...this.by.keys()],
+      rows: (k: number) => { const r = this.by.get(k)!; return new Uint8Array(r.f.buffer, r.f.byteOffset, r.n * Rows.BYTES); },
+      withMedia: [...this.withMedia],
+      mediaRank: [...this.mediaRank],
+      mediaTaxon: [...this.mediaTaxon],
+      mediaBy: [...this.mediaBy]
+    };
+  }
+  /** The index read back from the cache: what `dump` wrote, nothing derived again. `rowsOf` gives each key's bytes. */
+  static restore(d: Omit<OccDump, 'rows' | 'keys'>, keys: readonly number[], rowsOf: (k: number) => Uint8Array, wanted?: Set<number>, under?: ReadonlyMap<number, readonly number[]>): OccIndex {
+    const x = new OccIndex(d.cap, wanted, under);
+    x.doi = d.doi;
+    x.day = d.day;
+    x.parts = d.parts.map((p) => ({ ...p }));
+    x.part = d.part;
+    x.cc = Strings.from('countryCode', 0xffff, d.strings.cc);
+    x.ds = Strings.from('datasetKey', 0xffffffff, d.strings.ds);
+    x.est = Strings.from('establishmentMeans', 0xffff, d.strings.est);
+    x.st = Strings.from('stateProvince', 0xffffffff, d.strings.st);
+    x.basis = Strings.from('basisOfRecord', 255, d.strings.basis);
+    x.lic = Strings.from('license', 255, d.strings.lic);
+    x.worst = new Map(d.worst);
+    for (const k of keys) {
+      const bytes = rowsOf(k);
+      if (bytes.byteLength % Rows.BYTES) throw new Error(`the bulk cache's rows for key ${k} are ${bytes.byteLength} bytes, not a whole number of rows`);
+      const n = bytes.byteLength / Rows.BYTES;
+      const r = new Rows(n);
+      new Uint8Array(r.f.buffer).set(bytes);
+      r.n = n;
+      x.by.set(k, r);
+    }
+    for (const [a, b] of d.withMedia) x.withMedia.set(a, b);
+    for (const [a, b] of d.mediaRank) x.mediaRank.set(a, b);
+    for (const [a, b] of d.mediaTaxon) x.mediaTaxon.set(a, b);
+    for (const [a, b] of d.mediaBy) x.mediaBy.set(a, b.map((y) => [y[0], y[1]] as [number, number]));
+    return x;
+  }
   get species(): number {
     return this.by.size;
   }
@@ -959,6 +1036,17 @@ export class MediaIndex {
     }
     const results = [...byRec.values()];
     return { results, endOfRecords: true, count: results.length };
+  }
+  /** Round eighty-eight (the bulk cache): each owner's rows as kept, in order, and the next sequence number. */
+  dump(): { seq: number; owners: Array<[number, Array<{ gbifID: number; m: MediaRow; rank: number; seq: number }>]> } {
+    return { seq: this.seq, owners: [...this.by] };
+  }
+  /** The index read back from the cache, its owners' rows as `dump` gave them. */
+  static restore(d: ReturnType<MediaIndex['dump']>, ownerOf: Map<number, number>, rankOf?: Map<number, number>, taxonOf?: Map<number, number>): MediaIndex {
+    const x = new MediaIndex(ownerOf, rankOf, taxonOf);
+    x.seq = d.seq;
+    for (const [k, rows] of d.owners) x.by.set(k, rows.map((r) => ({ gbifID: r.gbifID, m: { ...r.m }, rank: r.rank, seq: r.seq })));
+    return x;
   }
   get species(): number {
     return this.by.size;

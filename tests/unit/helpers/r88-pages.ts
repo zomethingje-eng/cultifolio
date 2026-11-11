@@ -51,6 +51,9 @@ export function folder(only?: (i: number) => boolean): string {
   writeZip(join(dir, 'bulk/occurrence.zip'), { [`${KEY}.csv`]: [head.join('\t'), ...rows.map((r) => head.map((a) => sqlCell(r, a)).join('\t'))].join('\n') + '\n' });
   writeFileSync(join(dir, 'bulk/download.json'), JSON.stringify({ key: KEY, format: 'SQL_TSV_ZIP', doi: '10.15468/dl.hbdw64', records: rows.length, taxa: N, csv: `${KEY}.csv`, created: '2026-10-21T12:22:16.192+00:00', fetched: '2026-10-22T08:00:00.000Z' }));
   writeFileSync(join(dir, 'list.txt'), list.join('\n') + '\n');
+  // The keys the download was asked for, by name (bulk-fetch's keys.json), so a build keeps the keys of the pages it
+  // builds, as the owner's does, rather than every key (round eighty-eight, 3: a resumed walk's keys).
+  writeFileSync(join(dir, 'bulk/keys.json'), JSON.stringify(Object.fromEntries(Array.from({ length: N }, (_, i) => [`Begonia ${sp(i).epithet}`, sp(i).gbif]))));
   return dir;
 }
 /** A dossier with the build's own times taken out (`built`, and each source's `at`), which two runs cannot share. */

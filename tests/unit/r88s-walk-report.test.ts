@@ -6,13 +6,17 @@
  * Both runs measure against round eighty-five's rule (`--policy-before r85`), under which these pages' records do change by
  * reason, so the totals agree on more than zeros.
  *
- * On r87 (7e37f38): 1 and 2 FAILED (the walk wrote no report and no walk-ranges.txt).
+ * And 3 (the speed round's item 3): a walk stopped and resumed reads the bulk files for the whole walk, as the walk begun
+ * read them, so the resume reads the bulk cache the walk begun wrote, and writes the pages an unbroken walk writes.
+ *
+ * On r87 (7e37f38): 1 and 2 FAILED (the walk wrote no report and no walk-ranges.txt). Without the whole walk's keys, 3
+ * FAILED (the resume read the files again, for the six pages left).
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, cpSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { builder, folder, N, sp } from './helpers/r88-pages';
+import { builder, folder, N, sp, pages } from './helpers/r88-pages';
 
 /** The totals block, the first line aside ("nothing written" in the dry run, "each written" in the walk). */
 const totals = (out: string, head: RegExp) => {
@@ -58,5 +62,22 @@ describe('r88s 2: the walk reports the dry run\'s totals, every page of the walk
     expect(new Set(kept.map((x) => x.key)).size).toBe(N);
     expect(new Set(kept.map((x) => x.since)).size).toBe(1);
     for (const x of kept) { expect(x.c).toBeTruthy(); expect(x.f).toBeTruthy(); }
+  }, 300_000);
+  it('3. a walk stopped half-way reads the bulk cache when resumed, and writes what an unbroken walk writes', () => {
+    const whole = folder(), broken = folder(), was = folder();
+    const a = builder(whole, '--walk', '--offline', '--bulk', 'bulk');
+    expect(a.status, a.stderr + a.stdout).toBe(0);
+    expect(a.stdout).toContain('kept in the bulk cache');
+    // A walk that stopped after six pages: the walk begun over all twelve, then six of its pages as they were before it.
+    const b = builder(broken, '--walk', '--offline', '--bulk', 'bulk');
+    expect(b.status, b.stderr + b.stdout).toBe(0);
+    for (let i = 0; i < N; i += 2) writeFileSync(join(broken, `static/s/v3/k${sp(i).id}.json`), readFileSync(join(was, `static/s/v3/k${sp(i).id}.json`)));
+    const c = builder(broken, '--walk', '--offline', '--bulk', 'bulk');
+    expect(c.status, c.stderr + c.stdout).toBe(0);
+    expect(c.stdout).toMatch(/the walk began .*: 6 pages derived since, 6 to derive/);
+    expect(c.stdout).toContain('the bulk files read for the whole walk: the 6 pages left and the 6 derived before it stopped');
+    expect(c.stdout).toContain('GBIF occurrences from the bulk cache');
+    expect(c.stdout).toContain(`${N} pages derived, each written`);
+    expect(pages(broken)).toEqual(pages(whole));
   }, 300_000);
 });

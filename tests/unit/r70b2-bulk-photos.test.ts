@@ -50,7 +50,8 @@ describe('a species the download was not asked for is asked of GBIF', () => {
     // Round eighty-six (review D's D5): and the download the photographs come from (`mediaFrom`).
     expect(src).toMatch(/bulkFetcher\(f, \{ wcvp: wcvp \?\? undefined, occ: loaded\?\.occ, media: loaded\?\.media \?\? undefined, apiPath, covered, entryOf(?:, \.\.\.\(loaded\?\.media \? \{ mediaFrom: [^}]+\} \} : \{\}\))? \}\)/);
     // Round eighty-six (final review M1): and the keys that come with a key read from another page's species (`withUnder`).
-    expect(src).toMatch(/loadOccurrences\(bulkDir, 2000, wanted(?:, withUnder)?\)/);
+    // Round eighty-eight (the speed round, 3): and whether the bulk cache is read and written (`{ cache: … }`).
+    expect(src).toMatch(/loadOccurrences\(bulkDir, 2000, wanted(?:, withUnder)?(?:, \{ cache: .*? \})?\)/);
   });
 });
 

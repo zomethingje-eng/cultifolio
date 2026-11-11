@@ -68,14 +68,13 @@ export interface CheckPage {
 }
 
 /** The pages of the walk still to derive: every page built before the walk began (all of them, the first time). */
-export function walkList(pages: Iterable<CheckPage>, since: string): { lines: string[]; done: number } {
+export function walkList(pages: Iterable<CheckPage>, since: string): { lines: string[]; done: number; doneLines: string[] } {
   const lines: string[] = [];
-  let done = 0;
-  for (const d of pages) {
-    if (d.built && d.built >= since) { done++; continue; }
-    lines.push(`${d.key} ${d.name.scientific}`);
-  }
-  return { lines: lines.sort(), done };
+  // Round eighty-eight (the speed round, 3): the pages derived since, by the same line, so a walk resumed reads the bulk
+  // files for the whole walk, as the walk begun read them.
+  const doneLines: string[] = [];
+  for (const d of pages) (d.built && d.built >= since ? doneLines : lines).push(`${d.key} ${d.name.scientific}`);
+  return { lines: lines.sort(), done: doneLines.length, doneLines: doneLines.sort() };
 }
 
 export interface PageFaults {

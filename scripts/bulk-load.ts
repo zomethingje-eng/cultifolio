@@ -3,6 +3,7 @@
  * Node-only (readline over files); the parsing and the indexes are in
  * src/lib/dossier/bulk.ts where they are unit-tested.
  */
+import { cacheKey, readCache, writeCache, CACHE_DIR } from './bulk-cache';
 import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -220,7 +221,7 @@ const notBackboneKey = (raw: string | undefined) => !!raw && !/^\d+$/.test(raw.t
  * occurrence.csv is read too, for the small case. The same records give the same sample and the same photographs by
  * either form: the reader reads each column by its name, in any order and either case.
  */
-export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>, under?: ReadonlyMap<number, readonly number[]>): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string; mediaDay?: string } | null> {
+export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>, under?: ReadonlyMap<number, readonly number[]>, opts: { cache?: 'off' | 'read' | 'readwrite' } = {}): Promise<{ occ: OccIndex; media: MediaIndex | null; format: 'dwca' | 'sql' | 'csv'; photos: string; mediaDoi?: string; mediaDay?: string } | null> {
   // A names file with nothing in the download (a handful of extras) should not cost a pass over 28 M rows.
   if (wanted && wanted.size === 0) {
     console.log('  none of these species are in the occurrence download: occurrences will come from the API');
@@ -228,6 +229,22 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   }
   const parts = downloadParts(dir);
   if (!parts) return null;
+  // The bulk cache (round eighty-eight, `bulk-cache.ts`): this read of these files, kept by the build before, read back.
+  const mode = opts.cache ?? 'off';
+  let key: string | undefined;
+  if (mode !== 'off') {
+    const files = [...new Set(parts.map((p) => p.file))];
+    if (!parts.some((p) => p.media) && existsSync(`${dir}/media.zip`)) files.push(`${dir}/media.zip`);
+    key = cacheKey({ files, records: [`${dir}/download.json`, `${dir}/media-download.json`], cap, wanted, under });
+    const hit = readCache(dir, key, wanted, under);
+    if (hit) {
+      const { loaded, note } = hit;
+      console.log(`  GBIF occurrences from the bulk cache of ${files.join(', ')} (${dir}/${CACHE_DIR}/occ-${key}; the files, the code and the species asked are those it was read for)`);
+      console.log(`  ${note.rows} rows → ${loaded.occ.species} taxa, ${loaded.occ.kept} rows kept (≤${cap} each)`);
+      if (loaded.media) console.log(`  ${note.imageRows ?? 0} image rows → ${loaded.media.species} species with openly licensed photographs (${loaded.photos})`);
+      return loaded;
+    }
+  }
   // A key's records under the key GBIF files it under too, where the build says (round eighty-six, final review M1).
   const idx = new OccIndex(cap, wanted, under);
   idx.doi = parts[0].doi;
@@ -279,6 +296,7 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   // The day GBIF made the download the photographs come from (round eighty-six; review D's D5): their credits were read
   // from it, so the record says "as of" that day, never the build's.
   let mediaDay: string | undefined;
+  let imageRows = 0;
   const withMedia = parts.filter((p) => p.media);
   const mediaZip = `${dir}/media.zip`, mediaMeta = `${dir}/media-download.json`;
   if (withMedia.length) {
@@ -288,7 +306,7 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
       photos = 'multimedia.txt';
       mediaDoi = parts[0].doi;
       mediaDay = downloadDay(parts[0]);
-      for (const p of withMedia) await readMedia(p, p.media!, media);
+      for (const p of withMedia) imageRows += await readMedia(p, p.media!, media);
     }
   } else if (existsSync(mediaZip)) {
     const mm = members(mediaZip, mediaMeta);
@@ -310,13 +328,18 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
       photos = 'media.zip';
       mediaDoi = mmeta.doi;
       mediaDay = downloadDay(mmeta);
-      await readMedia(mp, mm.media, media);
+      imageRows += await readMedia(mp, mm.media, media);
     }
   }
-  return { occ: idx, media, format, photos, mediaDoi, mediaDay };
+  const result = { occ: idx, media, format, photos, mediaDoi, mediaDay };
+  if (key && mode === 'readwrite') {
+    const at = writeCache(dir, key, result, { format, photos, mediaDoi, mediaDay, rows: n, imageRows });
+    if (at) console.log(`  kept in the bulk cache (${at}): the next build of these files and species reads it in place of them`);
+  }
+  return result;
 }
 
-async function readMedia(p: DownloadPart, member: string, media: MediaIndex): Promise<void> {
+async function readMedia(p: DownloadPart, member: string, media: MediaIndex): Promise<number> {
   let mh: string[] = [];
   let rows = 0;
   console.log(`  GBIF photographs from ${member} of ${p.file}…`);
@@ -328,6 +351,7 @@ async function readMedia(p: DownloadPart, member: string, media: MediaIndex): Pr
     if (++rows % 500_000 === 0) process.stdout.write(`\r  ${(rows / 1e6).toFixed(1)} M image rows, ${media.species} species with photographs…   `);
   });
   console.log(`\r  ${rows} image rows → ${media.species} species with openly licensed photographs      `);
+  return rows;
 }
 
 function hasCmd(c: string): boolean {

@@ -8,8 +8,8 @@
  * read `gbifid` and `specieskey` as no column (every SQL row dropped), had no media.zip, no parts, no `SQL_SELECT`, no key
  * check and took a page's thirty photographs in file order.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { occHeader, parseOccRow, OCC_TERMS, SQL_SELECT, MediaIndex, OccIndex, parseMediaRow } from '$dossier/bulk';
@@ -207,3 +207,74 @@ describe('a species list is built from the download asked for it', () => {
   });
 });
 
+
+/**
+ * Round eighty-eight (the speed round), 3: the bulk cache (`scripts/bulk-cache.ts`). Each form above (the DWCA with its
+ * multimedia.txt, the SQL download beside its images' download, a download in parts) read from the files, then kept in
+ * the cache, then read back from it: the same rows of every key, the same photographs, the same marks. A cache of other
+ * species, of a changed download, or one that cannot be read whole is never read; a dry run's read writes none.
+ * On r87 (7e37f38): every test here FAILED (no cache).
+ */
+describe('r88s 3: the bulk cache gives back what the files give', () => {
+  const full = (l: Awaited<ReturnType<typeof loadOccurrences>>) => ({
+    view: KEYS.map((k) => ({ k, rows: l!.occ.get(k), photos: l!.media?.page(k) })),
+    species: l!.occ.species, kept: l!.occ.kept,
+    withMedia: [...l!.occ.withMedia].sort((a, b) => a[0] - b[0]), rank: [...l!.occ.mediaRank].sort((a, b) => a[0] - b[0]), taxon: [...l!.occ.mediaTaxon].sort((a, b) => a[0] - b[0]),
+    format: l!.format, photos: l!.photos, mediaDoi: l!.mediaDoi, mediaDay: l!.mediaDay, mediaSpecies: l!.media?.species
+  });
+  const caches = (d: string) => (existsSync(join(d, '.cache')) ? readdirSync(join(d, '.cache')) : []);
+  const copy = (from: string, name: string) => { const d = join(root, name); cpSync(from, d, { recursive: true }); return d; };
+  const said = async (f: () => Promise<unknown>) => { const lines: string[] = []; const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { lines.push(a.join(' ')); }); try { await f(); } finally { spy.mockRestore(); } return lines.join('\n'); };
+
+  for (const form of ['dwca', 'sql']) {
+    it(`${form}: read from the files, kept, and read back: the same in every part`, async () => {
+      const d = copy(join(root, form), `cache-${form}`);
+      const plain = await loadOccurrences(d, 25, new Set(KEYS));
+      expect(caches(d)).toEqual([]);
+      let wrote!: Awaited<ReturnType<typeof loadOccurrences>>;
+      expect(await said(async () => { wrote = await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'readwrite' }); })).toContain('kept in the bulk cache');
+      expect(caches(d)).toHaveLength(1);
+      let back!: Awaited<ReturnType<typeof loadOccurrences>>;
+      expect(await said(async () => { back = await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'readwrite' }); })).toContain('from the bulk cache');
+      expect(full(wrote)).toEqual(full(plain));
+      expect(full(back)).toEqual(full(plain));
+      expect(full(plain).view.some((v) => v.photos?.results.length)).toBe(true); // photographs there to compare
+    });
+  }
+  it('a download in parts, each record citing its own part, read back the same', async () => {
+    const p = dir('cache-parts');
+    const one = recs.filter((r) => r.species === 5384013), two = recs.filter((r) => r.species !== 5384013);
+    writeZip(join(p, 'occurrence-1.zip'), { 'p1.csv': sqlCsv(one) });
+    writeZip(join(p, 'occurrence-2.zip'), { 'p2.csv': sqlCsv(two) });
+    writeFileSync(join(p, 'download.json'), JSON.stringify({ format: 'SQL_TSV_ZIP', of: 2, parts: [{ key: '0000004-261020000000000', file: 'occurrence-1.zip', csv: 'p1.csv', doi: '10.15468/dl.p1', fetched: '2026-10-21T09:00:00Z' }, { key: '0000005-261020000000000', file: 'occurrence-2.zip', csv: 'p2.csv', doi: '10.15468/dl.p2', fetched: '2026-10-21T09:00:00Z' }] }));
+    const plain = await loadOccurrences(p, 25, new Set(KEYS));
+    await loadOccurrences(p, 25, new Set(KEYS), undefined, { cache: 'readwrite' });
+    const back = await loadOccurrences(p, 25, new Set(KEYS), undefined, { cache: 'readwrite' });
+    expect(full(back)).toEqual(full(plain));
+    expect(new Set(back!.occ.get(3084426)!.map((r) => r.downloadDoi))).toEqual(new Set(['10.15468/dl.p2']));
+  });
+  it('other species asked, or a changed download: the files read again, and the one cache kept is the new one', async () => {
+    const d = copy(join(root, 'sql'), 'cache-change');
+    await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'readwrite' });
+    const first = caches(d);
+    expect(await said(() => loadOccurrences(d, 25, new Set([5384013]), undefined, { cache: 'readwrite' }))).toContain('kept in the bulk cache');
+    expect(caches(d)).toHaveLength(1);
+    expect(caches(d)).not.toEqual(first);
+    const json = JSON.parse(readFileSync(join(d, 'download.json'), 'utf8'));
+    writeFileSync(join(d, 'download.json'), JSON.stringify({ ...json, fetched: '2026-11-01T00:00:00Z' }));
+    expect(await said(() => loadOccurrences(d, 25, new Set([5384013]), undefined, { cache: 'readwrite' }))).not.toContain('from the bulk cache');
+  });
+  it('a dry run (read) uses a cache and writes none; a cache cut short is not read', async () => {
+    const d = copy(join(root, 'dwca'), 'cache-read');
+    const plain = await loadOccurrences(d, 25, new Set(KEYS));
+    await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'read' });
+    expect(caches(d)).toEqual([]);
+    await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'readwrite' });
+    expect(await said(() => loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'read' }))).toContain('from the bulk cache');
+    const rows = join(d, '.cache', caches(d)[0], 'rows.bin');
+    writeFileSync(rows, readFileSync(rows).subarray(0, 100));
+    let back!: Awaited<ReturnType<typeof loadOccurrences>>;
+    expect(await said(async () => { back = await loadOccurrences(d, 25, new Set(KEYS), undefined, { cache: 'read' }); })).toContain('could not be read');
+    expect(full(back)).toEqual(full(plain));
+  });
+});

@@ -407,6 +407,8 @@ const WALK_CHANGES = 'walk-changes.jsonl';
 const WALK_RANGES = 'walk-ranges.txt';
 /** The walk's start (walk.json's `since`), set by `listWalk`: the lines of this walk in WALK_CHANGES carry it. */
 let walkSince: string | undefined;
+/** The pages a resumed walk derived before it stopped (round eighty-eight, 3), by walkList's line. */
+let walkDone: string[] = [];
 const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
@@ -1606,13 +1608,30 @@ function listWalk(): number {
   const began = !since;
   since ??= new Date().toISOString();
   const store = listingStore(diskStore());
-  const { lines, done } = walkList(readEach<CheckPage>(store), since);
+  const { lines, done, doneLines } = walkList(readEach<CheckPage>(store), since);
   refuseUnread(store, WALK_LIST);
   if (began) { writeFileSync(WALK_FILE, JSON.stringify({ since, rule: RANGE_RULE }) + '\n'); writeFileSync(WALK_CHANGES, ''); }
   walkSince = since;
+  walkDone = doneLines;
   writeFileSync(WALK_LIST, lines.join('\n') + (lines.length ? '\n' : ''));
   console.log(`  the walk ${began ? 'begins' : 'began'} ${since.replace('T', ' ').slice(0, 16)} UTC (${WALK_FILE}): ${done} page${done === 1 ? '' : 's'} derived since, ${lines.length} to derive → ${WALK_LIST}${lines.length ? (args.includes('--walk') ? '' : `; run --keys ${WALK_LIST} --offline --grid climate --bulk bulk (if it stops, run these two lines again: the list is then what is left)`) : '; the walk is done: run --index, then --check-ranges'}`);
   return lines.length;
+}
+/**
+ * The pages of walkList's lines as the build reads a list's (round eighty-eight, 3): by GBIF key and name, or, for a page
+ * with no GBIF key on disk, by Kew's id. Read only, for the keys the bulk files are read for; nothing is built from them.
+ */
+function walkLinesRead(lines: readonly string[]): { pages: Array<{ name: string; key: number }>; kew: string[] } {
+  const pages: Array<{ name: string; key: number }> = [];
+  const kew: string[] = [];
+  for (const line of lines) {
+    const m = /^([kg]?\d+)\s+([^\t]+)/.exec(line);
+    if (!m) continue;
+    const g = gbifOfLine(m[1]);
+    if (g != null) pages.push({ name: m[2].trim(), key: g });
+    else if (isPageId(m[1]) && kewOnDisk(m[1])) kew.push(m[1].slice(1));
+  }
+  return { pages, kew };
 }
 /**
  * The walk's report at its end (round eighty-eight, 2): the totals of every page of this walk (walk-changes.jsonl, this
@@ -3212,17 +3231,24 @@ async function main() {
       // still in the files by its key, and one outside them is asked of GBIF, never read as having no photograph (round
       // seventy, the owner's run: 85 of 118 species rebuilt lost their GBIF photographs).
       const covered = downloadKeys(bulkDir);
-      const byName = wantedKeys(bulkDir, names);
-      const wanted = byName && covered ? new Set([...byName, ...unique.flatMap((p) => (p.key && covered.has(p.key) ? [p.key] : []))]) : byName;
+      // Round eighty-eight (the speed round, 3): a walk resumed keeps the keys of the whole walk, the pages it derived
+      // before it stopped too, as the walk begun kept them. Which page a photograph of a subspecies goes to depends on
+      // whether its species is kept (OccIndex.addMedia), so a page derived after a stop could have been given another
+      // page's photographs; and the same keys are the same bulk cache, so a resume reads it rather than the files.
+      const before = args.includes('--walk') ? walkLinesRead(walkDone) : { pages: [], kew: [] };
+      if (before.pages.length + before.kew.length) console.log(`  the bulk files read for the whole walk: the ${unique.length + kewWanted.size} pages left and the ${before.pages.length + before.kew.length} derived before it stopped`);
+      const whole = [...unique, ...before.pages];
+      const byName = wantedKeys(bulkDir, whole.map((p) => p.name));
+      const wanted = byName && covered ? new Set([...byName, ...whole.flatMap((p) => (p.key && covered.has(p.key) ? [p.key] : []))]) : byName;
       // The other keys these pages read (round seventy-three): kept where the download holds them; the rest are asked of GBIF.
-      if (wanted) for (const p of unique) for (const x of extraKeys.get(p.key ?? -1) ?? []) wanted.add(x.key);
+      if (wanted) for (const p of whole) for (const x of extraKeys.get(p.key ?? -1) ?? []) wanted.add(x.key);
       // And those Kew's synonymy gives the pages without a GBIF key (round seventy-nine).
-      if (wanted) for (const id of kewWanted.keys()) for (const x of kewExtra.get(`k${id}`) ?? []) wanted.add(x.key);
+      if (wanted) for (const id of [...kewWanted.keys(), ...before.kew]) for (const x of kewExtra.get(`k${id}`) ?? []) wanted.add(x.key);
       // The keys that come with a key read from another page's species (D6's `with`), read under that key, as GBIF's search
       // by it answers with them (round eighty-six, final review M1: a DOUBTFUL one is its own taxon and accepted key, and
       // the download held its records under neither the variety's key nor any key the receiving page reads).
       const withUnder = withKeysUnder(infraKeys);
-      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera], fixtures ? undefined : scanDossiers().map((e) => e.name)), loadOccurrences(bulkDir, 2000, wanted, withUnder)]);
+      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera], fixtures ? undefined : scanDossiers().map((e) => e.name)), loadOccurrences(bulkDir, 2000, wanted, withUnder, { cache: args.includes('--no-bulk-cache') ? 'off' : dryRun ? 'read' : 'readwrite' })]);
       if (renew) {
         renewBefore = loaded?.occ.day;
         console.log(renewBefore ? `  --renew: every page built before ${renewBefore}, the day GBIF made the download, is built again; a page built since is kept` : '  --renew: no download read, or none whose day is known, so no page is built again for it');
