@@ -81,6 +81,7 @@ export function builderHeap(total = totalmem(), env = process.env) {
 
 /** The plan: one step a line, `#` starts a comment. Throws on a line it does not know, so a typo stops before anything runs. */
 export function parsePlan(text) {
+  /** @type {Array<{ line: any, kind: any, args: any, when?: string, expects?: any[] }>} */
   const steps = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
     const line = raw.replace(/#.*$/, '').trim();
