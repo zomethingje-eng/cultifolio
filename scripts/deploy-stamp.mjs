@@ -61,3 +61,17 @@ export function deploySteps(stamp, mark) {
       : `the predeploy of ${stamp.at} (--tier=${stamp.tier}) passed ${[stamp.check ? 'svelte-check' : '', stamp.unit ? 'the unit tests' : ''].filter(Boolean).join(' and ') || 'neither'} on this very code: ${[check ? 'svelte-check' : '', unit ? 'the unit tests' : ''].filter(Boolean).join(' and ') || 'nothing'} run${check && unit ? '' : 's'} first`;
   return { check, unit, why };
 }
+
+/**
+ * What a predeploy run stamps, if anything: a tier's whole run (not a part), every test passing, on code that did not
+ * change while it ran. Returns the stamp to write and the sentence to print, or the sentence alone.
+ * @param {{ tier?: string | null, status: number, scope: string, markBefore: string | null, markAfter: string | null }} r
+ */
+export function stampFor(r) {
+  if (!r.tier || r.status !== 0 || r.scope === 'part' || !r.markBefore) return { stamp: null, words: null };
+  if (r.markAfter !== r.markBefore) return { stamp: null, words: 'predeploy: the code changed while this ran: no stamp; node scripts/deploy.mjs runs everything' };
+  return {
+    stamp: { mark: r.markBefore, unit: true, check: r.tier === 'launch', tier: r.tier },
+    words: `predeploy: stamped (${STAMP}): node scripts/deploy.mjs leaves out ${r.tier === 'launch' ? 'svelte-check and ' : ''}the unit tests for this very code`
+  };
+}

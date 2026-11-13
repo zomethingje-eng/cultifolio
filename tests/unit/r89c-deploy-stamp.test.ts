@@ -6,10 +6,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, unlinkSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { treeMark, deploySteps, writeStamp, readStamp } from '../../scripts/deploy-stamp.mjs';
+import { treeMark, deploySteps, writeStamp, readStamp, stampFor } from '../../scripts/deploy-stamp.mjs';
 
 const repo = () => {
   const d = mkdtempSync(join(tmpdir(), 'r89c-'));
@@ -58,8 +58,12 @@ describe('r89c: the deploy stamp', () => {
     expect(deploySteps(s, 'another').why).toMatch(/^the code differs from what the predeploy of .* passed/);
   });
   it('the predeploy stamps only a tier\'s whole passing run on code that did not change under it', () => {
-    const text = readFileSync('scripts/predeploy.mjs', 'utf8');
-    expect(text).toContain("if (tier && status === 0 && markBefore && !runScope(");
-    expect(text).toContain('if (markAfter === markBefore) { writeStamp(');
+    const base = { tier: 'corpus', status: 0, scope: 'chromium', markBefore: 'm', markAfter: 'm' };
+    expect(stampFor(base)).toEqual({ stamp: { mark: 'm', unit: true, check: false, tier: 'corpus' }, words: 'predeploy: stamped (.predeploy-stamp.json): node scripts/deploy.mjs leaves out the unit tests for this very code' });
+    expect(stampFor({ ...base, tier: 'launch', scope: 'all' }).stamp).toEqual({ mark: 'm', unit: true, check: true, tier: 'launch' });
+    expect(stampFor({ ...base, status: 1 })).toEqual({ stamp: null, words: null });
+    expect(stampFor({ ...base, scope: 'part' })).toEqual({ stamp: null, words: null });
+    expect(stampFor({ ...base, tier: null })).toEqual({ stamp: null, words: null });
+    expect(stampFor({ ...base, markAfter: 'n' })).toEqual({ stamp: null, words: 'predeploy: the code changed while this ran: no stamp; node scripts/deploy.mjs runs everything' });
   });
 });
