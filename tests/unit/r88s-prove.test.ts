@@ -69,7 +69,7 @@ describe('r88s: the proof on the owner\'s PC', () => {
     expect(raw(dir)).not.toEqual(was);
     const back = prove(dir, '--put-back');
     expect(back.status, back.stderr + back.stdout).toBe(0);
-    expect(back.stdout).toMatch(/files put back from r88-prove\/before/);
+    expect(back.stdout).toMatch(/files put back from r88-prove[\\/]before/);
     expect(raw(dir)).toEqual(was);
     expect(existsSync(join(dir, 'drops.txt'))).toBe(false);
     expect(existsSync(join(dir, 'r88-prove/before/kept.json'))).toBe(false);
