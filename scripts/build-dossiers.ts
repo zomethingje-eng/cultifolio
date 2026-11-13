@@ -150,6 +150,9 @@
  *   npx tsx scripts/build-dossiers.ts --check-ranges             # check-ranges.txt (round eighty-four): after the walk, before the upload, every page whose
  *                                                                # typical cell lies outside its native regions or whose records were not tested by
  *                                                                # this round's shapes rule, and the review's five cases said one by one; exit 2 if any
+ *   npx tsx scripts/build-dossiers.ts --fill summary-owners      # round eighty-seven: every summary that is another plant's article (the rule
+ *                                                                # --check-summaries reads) taken off, its record saying whose; offline; then the index.
+ *                                                                # Every build does it for the pages it wrote, and --fill summaries for every page
  *   npx tsx scripts/build-dossiers.ts --check-summaries          # check-summaries.txt (round eighty-seven): offline, every page whose Wikipedia summary is
  *                                                                # not under its name, an older name or its item's article, each said why; those
  *                                                                # quoting another plant's article → rebuild-summaries.txt, exit 2; "not checked" where
@@ -223,7 +226,7 @@ import { InfraNames, backboneRow, type BackboneRow } from '../src/lib/dossier/in
 import { gbifView, kewHeadingOf, renamedLines, formerHeadings } from '../src/lib/dossier/kew-heading';
 import { stampRead, stampNew, applyCredits, readObservations, readFiles, observationOf, type CreditCounts, type CreditObs, type CreditFile } from '../src/lib/dossier/photo-read';
 import { readLeadsAll, revisionWanted, summariesLeft, type RevisionCounts, type RevisionPage } from '../src/lib/dossier/revision-fill';
-import { checkSummaryTitles, summaryCheckWords, faultLines, FAULTS_FILE as SUMMARY_FAULTS, UNCHECKED_FILE, UNCHECKED_EXIT, type SummaryPage } from '../src/lib/dossier/summary-check';
+import { checkSummaryTitles, summaryCheckWords, faultLines, FAULTS_FILE as SUMMARY_FAULTS, UNCHECKED_FILE, UNCHECKED_EXIT, ReferenceNames, takeOffAnotherPlants, type SummaryPage } from '../src/lib/dossier/summary-check';
 import { derivedTally, derivedCsv, derivedWords } from '../src/lib/dossier/derived-dataset';
 import { LEAD_TITLES } from '../src/lib/dossier/sources/wikipedia';
 import type { GrownRule } from '../src/lib/dossier/catalogue';
@@ -1676,6 +1679,33 @@ async function fillRangeSourceStep(): Promise<void> {
  * are a binomial Kew or the reference holds, and the words of a "no POWO link". Offline, from wcvp_names.csv; a second
  * run changes nothing. With `keys`, only those dossiers (a `--keys` build given `--bulk` runs it after). Then the index.
  */
+/**
+ * The summaries that are another plant's article taken off (round eighty-seven; `takeOffAnotherPlants`), by the rule
+ * `--check-summaries` reads: of the pages `keys` names, or of every page. The reference's names are read from every page
+ * on disk, so a title is judged against the whole reference. Returns how many were taken off.
+ */
+function summaryOwnersStep(keys?: Set<string>): number {
+  const store = diskStore();
+  const files = store.files();
+  // The names of every page, the check's way (only what `ReferenceNames` reads).
+  const names = new ReferenceNames();
+  for (const file of files) { try { const d = store.read<Dossier>(file); names.add({ key: d.key, name: { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [] } }); } catch { /* an unreadable page: the index step says so */ } }
+  let n = 0;
+  const lines: string[] = [];
+  for (const file of keys ? files.filter((f) => keys.has(f.replace(/\.json$/, ''))) : files) {
+    let d: Dossier;
+    try { d = store.read<Dossier>(file); } catch { continue; }
+    if (!d.summary) continue;
+    const page = d as unknown as SummaryPage & { summary?: unknown; ids?: Record<string, unknown>; links?: Record<string, unknown>; upstream?: Record<string, unknown> };
+    const done = takeOffAnotherPlants([page], names, null, () => new Date().toISOString());
+    if (!done.length) continue;
+    store.write(file, d);
+    n++;
+    lines.push(done[0].line);
+  }
+  console.log(`  ${n} summar${n === 1 ? 'y' : 'ies'} another plant's article, taken off (the rule --check-summaries reads)${n ? `:\n${lines.map((l) => `    ${l}`).join('\n')}` : ''}`);
+  return n;
+}
 async function fillKewNamesStep(keys?: Set<PageId>, index = true): Promise<void> {
   if (!bulkDir) { console.error('--fill kew-names needs --bulk <dir> with wcvp_names.csv'); process.exit(2); }
   const all = diskStore();
@@ -2180,6 +2210,8 @@ async function fillSummaries(): Promise<void> {
   if (c.unchecked) unfinished();
   if (c.uncheckedLines.length) console.log(`  not checked (run again):\n${c.uncheckedLines.map((l) => `    ${l}`).join('\n')}`);
   if (c.withdrawn) console.log(`  ${c.withdrawn} taken off until read`);
+  // Round eighty-seven: a summary taken back or kept on one of the page's older names that is another plant's article.
+  summaryOwnersStep();
   writeIndexFromDisk();
 }
 
@@ -2719,6 +2751,8 @@ async function main() {
   if (fill === 'credits') return fillCreditsStep();
   if (fill === 'summary-revisions' || fill === 'summary-leads') return fillRevisionsStep();
   if (fill === 'kew-names') return fillKewNamesStep();
+  // Round eighty-seven: every page's summary that is another plant's article taken off, offline, then the index.
+  if (fill === 'summary-owners') { summaryOwnersStep(); writeIndexFromDisk(); return; }
   if (fill === 'kew-why') return fillKewWhyStep();
   if (fill === 'gbif-infra') return fillGbifInfraStep();
   if (fill === 'gbif-media-day') return fillMediaDayStep();
@@ -3510,6 +3544,8 @@ async function main() {
     sayUnreadable();
     return;
   }
+  // The pages this build wrote, for the summaries' owners below (round eighty-seven), before Kew's names clear the list.
+  const builtNow = !fixtures && thisRun.size ? new Set<string>(thisRun.keys()) : null;
   // A build given Kew's files reads Kew's names for what it built, as `--fill kew-names` does (round seventy-two, A); the
   // index then reads those dossiers from disk.
   if (bulkDir && !fixtures && thisRun.size) {
@@ -3524,6 +3560,10 @@ async function main() {
     await fillKewPublishedStep(built);
     thisRun.clear();
   }
+  // Round eighty-seven: a summary that is another plant's article, by the rule --check-summaries reads, taken off the pages
+  // this build wrote, on their names as Kew's file has just given them (the stage-2 check's six, two of them taken again by
+  // an online build that afternoon).
+  if (builtNow) summaryOwnersStep(builtNow);
   // Each page under the id the rule gives (round seventy-eight): a new page, or one whose Kew entry this build changed.
   if (!fixtures && built && rekeyDisk()) thisRun.clear();
   // The losses, on each page as it is now written: after Kew's names and the page's id (round eighty-seven).

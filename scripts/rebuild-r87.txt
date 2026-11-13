@@ -14,3 +14,4 @@ k125305
 k2920560
 k362335
 k2941308
+k2814031	Frangula alnus: GBIF's search failed part way in the walk (2026-11-12, "fetch failed after 300 records"); built again online

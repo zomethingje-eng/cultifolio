@@ -141,3 +141,33 @@ export function summaryCheckWords(c: SummaryCheck, file: string): string[] {
         : `  No page quotes another plant's article.`
   ];
 }
+
+/**
+ * A summary that is another plant's article, taken off its page (round eighty-seven, the stage-2 check's six). The check
+ * found them; the builder and `--fill summaries` had taken them on a title that is one of the page's older names, which is
+ * also another page's own name (Mentha ×rotundifolia showed Mentha longifolia's article, Salix ×pendulina S. babylonica's)
+ * or an older name of another page and none of this one's. The rule is the check's own (`summaryVerdict`), so a build and
+ * the check cannot disagree: a build, `--fill summaries` and `--fill summary-owners` take such a summary off, and the
+ * page's record says whose article it is. Pure: the pages that change are returned, changed.
+ */
+export function takeOffAnotherPlants<T extends SummaryPage & { summary?: unknown; ids?: Record<string, unknown>; links?: Record<string, unknown>; upstream?: Record<string, unknown> }>(
+  pages: readonly T[],
+  names: ReferenceNames,
+  only: ((key: string) => boolean) | null,
+  now: () => string
+): Array<{ page: T; line: string }> {
+  const out: Array<{ page: T; line: string }> = [];
+  for (const p of pages) {
+    if (only && !only(p.key)) continue;
+    const v = summaryVerdict(p, names);
+    if (v?.verdict !== 'another-plant') continue;
+    const title = (p.summary as { title: string }).title;
+    const why = `Wikipedia's article ${title} is another plant's (${v.words}): no summary is shown`;
+    p.summary = undefined;
+    if (p.ids) delete p.ids.wikipedia;
+    if (p.links) delete p.links.wikipedia;
+    if (p.upstream) (p.upstream as Record<string, unknown>).wikipedia = { status: 'none', at: now(), detail: why };
+    out.push({ page: p, line: `${p.key} ${p.name.scientific}\t${why}` });
+  }
+  return out;
+}
