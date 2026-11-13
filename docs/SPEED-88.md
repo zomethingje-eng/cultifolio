@@ -85,6 +85,36 @@ Measured on round eighty-seven's stage 2, estimated: the 429 waits (about three 
 day) can be left out of a plan; the walk itself, with eight pages in flight, is bounded by the PC's one thread for the
 rest of each page, and its time is to be measured, not promised.
 
+## Round 89: the round's own steps
+
+Asked on 12 November 2026 ("any other ways to increase the speed and efficiency regarding all of the actions we repeatedly
+do for each round"; the owner took all four of the proposals, and option 1 of the API path's three):
+
+1. **GBIF's occurrence search asked once for a download** (`src/lib/dossier/api-answers.ts`, `scripts/api-answers-store.ts`).
+   About 13,600 requests and GBIF's throttle on every offline pass. An offline build keeps each answer of the species the
+   download left to the API path in `bulk/api-answers/` (gzipped, one an address), and every offline pass after reads it in
+   place of asking. The answers belong to the download: a new download.json key or api-path.txt clears them. A dry run reads
+   them and keeps none; `--no-api-answers` asks as before. The page derived from a kept answer is the page derived when GBIF
+   gave it; its record says the day GBIF's search answered ("GBIF's occurrence search as it answered on …", and `asOf`),
+   which /about/formats now says. Online builds ask GBIF as before. Test: r89a.
+2. **A review stop that checks its own figures** (`scripts/review-checks.mjs`, `expect` lines in a plan). Every condition of
+   a review that is a figure becomes a check of the builder's output since the review before; all holding, the run carries
+   on, saying each figure; any not, a stop as always. A review with a judgement no check can make keeps no `expect` lines and
+   stops for the owner. The daily plan's review is given its figures. Each step's output is kept with the run
+   (corpus-step.out-<n>.txt), so a review after a restart still checks it. Test: r89b.
+3. **The deploy leaves out what the predeploy just passed** (`scripts/deploy-stamp.mjs`, `node scripts/deploy.mjs`). A
+   predeploy with a tier, passing, stamps the code it ran on (the commit and every changed file by content);
+   `node scripts/deploy.mjs` leaves out the unit tests (and svelte-check, after `--tier=launch`) for exactly that code, and
+   always builds, deploys and runs the live check. `npm run deploy` is unchanged. Test: r89c.
+4. **Pages with no GBIF key are not offline gaps** (`offline-list.ts`, `derived-dataset.ts`): not listed for an online build
+   (599 of stage 2's 600), and counted as holding no record through GBIF's search rather than as unknown. Test: r89d.
+5. **Delivery by git bundle**: a round's commits fetched onto a local branch, the predeploy run there, `main` moved and pushed
+   only after it passes. The owner's choice, which relaxes "commit only after a clean predeploy" to "nothing reaches main or
+   GitHub before a clean predeploy".
+
+Also in this round: round 87's stage-2 fix (a summary that is another plant's article taken off by the check's own rule) is
+carried, as committed on the owner's PC (0f02f73).
+
 ## Record
 
 - 11 November 2026: asked by the owner during round eighty-seven's stage 2 dry run ("as long as all of them are safe to
