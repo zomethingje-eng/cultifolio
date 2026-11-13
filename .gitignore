@@ -43,6 +43,8 @@ live-search.txt
 /bucket-unlisted.txt
 extra-keys-kew-refused.txt
 /corpus-step.lock
+# each builder step's output, kept for the review after it (round eighty-nine)
+/corpus-step.out-*.txt
 /kew-shared.txt
 
 # a unit test's scratch folder (tests/unit/r75h-harness.test.ts), left behind when a run is stopped

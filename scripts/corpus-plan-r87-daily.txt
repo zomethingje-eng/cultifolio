@@ -18,5 +18,25 @@ dossier --fill flowering
 dossier --fill bhl
 dossier --index
 review Read the two fills' last lines. --fill flowering: "N pages asked of iNaturalist on <day>: R read (Z with no flowering observation of a wild plant), U not answered; B read before and passed by; T with no iNaturalist taxon, not asked; 0 left to ask", R and B together about 44,000 (90.9% of a sample have a taxon), T about 4,400. --fill bhl: "N citations asked of BHL on <day>: L linked to the one page BHL gives for them, X with no page taken (said why), U not answered; B answered before and passed by; Q not in a form BHL can be asked exactly, shown as text", N and B together about 39,963 and Q about 8,400. Then --index: "index: 48375 species". Stop, and paste the end of corpus-step.log back, if either line says more than a few hundred "not answered" (run the plan again in an hour: each fill asks only what is left), if a fill's line still says something is "left to ask" or "stopped", or if the index holds fewer species than 48,375.
+# The review's figures as checks (round eighty-nine; scripts/review-checks.mjs): all holding, the run carries on to the
+# upload by itself; any not, it stops here as it always has, the failed checks first.
+expect let FR /iNaturalist on [\d-]+: (\d+) read \(/
+expect let FB /(\d+) read before and passed by/
+expect let FU /iNaturalist on .*?, (\d+) not answered/
+expect let FT /(\d+) with no iNaturalist taxon/
+expect let BN /(\d+) citations asked of BHL/
+expect let BB /(\d+) answered before and passed by/
+expect let BU /BHL on .*?, (\d+) not answered/
+expect let BQ /(\d+) not in a form BHL can be asked exactly/
+expect let I /index: (\d+) species/
+expect FR + FB ~ 44000 ±10%
+expect FT ~ 4400 ±25%
+expect FU <= 300
+expect has /iNaturalist on .*; 0 left to ask/
+expect BN + BB ~ 39963 ±3%
+expect BQ ~ 8400 ±10%
+expect BU <= 300
+expect no /stopped:/
+expect I >= 48375
 upload
 live-check

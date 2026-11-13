@@ -52,6 +52,7 @@ import { join } from 'node:path';
 import { totalmem } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { takeLock, LOCK } from './run-lock.mjs';
+import { parseExpect, runChecks } from './review-checks.mjs';
 
 export const EXIT = { done: 0, failed: 1, review: 2, blocked: 2, unfinished: 3, interrupted: 130 };
 /** The dossier version (src/lib/dossier/schema.ts): the corpus is `static/s/v<N>` and the bucket's `s/v<N>`, as the Worker reads it. */
@@ -88,6 +89,14 @@ export function parsePlan(text) {
     const m = /^if-exists\s+(\S+)\s+(.*)$/.exec(line);
     if (m) { when = m[1]; rest = m[2]; }
     const [kind, ...args] = rest.split(/\s+/);
+    // Round eighty-nine: `expect` lines are the checks of the review line above them (scripts/review-checks.mjs), not
+    // steps of their own, so adding them to a plan under way keeps where its run is.
+    if (kind === 'expect') {
+      const last = steps[steps.length - 1];
+      if (!last || last.kind !== 'review' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": an expect line goes under a review line`);
+      try { (last.expects ??= []).push(parseExpect(rest.slice('expect'.length))); } catch (e) { throw new Error(`corpus plan line ${i + 1}: ${e instanceof Error ? e.message : String(e)}`); }
+      continue;
+    }
     if (!['backup', 'dossier', 'review', 'upload', 'live-check'].includes(kind)) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}" is not a step this script knows`);
     steps.push({ line, kind, args: kind === 'review' ? [rest.slice('review'.length).trim()] : args, ...(when ? { when } : {}) });
   }
@@ -277,6 +286,20 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
   state.planFile = planRel;
   const save = () => writeAtomic(stateFile, JSON.stringify(state, null, 1));
   const goOn = argv.includes('--go-on');
+  /** The checks of the review at step `i` on the output of the builder steps since the review before (round eighty-nine). */
+  const reviewChecks = (i) => {
+    let from = i - 1;
+    while (from >= 0 && plan[from].kind !== 'review') from--;
+    const texts = [];
+    for (let j = from + 1; j < i; j++) {
+      if (plan[j].kind !== 'dossier' || state.steps[j].status === 'skipped') continue;
+      const out = state.steps[j].out;
+      if (!out || !existsSync(at(out))) return { pass: false, why: `Its checks were not run: "${plan[j].line}" left no output kept by this run (it ran before round eighty-nine, or its output could not be written).`, lines: [] };
+      texts.push(readFileSync(at(out), 'utf8'));
+    }
+    const r = runChecks(plan[i].expects, texts.join('\n'));
+    return { ...r, why: r.pass ? '' : 'Its checks do not all hold:' };
+  };
   const once = { synced: false };
   let interrupted = false;
   // The first Ctrl-C lets the step's own process end (it gets the Ctrl-C too) and records where the run stopped; a second
@@ -301,7 +324,16 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       rec.status = 'running'; rec.at = now().toISOString(); save();
       let result;
       if (step.kind === 'review') {
-        result = { status: 'review', why: step.args[0] + facts(root, state.corpusBefore, state.backupDir) };
+        // Its checks (round eighty-nine), on what the builder steps since the review before printed: every one holding, the
+        // run carries on, saying each figure; any not, or any figure not found, a stop as always, the checks first.
+        const checked = step.expects?.length ? reviewChecks(i) : null;
+        if (checked?.pass) {
+          say(`  the review's ${step.expects.length} checks hold:\n${checked.lines.join('\n')}\n  carrying on (the review: ${step.args[0].slice(0, 160)}${step.args[0].length > 160 ? '…' : ''})\n`);
+          rec.status = 'done'; rec.note = `passed by its ${step.expects.length} checks ${stamp()}`; save();
+          continue;
+        }
+        const first = checked ? `${checked.why}\n${checked.lines.join('\n')}\n` : '';
+        result = { status: 'review', why: first + step.args[0] + facts(root, state.corpusBefore, state.backupDir) };
       } else if (step.kind === 'backup') {
         if (!existsSync(at(CORPUS)) && existsSync(at(BEFORE))) {
           // Round seventy-eight: this version's corpus is written from the version before's (`--rekey`), which is read and
@@ -334,6 +366,8 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         say(`  the builder's heap: ${heap.mb} MB (${heap.why}; CULTIFOLIO_HEAP_MB sets another)\n`);
         const code = await exec(process.execPath, [`--max-old-space-size=${heap.mb}`, '--import', 'tsx', 'scripts/build-dossiers.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
         if (interrupted) break;
+        // What it printed, kept for the review after it (round eighty-nine), named in its record so no other run's is read.
+        try { writeFileSync(at(`corpus-step.out-${i + 1}.txt`), collapse(output)); rec.out = `corpus-step.out-${i + 1}.txt`; rec.outAt = now().toISOString(); } catch { rec.out = undefined; }
         const dropsWritten = existsSync(at('drops.txt')) && statSync(at('drops.txt')).mtimeMs > dropsBefore && statSync(at('drops.txt')).mtimeMs >= t0 - 1000;
         // Pages merged away leave the index on purpose: the species before are counted without them from here on (round 73).
         const gone = mergedAway(output);
