@@ -57,3 +57,6 @@ tests/.r75h-harness-*/
 
 # what a passing predeploy proved, for node scripts/deploy.mjs (round eighty-nine)
 /.predeploy-stamp.json
+
+# Claude Code's notes for this folder: they name files kept out of git, so they stay out of it too
+/CLAUDE.md
