@@ -88,7 +88,10 @@ test('r61g 4: a sheet\'s unmatched columns are listed and kept, its dates asked 
   await page.getByRole('radio', { name: /^Day first/ }).check();
   await page.click('#imp-check');
   await expect(page.locator('#imp-summary')).toContainText(`${N} lines`, { timeout: 60_000 });
-  await page.locator('#imp-only-needs').check();
+  // Under load Firefox can take the click while the lines' review is still rendering, and the box does not change ("Clicking
+  // the checkbox did not change its state": the owner's predeploy of 13 November 2026, passing on its retry). Clicked again
+  // until it holds, as a person would.
+  await expect.poll(async () => { const box = page.locator('#imp-only-needs'); if (!(await box.isChecked())) await box.click(); return box.isChecked(); }, { timeout: 30_000 }).toBe(true);
   await expect(page.locator('.rvrow').first()).toBeVisible();
   await expect.poll(() => page.locator('.rvrow').count()).toBeLessThan(N); // the filter's render is not instant under load (round sixty-one, at the merge)
   await page.fill('#imp-watered', '2026-10-01');
