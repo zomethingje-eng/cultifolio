@@ -19,9 +19,18 @@ const SKIPPED = /\b(?:gbif\.occurrences|wcvp\.distribution) skipped\b/;
 export interface OfflinePage {
   key: unknown;
   name: { scientific: string };
+  ids?: { gbif?: number | null };
   upstream?: Record<string, { status?: string; detail?: string } | undefined>;
-  occurrences?: { rangeRule?: string };
+  occurrences?: { rangeRule?: string; unread?: { why?: string } | null };
 }
+
+/**
+ * Round eighty-nine: GBIF's records not asked because the page has no GBIF key, and the build said why from the backbone
+ * (`occurrences.unread`, `noKeyWhy`): an online build has no key to ask them by either, so the page is not one an online
+ * build derives again. Round eighty-seven's stage 2 listed 600 pages, 599 of them these, and the online build that read
+ * them all gave each the same "not asked" it had.
+ */
+const noKeyToAsk = (d: OfflinePage, k: string): boolean => k === 'gbif.occurrences' && d.ids?.gbif == null && !!d.occurrences?.unread?.why;
 
 /** Why a page is to be built online, or null: a range source not asked, carried or not. */
 export function offlineWhy(d: OfflinePage, rule: string): string | null {
@@ -33,6 +42,7 @@ export function offlineWhy(d: OfflinePage, rule: string): string | null {
     // Carried as one snapshot: the carrying build's words name the source it did not ask.
     if (p?.now && SKIPPED.test(p.now)) { why = `the range, records and climate of the build of ${/\d{4}-\d{2}-\d{2}/.exec(p.origin)?.[0] ?? '?'} kept: this build: ${p.now}`; break; }
     // Not carried: the row itself says the source was not asked, and the page holds this build's derivation without it.
+    if (row?.status === 'skipped' && !p && noKeyToAsk(d, k)) continue;
     if (row?.status === 'skipped' && !p) { why = `${k} not asked${row.detail ? ` (${row.detail})` : ''}; nothing carried`; break; }
   }
   if (!why) return null;

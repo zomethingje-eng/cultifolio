@@ -20,7 +20,7 @@
  */
 import type { PageId } from '../core/page-id';
 
-type Page = { key: PageId; name?: { scientific?: string }; occurrences?: { api?: ReadonlyArray<{ key: string; n: number }> } };
+type Page = { key: PageId; name?: { scientific?: string }; ids?: { gbif?: number | null }; occurrences?: { api?: ReadonlyArray<{ key: string; n: number }>; unread?: { why?: string } | null } };
 
 export interface DerivedTally {
   /** datasetKey → the in-range records of the pages that came through the API. */
@@ -38,6 +38,9 @@ export function derivedTally(pages: Iterable<Page>): DerivedTally {
   for (const d of pages) {
     t.pages++;
     const api = d.occurrences?.api;
+    // A page with no GBIF key whose build said why (round eighty-nine; `occurrences.unread`) read no GBIF record at all:
+    // none came through the API, known, not unknown.
+    if (!api && d.ids?.gbif == null && d.occurrences?.unread?.why) continue;
     if (!api) { t.unknown++; t.unknownPages.push(`${d.key} ${d.name?.scientific ?? ''}`.trim()); continue; }
     if (!api.length) continue;
     t.withApi++;
