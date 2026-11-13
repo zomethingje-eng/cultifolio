@@ -54,3 +54,6 @@ tests/.r75h-harness-*/
 /walk-changes.jsonl
 /walk-ranges.txt
 /r88-prove/
+
+# what a passing predeploy proved, for node scripts/deploy.mjs (round eighty-nine)
+/.predeploy-stamp.json

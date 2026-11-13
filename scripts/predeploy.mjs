@@ -31,6 +31,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { paceLine } from './engine-pace.mjs';
 import { runScope, closingLine } from './predeploy-scope.mjs';
+import { treeMark, writeStamp } from './deploy-stamp.mjs';
 
 const require = createRequire(import.meta.url);
 let cli;
@@ -94,6 +95,8 @@ const filtered = projectsNamed(extra);
 const phoneToo = filtered.includes('webkit') && !filtered.includes('phone-webkit') ? ['--project=phone-webkit'] : [];
 if (phoneToo.length) filtered.push('phone-webkit');
 const args = [cli, 'test', '--fail-on-flaky-tests', ...workers, ...extra, ...phoneToo];
+// The code this run runs on (round eighty-nine; `deploy-stamp.mjs`), for the stamp a passing tier writes at the end.
+const markBefore = tier ? (() => { try { return treeMark('.'); } catch { return null; } })() : null;
 if (tier) {
   console.log(`predeploy: --tier=${tier}: ${TIERS[tier]}`);
   const steps = [];
@@ -127,6 +130,14 @@ const status = run.status ?? 1;
 // The last line follows what was run (round eighty-four; outside review B12): only the whole suite in every engine ends
 // with the deploy going ahead; a spec, a filter, a repeat or a subset of projects says what it proved and names the gate.
 console.log(closingLine(status, runScope({ extra: [...extra, ...phoneToo], filtered, engines })));
+// What this run proved, for `node scripts/deploy.mjs` (round eighty-nine): a tier's whole run, every test passing, on code
+// that did not change while it ran. A narrowed run proves no gate and writes nothing.
+if (tier && status === 0 && markBefore && !runScope({ extra: [...extra, ...phoneToo], filtered, engines }).scope.startsWith('part')) {
+  let markAfter = null;
+  try { markAfter = treeMark('.'); } catch { /* not a git folder: no stamp */ }
+  if (markAfter === markBefore) { writeStamp('.', { mark: markBefore, unit: true, check: tier === 'launch', tier }); console.log(`predeploy: stamped (.predeploy-stamp.json): node scripts/deploy.mjs leaves out ${tier === 'launch' ? 'svelte-check and ' : ''}the unit tests for this very code`); }
+  else console.log('predeploy: the code changed while this ran: no stamp; node scripts/deploy.mjs runs everything');
+}
 // A WebKit test that failed kept its trace, and smoke's two traced Saves their record (round seventy; triage-69 P1, IND-8):
 // the run is on the owner's PC only, so where to find them is said, for sending back.
 if (status !== 0 && engines.includes('webkit')) console.log("predeploy: each failed WebKit test kept its trace (trace.zip) in its folder under test-results/, and smoke's species-change and 400-plant Saves a save-trace.json beside it; npx playwright show-trace <that trace.zip> opens one");
