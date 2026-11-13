@@ -263,6 +263,8 @@ import { kewRowsFetcher, type SameTypeName } from '../src/lib/dossier/kew-rows';
 import { loadKewRows } from './kew-rows-load';
 import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated, mediaDownloadOf } from './bulk-load';
+import { answerStore } from './api-answers-store';
+import { keptAnswers, answerLine, type AnswerStats } from '../src/lib/dossier/api-answers';
 import { mediaDay, type MediaDayCounts, type MediaDayPage } from '../src/lib/dossier/media-day';
 import { genusAnswer, genusPassedBy } from '../src/lib/dossier/genus-fill';
 import { applyCultigen, entryOfPage, type CultigenCounts, type CultigenPage } from '../src/lib/dossier/cultigen-fill';
@@ -864,6 +866,8 @@ function needsKewRebuild(kewId: string): boolean {
 }
 
 let bulkStats: BulkStats | null = null;
+/** What GBIF's kept answers gave this build (round eighty-nine). */
+let answerStats: AnswerStats | null = null;
 /** Kew's names answered from Kew's file this run (round seventy-eight), when `--bulk` holds it. */
 let kewRowsStats: { answered: number; through: number } | null = null;
 /** The batched sources of this run (round seventy-eight), when it asks Wikidata or Wikipedia. */
@@ -3213,7 +3217,17 @@ async function main() {
       // to the API path (more records than the cut, listed in bulk/api-path.txt), and a dossier holds only its open
       // records, so there is nothing on disk to re-derive the climate from: the API is asked for those, and only those.
       // Not asked, never "refused": nothing refused the site, and 44 pages said it had (round sixty-seven; triage-66 N4).
-      f = offlineFetcher(upstream(), (key) => { const prev = readPrev(key); return prev ? { key: prev.ids.gbif ?? key, scientific: prev.name.scientific, authorship: prev.name.authorship } : null; });
+      // Those answers are kept with the download (round eighty-nine; `api-answers.ts`), and read in place of asking by every
+      // offline pass after the one that asked; a dry run reads them and keeps none. --no-api-answers asks GBIF as before.
+      let net = upstream();
+      if (bulkDir && !args.includes('--no-api-answers')) {
+        const { store, note } = answerStore(bulkDir, !dryRun);
+        console.log(`  ${note}`);
+        const kept = keptAnswers(net, store, { write: !dryRun, today: () => new Date().toISOString().slice(0, 10) });
+        answerStats = kept.stats;
+        net = kept;
+      }
+      f = offlineFetcher(net, (key) => { const prev = readPrev(key); return prev ? { key: prev.ids.gbif ?? key, scientific: prev.name.scientific, authorship: prev.name.authorship } : null; });
     }
     if (bulkDir) {
       console.log(`Loading bulk files from ${bulkDir}/…`);
@@ -3664,6 +3678,7 @@ async function main() {
     for (const l of dryTotals.lines(!!gridDir)) console.log(`  ${l}`);
     if (gridDir) for (const l of figuresTally.lines(true)) console.log(`  ${l}`);
     console.log(`  the ${dryLines.length} pages that change, one a line → ${out}${gridDir ? '' : `; for their climates and typical spots: npm run dossier -- --dry-run --offline --grid climate --bulk bulk --keys ${out}`}`);
+    if (answerStats) console.log(answerLine(answerStats));
     sayUnreadable();
     return;
   }
@@ -3712,6 +3727,7 @@ async function main() {
   if (places && instEffect.records) console.log(instEffect.words(places.size, places.radiusM));
   else if (!places && built) console.log(`  Institution rule not applied: ${INSTITUTIONS} not found, so each page built says its records were not tested`);
   if (bulkStats) console.log(bulkWords(bulkStats));
+  if (answerStats) console.log(answerLine(answerStats));
   if (figuresTally.pages && gridDir) for (const l of figuresTally.lines()) console.log(`  ${l}`);
   // Which taxonomy the build's GBIF occurrence searches named (round eighty-seven; docs/COLXR-87.md 4): the backbone's
   // checklistKey on each, or how many named none or another. Silent when the build sent none (an offline build).

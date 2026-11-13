@@ -463,6 +463,8 @@ export interface GbifOccurrence {
   downloadDoi?: string;
   /** The day GBIF made that download (round seventy-two, B1). */
   downloadDay?: string;
+  /** The day GBIF's search gave the record, where its answer was kept for the download (round eighty-nine; `api-answers.ts`). */
+  answeredDay?: string;
   /** DWCA downloads: 'StillImage' when the record carries images (their rows are in multimedia.txt). */
   mediaType?: string;
   media?: Array<{ type?: string; identifier?: string; license?: string; rightsHolder?: string; creator?: string; references?: string }>;

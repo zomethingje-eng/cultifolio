@@ -40,6 +40,7 @@ import { gbifPage, type PageId } from '../core/page-id';
 import { countryOf, placeWords } from '../core/place-words';
 import { extraWhy, type ExtraKey } from './extra-keys';
 import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean';
+import { answeredWords } from './api-answers';
 
 /**
  * What the envelope may read beside the grid (round eighty-six; the Howea finding): whether a native region's drawn land (its
@@ -555,6 +556,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     upstream['gbif.occurrences'].detail = [base, ...extra.keys.map(extraKeyWords), ...(given ? [`${given} record${given === 1 ? '' : 's'} ${o.givenAway!.words}`] : [])].join('; ');
     // A file's day only where every record set came from it.
     if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
+    // The day GBIF's search gave the records read from it, where its answers were kept (round eighty-nine).
+    const answered = answeredWords(occ.status === 'ok' ? occ.data : []);
+    if (answered.words) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, answered.words].filter(Boolean).join('; ');
+    if (answered.asOf) upstream['gbif.occurrences'].asOf = answered.asOf;
   }
   const inside = rangeTest(native, o.regions);
   // The dry run (round eighty-six): every record's reason by the rule before too, counted, never written.

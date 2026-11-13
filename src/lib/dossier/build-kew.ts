@@ -55,6 +55,7 @@ import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, type Dossier,
 import { kindNamesOf, type HeldNames } from './photo-kind';
 import type { KewInfra } from './kew-infra';
 import { statementsOfEntity, wikidataNames, wdNamesRecord, wdNamesNoItem, WD_NAMES, type WdNameStatement } from './wikidata-names';
+import { answeredWords } from './api-answers';
 
 /** One species of Kew's file as this route reads it (`scripts/kew-species-load.ts` gives it). */
 export interface KewSpecies {
@@ -276,6 +277,10 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
       const day = rows.find((r) => r.downloadDay)?.downloadDay;
       upstream['gbif.occurrences'].detail = [kewKeysWords(extra.keys), ...(doi ? [`GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}`] : []), ...extra.keys.map(extraKeyWords)].join('; ');
       if (doi && day && extra.keys.every((x) => x.from === 'download')) upstream['gbif.occurrences'].asOf = day;
+      // The day GBIF's search gave the records read from it, where its answers were kept (round eighty-nine).
+      const answered = answeredWords(rows);
+      if (answered.words) upstream['gbif.occurrences'].detail = [upstream['gbif.occurrences'].detail, answered.words].filter(Boolean).join('; ');
+      if (answered.asOf) upstream['gbif.occurrences'].asOf = answered.asOf;
     }
     // By the regions' shapes where the build has them (round eighty, A).
     const inside = rangeTest(native, o.regions);
