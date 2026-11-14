@@ -25,6 +25,7 @@
 // Takes corpus-step.lock, so it never runs beside a corpus step. Plain Node; the builds run with the heap corpus-step
 // gives them.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -90,6 +91,30 @@ else {
   const step = Math.max(1, Math.floor(usable.length / n));
   sample = usable.filter((_, i) => i % step === 0).slice(0, n);
   console.log(`${sample.length} pages of ${index.length} (every ${step}th of the ${usable.length} not on the API path), built three ways`);
+  // Round ninety: each build writes the index at its end, and the index stamps every page changed since its stamp (a fill
+  // since the last index: scanDossiers in build-dossiers.ts). Such a page outside the sample is one the proof cannot put
+  // back, so it stopped after its first build, an hour on (14 November 2026, on the flowering fill's pages). Checked here,
+  // before anything is built, with the builder's own stamp and hash.
+  const stale = await staleOutside(new Set(sample.map((e) => `${e.key}.json`)));
+  if (stale.length) {
+    console.error(`${stale.length} page${stale.length === 1 ? '' : 's'} outside the sample changed since ${stale.length === 1 ? 'its' : 'their'} last stamp (${stale.slice(0, 8).join(', ')}${stale.length > 8 ? ', …' : ''}): a fill wrote ${stale.length === 1 ? 'it' : 'them'} after the index was last written. Each build writes the index at its end, which stamps them, and the proof would stop after its first build on pages it cannot put back. Write the index first (it stamps them, as the plan's own index step would): npm run dossier -- --index; then run this again. Nothing was built.`);
+    process.exit(2);
+  }
+}
+
+/** The pages outside the sample whose stamp no longer holds: those the index would stamp (`restamp`, as build-dossiers.ts calls it). */
+async function staleOutside(inSample) {
+  const { tsImport } = await import('tsx/esm/api');
+  const { restamp } = await tsImport(pathToFileURL(join(REPO, 'src/lib/dossier/changed.ts')).href, import.meta.url);
+  const sha1 = (s) => createHash('sha1').update(s).digest('hex');
+  const out = [];
+  for (const f of readdirSync(dir)) {
+    if (!isPage(f) || inSample.has(f)) continue;
+    let d;
+    try { d = JSON.parse(readFileSync(join(dir, f), 'utf8')); } catch { continue; } // a file the index cannot read it does not write either
+    if (restamp(d, '1970-01-01', sha1)) out.push(f);
+  }
+  return out;
 }
 
 const minutes = {};

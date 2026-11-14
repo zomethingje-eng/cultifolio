@@ -29,6 +29,17 @@ Tests: `tests/unit/r90a-daily-fills.test.ts` (the plan line, the gate, the sente
 own last lines, and the plan file); `tests/unit/r87s2-integration.test.ts` reads the plan's new lines.
 `docs/STAGE2-OWNER-87.md` no longer tells the owner to type `--fill bhl` by hand.
 
+## The proof checks the stamps before it builds
+
+The proof's first run stopped an hour in (the record, below): each build writes the index at its end, the index stamps
+every page changed since its last stamp, and the flowering fill had left 2,769 such pages outside the sample, which the
+proof cannot put back. `scripts/dev/r88-prove.mjs` now checks this before it builds, with the builder's own `restamp`
+and hash: a page outside the sample whose stamp no longer holds stops it at once (exit 2), naming the pages and saying
+to write the index first (`npm run dossier -- --index`), and nothing is built.
+
+Test: `tests/unit/r90b-prove-stamps.test.ts` (on the twelve pages of round 88's proof test, a page outside the sample
+changed as a fill changes it: refused at once; with every stamp holding, the proof runs as before).
+
 ## Leads for gathering faster, and only when needed (not done; each to be measured before it is built)
 
 These came up while reading the fills. None is in this round's code. Each would follow round 88's rule: a lead is
@@ -45,6 +56,25 @@ proved by the pages it writes matching the pages the slow way writes, or it is d
    and a compare against the 2,785 pages the API read on 13 November, page by page and month by month. The page would credit the GBIF download (its DOI and day)
    rather than iNaturalist's API on a day, and the counts would be the download's, not live ones: a compare on a sample of
    pages decides whether that is close enough to say as the same figure.
+   **Measured on 14 November 2026** (a script outside the repo, reading only): one pass over the download's
+   `occurrence.txt` took 14 minutes: 146,433,123 rows, 38,983,204 of them iNaturalist's, 6,250,237 with a condition
+   ("flowers" 3,118,650, "flowers|flower buds" 640,410, "flowers|fruits or seeds" 217,165, …), over 40,541 GBIF species.
+   Rows counted as flowering: those whose condition includes "flowers" (iNaturalist's value 13), by `month`, under the
+   page's GBIF key. Against the 6,785 pages the API had read (13 and 14 November): 123 have no GBIF key and 679 have no
+   iNaturalist row under it in the download. Of the rest, 1,662 none in both; 11 none from the API and some in the
+   download; 366 some from the API and none in the download (median 2, but a tenth over 1,969: the API's taxon and
+   GBIF's key are not the same plant there); 4,623 some in both. On those 4,623: the download counts 0.79 of the API's
+   (quartiles 0.67 and 0.94: it holds only openly licensed observations, as of 21 October); the shape agrees (cosine
+   median 0.994); the peak month is the same on 84.3% and within a month on 92.1%; but the months holding a tenth of the
+   year's count are the same on only 63.5% (on pages of 30 or more, 69.9%). The farthest apart are taxon mismatches
+   (Melaleuca citrina: the API's peak October, the download's January; Monardella odoratissima: the download twice the
+   API's).
+
+   **So not the same figure, and not a replacement for the fill.** A page's flowering months would move on a third of
+   pages, and some pages would take another plant's observations. The fill has about ten days left and is the figure
+   the pages say. What the download could still give, each a decision for the owner and each sourced as the download
+   (doi 10.15468/dl.hbdw64, 21 October 2026), never as iNaturalist's API: flowering for pages with no iNaturalist taxon
+   (the fill cannot ask them; only where the GBIF key is the page's own), and a refresh check later (lead 4). Not built.
 2. **BHL links from IPNI.** IPNI records carry a BHL page link for many names. Where Kew's citation and IPNI's record are
    the same publication, IPNI's link would save the resolver request. Measure how many of the 39,963 askable citations
    IPNI already links, and whether those links agree with what the resolver answers on a sample.
@@ -86,3 +116,17 @@ proved by the pages it writes matching the pages the slow way writes, or it is d
   (the cache read against the files read): the same, 200 of 200 pages"; minutes A 68, B 60, C 10; "the corpus is as it
   was (the 200 pages and the files kept put back)". So rounds 88 and 89 hold on real pages, and builder steps no longer
   need `--pages 1 --no-bulk-cache --no-api-answers` (no plan in `scripts/` carries them).
+- 14 November 2026, 02:28 to 06:51 UTC: the daily plan's first day on this round's runner. `daily dossier --fill
+  flowering`: "4000 pages asked of iNaturalist on 2026-11-14: 4000 read (871 with no flowering observation of a wild
+  plant), 0 not answered; 2785 read before and passed by; … 39830 left to ask", then "Going on to the next of the day's
+  fills." `daily dossier --fill bhl` (from 04:59): "4000 citations asked of BHL on 2026-11-14: 915 linked to the one
+  page BHL gives for them, 3082 with no page taken (said why), 3 not answered; … 880 not in a form BHL can be asked
+  exactly". Then "Stopped before "dossier --index": the day's fills are not finished, and each has spent its day's
+  allowance … Run the same command again tomorrow, after midnight UTC". Both allowances used, as this round meant.
+  iNaturalist answered 429 often near the end of its 4,000 (a 60 s wait each), so its share took about two and a half
+  hours.
+- `tests/unit/r90b-prove-stamps.test.ts` on bf1a176's `scripts/dev/r88-prove.mjs`: FAILED ("expected 1 to be 2": A was
+  built, then the proof stopped on the page outside the sample). On this code, with r88s-prove: 4 passed.
+- The predeploy (`node scripts/predeploy.mjs --tier=corpus`, from PowerShell) on this change, 14 November 2026, ended
+  07:07 UTC: unit tests 685 files, 6,203 passed and 10 skipped; the browser suite in Chromium desktop and phone, 1,019
+  passed: "every test passed first time in Chromium (desktop and phone)", stamped.
