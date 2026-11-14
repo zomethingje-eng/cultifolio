@@ -241,6 +241,17 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   if (r2.h('x-cultifolio-page') !== 'held') ({ a: first, b: r2 } = await heldPair('/', { headers: { accept: 'text/html' } }));
   if (r2.h('x-cultifolio-page') !== 'held') fail(`/: the second request was not answered from the Worker's cache (x-cultifolio-page "${r2.h('x-cultifolio-page')}")${centres(first, r2)}`, r2);
   ok('/: no beacon, referrer meta present, held for the next request');
+  // Round ninety-one: the link-preview card names the species count (scripts/dev/og.mjs draws it from the index, and its
+  // alt, OG_ALT, says it), and an image is not drawn again with the corpus. So the card's count, as its alt gives it, is the
+  // live front page's own; a corpus that changed the count fails here until the card is drawn again. Not with the fixture
+  // corpus, whose count is a handful.
+  if (!process.env.LIVE_CHECK_FIXTURE_OK) {
+    const card = /<meta property="og:image:alt" content="[^"]*?([\d,]+) species/.exec(r.text)?.[1];
+    const live = /([\d,]+) plant species/.exec(r.text)?.[1];
+    if (!card || !live) fail(`/: the share card's count (${card ?? 'not found in og:image:alt'}) or the page's (${live ?? 'not found'}) could not be read`, r);
+    if (card !== live) fail(`/: the share card says ${card} species and the reference holds ${live}: set OG_ALT's count (src/lib/ui/ref/head.ts) to ${live}, draw the card again (node scripts/dev/og.mjs), and deploy`, r);
+    ok(`/: the share card's count is the reference's, ${live} species`);
+  }
 }
 
 // The reference under a stale corpus id is answered but not stored anywhere (round sixteen, 12).

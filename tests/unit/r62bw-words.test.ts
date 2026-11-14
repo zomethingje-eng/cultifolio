@@ -172,7 +172,8 @@ describe('a credit says two licences disagree only when they do (the words revie
 
 describe('the link-preview image\'s alt (the words review\'s 2)', () => {
   it('is the image\'s own words, on the front page and on a species page with no photograph', () => {
-    expect(OG_ALT).toContain('The plants people grow, each with its habitat climate where its records allow one. Every figure names its source. Your own plants stay on your device, or sync encrypted.'); // round seventy-four's words, for every home grower
+    // Round ninety-one: the card in the site's look, its words checked against /about (docs/REVIEW-ROUND-91.md).
+    expect(OG_ALT).toContain('A reference for the plants people grow. 48,375 species, every figure with its source. No account, open source. Your plants stay on your device, or sync encrypted.');
     expect(home).toContain('<meta property="og:image:alt" content={OG_ALT} />');
     expect(species).toContain('content={hero ? heroAlt : OG_ALT}');
   });

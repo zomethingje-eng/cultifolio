@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Cultifolio" />
-  <link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
   <script>try{var t=localStorage.getItem('cultifolio.theme'),d=document.documentElement.dataset,s=sessionStorage,a=/[?&]left=([^&#]*)/.exec(location.search),k=s.getItem('cultifolio.sampleLeaving'),e=/[?&]enter=([^&#]*)/.exec(location.search),n=s.getItem('cultifolio.sampleEntering');if(t==='light'||t==='dark')d.theme=t;if(localStorage.getItem('cultifolio.welcomed')==='1')d.welcomed='1';if(localStorage.getItem('cultifolio.hasMine')==='1')d.grower='1';if(a){if(k&&a[1]===k)s.setItem('cultifolio.sampleLeft','1');s.removeItem('cultifolio.sampleLeaving')}if(e){if(n&&e[1]===n&&!a){s.setItem('cultifolio.demo','1');s.setItem('cultifolio.demo.gen',localStorage.getItem('cultifolio.sampleGen')||'');s.removeItem('cultifolio.sampleClosed')}s.removeItem('cultifolio.sampleEntering')}if(s.getItem('cultifolio.demo')==='1'&&(s.getItem('cultifolio.demo.gen')||'')!==(localStorage.getItem('cultifolio.sampleGen')||''))s.setItem('cultifolio.sampleClosed','1');if(a||s.getItem('cultifolio.sampleClosed')==='1')s.removeItem('cultifolio.demo');if(s.getItem('cultifolio.demo')==='1'){d.demo='1';d.grower='1';var l=navigator.locks;if(l){var h=window.__sampleOpen={r:null,done:false,failed:false};try{l.request('cultifolio-sample-open',{mode:'shared'},function(){return new Promise(function(r){if(h.done)r();else h.r=r})}).catch(function(){h.failed=true})}catch(x){h.failed=true}}}}catch(e){}</script>
   %sveltekit.head%
 </head>

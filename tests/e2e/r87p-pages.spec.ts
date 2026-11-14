@@ -62,9 +62,11 @@ test('r87p 3: /changes lists the rounds, newest first, each with its date and it
   await page.goto('/changes');
   await ready(page);
   const heads = page.locator('article.changes section h2');
-  await expect(heads.first()).toContainText('Round 87');
-  await expect(heads.first()).toContainText('9 November 2026');
-  for (const n of [80, 81, 82, 84, 85, 86, 87]) await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
+  // Round ninety-one, the newest (the icon), then round 87.
+  await expect(heads.first()).toContainText('Round 91');
+  await expect(heads.first()).toContainText('14 November 2026');
+  await expect(heads.nth(1)).toContainText('Round 87');
+  for (const n of [80, 81, 82, 84, 85, 86, 87, 91]) await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
   await expect(page.locator('#round-83')).toHaveCount(0);
   // The one row of links, on every about page, the page being read marked.
   for (const [path, label] of [['/about', 'About'], ['/about/how', 'How it is made'], ['/about/formats', 'Formats'], ['/about/data', 'The data'], ['/changes', 'Changes']]) {

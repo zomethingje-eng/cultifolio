@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 91,
+    date: '2026-11-14',
+    lines: [
+      'A new icon, a plant growing from an open book, and the site\'s mark beside its name.',
+      'Selected text, the front page\'s figure of the day and the link preview take the icon\'s sunflower; the site\'s own colours are as they were.'
+    ]
+  },
+  {
     n: 87,
     date: '2026-11-09',
     lines: liveLines(R87_LINES, R87_LIVE_STAGE)

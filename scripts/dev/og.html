@@ -1,35 +1,44 @@
 <!doctype html>
 <!--
-  The link-preview image, static/app/og.png (1200 x 630), drawn from this page by scripts/dev/og.mjs. Its words are the front
-  page's own (the title, the pitch's first two sentences, the head's "No sign-up"), and OG_ALT in src/lib/ui/ref/head.ts
-  says them as they are drawn: change one, change the other. No figure on it: the counts move with every corpus, and an
-  image is not redrawn with the corpus (round sixty-three; the review of round sixty-two, 8 and 11).
-  Round ninety: drawn in round eighty-seven's type and look (the owner's): Source Sans 3 for every word, the wordmark at the
-  site's weight 600, near-black on white, thin rules, the link green; it was still Newsreader, Public Sans and DM Mono on a
-  green bar. The fonts are the files the site serves (static/fonts/), put in by og.mjs (FONT_* below); the colours are
-  theme.css's light theme.
+  The link-preview image, static/app/og.png (1200 x 630), drawn from this page by scripts/dev/og.mjs. Round ninety-one (the
+  owner's design of 14 November 2026, icon-handoff's mock): the icon's tile at left, "Cultifolio" in Source Sans 3
+  semibold, the site's line in Source Serif 4 italic, a thin rule, three lines in the muted ink, and a sunflower bar along
+  the foot. Every claim is what /about says (rule 5): a reference for the plants people grow (the site's title), every
+  figure with its source (/about: "Every figure has a source and a date"), no account and open source (/about), and the
+  plants staying on the device or syncing encrypted (/about/how: "Your plants stay on your device, or sync encrypted if
+  you choose"; the mock's "stay on your device" alone was not true with sync on). OG_ALT in src/lib/ui/ref/head.ts says
+  the same words. SPECIES is the index's count of species, put in by og.mjs, which refuses to draw when OG_ALT names
+  another; scripts/live-check.mjs fails when the live front page's count is not the card's, so a card the corpus has
+  outgrown is drawn again, never left to say a stale figure. The fonts and the icon are the files the site serves, put in
+  by og.mjs (the {{…}} below); the colours are theme.css's light theme and the icon's sunflower.
 -->
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
 <style>
-  @font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; src: url(FONT_SANS) format('woff2'); }
+  @font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; src: url({{FONT_SANS}}) format('woff2'); }
+  @font-face { font-family: 'Source Serif 4'; font-style: italic; font-weight: 200 900; src: url({{FONT_SERIF_ITALIC}}) format('woff2'); }
   html, body { margin: 0; }
   body { width: 1200px; height: 630px; overflow: hidden; background: #ffffff; color: #1b1d1c; font-family: 'Source Sans 3', sans-serif; position: relative; }
-  main { position: absolute; left: 80px; right: 80px; top: 78px; }
-  .kick { font-size: 24px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6b685f; margin: 0; }
-  h1 { font-weight: 600; font-size: 128px; line-height: 1; letter-spacing: -0.01em; margin: 10px 0 0; padding-bottom: 30px; border-bottom: 2px solid #1b1d1c; }
-  p.pitch { font-size: 37px; line-height: 1.36; margin: 34px 0 0; max-width: 1040px; color: #1b1d1c; }
-  p.pitch span { color: #4a4842; }
-  p.foot { position: absolute; left: 80px; right: 80px; bottom: 52px; margin: 0; padding-top: 18px; border-top: 1px solid #d9d6cf; font-size: 29px; font-weight: 600; color: #1d5c45; }
+  img.tile { position: absolute; left: 104px; top: 158px; width: 300px; height: 300px; }
+  main { position: absolute; left: 468px; right: 80px; top: 150px; }
+  h1 { font-weight: 600; font-size: 84px; line-height: 1; letter-spacing: -0.005em; margin: 0; }
+  p.line { font-family: 'Source Serif 4', serif; font-style: italic; font-weight: 400; font-size: 36px; line-height: 1.2; margin: 26px 0 0; }
+  hr { border: 0; border-top: 1px solid #d9d6cf; margin: 30px 0 22px; }
+  p.small { font-size: 24px; line-height: 1.6; margin: 0; color: #4a4842; }
+  .bar { position: absolute; left: 16px; right: 16px; bottom: 0; height: 16px; background: #ffd02e; }
 </style>
 </head>
 <body>
+  <img class="tile" src="{{ICON}}" alt="">
   <main>
-    <p class="kick">Species reference</p>
     <h1>Cultifolio</h1>
-    <p class="pitch">The plants people grow, each with its habitat climate where its records allow one. Every figure names its source. <span>Your own plants stay on your device, or sync encrypted.</span></p>
+    <p class="line">A reference for the plants people grow</p>
+    <hr>
+    <p class="small">{{SPECIES}} species, every figure with its source</p>
+    <p class="small">No account · open source</p>
+    <p class="small">Your plants stay on your device, or sync encrypted</p>
   </main>
-  <p class="foot">cultifolio.com · no sign-up · free and open source</p>
+  <div class="bar"></div>
 </body>
 </html>

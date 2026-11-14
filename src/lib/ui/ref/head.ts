@@ -19,8 +19,10 @@ import { yearRain } from '$climate/year-rain';
  * shows, as it shows them. The alt once described a wider line than the image holds, and the species page's fallback
  * a narrower one (round sixty-two; the words review's 2, outside review A2). The image is drawn by scripts/dev/og.mjs from
  * scripts/dev/og.html (round sixty-three); change the two together.
+ * Round ninety-one: the card in the site's look, with the icon; its count is the index's, and og.mjs will not draw a card
+ * whose count is not this line's (the live check fails when the live front page's count is not it).
  */
-export const OG_ALT = 'Cultifolio, species reference. The plants people grow, each with its habitat climate where its records allow one. Every figure names its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no sign-up, free and open source.';
+export const OG_ALT = 'Cultifolio, the icon: a plant growing from an open book. A reference for the plants people grow. 48,375 species, every figure with its source. No account, open source. Your plants stay on your device, or sync encrypted.';
 
 type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
 export interface HeadInput {

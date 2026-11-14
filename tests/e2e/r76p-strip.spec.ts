@@ -107,9 +107,12 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // Round ninety (14 November 2026): R87_LIVE_STAGE raised to 3, so "Changed lately" carries stage 2's first line, longer
 // than the stage 1 line it follows, and everything under it is 22 px lower at 1280 (21 at 1024), measured in Chromium:
 // on fce7905 the base was 1091, 1294, 1308, 1449 (1114, 1305, 1319, 1461 at 1024). Tiles and gaps unchanged.
+// Round ninety-one: "Changed lately" opens with round 91's two lines (the icon), shorter than round 87's they replace there,
+// so everything under it is 44 px higher at 1280 (21 at 1024), measured in Chromium; on 0812e7b the base was 1113, 1316,
+// 1330, 1471 (1135, 1327, 1341, 1482 at 1024). Tiles and gaps unchanged.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1113, stripBottom: 1316, searchTop: 1330, rowTop: 1471, tile: [172, 193] },
-  '1024': { stripTop: 1135, stripBottom: 1327, searchTop: 1341, rowTop: 1482, tile: [155, 182] }
+  '1280': { stripTop: 1069, stripBottom: 1272, searchTop: 1286, rowTop: 1427, tile: [172, 193] },
+  '1024': { stripTop: 1114, stripBottom: 1305, searchTop: 1319, rowTop: 1461, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

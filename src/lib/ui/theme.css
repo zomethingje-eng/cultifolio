@@ -848,3 +848,16 @@ h1.sci .auth { font-size: 1.25rem; color: var(--ink2); }
 h1.q, h3.q, h2.q { font-family: var(--ui); font-weight: 400; letter-spacing: 0; }
 h1.q { font-size: 2rem; }
 @media (max-width: 640px) { h1.q { font-size: 1.625rem; } }
+
+/* Round ninety-one (the owner's icon, 14 November 2026): the icon's sunflower, #ffd02e, on the site in two places only.
+   Sunflower is never text, a line or a focus ring on white (about 1.4:1 against it): only a ground behind ink, or a mark
+   on the dark ground. The site's own colours, theme-color and type are unchanged.
+   - Selected text: ink on sunflower, in both modes (the browser's blue before).
+   - The front page's lead figure (the number and its unit, `.leadfig`): a highlighter stroke behind it on white; on the
+     dark ground, where a fill looked muddy, a sunflower underline. Decoration only: the figure says itself in words. On
+     paper, the light theme's stroke, as every colour there is the light theme's. */
+::selection { background: #ffd02e; color: #1b1d1c; }
+:root { --lead-mark: linear-gradient(transparent 58%, #ffd02e 58%, #ffd02e 92%, transparent 92%); --lead-line: transparent; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --lead-mark: none; --lead-line: #ffd02e; } }
+:root[data-theme='dark'] { --lead-mark: none; --lead-line: #ffd02e; }
+@media print { :root:root:root { --lead-mark: linear-gradient(transparent 58%, #ffd02e 58%, #ffd02e 92%, transparent 92%); --lead-line: transparent; } }

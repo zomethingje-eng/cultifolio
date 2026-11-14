@@ -30,16 +30,17 @@ describe('r90e: the link-preview image in the site\'s own faces', () => {
   it('og.mjs reads the fonts the site serves, not an npm package', () => {
     const js = readFileSync('scripts/dev/og.mjs', 'utf8');
     expect(js).not.toMatch(/@fontsource|node_modules/); // base: node_modules/@fontsource-variable/newsreader/…
-    expect(js).toContain("'static/fonts/'");
+    expect(js).toContain('static/fonts/source-sans-3/');
     expect(statSync('static/fonts/source-sans-3/source-sans-3-latin-wght-normal.woff2').size).toBeGreaterThan(10_000);
   });
 
-  it('og.html draws in Source Sans 3 alone, on the light theme\'s white and ink', () => {
+  // Round ninety-one (r91): the owner's card, in Source Sans 3 and, for its line, Source Serif 4 italic; the icon's sunflower.
+  it("og.html draws in the site's faces, on the light theme's white and ink, with the icon's sunflower", () => {
     const html = readFileSync('scripts/dev/og.html', 'utf8').replace(/<!--[\s\S]*?-->/, '');
-    expect([...html.matchAll(/font-family: '([^']+)'/g)].map((m) => m[1])).toEqual(['Source Sans 3', 'Source Sans 3']);
-    expect(html).not.toMatch(/Newsreader|Public Sans|DM Mono|FONT_SERIF|FONT_MONO/);
+    expect([...new Set([...html.matchAll(/font-family: '([^']+)'/g)].map((m) => m[1]))]).toEqual(['Source Sans 3', 'Source Serif 4']);
+    expect(html).not.toMatch(/Newsreader|Public Sans|DM Mono/);
     const css = readFileSync('src/lib/ui/theme.css', 'utf8');
-    for (const c of ['#ffffff', '#1b1d1c', '#1d5c45']) {
+    for (const c of ['#ffffff', '#1b1d1c', '#4a4842', '#ffd02e']) {
       expect(html, c).toContain(c);
       expect(css, c).toContain(c);
     }

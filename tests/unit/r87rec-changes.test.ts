@@ -23,9 +23,10 @@ import { ROUNDS, R87_LINES, R87_LIVE_STAGE, liveLines, changedLately, recordHref
 const r87 = () => ROUNDS.find((r) => r.n === 87);
 
 describe('r87rec changes 1: round eighty-seven lists its live stages alone', () => {
-  it('is the newest entry, dated 9 November 2026, the day its record was finished', () => {
-    expect(ROUNDS[0].n).toBe(87);
-    expect(ROUNDS[0].date).toBe('2026-11-09');
+  // Round ninety-one is newer (r91, the icon); round eighty-seven's entry keeps its day.
+  it('its entry is dated 9 November 2026, the day its record was finished', () => {
+    const r87 = ROUNDS.find((r) => r.n === 87)!;
+    expect(r87.date).toBe('2026-11-09');
     expect(readFileSync('docs/REVIEW-ROUND-87.md', 'utf8')).toMatch(/9 November/);
     expect(recordHref(87)).toMatch(/docs\/REVIEW-ROUND-87\.md$/);
   });
@@ -58,7 +59,7 @@ describe('r87rec changes 1: round eighty-seven lists its live stages alone', () 
     const st = R87_LINES.map((l) => l.stage);
     expect(st).toEqual([...st].sort());
     expect(new Set(st)).toEqual(new Set([1, 2, 3]));
-    expect(changedLately(1)[0].text).toBe(R87_LINES[0].text);
+    expect(changedLately(100).filter((c) => c.round === 87)[0].text).toBe(R87_LINES[0].text);
   });
 });
 

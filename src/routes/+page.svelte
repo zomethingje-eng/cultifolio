@@ -1408,7 +1408,9 @@
   /* The lead (round eighty-seven; plan D1): the figure in a sentence, its trail as a table, the photograph beside it. */
   .lead { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; padding: 40px 0 28px; border-bottom: 1px solid var(--rule); }
   .lead h1 { margin: 10px 0 0; font-weight: 400; font-size: 2.375rem; line-height: 1.2; text-wrap: pretty; }
-  .leadfig { font-variant-numeric: var(--figs); font-weight: 500; white-space: nowrap; }
+  /* Round ninety-one: the figure marked in the icon's sunflower, a stroke behind it on white and a line under it on the dark
+     ground (theme.css's --lead-mark and --lead-line); on this page alone. */
+  .leadfig { font-variant-numeric: var(--figs); font-weight: 500; white-space: nowrap; background-image: var(--lead-mark); text-decoration: underline var(--lead-line) 5px; text-underline-offset: 8px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .leadkick { margin: 0; }
   .leadwhat { display: none; }
   .trail { margin-top: 18px; border-collapse: collapse; width: 100%; font-size: 0.875rem; }

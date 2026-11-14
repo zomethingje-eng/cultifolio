@@ -75,12 +75,13 @@ describe('r87p changes 2: plain lines', () => {
 });
 
 describe('r87p changes 3: changedLately', () => {
+  // Round ninety-one: the newest round may hold two lines, so as many as it holds (three assumed round 87's eight).
   it('the newest lines, in order, each with its round, its date and its links', () => {
-    const three = changedLately(3);
-    expect(three).toHaveLength(3);
     const newest = ROUNDS[0];
-    expect(three.map((x) => x.text)).toEqual(newest.lines.slice(0, 3));
-    for (const x of three) expect(x).toEqual({ round: newest.n, date: newest.date, text: x.text, href: roundHref(newest.n), record: recordHref(newest.n) });
+    const first = changedLately(newest.lines.length);
+    expect(first).toHaveLength(newest.lines.length);
+    expect(first.map((x) => x.text)).toEqual(newest.lines);
+    for (const x of first) expect(x).toEqual({ round: newest.n, date: newest.date, text: x.text, href: roundHref(newest.n), record: recordHref(newest.n) });
   });
   it('past the newest round, the next round\'s lines follow', () => {
     const n = ROUNDS[0].lines.length + 2;

@@ -490,7 +490,9 @@
 <!-- Round eighty-seven (the owner's look): the name of the site, the search, the four places and a rule of ink under them.
      The menu, Back, the crumb, the example's mark, sync and "+" keep their places and their names. -->
 <header id="topbar" data-cover="top" inert={locked}>
-  <a class="wordmark" class:withback={!!back} href="/">Cultifolio</a>
+  <!-- Round ninety-one (the owner's icon): the mark beside the name, in the text's colour, hidden from assistive technology
+       (the name is the link's). Its drawing is static/app/favicon.svg's figure alone (icon-handoff's mark.svg). -->
+  <a class="wordmark" class:withback={!!back} href="/"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="14 4 100 104" fill="currentColor" aria-hidden="true" focusable="false"><path d="M64 104 C52 90 36 86 18 90 L18 54 C36 50 52 54 64 68 Z"/><path d="M64 104 C76 90 92 86 110 90 L110 54 C92 50 76 54 64 68 Z"/><path d="M61.6 72 C61 60 61.6 48 61.6 36 L66.4 36 C66.4 48 67 60 66.4 72 Z"/><path d="M64 42 C52 30 56 14 64 8 C72 14 76 30 64 42 Z"/><path d="M63 58 C44 56 30 40 34 26 C50 30 62 44 63 58 Z"/><path d="M65 52 C84 50 98 34 94 20 C78 24 66 38 65 52 Z"/></svg>Cultifolio</a>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
   <nav class="crumb" class:detail={parts.length > 1} aria-label="Breadcrumb">
     <ol>
@@ -648,6 +650,8 @@
   @media (min-width: 701px) { #topbar { min-height: 56px; gap: 12px; padding-inline: max(16px, env(safe-area-inset-left), calc((100% - var(--maxw)) / 2 + 16px)); } }
   .wordmark { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 1.0625rem; letter-spacing: 0.01em; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; min-height: max(40px, var(--tap)); padding-right: 4px; }
   .wordmark:hover { text-decoration: none; color: var(--ink); }
+  /* The mark (round ninety-one): about 22 px tall, 8 px before the name, in the name's colour; it never shrinks away. */
+  .wordmark .mark { flex: none; height: 22px; width: auto; aspect-ratio: 100 / 104; margin-right: 8px; }
   /* On a phone a detail page's bar is Back and the page's name: the name of the site is the tab bar's Reference there. */
   @media (max-width: 480px) { .wordmark.withback { display: none; } }
   /* Padded as the body is, by the safe area where there is one: in landscape on a notched iPhone the menu button sat under
