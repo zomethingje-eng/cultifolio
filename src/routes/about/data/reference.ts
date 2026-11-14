@@ -19,8 +19,18 @@
  * The DOI of the GBIF derived dataset that cites the records the build read through GBIF's search API rather than a
  * download (https://www.gbif.org/derived-dataset), as `10.15468/…`, once it is registered. Null: none is registered, and
  * /about/data says nothing of one. Set it here, and the section is drawn with the DOI linked.
+ *
+ * Round ninety: registered by the owner on 14 November 2026 from derived-dataset.csv (`--list-derived` over the pages as
+ * built on 13 November). Read back from GBIF's API the same day (https://api.gbif.org/v1/derivedDataset/10.15468/dd.pmx97y):
+ * 2,264 datasets, registration date 2026-11-14, source URL https://cultifolio.com/about/data.
  */
-export const GBIF_DERIVED_DOI: string | null = null;
+export const GBIF_DERIVED_DOI: string | null = '10.15468/dd.pmx97y';
+
+/**
+ * GBIF's citation of the derived dataset, as its API gives it (`citation`), so the page credits it as GBIF asks; and how
+ * many datasets and records it cites, summed from the file it was registered from.
+ */
+export const GBIF_DERIVED = { citation: 'Derived dataset GBIF.org (14 November 2026) Filtered export of GBIF occurrence data', datasets: 2264, records: 908964, counted: '2026-11-13' } as const;
 
 /** A DOI as the pages take one: `10.<registrant>/<suffix>`, with or without the resolver's address before it. */
 export const doiOf = (x: string | null | undefined): string | null => {

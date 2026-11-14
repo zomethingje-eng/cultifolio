@@ -9,7 +9,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import AboutNav from '../AboutNav.svelte';
   import { REPO } from '$lib/changes/rounds';
-  import { citation, GBIF_DERIVED_DOI } from './reference';
+  import { citation, GBIF_DERIVED_DOI, GBIF_DERIVED } from './reference';
   import { countText } from '$lib/ui/about-counts';
   let { data } = $props();
   $effect(() => {
@@ -98,7 +98,8 @@
   {#if GBIF_DERIVED_DOI}
     <section aria-labelledby="derived">
       <h2 id="derived">The records read through GBIF's search</h2>
-      <p>The records the build read through GBIF's search, not a download, are cited together as a GBIF derived dataset: <a href="https://doi.org/{GBIF_DERIVED_DOI}" rel="noopener">https://doi.org/{GBIF_DERIVED_DOI}</a>.</p>
+      <p>The records the build read through GBIF's search, not a download, are cited together as a GBIF derived dataset: <a href="https://doi.org/{GBIF_DERIVED_DOI}" rel="noopener">https://doi.org/{GBIF_DERIVED_DOI}</a>. It names each of the {GBIF_DERIVED.datasets.toLocaleString('en-GB')} datasets those {GBIF_DERIVED.records.toLocaleString('en-GB')} records came from, counted from the pages as built on {new Date(`${GBIF_DERIVED.counted}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}.</p>
+      <p id="derived-cite">{GBIF_DERIVED.citation} https://doi.org/{GBIF_DERIVED_DOI}</p>
     </section>
   {/if}
 </article>

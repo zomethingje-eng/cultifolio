@@ -74,6 +74,16 @@ changed as a fill changes it: refused at once; with every stamp holding, the pro
    asks it again. Test: `tests/unit/r90d-walk-carry.test.ts`; `tests/unit/r87f-list-offline.test.ts` now expects a page
    carried over a refusal to be listed.
 
+5. **The GBIF derived dataset, registered.** The owner registered it on gbif.org on 14 November 2026 from
+   `derived-dataset.csv` (`--list-derived` over the pages as built on 13 November): DOI `10.15468/dd.pmx97y`. The form
+   took the file only without its final newline (it read the last count as "1" and a line end, "must be a number"), so it
+   was uploaded as `derived-dataset-gbif.csv`, the same rows. Read back from GBIF's API the same day: 2,264 datasets,
+   908,964 records, registration date 2026-11-14, source URL https://cultifolio.com/about/data, citation "Derived dataset
+   GBIF.org (14 November 2026) Filtered export of GBIF occurrence data https://doi.org/10.15468/dd.pmx97y".
+   `GBIF_DERIVED_DOI` and `GBIF_DERIVED` in `src/routes/about/data/reference.ts` are set, and /about/data draws its
+   section: the DOI linked, the datasets and records it names and the day they were counted, and GBIF's citation as GBIF
+   gives it. Tests: r87p-data 4 and r87p 2 (before, both held that no derived dataset was registered).
+
 ## Leads for gathering faster, and only when needed (not done; each to be measured before it is built)
 
 These came up while reading the fills. None is in this round's code. Each would follow round 88's rule: a lead is

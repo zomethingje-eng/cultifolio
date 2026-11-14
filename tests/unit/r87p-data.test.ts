@@ -4,7 +4,8 @@
  * 1. `downloadsOf` reads the GBIF downloads a page's record of sources cites, in the build's own words, and nothing else.
  * 2. `pickOf` is the front page's first tile of the day, by the front page's own formula.
  * 3. `citeOf` and `citation`: the manifest's id and the day it was built, read as served; the corpus id alone without one.
- * 4. The derived dataset's section is drawn only once its DOI is set, and it is not set.
+ * 4. The derived dataset's section is drawn only once its DOI is set. Round ninety: set, the owner having registered it on
+ *    14 November 2026 (10.15468/dd.pmx97y; on fce7905 the DOI was null and the section not drawn).
  * 5. `today()` over the fixture corpus: the front page's first species, its lead photograph credited in full, and the day.
  * 6. The endpoint and the page's load: their answers and their lifetimes.
  *
@@ -12,7 +13,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { downloadsOf, pickOf, dayNumber, citeOf, citation, doiOf, GBIF_DERIVED_DOI } from '../../src/routes/about/data/reference';
+import { downloadsOf, pickOf, dayNumber, citeOf, citation, doiOf, GBIF_DERIVED_DOI, GBIF_DERIVED } from '../../src/routes/about/data/reference';
 import { today } from '../../src/routes/about/data/today.server';
 import { GET as todayGet } from '../../src/routes/about/data/today/+server';
 import { load as dataLoad } from '../../src/routes/about/data/+page.server';
@@ -91,7 +92,12 @@ describe('r87p data 3: how to cite it', () => {
 });
 
 describe('r87p data 4: the derived dataset', () => {
-  it('no DOI is set: none is registered', () => expect(GBIF_DERIVED_DOI).toBeNull());
+  it('the DOI GBIF gave on registering it (14 November 2026), a DOI as the pages take one', () => {
+    expect(GBIF_DERIVED_DOI).toBe('10.15468/dd.pmx97y');
+    expect(doiOf(GBIF_DERIVED_DOI)).toBe('10.15468/dd.pmx97y');
+    // As GBIF's API gave them back: its citation, and the datasets and records summed over its list.
+    expect(GBIF_DERIVED).toEqual({ citation: 'Derived dataset GBIF.org (14 November 2026) Filtered export of GBIF occurrence data', datasets: 2264, records: 908964, counted: '2026-11-13' });
+  });
   it('its section is drawn only with the DOI', () => {
     const src = readFileSync('src/routes/about/data/+page.svelte', 'utf8');
     const at = src.indexOf('id="derived"');

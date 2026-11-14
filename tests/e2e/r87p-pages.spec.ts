@@ -34,7 +34,7 @@ test('r87p 1: /about is the owner\'s page, served whole without JavaScript @phon
   await ctx.close();
 });
 
-test('r87p 2: /about/data reads the corpus served: its id for the citation, the index to download, no derived dataset @phone', async ({ page, request }) => {
+test('r87p 2: /about/data reads the corpus served: its id for the citation, the index to download, the derived dataset cited @phone', async ({ page, request }) => {
   await photosLoad(page);
   await page.goto('/about/data');
   await ready(page);
@@ -49,8 +49,12 @@ test('r87p 2: /about/data reads the corpus served: its id for the citation, the 
   expect(Array.isArray(await r.json())).toBe(true);
   // The fixture's page cites no download: said so, never a DOI made up.
   await expect(page.locator('#doi')).toContainText('names no GBIF download');
-  await expect(page.locator('#derived')).toHaveCount(0);
-  await expect(page.locator('article')).not.toContainText('derived dataset');
+  // Round ninety: the derived dataset registered on 14 November 2026, linked and cited as GBIF gives its citation (before:
+  // no section).
+  await expect(page.locator('#derived')).toHaveText("The records read through GBIF's search");
+  await expect(page.locator('a[href="https://doi.org/10.15468/dd.pmx97y"]')).toBeVisible();
+  await expect(page.locator('article')).toContainText('It names each of the 2,264 datasets those 908,964 records came from, counted from the pages as built on 13 November 2026.');
+  await expect(page.locator('#derived-cite')).toHaveText('Derived dataset GBIF.org (14 November 2026) Filtered export of GBIF occurrence data https://doi.org/10.15468/dd.pmx97y');
   await expect(page.locator('a[href="https://github.com/zomethingje-eng/cultifolio"]').first()).toBeVisible();
 });
 
