@@ -24,7 +24,9 @@
 // job (Y/N)?", which this script cannot answer for you (either answer is safe; the state is written before it asks).
 //
 // Each step of the plan is a line: `backup`, `dossier <the builder's arguments>`, `if-exists <file> dossier ...`,
-// `review <what to read>`, `upload`, `live-check`. A step that finishes is recorded in corpus-step.json and not run again;
+// `review <what to read>`, `upload`, `live-check`, and `daily dossier <a fill>` (round ninety): the day's fills, each under
+// a daily allowance of its own; one that stops at its allowance hands over to the next daily step, and the run stops
+// before the first step after them until every one has finished. A step that finishes is recorded in corpus-step.json and not run again;
 // one that stops is run again by the next run, and every builder step is itself resumable. Everything the steps print
 // goes to the screen and to corpus-step.log, both in the project folder, so the log can be read back or pasted.
 //
@@ -81,7 +83,7 @@ export function builderHeap(total = totalmem(), env = process.env) {
 
 /** The plan: one step a line, `#` starts a comment. Throws on a line it does not know, so a typo stops before anything runs. */
 export function parsePlan(text) {
-  /** @type {Array<{ line: any, kind: any, args: any, when?: string, expects?: any[] }>} */
+  /** @type {Array<{ line: any, kind: any, args: any, when?: string, expects?: any[], daily?: boolean }>} */
   const steps = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
     const line = raw.replace(/#.*$/, '').trim();
@@ -96,6 +98,15 @@ export function parsePlan(text) {
       const last = steps[steps.length - 1];
       if (!last || last.kind !== 'review' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": an expect line goes under a review line`);
       try { (last.expects ??= []).push(parseExpect(rest.slice('expect'.length))); } catch (e) { throw new Error(`corpus plan line ${i + 1}: ${e instanceof Error ? e.message : String(e)}`); }
+      continue;
+    }
+    // Round ninety: `daily dossier <a fill>` is one of the day's fills. Each has its own daily allowance (iNaturalist's,
+    // BHL's), so one that stops at its allowance hands over to the next, and the run stops before the first step that is
+    // not one of them until every one has finished (`dailyGate`).
+    if (kind === 'daily') {
+      const [inner, ...innerArgs] = args;
+      if (inner !== 'dossier' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": daily goes before a dossier step, as "daily dossier --fill <source>"`);
+      steps.push({ line, kind: inner, args: innerArgs, daily: true });
       continue;
     }
     if (!['backup', 'dossier', 'review', 'upload', 'live-check'].includes(kind)) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}" is not a step this script knows`);
@@ -151,7 +162,7 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
   switch (result.status) {
     // The day's allowance of a source (iNaturalist's 9,000; round seventy-eight's budget) is spent until midnight UTC, so
     // the same command an hour later would stop again at once (round seventy-nine: the six days of the cultivated fill).
-    case 'unfinished': return /allowance of \d+ requests is spent|allows about [\d,]+ calls a day/.test(result.why)
+    case 'unfinished': return ALLOWANCE_SPENT.test(result.why)
       ? `Stopped at "${step.line}": the day's allowance is spent (${result.why}). Nothing is lost and what was read stands. Run the same command again tomorrow, after midnight UTC: ${cmd}`
       : `Stopped at "${step.line}": a source did not answer (${result.why}). Nothing is lost and what was read stands. Run the same command again in an hour or so: ${cmd}`;
     case 'blocked':
@@ -170,6 +181,32 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
       : `Stopped at "${step.line}": it failed (${result.why}). Paste the last forty lines of corpus-step.log back. To try that step again: ${cmd}`;
     default: return '';
   }
+}
+
+/** Whether a stop's reason is a day's allowance spent (until midnight UTC), not a source that did not answer. */
+export const ALLOWANCE_SPENT = /allowance of \d+ requests is spent|allows about [\d,]+ calls a day/;
+
+/**
+ * The day's fills not yet finished before step `i` (round ninety): the `daily` steps just above it, back to the first
+ * step that is not one, whose record says `unfinished`. Step `i` is the first step after them (or the plan's end, `i` =
+ * its length). Empty when every one has finished, or when no daily step is above it.
+ * @param {Array<{ line: string, daily?: boolean }>} plan
+ * @param {Array<{ status: string, why?: string }>} steps
+ * @param {number} i
+ */
+export function dailyGate(plan, steps, i) {
+  const left = [];
+  for (let j = i - 1; j >= 0 && plan[j].daily; j--) if (steps[j].status === 'unfinished') left.unshift({ line: plan[j].line, why: steps[j].why ?? '' });
+  return left;
+}
+
+/** The sentence the run stops with before `next` (a step's line, or null at the plan's end) while the day's fills in `left` are not finished. */
+export function dailySentence(left, next, cmd = 'node scripts/corpus-step.mjs') {
+  const each = left.map((x) => `"${x.line}" (${x.why})`).join('; ');
+  const where = next ? `before "${next}"` : 'at the end of the plan';
+  return left.every((x) => ALLOWANCE_SPENT.test(x.why))
+    ? `Stopped ${where}: the day's fills are not finished, and each has spent its day's allowance: ${each}. Nothing is lost and what was read stands. Run the same command again tomorrow, after midnight UTC: ${cmd}`
+    : `Stopped ${where}: the day's fills are not finished: ${each}. Nothing is lost and what was read stands. A source did not answer, so run the same command again in an hour or so (a fill whose allowance is spent stops at once, asking nothing): ${cmd}`;
 }
 
 /**
@@ -314,6 +351,9 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
     for (const [i, step] of plan.entries()) {
       const rec = state.steps[i];
       if (rec.status === 'done' || rec.status === 'skipped') continue;
+      // Round ninety: not past the day's fills until every one has finished.
+      const left = step.daily ? [] : dailyGate(plan, state.steps, i);
+      if (left.length) { say(`\n${dailySentence(left, step.line, cmd)}\n`); return EXIT.unfinished; }
       if (rec.status === 'review') {
         // A stop for review is passed only by --go-on, and only this one: a later stop stops again.
         if (!goOn) { say(`\n${rec.note}\n`); return EXIT.review; }
@@ -423,8 +463,15 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       rec.why = result.why;
       rec.note = step.kind === 'review' ? `Review before going on: ${result.why} When it is as expected, carry on with: ${cmd} --go-on` : stopSentence(step, result, cmd);
       save();
+      // Round ninety: one of the day's fills that stopped unfinished (its allowance spent, or a source that did not answer)
+      // hands over to the next, which has an allowance of its own; the gate above stops the run after the last of them.
+      if (step.daily && result.status === 'unfinished') { say(`\n  "${step.line}" stopped unfinished (${result.why}); what it read stands, and it carries on at the next run. Going on to the next of the day's fills.\n`); continue; }
       say(`\n${rec.note}\n`);
       return EXIT[result.status];
+    }
+    if (!interrupted) {
+      const left = dailyGate(plan, state.steps, plan.length);
+      if (left.length) { say(`\n${dailySentence(left, null, cmd)}\n`); return EXIT.unfinished; }
     }
     if (interrupted) {
       const i = state.steps.findIndex((s) => s.status === 'running');

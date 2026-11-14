@@ -151,6 +151,7 @@ describe('5. the stage-2 plans, in order', () => {
     for (const r of l.filter((x) => x.startsWith('review '))) expect(r, r.slice(0, 60)).toMatch(/\bStop\b/);
   });
   it('the daily plan: the two fills, the index, a review, the upload and the live check', () => {
-    expect(lines('scripts/corpus-plan-r87-daily.txt').map((x) => x.split(/\s+/).slice(0, 3).join(' '))).toEqual(['dossier --fill flowering', 'dossier --fill bhl', 'dossier --index', 'review Read the', 'upload', 'live-check']);
+    // Round ninety: the two fills are `daily` steps (r90a), so a day uses both allowances.
+    expect(lines('scripts/corpus-plan-r87-daily.txt').map((x) => x.split(/\s+/).slice(0, 3).join(' '))).toEqual(['daily dossier --fill', 'daily dossier --fill', 'dossier --index', 'review Read the', 'upload', 'live-check']);
   });
 });

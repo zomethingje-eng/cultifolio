@@ -77,6 +77,7 @@ The check can be done before the plan below (its `--fill sources` step then appl
    publisher's. The stage's stated-wild choice of the typical cell is out (the review of stage 2, S4), so the dry run
    and the walk print no "typical cells chosen" line and ask NASA POWER for no new cell.
 2. Then once a day: `node scripts\corpus-step.mjs --plan scripts\corpus-plan-r87-daily.txt`: `--fill flowering`
-   (about 11 days) and `--fill bhl` (10 days at the least), then the index, the upload and the live check. On a day the
-   run stops at `--fill flowering`, also type `npm run dossier -- --fill bhl` once, after the run has stopped: BHL's
-   allowance is its own. Until a page is read, its flowering and BHL lines say "not asked".
+   (about 11 days) and `--fill bhl` (10 days at the least), then the index, the upload and the live check. Since round
+   ninety both are `daily` steps: a fill that stops at its day's allowance hands over to the other, so each day's run
+   uses both allowances, and the run stops before the index until both have finished. Nothing is typed by hand. Until
+   a page is read, its flowering and BHL lines say "not asked".
