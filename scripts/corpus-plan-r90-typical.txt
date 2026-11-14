@@ -1,0 +1,24 @@
+# Round ninety: a dry run of every page under this round's code, before the next walk, to see what the typical-spot rule
+# of 14 November 2026 moves (TYPICAL_TIE_C in src/lib/climate/provider.ts: cells within 0.5 °C of the one nearest the
+# median coldest night count as equally near, and of those the one holding the most records is taken). The dry run
+# derives every page offline as the walk does and writes nothing but dry-run-ranges.txt: no dossier, index, cache or
+# walk.json. Nothing is uploaded.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r90-typical.txt
+# When: after a day's daily run has stopped (it takes the lock for some hours, and the daily run is refused while it
+# holds it), never at midnight UTC. A run that has not finished by the next midnight is stopped with Ctrl+C and run
+# again with the same command after that day's daily run; the daily fills come first.
+#
+# What it measures: stage 2's walk was derived on round eighty-nine's code from the same download and Kew's files, so a
+# typical spot the dry run moves is moved by this round's rule (or by GBIF's search answering otherwise for a species
+# the download left to it). Stage 2's own dry run, before that walk, moved 79 spots, 24 of them over 1,000 km. This one
+# is expected to move the spots of wide ranges once, onto their most recorded near-median cell, and from then on to
+# hold them. NASA POWER is asked for each new typical cell its cache lacks, as the walk does; nothing it answers is kept.
+dossier --dry-run --offline --grid climate --bulk bulk
+review Read the dry run's end: "Dry run, rule … against the dossiers on disk", then "climates: G gained, L lost, K kept with other cells; typical spots moved: M (N by 10 km or more)", and "the P pages that change, one a line → dry-run-ranges.txt". G and L are expected near 0 (the walk's own files): the rule moves typical cells, it does not gain or lose a climate. M is the number of pages whose typical spot this rule moves, and the figure this run is for. Then tell Claude, who reads dry-run-ranges.txt with you: how far the spots moved, and whether any moved somewhere it should not (outside the plant's native regions, onto a far smaller population). Stop, and paste the end of corpus-step.log back, if G or L is over 50, or if a line says "COULD NOT BE READ".
+expect let G /climates: ([\d,]+) gained/
+expect let L /climates: [\d,]+ gained, ([\d,]+) lost/
+expect let M /typical spots moved: ([\d,]+)/
+expect G <= 50
+expect L <= 50
+expect M >= 0
+expect no /COULD NOT BE READ/

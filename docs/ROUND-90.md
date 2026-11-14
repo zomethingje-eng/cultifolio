@@ -84,6 +84,40 @@ changed as a fill changes it: refused at once; with every stamp holding, the pro
    section: the DOI linked, the datasets and records it names and the day they were counted, and GBIF's citation as GBIF
    gives it. Tests: r87p-data 4 and r87p 2 (before, both held that no derived dataset was registered).
 
+## While the daily runs go on (14 November 2026, the owner: "get 1-3 done")
+
+1. **The link-preview image in round 87's type.** `static/app/og.png` (what a shared cultifolio.com link shows) was still
+   drawn in Newsreader, Public Sans and DM Mono on a green bar, the look round 87 replaced, and `scripts/dev/og.mjs` read
+   those faces from their npm packages. It is drawn again from `scripts/dev/og.html` in Source Sans 3 alone, the
+   wordmark at the site's weight 600, near-black on white with a rule under the name and a hairline over the address line
+   in the link green, from the file the site serves (`static/fonts/source-sans-3/`). The words are as they were, so
+   `OG_ALT` still says them. Test: `tests/unit/r90e-og-faces.test.ts`, which also holds that nothing in the project reads
+   the three old packages, so the owner can remove them from `package.json`.
+2. **A dry run of the typical-spot rule, ready to run.** `scripts/corpus-plan-r90-typical.txt`: `dossier --dry-run
+   --offline --grid climate --bulk bulk` over every page, then a review whose checks hold the climates gained and lost at
+   50 or under and read "typical spots moved: M". It writes no dossier, index or cache and uploads nothing; it is to run
+   after a day's daily run has stopped. Stage 2's own dry-run list is kept as `dry-run-ranges-r87s2.txt` (not in git),
+   since this run writes `dry-run-ranges.txt` again. Test: `tests/unit/r90f-typical-plan.test.ts`.
+
+3. **Lead 2 measured: BHL by IPNI's title.** IPNI does not give the page a name was published on: its name record
+   (`https://www.ipni.org/api/1/n/urn:lsid:ipni.org:names:<id>`) gives its publication's BHL title id (`bhlTitleLink`,
+   `bibliography/<n>`) and a resolver query built on it, still to be asked. So it saves no request. What it gives is the
+   title, which is where Kew's abbreviations go wrong: BHL's resolver answers `pid=title:<n>` with the volume, page and
+   year (`Melet. Bot.: 20 (1832)` by title 40101 gave page 28142661, the fill's page). Measured on 14 November 2026 on 250
+   of the 3,997 citations the fill had asked (100 it linked, 150 it did not), each answer judged by the fill's own
+   `bhlPage` (one citation, its page, volume, year and title): of the 100 linked, 92 gave the same page, none another
+   page, 8 no page (4 several citations, 3 no title in IPNI, 1 a volume); of the 150 not linked, 22 gave a page, 47 have
+   no BHL title in IPNI, and 81 stay none. All 22 gains were citations the fill refused because Kew's title matched
+   several books ("BHL's resolver gave 2 citations, not one": most of them copies of Linnaeus's Species Plantarum), which
+   IPNI's title id names one of. Of the fill's 3,082 none, 1,427 (46%) are that case, and IPNI's title gave a page for 22 of
+   the 82 in the sample (27%).
+
+   **So a second ask, by IPNI's title, only where Kew's title gave several citations**, keeping the fill's first answer
+   everywhere else (so the 8 above are not lost), would link about a quarter of those: about 385 more pages on the 3,997
+   asked so far (915 now), and on the whole fill perhaps 3,500 more, about 40% more than the fill alone. Its cost: one IPNI
+   request and one BHL request for each such citation, about 14,000 of each over the fill, so three or four more days of
+   BHL's allowance. IPNI would be credited for the choice of title on the page's line. Not built: the owner's decision.
+
 ## Leads for gathering faster, and only when needed (not done; each to be measured before it is built)
 
 These came up while reading the fills. None is in this round's code. Each would follow round 88's rule: a lead is
