@@ -38,9 +38,6 @@
     "wrangler": "^4.143.0"
   },
   "dependencies": {
-    "@fontsource-variable/newsreader": "^5.3.0",
-    "@fontsource-variable/public-sans": "^5.3.0",
-    "@fontsource/dm-mono": "^5.3.0",
     "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "qrcode": "^1.5.4",
