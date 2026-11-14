@@ -62,9 +62,11 @@ describe('which pages are listed', () => {
     expect(offlineWhy(page({ 'gbif.occurrences': { status: 'ok', detail: 'GBIF occurrence download' }, 'wcvp.distribution': { status: 'skipped', detail: NOT_ASKED } }), 'r87')).toBe(`wcvp.distribution not asked (${NOT_ASKED}); nothing carried`);
     expect(offlineWhy(page({ 'gbif.occurrences': { status: 'ok', detail: 'carried from build of 2026-10-22 as one snapshot; this build: gbif.occurrences skipped' } }), 'r87')).toMatch(/^the range, records and climate of the build of 2026-10-22 kept: this build: gbif\.occurrences skipped$/);
   });
-  it('not a page whose range was asked, nor one carried over a refusal (an online build\'s, not an offline one\'s)', () => {
+  it('not a page whose range was asked and answered', () => {
     expect(offlineWhy(page({ 'gbif.occurrences': { status: 'ok', detail: 'GBIF occurrence download' }, 'wcvp.distribution': { status: 'ok', detail: "Kew's distribution" } }), 'r87')).toBeNull();
-    expect(offlineWhy(page({ 'gbif.occurrences': { status: 'ok', detail: 'carried from build of 2026-10-22 as one snapshot; this build: gbif.occurrences refused' } }), 'r87')).toBeNull();
+    // Round ninety (r90d): one carried over a refusal is listed now, to be asked again: since round eighty-nine the walk
+    // asks GBIF's search too, so a refusal is no longer an online build's alone.
+    expect(offlineWhy(page({ 'gbif.occurrences': { status: 'ok', detail: 'carried from build of 2026-10-22 as one snapshot; this build: gbif.occurrences refused' } }), 'r87')).toBe('the range, records and climate of the build of 2026-10-22 kept: this build: gbif.occurrences refused');
     // Another source not asked offline (Wikidata, carried) is not the range's.
     expect(offlineWhy(page({ wikidata: { status: 'skipped', detail: 'www.wikidata.org not asked: offline re-derivation' }, 'gbif.occurrences': { status: 'ok' }, 'wcvp.distribution': { status: 'ok' } }), 'r87')).toBeNull();
     expect(offlinePages([page({ 'wcvp.distribution': { status: 'skipped', detail: NOT_ASKED } }), { ...page({}), key: 'g2' }], 'r87')).toEqual([`g1 Conophytum tomasii\twcvp.distribution not asked (${NOT_ASKED}); nothing carried`]);

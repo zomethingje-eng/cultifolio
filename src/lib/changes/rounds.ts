@@ -52,7 +52,10 @@ export interface StagedLine {
  * deploys before its walk, when its sections still say "Not worked out for this page yet", so it keeps 1). A stage
  * listed late says too little for a while; one listed early would say what a reader cannot see.
  */
-export const R87_LIVE_STAGE: 1 | 2 | 3 = 1;
+// Raised to 3 on 14 November 2026 (round ninety): stage 3's code is live, and stage 2's corpus was uploaded and checked
+// live on 13 November (scripts/corpus-plan-r87s2.txt, every step done); the flowering line says "page by page", since
+// the daily fill reads about 4,000 pages a day and its pages go up once it has finished.
+export const R87_LIVE_STAGE: 1 | 2 | 3 = 3;
 
 /**
  * Round eighty-seven's lines, every stage's, in the order /changes lists them: the stages in turn, so that "Changed

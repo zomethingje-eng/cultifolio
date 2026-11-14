@@ -40,6 +40,40 @@ to write the index first (`npm run dossier -- --index`), and nothing is built.
 Test: `tests/unit/r90b-prove-stamps.test.ts` (on the twelve pages of round 88's proof test, a page outside the sample
 changed as a fill changes it: refused at once; with every stamp holding, the proof runs as before).
 
+## The open items, 14 November 2026 (the owner: "get on those, yes for my decisions")
+
+1. **Round 87's last stage listed.** `R87_LIVE_STAGE` in `src/lib/changes/rounds.ts` is 3: stage 3's code is live, and
+   stage 2's corpus was uploaded and checked live on 13 November, which is when round 87's record says to raise it.
+   /changes and the front page's "Changed lately" now list stage 2's and stage 3's lines. The flowering line says "page by
+   page": the daily fill has read 6,785 pages, and they go up when both fills finish, about ten days on. "Changed lately"
+   now carries stage 2's first line, longer than stage 1's, so the front page under it is 22 px lower at 1280 (21 at
+   1024), measured in Chromium; `DESKTOP_BASE` in `tests/e2e/r76p-strip.spec.ts` holds the new figures. Tests:
+   r87rec-changes (the stage and the record), r76p strip 2.
+2. **The BCSS lookup, checked.** In the desktop app's browser, `https://fieldnos.bcss.org.uk/fieldno.php?FieldNo=SB%20829`
+   opened the entry (Steven Brack, Ariocarpus scapharostrus, Rayones, Nuevo León), and `FieldNo=KK1398`, the form the
+   app's test builds, opened Karel Kníže's Copiapoa uhligiana, Esmeralda, Chile. No browser check stood in the way. The
+   link is right as built (`BCSS_LOOKUP` in `src/lib/core/identity.ts`); nothing changed.
+3. **The typical spot holds on a few records more** (the owner's decision). The typical cell was the one whose coldest
+   month's mean nightly low is nearest the median across cells, and equals were decided by the order the records came
+   in. On wide ranges many cells sit within a fraction of a degree of the median, so a few records more moved it across
+   the world: stage 2's dry run moved 79 typical spots, 24 of them over 1,000 km (Medicago lupulina from Shandong to Bern,
+   8,591 km, on 774 → 778 records; Oplismenus undulatifolius from Turin to Kōchi, 9,725 km). Now cells within 0.5 °C of
+   the nearest count as equally near, and of those the one holding the most records is taken (then the nearer, then the
+   cell's id); the land rule after it is as before. The climate source says so when it applied ("the N cells within 0.5
+   °C of the nearest count as equally near, and of those the one holding the most records is taken"), and /about/how
+   says the rule and that a page's climate source says when it chose the spot (its first predeploy failed
+   on /about/how's ceiling of 6,000 visible words and its ban on "built before"; both put right). It applies to pages as they are
+   next derived (a walk, a `--keys` build); no page changes until then. `TYPICAL_TIE_C` in `src/lib/climate/provider.ts`.
+   Test: `tests/unit/r90c-typical-spot.test.ts`.
+4. **A walk carries through a GBIF search that failed** (the owner's decision). A re-derivation carried the build
+   before's records, range, marker and climate only when it had not asked a source; since round 89 the walk asks GBIF's
+   search for the species the download left to it, and when that search failed part way (Frangula alnus in stage 2's
+   walk) the page lost them, said "not answered", and `--list-offline` did not list it. Now a re-derivation carries
+   through a source that refused or did not answer, as an online build does (`carriesCore`, same key and dossier
+   version only, as before), and `--list-offline` lists such a page, carried or not, so the plan's online `--keys` build
+   asks it again. Test: `tests/unit/r90d-walk-carry.test.ts`; `tests/unit/r87f-list-offline.test.ts` now expects a page
+   carried over a refusal to be listed.
+
 ## Leads for gathering faster, and only when needed (not done; each to be measured before it is built)
 
 These came up while reading the fills. None is in this round's code. Each would follow round 88's rule: a lead is
@@ -130,3 +164,11 @@ proved by the pages it writes matching the pages the slow way writes, or it is d
 - The predeploy (`node scripts/predeploy.mjs --tier=corpus`, from PowerShell) on this change, 14 November 2026, ended
   07:07 UTC: unit tests 685 files, 6,203 passed and 10 skipped; the browser suite in Chromium desktop and phone, 1,019
   passed: "every test passed first time in Chromium (desktop and phone)", stamped.
+- The open items' predeploy (`node scripts/predeploy.mjs --tier=app`, from PowerShell), 14 November 2026: the first run
+  stopped at the unit tests, 2 of 6,220 failed in r85a-about (/about/how at 6,009 visible words, over its 6,000, and
+  "built before" in a visitor's text); both put right. The second, 13:06 to 14:03 UTC: unit tests 687 files, 6,210 passed
+  and 10 skipped; the browser suite in every engine, 2,715 passed and 23 skipped in 51 minutes: "every test passed first
+  time in every engine; the deploy may go ahead", stamped.
+- `tests/unit/r90c-typical-spot.test.ts` on fce7905's `src/lib/climate/provider.ts`: FAILED (the second build's spot
+  Shandong's, 36.175, 120.275). `tests/unit/r90d-walk-carry.test.ts` on fce7905's `carry-core.ts` and `offline-list.ts`:
+  3 of 4 FAILED (no carry in a re-derivation through "error" or "refused"; no page listed).

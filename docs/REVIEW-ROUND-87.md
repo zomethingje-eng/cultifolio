@@ -148,7 +148,7 @@ says the stage-2 fixes' matching.
   forbid redistribution), only linked; CCDB states no licence and is not used; ChromoDB 2.0 is withdrawn by its authors
   and not used.
 - **/changes:** the round's lines carry their stage, and only a live stage's lines are listed (`R87_LIVE_STAGE` in
-  `src/lib/changes/rounds.ts`, now 1), so neither /changes nor the front page's "Changed lately" says a change a reader
+  `src/lib/changes/rounds.ts`, now 3, raised on 14 November 2026 in round ninety), so neither /changes nor the front page's "Changed lately" says a change a reader
   cannot yet see.
 
 ## 4. Left for a later round

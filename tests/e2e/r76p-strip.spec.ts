@@ -104,9 +104,12 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // module was not in the build and Browse stood alone; merged, "Changed lately" stands beside it (four lines of the rounds'
 // records, `changedLately`), taller than the Browse table, and everything under it is 192 px lower at 1280 (214 at
 // 1024, where its lines wrap more). The strip, its tiles and the gaps between strip, search and first row are unchanged.
+// Round ninety (14 November 2026): R87_LIVE_STAGE raised to 3, so "Changed lately" carries stage 2's first line, longer
+// than the stage 1 line it follows, and everything under it is 22 px lower at 1280 (21 at 1024), measured in Chromium:
+// on fce7905 the base was 1091, 1294, 1308, 1449 (1114, 1305, 1319, 1461 at 1024). Tiles and gaps unchanged.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
-  '1024': { stripTop: 1114, stripBottom: 1305, searchTop: 1319, rowTop: 1461, tile: [155, 182] }
+  '1280': { stripTop: 1113, stripBottom: 1316, searchTop: 1330, rowTop: 1471, tile: [172, 193] },
+  '1024': { stripTop: 1135, stripBottom: 1327, searchTop: 1341, rowTop: 1482, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

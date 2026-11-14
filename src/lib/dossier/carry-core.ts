@@ -12,14 +12,18 @@
 type Row = { status?: string } | undefined;
 export interface CorePage { v?: number; ids?: { gbif?: number }; upstream?: Record<string, Row> }
 
-export function carriesCore(prev: CorePage, d: CorePage, rederive: boolean): boolean {
+/** `_rederive`: whether the build is a re-derivation; since round ninety it carries as any build does (kept for the callers). */
+export function carriesCore(prev: CorePage, d: CorePage, _rederive: boolean): boolean {
   const core = ['gbif.occurrences', 'wcvp.distribution'];
   const st = (p: CorePage, k: string) => p.upstream?.[k]?.status ?? '';
   const notNow = core.filter((k) => ['refused', 'error', 'skipped'].includes(st(d, k)));
   if (!notNow.length) return false;
-  const notAsked = notNow.every((k) => st(d, k) === 'skipped');
   const prevOk = core.every((k) => ['ok', 'none'].includes(st(prev, k)));
   const sameKey = (prev.ids?.gbif ?? null) === (d.ids?.gbif ?? null);
   const noKeyToRead = d.ids?.gbif == null && st(d, 'gbif.occurrences') === 'skipped';
-  return prevOk && prev.v === d.v && (!rederive || notAsked) && sameKey && !noKeyToRead;
+  // Round ninety: a re-derivation carries through a source that was asked and did not answer, as an online build does.
+  // Until round eighty-nine a re-derivation asked no network, so only a source it did not ask was carried; since then the
+  // walk asks GBIF's search for the species the download left to it, and a search that failed part way (Frangula alnus in
+  // stage 2's walk) left the page's records, range and climate "not answered" until it was built again online.
+  return prevOk && prev.v === d.v && sameKey && !noKeyToRead;
 }

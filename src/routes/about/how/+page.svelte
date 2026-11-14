@@ -738,6 +738,7 @@
   <details class="full in-full"><summary>The rules in full<span class="sr">: the extremes at a typical spot</span></summary>
   <ul class="rules">
     <li>The typical spot is the grid cell whose coldest month's mean nightly low is nearest the median of that figure across the range.</li>
+    <li>Cells within 0.5 °C of that nearest one count as equally near, and of those the cell holding the most records is taken, so a few new records do not move a wide-ranging plant's spot to another continent. A page's climate source says when this rule chose its spot.</li>
     <li>Its NASA POWER cell (0.5° by 0.625°) must be mostly land, by the same elevation layer. A cell on a coast or an island is averaged with the sea, so up to eleven more candidates within 2 °C of the median are tried.</li>
     <li>When none is mostly land, the nearest stands, and the page says what fraction of its POWER cell is land.</li>
     <li>The position printed for that cell is the cell's centre, never a record's coordinate.</li>

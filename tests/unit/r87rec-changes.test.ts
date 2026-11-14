@@ -43,8 +43,9 @@ describe('r87rec changes 1: round eighty-seven lists its live stages alone', () 
       expect(lately, t).not.toContain(t);
     }
   });
-  it('stage 1 is live and the later stages are not, until their deploys raise it', () => {
-    expect(R87_LIVE_STAGE).toBe(1);
+  // Round ninety (14 November 2026): every stage is live, stage 2's corpus uploaded and checked on 13 November.
+  it("every stage is live: stage 3's code deployed after stage 2's corpus was uploaded and checked", () => {
+    expect(R87_LIVE_STAGE).toBe(3);
   });
   it('liveLines keeps the stages up to the one given, in order', () => {
     const ls = [{ stage: 1, text: 'A.' }, { stage: 3, text: 'C.' }, { stage: 2, text: 'B.' }] as const;
@@ -95,7 +96,7 @@ describe('r87rec changes 3: a line says only its own stage\'s changes', () => {
 describe('r87rec changes 4: the record says how the stage is raised', () => {
   it('names R87_LIVE_STAGE, its value now, and stage 3\'s deploy setting it to 3', () => {
     const rec = readFileSync('docs/REVIEW-ROUND-87.md', 'utf8');
-    expect(rec).toMatch(/`R87_LIVE_STAGE` in\s+`src\/lib\/changes\/rounds\.ts`, now 1/);
+    expect(rec).toMatch(/`R87_LIVE_STAGE` in\s+`src\/lib\/changes\/rounds\.ts`, now 3/);
     expect(rec).toMatch(/sets `R87_LIVE_STAGE` in `src\\lib\\changes\\rounds\.ts` to 3/);
   });
 });

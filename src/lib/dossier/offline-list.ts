@@ -14,7 +14,10 @@ import { carriedParts } from './schema';
 
 /** The rows of the range's one derivation that a build asks a source for (`coreRefused` in the builder). */
 const RANGE_SOURCES = ['gbif.occurrences', 'wcvp.distribution'] as const;
-const SKIPPED = /\b(?:gbif\.occurrences|wcvp\.distribution) skipped\b/;
+// Round ninety: a source asked that did not answer (refused, error) too: since round eighty-nine the walk asks GBIF's
+// search for the species the download left to it, and a page is carried through a failed search (`carriesCore`) but
+// still wants the answer it did not get.
+const NOT_NOW = /\b(?:gbif\.occurrences|wcvp\.distribution) (?:skipped|error|refused)\b/;
 
 export interface OfflinePage {
   key: unknown;
@@ -32,7 +35,7 @@ export interface OfflinePage {
  */
 const noKeyToAsk = (d: OfflinePage, k: string): boolean => k === 'gbif.occurrences' && d.ids?.gbif == null && !!d.occurrences?.unread?.why;
 
-/** Why a page is to be built online, or null: a range source not asked, carried or not. */
+/** Why a page is to be built online, or null: a range source not asked, or asked and not answered (round ninety), carried or not. */
 export function offlineWhy(d: OfflinePage, rule: string): string | null {
   const up = d.upstream ?? {};
   let why: string | null = null;
@@ -40,10 +43,11 @@ export function offlineWhy(d: OfflinePage, rule: string): string | null {
     const row = up[k];
     const p = carriedParts(row?.detail);
     // Carried as one snapshot: the carrying build's words name the source it did not ask.
-    if (p?.now && SKIPPED.test(p.now)) { why = `the range, records and climate of the build of ${/\d{4}-\d{2}-\d{2}/.exec(p.origin)?.[0] ?? '?'} kept: this build: ${p.now}`; break; }
+    if (p?.now && NOT_NOW.test(p.now)) { why = `the range, records and climate of the build of ${/\d{4}-\d{2}-\d{2}/.exec(p.origin)?.[0] ?? '?'} kept: this build: ${p.now}`; break; }
     // Not carried: the row itself says the source was not asked, and the page holds this build's derivation without it.
     if (row?.status === 'skipped' && !p && noKeyToAsk(d, k)) continue;
     if (row?.status === 'skipped' && !p) { why = `${k} not asked${row.detail ? ` (${row.detail})` : ''}; nothing carried`; break; }
+    if ((row?.status === 'error' || row?.status === 'refused') && !p) { why = `${k} not answered${row.detail ? ` (${row.detail})` : ''}; nothing carried`; break; }
   }
   if (!why) return null;
   const tested = d.occurrences?.rangeRule;
