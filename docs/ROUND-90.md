@@ -118,6 +118,34 @@ changed as a fill changes it: refused at once; with every stamp holding, the pro
    request and one BHL request for each such citation, about 14,000 of each over the fill, so three or four more days of
    BHL's allowance. IPNI would be credited for the choice of title on the page's line. Not built: the owner's decision.
 
+## BHL by IPNI's title, built (the owner's decision of 14 November 2026)
+
+Lead 2's measurement (above) is built into `--fill bhl` (`src/lib/dossier/bhl.ts`), so the daily plan's BHL step does it
+under the same allowance.
+
+- Where BHL's resolver answers Kew's citation with several citations ("BHL's resolver gave N citations, not one",
+  `SEVERAL`), the fill asks IPNI for the page's name (its IPNI id, `ipniNameUrl`), reads BHL's title id IPNI links the
+  name's publication to (`ipniBhlTitle`, from `linkedPublication.bhlTitleLink`), and asks BHL's resolver again within that
+  title alone (`bhlTitleUrl`, `pid=title:<n>`) with the citation's volume, page and year. The answer is judged by
+  `bhlPage`, every rule of the first ask, Kew's title rule included.
+- A page taken so is written `bhl: { page, read, ipni: { title, read } }`; one not, the first answer kept beside
+  `ipni: { title?, none, read }` with why ("IPNI links the name's publication to no BHL title", or the rule it failed). A
+  second ask not answered (IPNI or BHL) writes nothing, and the next run asks it again; the step is then unfinished, as for
+  a first ask not answered.
+- The citations the fill answered so before this change (1,427 of its first 3,082 none) are asked the second time only,
+  never the first again. A citation Kew's title answered with one page, or none for another reason, asks IPNI nothing; a
+  page with no IPNI id is not asked.
+- IPNI is asked as the build already asks it for the Wikidata proof, paced by the fetcher (1.1 s); the BHL request counts
+  against BHL's 4,000 a day. The fill's line adds "N that Kew's title gave several citations for asked again by the BHL
+  title IPNI links their publication to: L linked, M with no page taken (said why), U not answered".
+- The page: "Published in" credits IPNI where its title found the page ("page by BHL's resolver for this citation, in the
+  BHL title IPNI links its publication to (IPNI, RBG Kew)"); /about/how's rules say the second ask.
+- Test: `tests/unit/r90g-bhl-ipni.test.ts` (the second ask on the measurement's own example, Homalomena occulta's "Melet.
+  Bot.: 20 (1832)" in BHL title 40101, page 28142661; an earlier day's answer asked the second time only; every rule
+  applied; what is not asked; IPNI with no title or not answered; the allowance spent). On 3fd09ac: 6 of 9 FAILED. The page's line is read in the
+  browser suite (r87s2 1), the fixture's Copiapoa cinerea given a BHL page found by IPNI's title: a component mounted in
+  the unit tests instead added a browser there, and three predeploys in a row timed out in other files' browsers.
+
 ## Leads for gathering faster, and only when needed (not done; each to be measured before it is built)
 
 These came up while reading the fills. None is in this round's code. Each would follow round 88's rule: a lead is

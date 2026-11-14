@@ -77,7 +77,8 @@ export type ElsewhereView = {
   links: ElsewhereLink[];
   /** What the line says of Wikidata: read (the item and day), not checked, or not asked (and why). */
   wikidata: { state: 'read'; item: string; read: string } | { state: 'not-checked'; item: string; read: string; why: string } | { state: 'not-asked'; why: string };
-  published: null | { text: string; file?: string; bhl?: string };
+  /** `byIpni` (round ninety): BHL's page was found in the title IPNI links the name's publication to, BHL's title id. */
+  published: null | { text: string; file?: string; bhl?: string; byIpni?: number };
 };
 
 /** Kew's citation as Kew writes it: the place, its volume and page as given, and the year. */
@@ -104,7 +105,8 @@ export function elsewhereView(d: { ids: { wikidata?: string }; links: Record<str
   const p = d.elsewhere?.published;
   // BHL's page only where BHL answered one page for exactly this citation (`bhl.ts`); a citation changed since is not linked.
   const bhl = p?.bhl?.page != null && !('not' in bhlAsk(p)) ? `https://www.biodiversitylibrary.org/page/${p.bhl.page}` : undefined;
-  return { links, wikidata, published: p ? { text: citationText(p), ...(p.file ? { file: p.file } : {}), ...(bhl ? { bhl } : {}) } : null };
+  const byIpni = bhl && p?.bhl?.ipni?.title != null && p.bhl.ipni.none == null ? p.bhl.ipni.title : undefined;
+  return { links, wikidata, published: p ? { text: citationText(p), ...(p.file ? { file: p.file } : {}), ...(bhl ? { bhl } : {}), ...(byIpni != null ? { byIpni } : {}) } : null };
 }
 
 /* ---------- A hybrid's parents ---------- */

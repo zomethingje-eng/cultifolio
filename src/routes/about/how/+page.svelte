@@ -406,6 +406,7 @@
     <li>The citation is where Kew's file says the page's Kew entry was published, its title, volume and page, and year, quoted as Kew's file writes them ("Kew Bull. 16: 181 (1962)"), credited to WCVP with the day of Kew's file.</li>
     <li>BHL's resolver is asked only a citation it can be given whole: a title, a plain volume and page ("16: 181") or a page alone (": 293", a book), and one year ("(1962)"). Any other form, "5(9): 6" or "(1862 publ. 1863)", is not asked, and is shown as text.</li>
     <li>BHL's page is linked only when BHL answers one citation whose address is one page, numbered as the citation's page, in the citation's volume, dated in its year, and in a title whose words Kew's abbreviation begins, in order. A journal Kew cites with words in parentheses, as Bot. Mag. (Tokyo), is not taken for the abbreviation without them. Otherwise the citation is shown as text. No page is guessed.</li>
+    <li>Where Kew's title matches several of BHL's titles, BHL is asked once more within the one title that IPNI (RBG Kew) links the name's publication to, and its answer must meet every rule above. The page then says so. A citation Kew's title answered with one page is not asked again.</li>
     <li>BHL is asked once a second at most, and 4,000 times a day. A citation it did not answer is asked again by the next run; one Kew's file changes is asked again.</li>
   </ul>
   </details>

@@ -1967,10 +1967,11 @@ async function fillBhlStep(): Promise<void> {
     read: (d: string) => { try { return Number(readFileSync(`${BUDGET_ROOT}/${d}-${host}.txt`, 'utf8')) || 0; } catch { return 0; } },
     write: (d: string, n: number) => { try { mkdirSync(BUDGET_ROOT, { recursive: true }); writeFileSync(`${BUDGET_ROOT}/${d}-${host}.txt`, String(n)); } catch { /* not kept: the count starts again */ } }
   };
-  console.log(`Asking BHL's OpenURL resolver for the page of each citation Kew's file gives, one a second, at most ${BHL_DAY_BUDGET} a UTC day…`);
+  console.log(`Asking BHL's OpenURL resolver for the page of each citation Kew's file gives, one a second, at most ${BHL_DAY_BUDGET} a UTC day (and again by the BHL title IPNI links the publication to, where Kew's title gives several)…`);
   const c = await fillBhl(store, dayBudget(upstreamApi(), host, BHL_DAY_BUDGET, bhlStore), day, { again: args.includes('--again'), progress: (n) => process.stdout.write(`\r  ${n.asked} asked: ${n.linked} linked…   `) });
   console.log(`\r${bhlLine(c, day)}`);
-  if (c.held || c.unanswered) unfinished();
+  // Round ninety: a second ask by IPNI's title that was not answered is asked again, as a first one is.
+  if (c.held || c.unanswered || c.byIpni?.unanswered) unfinished();
 }
 
 /**

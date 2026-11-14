@@ -14,7 +14,7 @@
 </script>
 
 {#if v.published}
-  <p class="small muted names" id="first-published"><b>Published in</b> {#if v.published.bhl}<a href={v.published.bhl} rel="noopener">{v.published.text}</a> (the page on BHL){:else}{v.published.text}{/if} <span class="faint">(WCVP, RBG Kew{v.published.file ? `, file of ${v.published.file}` : ''}{v.published.bhl ? '; page by BHL’s resolver for this citation' : ''})</span></p>
+  <p class="small muted names" id="first-published"><b>Published in</b> {#if v.published.bhl}<a href={v.published.bhl} rel="noopener">{v.published.text}</a> (the page on BHL){:else}{v.published.text}{/if} <span class="faint">(WCVP, RBG Kew{v.published.file ? `, file of ${v.published.file}` : ''}{v.published.bhl ? `; page by BHL’s resolver for this citation${v.published.byIpni != null ? ', in the BHL title IPNI links its publication to (IPNI, RBG Kew)' : ''}` : ''})</span></p>
 {/if}
 <p class="small muted names elsewhere" id="elsewhere">
   <b>Elsewhere</b>

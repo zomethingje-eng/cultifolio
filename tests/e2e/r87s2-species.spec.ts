@@ -21,7 +21,8 @@ const SECTIONS: Array<[string, RegExp[]]> = [
   ['section#at-home', [/Winter nights/, /CHELSA/, /NASA POWER, daily lows over 40 years/, /Grow light, 14 h a day/]],
   ['section#flowering', [/iNaturalist, read 2026-11-09/, /52 observations/]],
   ['#wfo-line', [/WFO Plant List \(2026-06\)/, /accepted/, /World Flora Online, CC0; read 2026-11-09/]],
-  ['#first-published', [/Cactaceae 3: 86 \(1922\)/, /WCVP, RBG Kew, file of 2026-06-04/]],
+  // Round ninety (r90g): the fixture's BHL page was found in the title IPNI links the publication to, and the line says so.
+  ['#first-published', [/Cactaceae 3: 86 \(1922\)/, /WCVP, RBG Kew, file of 2026-06-04/, /page by BHL’s resolver for this citation, in the BHL title IPNI links its publication to \(IPNI, RBG Kew\)/]],
   ['#elsewhere', [/Tropicos/, /IUCN Red List/, /Wikidata's item Q5168360, read 2026-11-09, CC0/]],
   ['#chromosome-line', [/2n = 22/, /version 3\.1 of 8 November 2026, CC BY 4\.0; read 2026-11-09/]],
   ['#risk-line', [/21% probability of being threatened/, /Kew's data of 1 February 2024, CC BY 4\.0; read 2026-11-09/, /A model's prediction, not an assessment/]],

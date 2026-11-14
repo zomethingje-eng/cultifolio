@@ -550,7 +550,10 @@ export const Elsewhere = v.object({
     year: v.optional(v.string()),
     row: v.string(),
     file: v.optional(v.string()),
-    bhl: v.optional(v.object({ page: v.optional(v.number()), none: v.optional(v.string()), read: v.string() }))
+    // Round ninety: `ipni`, the second ask where Kew's title gave several citations: BHL's title id IPNI links the name's
+    // publication to (`title`), and why no page was taken by it (`none`), the day of that ask (`read`). A page taken so has
+    // `page` beside it, and the page says IPNI named the title.
+    bhl: v.optional(v.object({ page: v.optional(v.number()), none: v.optional(v.string()), read: v.string(), ipni: v.optional(v.object({ title: v.optional(v.number()), none: v.optional(v.string()), read: v.string() })) }))
   }))
 });
 

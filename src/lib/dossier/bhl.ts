@@ -105,13 +105,47 @@ export function bhlPage(a: { title?: string; volume?: string; page: string; year
   return { page: Number(m[1]) };
 }
 
-export type BhlPage = { key: string; name: { scientific: string }; elsewhere?: Elsewhere };
-export interface BhlCounts { pages: number; asked: number; linked: number; none: number; unanswered: number; notAskable: number; before: number; held?: string }
+/**
+ * Round ninety (the owner's decision of 14 November 2026; docs/ROUND-90.md, lead 2): a second ask where Kew's title gave
+ * several citations, the case of 1,427 of the fill's first 3,082 none ("BHL's resolver gave 2 citations, not one": most of
+ * them copies of Linnaeus's Species Plantarum). IPNI's record of the page's name (its IPNI id, `ids.ipni`) links the name's
+ * publication to one BHL title (`linkedPublication.bhlTitleLink`, "…/bibliography/<n>"), and BHL's resolver is asked
+ * again by that title (`pid=title:<n>`), with the same volume, page and year; its answer is judged by every rule above,
+ * the title rule included. Measured on 82 such citations: a page for 22, and on 100 the fill had linked, the same page or
+ * none, never another. A citation Kew's title answered with one page is never asked so.
+ */
+export const SEVERAL = /^BHL's resolver gave \d+ citations, not one$/;
 
-/** Whether the fill asks a page's citation: it has one BHL can be asked, and no answer for it yet (or `again`). */
-export function bhlWanted(d: Pick<BhlPage, 'elsewhere'>, again = false): boolean {
+/** IPNI's record of a name, by its IPNI id ("87255-1"). */
+export const ipniNameUrl = (id: string) => `https://www.ipni.org/api/1/n/urn:lsid:ipni.org:names:${id}`;
+
+/** BHL's title id that IPNI links the name's publication to, or null where it links none. */
+export function ipniBhlTitle(data: unknown): number | null {
+  const link = (data as { linkedPublication?: { bhlTitleLink?: unknown } } | null)?.linkedPublication?.bhlTitleLink;
+  const m = typeof link === 'string' ? /biodiversitylibrary\.org\/bibliography\/(\d+)(?:\D|$)/.exec(link) : null;
+  return m ? Number(m[1]) : null;
+}
+
+/** The resolver's address for a citation in one BHL title. */
+export function bhlTitleUrl(a: { volume?: string; page: string; year: string }, title: number): string {
+  const q = new URLSearchParams({ pid: `title:${title}`, ...(a.volume ? { volume: a.volume } : {}), spage: a.page, date: a.year, format: 'json' });
+  return `https://www.biodiversitylibrary.org/openurl?${q.toString()}`;
+}
+
+export type BhlPage = { key: string; name: { scientific: string }; ids?: { ipni?: string }; elsewhere?: Elsewhere };
+export interface BhlCounts {
+  pages: number; asked: number; linked: number; none: number; unanswered: number; notAskable: number; before: number; held?: string;
+  /** Round ninety: the second asks, by IPNI's title (each asks IPNI, then BHL where IPNI names a title). */
+  byIpni?: { asked: number; linked: number; none: number; unanswered: number };
+}
+
+/** Whether a citation's answer is one the second ask is for, and it has not been made. */
+const secondWanted = (p: Published, ipni: string | undefined): boolean => !!ipni && !!p.bhl && p.bhl.page == null && SEVERAL.test(p.bhl.none ?? '') && !p.bhl.ipni;
+
+/** Whether the fill asks a page's citation: it has one BHL can be asked, and no answer for it yet (or `again`), or one the second ask is for. */
+export function bhlWanted(d: Pick<BhlPage, 'elsewhere' | 'ids'>, again = false): boolean {
   const p = d.elsewhere?.published;
-  return !!p && !('not' in bhlAsk(p)) && (again || !p.bhl);
+  return !!p && !('not' in bhlAsk(p)) && (again || !p.bhl || secondWanted(p, d.ids?.ipni));
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -131,18 +165,53 @@ export async function fillBhl(store: DossierStore, f: JsonFetcher, day: string, 
     c.pages++;
     const a = bhlAsk(p);
     if ('not' in a) { c.notAskable++; continue; }
-    if (p.bhl && !opts.again) { c.before++; continue; }
-    const wait = last + (opts.gapMs ?? BHL_GAP_MS) - Date.now();
-    if (wait > 0) await sleep(wait);
-    const r = await f<unknown>(bhlUrl(a), { timeoutMs: BHL_TIMEOUT_MS });
-    last = Date.now();
-    if (r.status === 'refused' && /allowance|not asked/.test(r.detail ?? '')) { c.held = r.detail; break; }
-    c.asked++;
-    const got = r.status === 'ok' ? bhlPage(a, r.data, places) : null;
-    if (!got) { c.unanswered++; if (++failedRun >= 5) { c.held = '5 requests in a row not answered'; break; } continue; }
-    failedRun = 0;
-    if ('page' in got) c.linked++; else c.none++;
-    d.elsewhere = { ...d.elsewhere, published: { ...p, bhl: { ...got, read: day } } };
+    const ipni = d.ids?.ipni;
+    let pub: Published = p;
+    if (!p.bhl || opts.again) {
+      const wait = last + (opts.gapMs ?? BHL_GAP_MS) - Date.now();
+      if (wait > 0) await sleep(wait);
+      const r = await f<unknown>(bhlUrl(a), { timeoutMs: BHL_TIMEOUT_MS });
+      last = Date.now();
+      if (r.status === 'refused' && /allowance|not asked/.test(r.detail ?? '')) { c.held = r.detail; break; }
+      c.asked++;
+      const got = r.status === 'ok' ? bhlPage(a, r.data, places) : null;
+      if (!got) { c.unanswered++; if (++failedRun >= 5) { c.held = '5 requests in a row not answered'; break; } continue; }
+      failedRun = 0;
+      if ('page' in got) c.linked++; else c.none++;
+      pub = { ...p, bhl: { ...got, read: day } };
+      d.elsewhere = { ...d.elsewhere, published: pub };
+      store.write(file, d);
+      opts.progress?.(c);
+    } else if (!secondWanted(p, ipni)) { c.before++; continue; }
+    if (!secondWanted(pub, ipni)) continue;
+    // The second ask (round ninety): IPNI's title for the name's publication, then BHL in that title alone.
+    const s = (c.byIpni ??= { asked: 0, linked: 0, none: 0, unanswered: 0 });
+    const ir = await f<unknown>(ipniNameUrl(ipni!));
+    s.asked++;
+    let second: { title?: number; none?: string; page?: number } | null;
+    if (ir.status === 'none' || (ir.status === 'error' && /\b404\b/.test(ir.detail ?? ''))) second = { none: `IPNI holds no record of the name's IPNI id ${ipni}` };
+    else if (ir.status !== 'ok') second = null;
+    else {
+      const title = ipniBhlTitle(ir.data);
+      if (title == null) second = { none: "IPNI links the name's publication to no BHL title" };
+      else {
+        const wait = last + (opts.gapMs ?? BHL_GAP_MS) - Date.now();
+        if (wait > 0) await sleep(wait);
+        const r = await f<unknown>(bhlTitleUrl(a, title), { timeoutMs: BHL_TIMEOUT_MS });
+        last = Date.now();
+        if (r.status === 'refused' && /allowance|not asked/.test(r.detail ?? '')) { s.asked--; c.held = r.detail; break; }
+        const got = r.status === 'ok' ? bhlPage(a, r.data, places) : null;
+        second = !got ? null : 'page' in got ? { title, page: got.page } : { title, none: got.none };
+      }
+    }
+    // Not answered (IPNI or BHL): nothing written, asked again by the next run.
+    if (!second) { s.unanswered++; continue; }
+    const first = pub.bhl!;
+    const asked = { ...(second.title != null ? { title: second.title } : {}), ...(second.none ? { none: second.none } : {}), read: day };
+    if (second.page != null) s.linked++;
+    else s.none++;
+    const bhl = second.page != null ? { page: second.page, read: day, ipni: asked } : { ...first, ipni: asked };
+    d.elsewhere = { ...d.elsewhere, published: { ...pub, bhl } };
     store.write(file, d);
     opts.progress?.(c);
   }
@@ -151,5 +220,7 @@ export async function fillBhl(store: DossierStore, f: JsonFetcher, day: string, 
 
 /** The fill's last line (rule 6). */
 export function bhlLine(c: BhlCounts, day: string): string {
-  return `  ${c.asked} citations asked of BHL on ${day}: ${c.linked} linked to the one page BHL gives for them, ${c.none} with no page taken (said why), ${c.unanswered} not answered; ${c.before} answered before and passed by; ${c.notAskable} not in a form BHL can be asked exactly, shown as text${c.held ? `; stopped: ${c.held}: run --fill bhl again (tomorrow, if the day's allowance is spent); it asks only what is left` : ''}.`;
+  const s = c.byIpni;
+  const second = s?.asked ? `; ${s.asked} that Kew's title gave several citations for asked again by the BHL title IPNI links their publication to: ${s.linked} linked, ${s.none} with no page taken (said why), ${s.unanswered} not answered` : '';
+  return `  ${c.asked} citations asked of BHL on ${day}: ${c.linked} linked to the one page BHL gives for them, ${c.none} with no page taken (said why), ${c.unanswered} not answered${second}; ${c.before} answered before and passed by; ${c.notAskable} not in a form BHL can be asked exactly, shown as text${c.held ? `; stopped: ${c.held}: run --fill bhl again (tomorrow, if the day's allowance is spent); it asks only what is left` : ''}.`;
 }
