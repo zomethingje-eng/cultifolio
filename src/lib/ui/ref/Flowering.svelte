@@ -1,15 +1,16 @@
 <script lang="ts">
   /**
    * Flowering by month (round eighty-seven, stage 2; links agent): iNaturalist's research-grade observations of wild plants
-   * annotated "Flowering", counted by the month they were observed in (`$dossier/flowering`, `--fill flowering`). Twelve
+   * annotated "Flowering", counted by the month they were observed in: from GBIF's download of them since round ninety-two
+   * (`$dossier/flowering-gbif`, `--fill flowering-gbif`), from iNaturalist's API before (`$dossier/flowering`). Twelve
    * cells, January first, each its count and a bar to the busiest month's; the source and the day read under them. "Not
-   * asked" until the fill reads the page, "not checked" where iNaturalist did not answer, never "none" (rule 2). Under
+   * asked" until a fill counts the page, "not checked" where iNaturalist did not answer, never "none" (rule 2). Under
    * twelve observations it is marked "from few records", as the habitat climate is, and shown as read. The months are the
    * calendar's, as observed: never moved to the reader's hemisphere, as the climate chart keeps the habitat's.
    */
   import type { Dossier } from '$dossier/schema';
-  import { floweringView, floweringCaption, floweringMonthsWords, floweringFew } from './links-words';
-  let { dossier }: { dossier: Pick<Dossier, 'ids' | 'flowering' | 'climate'> } = $props();
+  import { floweringView, floweringCaption, floweringWhat, floweringZero, floweringMonthsWords, floweringFew } from './links-words';
+  let { dossier }: { dossier: Pick<Dossier, 'ids' | 'flowering' | 'climate'> & { occurrences?: { keys?: unknown[] } } } = $props();
   const v = $derived(floweringView(dossier));
 </script>
 
@@ -25,9 +26,13 @@
         {#each v.months as m (m.m)}<li><span class="n">{m.n}</span><span class="bar" aria-hidden="true"><i style="height:{Math.round(m.share * 100)}%"></i></span><span class="mo">{m.m}</span></li>{/each}
       </ol>
     {:else}
-      <p class="small" id="flowering-zero">No research-grade observation of a wild plant is annotated flowering on iNaturalist.</p>
+      <p class="small" id="flowering-zero">{floweringZero(v.source)}</p>
     {/if}
-    <p class="small muted cap">{floweringCaption(v.read)}: <a href={v.href} rel="noopener">{v.total} observation{v.total === 1 ? '' : 's'}</a>, research grade, not captive. {floweringMonthsWords(v.south)}</p>
+    {#if v.source === 'gbif'}
+      <p class="small muted cap" id="flowering-source" data-source="gbif">{floweringCaption(v)} <a href={v.href} rel="noopener">https://doi.org/{v.doi}</a>: {v.total} observation{v.total === 1 ? '' : 's'}, {floweringWhat(v.source)} {floweringMonthsWords(v.south)}</p>
+    {:else}
+      <p class="small muted cap" id="flowering-source" data-source="api">{floweringCaption(v)}: <a href={v.href} rel="noopener">{v.total} observation{v.total === 1 ? '' : 's'}</a>, {floweringWhat(v.source)} {floweringMonthsWords(v.south)}</p>
+    {/if}
     {#if v.few && v.total}<p class="small muted">{floweringFew(v.total)}</p>{/if}
   {/if}
 </section>

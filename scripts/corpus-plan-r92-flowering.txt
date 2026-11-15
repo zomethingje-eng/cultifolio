@@ -1,0 +1,33 @@
+# Round ninety-two (docs/PLAN-92.md): every page's flowering by month counted from one GBIF download of iNaturalist's
+# research-grade observations, in place of iNaturalist's API a page at a time. Before it, once:
+#   npx tsx scripts/bulk-fetch.ts gbif-flowering --wait
+# (GBIF_USER, GBIF_PASSWORD and GBIF_EMAIL set, as for the occurrence download; GBIF prepares it in minutes to hours, and
+# writes bulk/flowering.zip and bulk/flowering-download.json). Then:
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r92-flowering.txt
+# When: after a day's daily run has stopped, never at midnight UTC. The fill is offline and takes minutes.
+#
+# The dry run counts every page and writes none: it compares the download's counts with the API's on every page the API
+# read (bulk/flowering-compare.tsv), and the first review stops on the plan's conditions. The second stops whatever the
+# figures, so the pages sharply apart are read with Claude before any page is written (decision 2: a synonym GBIF files
+# under another key is fixed by the extra-keys rule for every page; otherwise the download's figure stands). Then
+# --go-on writes every page, indexes, uploads and checks the live site. The backup first, so the API's counts can be put
+# back if anything is wrong after the write.
+backup
+dossier --fill flowering-gbif --bulk bulk --dry-run
+review Read the dry run's three lines. "the flowering download <key> (GBIF.org, <day>, https://doi.org/<doi>): R rows read, T taken, O observations annotated flowers; left out: …", then "48375 pages read (a dry run: nothing written): C counted, N with no observation annotated flowers in the download, K with no GBIF key, not counted (A of them held iNaturalist's API count, which the fill takes off)", then "compared with iNaturalist's API on the P pages it read: …". Measured on 14 November 2026 against the download of 21 October: the median ratio 0.79, the peak month within a month on 92.1%, and the taxon mismatches. Stop, and paste the end of corpus-step.log back, if the peak month is within one month on fewer than 85% of the pages with 30 or more from the API, if the median ratio is below 0.6, if more than 2% of the pages with over 100 from the API have none in the download, if K is over 1,000 (2,354 pages have no GBIF key of their own and 1,419 of them read the keys Kew's synonymy gives them), or if a line says "not counted, nothing written".
+expect let P /^\s*([\d,]+) pages read \(a dry run/
+expect let K /, ([\d,]+) with no GBIF key, not counted/
+expect let M /median ratio ([\d.]+);/
+expect let W /peak month within one month on ([\d.]+)%/
+expect let L /over 100 from the API, ([\d.]+)% with none in the download/
+expect P >= 48375
+expect K <= 1000
+expect M >= 0.6
+expect W >= 85
+expect L <= 2
+expect no /not counted, nothing written/
+review The figures held. Now read with Claude the pages sharply apart, listed under "sharply apart" in the dry run's output and in bulk/flowering-compare.tsv (the API counted 30 or more, and the download none or another shape): for each cause, a synonym GBIF files under another key (the extra-keys rule then gives the key to every page it fits, in a later walk), or another plant under the same name (the download's figure stands, and the page says what it counts). Nothing has been written yet. Then run the same command with --go-on: the fill writes every page, and the index, the upload and the live check follow.
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+upload
+live-check

@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseExpect, runChecks } from '../../scripts/review-checks.mjs';
 import { run, parsePlan, sameSteps, EXIT } from '../../scripts/corpus-step.mjs';
-import { floweringLine } from '../../src/lib/dossier/flowering';
 import { bhlLine } from '../../src/lib/dossier/bhl';
 
 const checks = (lines: string[], output: string) => runChecks(lines.map((l) => parseExpect(l)), output);
@@ -124,9 +123,9 @@ describe('r89b 2: the plan\'s runner', () => {
 
 describe('r89b 3: the daily plan\'s review, on the fills\' own lines', () => {
   const review = parsePlan(readFileSync('scripts/corpus-plan-r87-daily.txt', 'utf8')).find((x) => x.kind === 'review')!;
-  const output = (o: { left?: number; unanswered?: number; held?: string } = {}) => [
-    floweringLine({ pages: 48375, asked: 3900, read: 3880, zero: 400, unanswered: o.unanswered ?? 20, noTaxon: 4410, before: 40050, lines: [] } as never, '2026-11-24', o.left ?? 0),
-    bhlLine({ pages: 48375, asked: 3800, linked: 3000, none: 790, unanswered: 10, notAskable: 8390, before: 36150, ...(o.held ? { held: o.held } : {}) } as never, '2026-11-24'),
+  // Round ninety-two: the daily plan's one fill is BHL's (flowering is counted from GBIF's download, r92a).
+  const output = (o: { unanswered?: number; held?: string } = {}) => [
+    bhlLine({ pages: 48375, asked: 3800, linked: 3000, none: 790, unanswered: o.unanswered ?? 10, notAskable: 8390, before: 36150, ...(o.held ? { held: o.held } : {}) } as never, '2026-11-24'),
     '  index: 48375 species'
   ].join('\n');
   it('a last day as the plan expects it: every check holds', () => {
@@ -134,8 +133,7 @@ describe('r89b 3: the daily plan\'s review, on the fills\' own lines', () => {
     expect(r.lines.filter((l: string) => l.startsWith('  ✗'))).toEqual([]);
     expect(r.pass).toBe(true);
   });
-  it('pages left to ask, a fill stopped, or hundreds not answered: a stop', () => {
-    expect(runChecks(review.expects, output({ left: 120 })).pass).toBe(false);
+  it('a fill stopped, or hundreds not answered: a stop', () => {
     expect(runChecks(review.expects, output({ unanswered: 900 })).pass).toBe(false);
     expect(runChecks(review.expects, output({ held: "BHL's day of 4,000 requests is spent" })).pass).toBe(false);
   });

@@ -521,13 +521,32 @@ export type NameAgreement = v.InferOutput<typeof NameAgreement>;
  * varieties), and the day it was read. Written by `--fill flowering`. iNaturalist's data are its observers' (the counts are
  * facts read from its API, linked to its search, not its observations' text or photographs). Absent: not asked.
  */
-export const Flowering = v.object({
+const Twelve = v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(0))), v.length(12));
+export const FloweringApi = v.object({
   taxon: v.number(),
   /** January first. Absent with `unanswered`: asked, and iNaturalist did not answer ("not checked", asked again by the next fill). */
-  months: v.optional(v.pipe(v.array(v.pipe(v.number(), v.integer(), v.minValue(0))), v.length(12))),
+  months: v.optional(Twelve),
   read: v.string(),
   unanswered: v.optional(v.string())
 });
+/**
+ * Round ninety-two (`src/lib/dossier/flowering-gbif.ts`): the same annotation counted from one GBIF download of
+ * iNaturalist's research-grade observations (the openly licensed ones iNaturalist shares with GBIF), under the page's
+ * GBIF keys: `key` the page's own when it has one, `keys` those that gave a row, `months` January first (twelve zeros:
+ * none in the download), the download's `doi` and the day GBIF made it (`made`), and the day the fill wrote it
+ * (`read`). Written by `--fill flowering-gbif`, which writes every page with a key.
+ */
+export const FloweringGbif = v.object({
+  source: v.literal('gbif'),
+  key: v.optional(v.number()),
+  keys: v.array(v.number()),
+  months: Twelve,
+  doi: v.string(),
+  made: v.string(),
+  read: v.string()
+});
+export type FloweringGbif = v.InferOutput<typeof FloweringGbif>;
+export const Flowering = v.union([FloweringGbif, FloweringApi]);
 
 /**
  * Round eighty-seven, stage 2 (links agent; `src/lib/dossier/elsewhere.ts`): where else the plant is recorded.

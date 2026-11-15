@@ -72,7 +72,8 @@ test('r87s2 3: a page whose record holds none of the new fields says "not asked"
   await expect(page.locator('#cites-line')).toContainText('CITES not asked');
   await expect(page.locator('#chromosome-line')).toContainText('Chromosomes not asked');
   await expect(page.locator('#wfo-line')).toContainText('not asked');
-  await expect(page.locator('#flowering-not-asked')).toContainText('Not asked: this page has no iNaturalist taxon to ask');
+  // Round ninety-two: flowering is counted under the page's GBIF keys, and this page has one: not counted yet.
+  await expect(page.locator('#flowering-not-asked')).toContainText("Not asked: this page has not been counted from GBIF's download yet");
   await expect(page.locator('#elsewhere')).toContainText('not asked: this page has no Wikidata item');
   await expect(page.locator('section#hardiness')).toContainText('Not worked out for this page yet');
   await expect(page.locator('section#climate-class')).toContainText('No Köppen–Geiger class is worked out for this page yet');

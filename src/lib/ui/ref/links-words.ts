@@ -29,6 +29,13 @@ export type FloweringView =
       /** Where the habitat climate is read south of the equator: the strip keeps the calendar months, and says so. */
       south: boolean;
       href: string;
+      /**
+       * Whose count it is (round ninety-two): GBIF's download of iNaturalist's openly licensed observations (`gbif`, with
+       * the day GBIF made it), or iNaturalist's API on the day read (`api`, round eighty-seven).
+       */
+      source: 'gbif' | 'api';
+      made?: string;
+      doi?: string;
     };
 
 /** Whether the habitat climate is read south of the equator: its records' side, else its typical cell's. */
@@ -37,32 +44,49 @@ export function habitatSouth(c: Dossier['climate'] | null | undefined): boolean 
   return c.hemispheres ? c.hemispheres.used === 'south' : c.at.lat < 0;
 }
 
+/** Words for "not asked" (round ninety-two): no key to count under, or not counted yet. */
+export const FLOWERING_NO_KEY = 'this page has no GBIF key to count its observations under';
+export const FLOWERING_NOT_YET = "this page has not been counted from GBIF's download yet";
+
 /**
- * The strip: "not asked" until the fill reads the page (and why: no taxon, or not yet asked), "not checked" when it was
- * asked and iNaturalist did not answer, else the twelve counts. The months are the calendar's, as observed: never moved
+ * The strip: "not asked" until a fill counts the page (and why: no GBIF key, or not counted yet), "not checked" when
+ * iNaturalist's API was asked and did not answer, else the twelve counts, the download's (round ninety-two) or the API's
+ * (round eighty-seven, until the download's count replaces it). The months are the calendar's, as observed: never moved
  * to the reader's hemisphere, since an observation is dated where the plant was seen (the climate chart keeps the
  * habitat's months for the same reason).
  */
-export function floweringView(d: { ids: { inat?: number }; flowering?: Flowering; climate?: Dossier['climate'] }): FloweringView {
+export function floweringView(d: { ids: { inat?: number; gbif?: number }; flowering?: Flowering; climate?: Dossier['climate']; occurrences?: { keys?: unknown[] } }): FloweringView {
   const f = d.flowering;
-  if (typeof d.ids.inat !== 'number') return { state: 'not-asked', why: 'this page has no iNaturalist taxon to ask' };
-  if (!f || f.taxon !== d.ids.inat) return { state: 'not-asked', why: 'iNaturalist has not been asked for this page yet' };
-  if (!f.months) return { state: 'not-checked', why: f.unanswered ?? 'iNaturalist did not answer', read: f.read };
-  const max = Math.max(...f.months);
-  const total = f.months.reduce((a, n) => a + n, 0);
-  return {
-    state: 'read',
-    months: f.months.map((n, i) => ({ m: MON3[i], n, share: max ? n / max : 0 })),
-    total,
-    read: f.read,
-    few: total < FEW_RECORDS,
-    south: habitatSouth(d.climate),
-    href: floweringSearchUrl(f.taxon)
+  const counted = (months: number[]) => {
+    const max = Math.max(...months);
+    return { months: months.map((n, i) => ({ m: MON3[i], n, share: max ? n / max : 0 })), total: months.reduce((a, n) => a + n, 0) };
   };
+  if (f && 'source' in f) {
+    const c = counted(f.months);
+    return { state: 'read', ...c, read: f.read, few: c.total < FEW_RECORDS, south: habitatSouth(d.climate), href: `https://doi.org/${f.doi}`, source: 'gbif', made: f.made, doi: f.doi };
+  }
+  const hasKey = typeof d.ids.gbif === 'number' || !!d.occurrences?.keys?.length;
+  if (!f || f.taxon !== d.ids.inat) return { state: 'not-asked', why: hasKey ? FLOWERING_NOT_YET : FLOWERING_NO_KEY };
+  if (!f.months) return { state: 'not-checked', why: f.unanswered ?? 'iNaturalist did not answer', read: f.read };
+  const c = counted(f.months);
+  return { state: 'read', ...c, read: f.read, few: c.total < FEW_RECORDS, south: habitatSouth(d.climate), href: floweringSearchUrl(f.taxon), source: 'api' };
 }
 
-/** The strip's caption, its source and day. */
-export const floweringCaption = (read: string) => `Flowering observations of wild plants, iNaturalist, read ${read}`;
+/** The strip's caption, its source and day: the download's citation as GBIF gives it, or the API and the day read. */
+export const floweringCaption = (v: { source: 'gbif' | 'api'; read: string; made?: string }) =>
+  v.source === 'gbif'
+    ? `Flowering observations of wild plants on iNaturalist, as iNaturalist shares them with GBIF: GBIF.org (${v.made}) GBIF Occurrence Download`
+    : `Flowering observations of wild plants, iNaturalist, read ${v.read}`;
+
+/** What the counted observations are, after the link. */
+export const floweringWhat = (source: 'gbif' | 'api') =>
+  source === 'gbif' ? "research grade, openly licensed (CC0, CC BY or CC BY-NC), counted under the page's GBIF keys." : 'research grade, not captive.';
+
+/** Twelve months of nothing, said with its source (rule 2: never "does not flower"). */
+export const floweringZero = (source: 'gbif' | 'api') =>
+  source === 'gbif'
+    ? "No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated flowering, in GBIF's download."
+    : 'No research-grade observation of a wild plant is annotated flowering on iNaturalist.';
 
 /** Whose months the strip shows. */
 export const floweringMonthsWords = (south: boolean) =>

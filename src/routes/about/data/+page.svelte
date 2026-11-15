@@ -55,7 +55,7 @@
         <tr><td>CITES Appendix status (in each species file)</td><td>The CITES Appendices, transcribed by hand</td><td>The Convention's text; no Species+ data</td></tr>
         <tr><td>Chromosome counts and their references (in each species file)</td><td>ChromoDB, IAPT/IOPB chromosome data, version 3.1 (10.5281/zenodo.24057855)</td><td><a href={CC_BY}>CC BY 4.0</a></td></tr>
         <tr><td>WFO's reading of the name (in each species file)</td><td>WFO Plant List, release 2026-06 (10.5281/zenodo.20782718)</td><td><a href={CC0}>CC0 1.0</a></td></tr>
-        <tr><td>Wild plants observed in flower, counted by month (in each species file)</td><td>iNaturalist's research-grade observations</td><td>Counts read from iNaturalist's API and linked to its search; no observation is copied</td></tr>
+        <tr><td>Wild plants observed in flower, counted by month (in each species file)</td><td>iNaturalist's research-grade observations, from a GBIF download of those iNaturalist shares with GBIF (its observers' CC0, CC BY and CC BY-NC); on a page not yet counted from it, iNaturalist's API</td><td>Counts only, no observation copied; each page cites the download by its DOI and day, as GBIF asks, or names the day iNaturalist's API was read and links its search</td></tr>
         <tr><td>Monthly climate normals</td><td>CHELSA V2.1</td><td><a href={CC0}>CC0 1.0</a></td></tr>
         <tr><td>Elevation; daily temperatures; coastlines and the regions' shapes</td><td>ETOPO 2022 (NOAA); NASA POWER; Natural Earth</td><td>Public domain</td></tr>
       </tbody>

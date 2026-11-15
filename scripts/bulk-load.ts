@@ -9,6 +9,7 @@ import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow, wcvpExtractedDay, downloadDay, ownText } from '../src/lib/dossier/bulk';
 import { USER_AGENT } from '../src/lib/dossier/fetch';
+import { parseFloweringRows, type FloweringTable, type FloweringDownload } from '../src/lib/dossier/flowering-gbif';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 
@@ -356,4 +357,30 @@ async function readMedia(p: DownloadPart, member: string, media: MediaIndex): Pr
 
 function hasCmd(c: string): boolean {
   return spawnSync(process.platform === 'win32' ? 'where' : 'which', [c], { stdio: 'ignore' }).status === 0;
+}
+
+/**
+ * Round ninety-two: the flowering download (`npm run bulk -- gbif-flowering`; src/lib/dossier/flowering-gbif.ts), read
+ * whole out of bulk/flowering.zip as bulk/flowering-download.json names it, or refused with why (nothing is taken from a
+ * file not read whole): no state file, no DOI or day, the zip missing, tar failing, or a row count that is neither GBIF's
+ * count of the rows nor of the observations.
+ */
+export async function loadFloweringDownload(dir: string): Promise<{ table: FloweringTable; dl: FloweringDownload } | { refused: string }> {
+  const metaPath = `${dir}/flowering-download.json`, zip = `${dir}/flowering.zip`;
+  if (!existsSync(metaPath)) return { refused: `no ${metaPath}: ask GBIF for the download first (npx tsx scripts/bulk-fetch.ts gbif-flowering --wait)` };
+  const m = JSON.parse(readFileSync(metaPath, 'utf8')) as { key?: string; doi?: string; created?: string; records?: number; csv?: string; fetched?: string };
+  if (!m.fetched || !m.csv) return { refused: `${metaPath} says the download ${m.key ?? ''} is not fetched yet: npx tsx scripts/bulk-fetch.ts gbif-flowering-status --wait` };
+  if (!m.doi || !m.created || !m.key) return { refused: `${metaPath} has no ${!m.doi ? 'DOI' : !m.created ? 'day GBIF made it' : 'key'}: a page could not cite it` };
+  if (!existsSync(zip)) return { refused: `no ${zip}, which ${metaPath} says was fetched` };
+  const s = streamMember(zip, m.csv);
+  const lines: string[] = [];
+  for await (const l of createInterface({ input: s.input, crlfDelay: Infinity })) lines.push(l);
+  const code = await s.exit;
+  if (code !== 0) return { refused: `${s.how} could not read ${m.csv} out of ${zip} whole (exit ${code})` };
+  let table: FloweringTable;
+  try { table = parseFloweringRows(lines); } catch (e) { return { refused: (e as Error).message }; }
+  const r = table.read;
+  const observations = r.observations + r.noMonth + r.notFlowers + r.noKey;
+  if (typeof m.records === 'number' && m.records !== r.lines && m.records !== observations) return { refused: `${m.csv} holds ${r.lines} rows and ${observations} observations, and GBIF counts ${m.records}: not the whole download` };
+  return { table, dl: { key: m.key, doi: m.doi, made: m.created.slice(0, 10) } };
 }

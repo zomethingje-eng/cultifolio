@@ -453,14 +453,18 @@
   </details>
 
   <h3 id="flowering">Flowering by month</h3>
-  <p class="sum">A page shows how many of iNaturalist's research-grade observations of wild plants are marked as flowering, month by month. The months are the calendar's, as each plant was observed.</p>
+  <p class="sum">A page counts iNaturalist's research-grade observations of wild plants marked as flowering, month by month, from one GBIF download. The months are the calendar's, as each plant was observed.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: flowering by month</span></summary>
   <ul class="rules">
-    <li>The counts are iNaturalist's: research-grade observations, not captive or cultivated, annotated "Flowering", by the month they were observed in, for the page's iNaturalist taxon, its varieties and subspecies included. The page names the day they were read and links the same search on iNaturalist.</li>
+    <li id="flowering-gbif">The counts are from one GBIF download of iNaturalist's research-grade observations, the ones iNaturalist shares with GBIF: those its observers license CC0, CC BY or CC BY-NC. An observation counts when one of its annotations is "flowers", by the month it was observed in. Flower buds are not counted, and neither is "no flowers or fruits". The page cites the download as GBIF asks: its day and its DOI.</li>
+    <li>The observations counted are those GBIF files under the page's GBIF keys, the same keys its records are read by: its own key, its synonyms and its varieties and subspecies, and the other keys the page reads, less the names each leaves out. A page with no GBIF key is not counted, and says so.</li>
+    <li>A page with a key and no observation annotated flowers in the download says so, naming the download. That is the download's answer, not a plant that does not flower.</li>
+    <li>The download is asked for again each month, and every page counted again from it.</li>
+    <li>A page not yet counted from the download shows iNaturalist's own count, read from its API on the day the page names, with a link to the same search on iNaturalist: research-grade observations, not captive or cultivated, annotated "Flowering", for the page's iNaturalist taxon. Those counts include observations iNaturalist does not share with GBIF, so they are higher.</li>
     <li>An observation not annotated is not counted, so the counts say when people saw the plant in flower and said so, not how long it flowers.</li>
     <li>The months are never moved to your hemisphere: an observation is dated where the plant was seen. Where the habitat climate is read south of the equator, the page says so.</li>
     <li>Under 12 observations, the strip is marked "from few records", as a habitat climate is, and shown as read. Twelve months of nothing is said as no observation annotated, never as a plant that does not flower.</li>
-    <li>Until a page has been read, it says "not asked"; where iNaturalist did not answer, "not checked", with the day. iNaturalist is asked one request a page, at most one every 2 seconds, within the reference's 4,000 requests a day to iNaturalist.</li>
+    <li>Until a page has been counted, it says "not asked"; where iNaturalist's API did not answer, "not checked", with the day.</li>
   </ul>
   </details>
 

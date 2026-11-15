@@ -87,7 +87,8 @@ describe('--fill flowering: resumable, with its day, under the day\'s allowance'
   });
   it('the schema keeps the field (a dossier that carries it parses; one with eleven months does not)', () => {
     const base = { v: 3, key: 'k1', slug: 'x', built: 'x', builtBy: 'node', name: { scientific: 'X', status: 'accepted', synonyms: [], vernacular: [] }, ids: {}, distribution: { native: [], introduced: [], source: 'x', boxes: [] }, occurrences: { open: [], nOpenInRange: 0, nRestrictedInRange: 0, nOutsideRange: 0, restrictedShiftKm: null, thin: true, datasets: [] }, climate: { status: 'none' }, photos: [], literature: [], links: {}, upstream: {} };
-    expect(v.parse(DossierSchema, { ...base, flowering: { taxon: 1, months: Array(12).fill(0), read: '2026-11-09' } }).flowering?.taxon).toBe(1);
+    // Round ninety-two: `flowering` is the API's form or the download's (r92a); this one is the API's.
+    expect(v.parse(DossierSchema, { ...base, flowering: { taxon: 1, months: Array(12).fill(0), read: '2026-11-09' } }).flowering).toMatchObject({ taxon: 1 });
     expect(() => v.parse(DossierSchema, { ...base, flowering: { taxon: 1, months: Array(11).fill(0), read: '2026-11-09' } })).toThrow();
   });
 });
@@ -95,8 +96,9 @@ describe('--fill flowering: resumable, with its day, under the day\'s allowance'
 describe('the strip on the page', () => {
   const okClimate = (lat: number, used?: 'north' | 'south') => ({ status: 'ok', at: { lat, lon: 0 }, ...(used ? { hemispheres: { north: 5, south: 5, used } } : {}) });
   it('"Not asked" until filled, with why', () => {
-    expect(html({ dossier: { ids: { inat: 7 } } })).toContain('Not asked: iNaturalist has not been asked for this page yet.');
-    expect(html({ dossier: { ids: {} } })).toContain('Not asked: this page has no iNaturalist taxon to ask.');
+    // Round ninety-two: a page is counted under its GBIF keys (r92a), so "not asked" says whether it has one.
+    expect(html({ dossier: { ids: { inat: 7, gbif: 70 } } })).toContain("Not asked: this page has not been counted from GBIF's download yet.");
+    expect(html({ dossier: { ids: { inat: 7 } } })).toContain('Not asked: this page has no GBIF key to count its observations under.');
     expect(html({ dossier: { ids: { inat: 7 }, flowering: { taxon: 6, months: Array(12).fill(1), read: 'x' } } })).toContain('Not asked');
   });
   it('twelve counts, January first, the caption with its source and day, the link to what was counted', () => {

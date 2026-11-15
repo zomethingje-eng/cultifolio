@@ -142,10 +142,11 @@ describe('r90a 2: the runner', () => {
 
 describe('r90a 3: the daily plan', () => {
   const plan = parsePlan(readFileSync('scripts/corpus-plan-r87-daily.txt', 'utf8'));
-  it('both fills are daily; the index, the review, the upload and the live check come after them and are not', () => {
+  // Round ninety-two: flowering is counted from GBIF's download (r92a), so the BHL fill is the plan's one daily step.
+  it('the BHL fill is daily; the index, the review, the upload and the live check come after it and are not', () => {
     expect(plan.map((s) => [s.line.split(/\s+/).slice(0, 4).join(' '), !!s.daily])).toEqual([
-      ['daily dossier --fill flowering', true], ['daily dossier --fill bhl', true], ['dossier --index', false],
-      ['review Read the two', false], ['upload', false], ['live-check', false]
+      ['daily dossier --fill bhl', true], ['dossier --index', false],
+      ['review Read the fill\'s', false], ['upload', false], ['live-check', false]
     ]);
   });
   it('it no longer tells the owner to type --fill bhl by hand', () => {

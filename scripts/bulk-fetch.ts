@@ -16,7 +16,11 @@
  *   npx tsx scripts/bulk-fetch.ts gbif-media list.txt --wait # beside an SQL download: a DWCA of the records with images alone → bulk/media.zip,
  *                                                         # iNaturalist's dataset left out (--with-inat keeps it, for the DWCA route's photographs exactly)
  *   npx tsx scripts/bulk-fetch.ts gbif-media-status [--wait] # poll that one and fetch it when ready
- *   … --dry-run                                           # with gbif, gbif-sql or gbif-media: write the request file (bulk/request-*.json) and send nothing
+ *   npx tsx scripts/bulk-fetch.ts gbif-flowering --wait   # round ninety-two: iNaturalist's research-grade plant observations annotated flowers, by
+ *                                                         # key, month and annotation (one SQL download, no list) → bulk/flowering.zip, for
+ *                                                         # --fill flowering-gbif; asked again each month
+ *   npx tsx scripts/bulk-fetch.ts gbif-flowering-status [--wait] # poll that one and fetch it when ready
+ *   … --dry-run                                           # with gbif, gbif-sql, gbif-media or gbif-flowering: write the request file (bulk/request-*.json) and send nothing
  *   … --parts N                                           # with gbif or gbif-sql: ask in N requests of the keys, each its own zip, which the build reads in turn
  *
  * The GBIF download API needs a (free) GBIF account: set GBIF_USER, GBIF_PASSWORD
@@ -39,7 +43,7 @@ import { makeFetcher } from '../src/lib/dossier/fetch';
 import { matchName, BACKBONE } from '../src/lib/dossier/sources/gbif';
 import { downloadKeysOf, kewDownloadKeysOf, isSpeciesList, parseSpeciesList } from './select-species-lib';
 import { parseExtraKeys } from '../src/lib/dossier/extra-keys';
-import { dwcaRequest, sqlRequest, mediaRequest, predicateItems, splitKeys, partsNeeded, countUrl, sizes, PREDICATE_ITEMS_MAX, INAT_DATASET } from './gbif-request-lib';
+import { dwcaRequest, sqlRequest, mediaRequest, floweringRequest, predicateItems, splitKeys, partsNeeded, countUrl, sizes, PREDICATE_ITEMS_MAX, INAT_DATASET } from './gbif-request-lib';
 
 const DIR = 'bulk';
 const WCVP_URL = 'http://sftp.kew.org/pub/data-repositories/WCVP/wcvp.zip';
@@ -186,9 +190,9 @@ async function countsFor(keys: number[]): Promise<Map<number, number>> {
   return new Map(keys.map((k) => [k, cache[String(k)] ?? 0]));
 }
 
-type Route = 'dwca' | 'sql' | 'media';
-const STATE: Record<Route, string> = { dwca: `${DIR}/download.json`, sql: `${DIR}/download.json`, media: `${DIR}/media-download.json` };
-const ZIP: Record<Route, string> = { dwca: `${DIR}/occurrence.zip`, sql: `${DIR}/occurrence.zip`, media: `${DIR}/media.zip` };
+type Route = 'dwca' | 'sql' | 'media' | 'flowering';
+const STATE: Record<Route, string> = { dwca: `${DIR}/download.json`, sql: `${DIR}/download.json`, media: `${DIR}/media-download.json`, flowering: `${DIR}/flowering-download.json` };
+const ZIP: Record<Route, string> = { dwca: `${DIR}/occurrence.zip`, sql: `${DIR}/occurrence.zip`, media: `${DIR}/media.zip`, flowering: `${DIR}/flowering.zip` };
 
 /** The keys the download asks for: the list's, less those over the cut, which go to the API path (bulk/api-path.txt). */
 async function downloadKeys(file: string, maxRecords: number): Promise<{ keys: number[]; counts: Map<number, number> }> {
@@ -255,6 +259,26 @@ async function gbifRequest(route: Route, file: string, o: { maxRecords: number; 
   }
 }
 
+/**
+ * Round ninety-two: ask GBIF for the flowering download (one SQL query, no species list: `floweringRequest`), after
+ * GBIF's validation of the query. The body is written to bulk/request-flowering.json first, which is what is sent (and,
+ * with `--dry-run`, all that is done). Each month's refresh asks it again.
+ */
+async function floweringAsk(dryRun: boolean): Promise<void> {
+  const who = dryRun ? {} : (() => { const { u, email } = creds(); return { creator: u, email }; })();
+  const body = floweringRequest(who);
+  writeFileSync(`${DIR}/request-flowering.json`, JSON.stringify(body, null, 1));
+  console.log(`  the request: ${DIR}/request-flowering.json`);
+  const v = await fetch(`${GBIF}/occurrence/download/request/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ format: 'SQL_TSV_ZIP', sql: body.sql }) });
+  if (!v.ok) throw new Error(`GBIF's validation refused the SQL (HTTP ${v.status}): ${(await v.text()).slice(0, 600)}`);
+  console.log(`  GBIF's validation accepted the SQL (HTTP ${v.status})`);
+  if (dryRun) { console.log('  --dry-run: nothing sent.'); return; }
+  const key = await submit(body, 'flowering');
+  const requested = new Date().toISOString();
+  writeFileSync(STATE.flowering, JSON.stringify({ key, format: 'SQL_TSV_ZIP', requested }, null, 1));
+  console.log(`  download requested: ${key}. GBIF prepares it in minutes to hours; then: npx tsx scripts/bulk-fetch.ts gbif-flowering-status --wait`);
+}
+
 function stateOf(route: Route, parts: Array<{ key: string; taxa: number; requested: string }>, of: number, inat: boolean) {
   const format = route === 'sql' ? 'SQL_TSV_ZIP' : 'DWCA';
   if (of === 1) return { key: parts[0].key, format, requested: parts[0].requested, taxa: parts[0].taxa, ...(route === 'media' ? { inat } : {}) };
@@ -264,7 +288,7 @@ function stateOf(route: Route, parts: Array<{ key: string; taxa: number; request
 type Part = { key: string; file?: string; doi?: string; records?: number; csv?: string; media?: string; created?: string; fetched?: string };
 async function gbifStatus(route: Route, wait: boolean): Promise<void> {
   const p = STATE[route];
-  if (!existsSync(p)) throw new Error(`No pending download; run \`${route === 'media' ? 'gbif-media' : 'gbif'} names.txt\` first.`);
+  if (!existsSync(p)) throw new Error(`No pending download; run \`${route === 'media' ? 'gbif-media names.txt' : route === 'flowering' ? 'gbif-flowering' : 'gbif names.txt'}\` first.`);
   const state = JSON.parse(readFileSync(p, 'utf8')) as Part & { format?: string; parts?: Part[]; of?: number; inat?: boolean; taxa?: number; requested?: string };
   const parts: Part[] = state.parts ?? [{ ...state, file: ZIP[route].slice(DIR.length + 1) }];
   for (;;) {
@@ -296,7 +320,7 @@ async function gbifStatus(route: Route, wait: boolean): Promise<void> {
     }
     if (!left) return;
     if (!wait) {
-      console.log(`  not ready; run \`${route === 'media' ? 'gbif-media-status' : 'gbif-status'}\` again later, or with --wait.`);
+      console.log(`  not ready; run \`${route === 'media' ? 'gbif-media-status' : route === 'flowering' ? 'gbif-flowering-status' : 'gbif-status'}\` again later, or with --wait.`);
       return;
     }
     await new Promise((r) => setTimeout(r, 30_000));
@@ -365,8 +389,10 @@ async function main() {
   } else if (cmd === 'gbif-status') await gbifStatus('dwca', args.includes('--wait'));
   else if (cmd === 'gbif-media-status') await gbifStatus('media', args.includes('--wait'));
   else if (cmd === 'gbif-count') await gbifCount(list(), num('--max-records', 100_000)!);
+  else if (cmd === 'gbif-flowering') { const dryRun = args.includes('--dry-run'); await floweringAsk(dryRun); if (!dryRun) await gbifStatus('flowering', args.includes('--wait')); }
+  else if (cmd === 'gbif-flowering-status') await gbifStatus('flowering', args.includes('--wait'));
   else {
-    console.error('usage: tsx scripts/bulk-fetch.ts wcvp | gbif <names.txt> [--wait] | gbif-sql <list> [--wait] | gbif-media <list> [--wait] [--with-inat] | gbif-status [--wait] | gbif-media-status [--wait] | gbif-count <list>   (gbif, gbif-sql, gbif-media: --dry-run, --max-records N; gbif, gbif-sql: --parts N)');
+    console.error('usage: tsx scripts/bulk-fetch.ts wcvp | gbif <names.txt> [--wait] | gbif-sql <list> [--wait] | gbif-media <list> [--wait] [--with-inat] | gbif-status [--wait] | gbif-media-status [--wait] | gbif-count <list> | gbif-flowering [--wait] [--dry-run] | gbif-flowering-status [--wait]   (gbif, gbif-sql, gbif-media: --dry-run, --max-records N; gbif, gbif-sql: --parts N)');
     process.exit(2);
   }
 }

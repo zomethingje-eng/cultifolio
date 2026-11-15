@@ -4,7 +4,8 @@
  * and Kew's file write, would be lost on every page it derives. Each is carried from the build before, unless it is
  * another taxon's or another item's:
  *
- *   - `flowering` only while the page's iNaturalist taxon is the one it was read for;
+ *   - `flowering` only while the page's iNaturalist taxon is the one it was read for (GBIF's download's count, round
+ *     ninety-two: while the page's own GBIF key is the one it was counted under);
  *   - `elsewhere.wikidata` only while the page's Wikidata item is the one read;
  *   - `elsewhere.published` and `parents` (Kew's file's) as they were; a walk given Kew's file reads them again after
  *     deriving the pages (`fillKewPublished`), which corrects them where Kew's entry changed.
@@ -17,7 +18,9 @@ type Carried = Pick<Dossier, 'ids'> & Partial<Pick<Dossier, 'flowering' | 'elsew
 
 export function carryLinks(prev: Carried | null | undefined, d: Carried): void {
   if (!prev) return;
-  if (!d.flowering && prev.flowering && prev.flowering.taxon === d.ids.inat) d.flowering = prev.flowering;
+  // Round ninety-two: a count from GBIF's download is carried while the page's own GBIF key is the one it was counted under.
+  const f = prev.flowering;
+  if (!d.flowering && f && ('source' in f ? f.key === d.ids.gbif : f.taxon === d.ids.inat)) d.flowering = f;
   const wd = !d.elsewhere?.wikidata && prev.elsewhere?.wikidata && prev.elsewhere.wikidata.item === d.ids.wikidata ? prev.elsewhere.wikidata : d.elsewhere?.wikidata;
   const pub = d.elsewhere?.published ?? prev.elsewhere?.published;
   if (wd || pub) d.elsewhere = { ...(d.elsewhere ?? {}), ...(wd ? { wikidata: wd } : {}), ...(pub ? { published: pub } : {}) };

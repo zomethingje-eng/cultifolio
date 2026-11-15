@@ -22,6 +22,7 @@
  */
 import { SQL_SELECT } from '../src/lib/dossier/bulk';
 import { BACKBONE } from '../src/lib/dossier/sources/gbif';
+import { FLOWERING_SQL } from '../src/lib/dossier/flowering-gbif';
 
 /**
  * GBIF's limit on a download predicate: "A download predicate may contain a maximum of 101,000 items (taxon keys, kingdom
@@ -93,6 +94,15 @@ export function sqlQuery(keys: readonly number[]): string {
 /** The SQL download request (format SQL_TSV_ZIP, the only one GBIF offers). */
 export function sqlRequest(keys: readonly number[], who: Who = {}) {
   return { ...people(who), format: 'SQL_TSV_ZIP', sql: sqlQuery(keys) };
+}
+
+/**
+ * Round ninety-two: the flowering download (`FLOWERING_SQL` in src/lib/dossier/flowering-gbif.ts), one SQL download of
+ * iNaturalist's research-grade plant observations annotated flowers, counted by key, month and annotation: a few hundred
+ * thousand rows, whatever the species list holds (the fill reads it under each page's keys).
+ */
+export function floweringRequest(who: Who = {}) {
+  return { ...people(who), format: 'SQL_TSV_ZIP', sql: FLOWERING_SQL };
 }
 
 /**

@@ -26,7 +26,10 @@ export type FloweringPage = { key: string; name: { scientific: string }; ids: { 
 export function floweringWanted(d: Pick<FloweringPage, 'ids' | 'flowering'>, again = false): boolean {
   const t = d.ids?.inat;
   if (typeof t !== 'number') return false;
-  return again || !d.flowering || d.flowering.taxon !== t || !d.flowering.months;
+  const f = d.flowering;
+  // Round ninety-two: a page counted from GBIF's download is that source's, and this fill never asks it again.
+  if (f && 'source' in f) return false;
+  return again || !f || f.taxon !== t || !f.months;
 }
 
 /** A refusal that held the request back, so nothing was asked: the day's allowance, or a host cooling (`fetch.ts`). */
@@ -78,7 +81,8 @@ export async function fillFlowering(store: DossierStore, f: JsonFetcher, day: st
       c.unanswered++;
       c.lines.push(`${d.name.scientific} [${d.key}]: iNaturalist taxon ${taxon} not answered: ${r.unanswered}`);
       // The day and why are kept with the taxon, and a count read before for this taxon stays (it is not lost to a refusal).
-      d.flowering = d.flowering?.taxon === taxon && d.flowering.months ? d.flowering : { taxon, read: day, unanswered: r.unanswered };
+      const was = d.flowering && !('source' in d.flowering) ? d.flowering : undefined;
+      d.flowering = was?.taxon === taxon && was.months ? was : { taxon, read: day, unanswered: r.unanswered };
     }
     store.write(file, d);
     opts.progress?.(c);

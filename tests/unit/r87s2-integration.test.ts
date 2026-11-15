@@ -150,8 +150,9 @@ describe('5. the stage-2 plans, in order', () => {
     // Each review says what to stop on.
     for (const r of l.filter((x) => x.startsWith('review '))) expect(r, r.slice(0, 60)).toMatch(/\bStop\b/);
   });
-  it('the daily plan: the two fills, the index, a review, the upload and the live check', () => {
-    // Round ninety: the two fills are `daily` steps (r90a), so a day uses both allowances.
-    expect(lines('scripts/corpus-plan-r87-daily.txt').map((x) => x.split(/\s+/).slice(0, 3).join(' '))).toEqual(['daily dossier --fill', 'daily dossier --fill', 'dossier --index', 'review Read the', 'upload', 'live-check']);
+  it('the daily plan: the BHL fill, the index, a review, the upload and the live check', () => {
+    // Round ninety: the fills are `daily` steps (r90a), so a day uses every allowance. Round ninety-two: flowering is
+    // counted from GBIF's download (r92a), so BHL is the daily plan's one fill.
+    expect(lines('scripts/corpus-plan-r87-daily.txt').map((x) => x.split(/\s+/).slice(0, 3).join(' '))).toEqual(['daily dossier --fill', 'dossier --index', 'review Read the', 'upload', 'live-check']);
   });
 });

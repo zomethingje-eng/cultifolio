@@ -1,0 +1,20 @@
+# Round ninety-two (docs/PLAN-92.md, decision 3): the monthly refresh of every page's flowering by month, after the
+# round's first run (scripts/corpus-plan-r92-flowering.txt). Each month, first:
+#   npx tsx scripts/bulk-fetch.ts gbif-flowering --wait
+# (a new download of the same query: a new DOI and day, which each page then cites). Then:
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r92-monthly.txt
+# When: after a day's daily run has stopped, never at midnight UTC. Minutes, offline but the upload.
+#
+# Every page is counted again from the new download and written; a page whose count and download are the same as before
+# is passed by. The review checks the figures and carries on by itself when they hold: the index, the upload and the
+# live check follow.
+dossier --fill flowering-gbif --bulk bulk
+review Read the fill's lines: "the flowering download <key> (GBIF.org, <day>, https://doi.org/<doi>): …", then "48375 pages read: C counted, N with no observation annotated flowers in the download, K with no GBIF key, not counted; S counted from this download before and passed by". Stop, and paste the end of corpus-step.log back, if fewer pages are read than the index holds, if K is over 1,000, or if a line says "not counted, nothing written" (the download was not read whole: fetch it again).
+expect let P /^\s*([\d,]+) pages read: /
+expect let K /, ([\d,]+) with no GBIF key, not counted/
+expect P >= 48375
+expect K <= 1000
+expect no /not counted, nothing written/
+dossier --index
+upload
+live-check

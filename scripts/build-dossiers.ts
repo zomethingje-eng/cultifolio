@@ -88,10 +88,11 @@
  *   npx tsx scripts/build-dossiers.ts --fill kew-links          # every stored IPNI and POWO link set to Kew's number for the name and author; resumable; then the index
  *   npx tsx scripts/build-dossiers.ts --fill credits             # every stored iNaturalist and Commons photograph's credit read again and stamped with the
  *                                                                # day (round eighty-five); changed credits corrected, closed or missing files dropped
- *   npx tsx scripts/build-dossiers.ts --fill flowering           # round eighty-seven (stage 2): iNaturalist's research-grade wild observations annotated
- *                                                                # "Flowering", by month, one request a page with a taxon, every 2 s, under
- *                                                                # iNaturalist's day (--inat-budget); at the allowance it stops (exit 3), and the same
- *                                                                # command the next day goes on; --again asks every page
+ *   npx tsx scripts/build-dossiers.ts --fill flowering-gbif --bulk bulk [--dry-run]
+ *                                                                # round ninety-two: every page's flowering by month from GBIF's download of
+ *                                                                # iNaturalist's research-grade observations (bulk/flowering.zip), under the page's
+ *                                                                # GBIF keys; compared with the API's counts (bulk/flowering-compare.tsv); offline
+ *                                                                # (--fill flowering, iNaturalist's API a page at a time, asks nothing since)
  *   npx tsx scripts/build-dossiers.ts --fill elsewhere           # round eighty-seven (stage 2): the other registers' identifiers each page's own
  *                                                                # Wikidata item holds (src/lib/dossier/elsewhere.ts), fifty items a request; resumable
  *   npx tsx scripts/build-dossiers.ts --fill kew-published --bulk bulk
@@ -262,7 +263,7 @@ import { batchSources, BATCH_CHUNK } from '../src/lib/dossier/batch';
 import { kewRowsFetcher, type SameTypeName } from '../src/lib/dossier/kew-rows';
 import { loadKewRows } from './kew-rows-load';
 import { nearestByClimate } from '../src/lib/core/near';
-import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated, mediaDownloadOf } from './bulk-load';
+import { loadWcvp, loadOccurrences, wantedKeys, downloadShortOf, addCreated, mediaDownloadOf, loadFloweringDownload } from './bulk-load';
 import { answerStore } from './api-answers-store';
 import { keptAnswers, answerLine, type AnswerStats } from '../src/lib/dossier/api-answers';
 import { mediaDay, type MediaDayCounts, type MediaDayPage } from '../src/lib/dossier/media-day';
@@ -301,7 +302,7 @@ import { dryLine } from '../src/lib/dossier/dry-line';
 import { upToDate, writeStamp, INDEX_STAMP } from '../src/lib/dossier/index-stamp';
 import { loadSources, fillSources, sourcesLines, carrySources, sourcePage } from '../src/lib/dossier/sources-fill';
 // Round eighty-seven, stage 2 (links agent): flowering by month, the other registers, the first publication and BHL, a hybrid's parents.
-import { fillFlowering, floweringLine, floweringLeft } from '../src/lib/dossier/flowering';
+import { fillFloweringGbif, floweringGbifLine, sharplyApart, COMPARE_MIN, type FloweringGbifPage, type PageKeys } from '../src/lib/dossier/flowering-gbif';
 import { fillElsewhere, elsewhereLine } from '../src/lib/dossier/elsewhere';
 import { fillKewPublished, kewPublishedLine, entryOf as kewEntryOfPage, type KewPublishedPage } from '../src/lib/dossier/kew-published';
 import { fillBhl, bhlLine, BHL_DAY_BUDGET } from '../src/lib/dossier/bhl';
@@ -1894,22 +1895,46 @@ async function fillCreditsStep(): Promise<void> {
 }
 
 /**
- * `--fill flowering` (round eighty-seven, stage 2; links agent; `src/lib/dossier/flowering.ts`): iNaturalist's
- * research-grade observations of wild plants annotated "Flowering", by month, one request a page with a taxon, paced and
- * counted as every iNaturalist request is (one every 2 s; the day's allowance `--inat-budget`, shared with the other
- * iNaturalist fills). Each page is written as it is answered, so a run that stops resumes; at the allowance it stops
- * (exit 3), as `--fill credits` does, and the same command the next day goes on. `--again` asks every page. No index:
- * the index holds none of it.
+ * `--fill flowering` (round eighty-seven, stage 2): iNaturalist's API, one request a page (`src/lib/dossier/flowering.ts`).
+ * Since round ninety-two it asks nothing and says why; the counts come from GBIF's download (`--fill flowering-gbif`).
  */
 async function fillFloweringStep(): Promise<void> {
+  // Round ninety-two (docs/PLAN-92.md, decision 2): flowering is counted from one GBIF download for every page, so this
+  // fill, which would put iNaturalist's API count back on the pages that download does not reach, asks nothing.
+  console.error("--fill flowering asks nothing since round ninety-two: every page's flowering is counted from GBIF's download of iNaturalist's observations (--fill flowering-gbif --bulk bulk; npx tsx scripts/bulk-fetch.ts gbif-flowering --wait asks GBIF for it).");
+  process.exit(2);
+}
+
+/**
+ * `--fill flowering-gbif [--dry-run]` (round ninety-two; `src/lib/dossier/flowering-gbif.ts`, docs/PLAN-92.md): every
+ * page's flowering by month counted from GBIF's download of iNaturalist's research-grade observations
+ * (`<bulk>/flowering.zip`, as `<bulk>/flowering-download.json` names it; `--bulk`, default bulk), under the keys the build
+ * reads the page's records by: its own (less the keys given to other pages), the other keys `scripts/extra-keys.txt`
+ * gives it, or, for a page with no GBIF key, those Kew's synonymy gives it. Offline, a few minutes. A download not read
+ * whole writes nothing (exit 2). Every page the API read is compared with what the download gives it: the line says the
+ * figures the review's `expect` lines read, and `<bulk>/flowering-compare.tsv` holds every page compared, the pages
+ * sharply apart listed in the log. `--dry-run` writes no page. No index: the index holds none of it.
+ */
+async function fillFloweringGbifStep(): Promise<void> {
+  const dir = bulkDir ?? 'bulk';
+  const dry = args.includes('--dry-run');
+  console.log(`Counting flowering by month from GBIF's download of iNaturalist's research-grade observations (${dir}/flowering.zip)${dry ? ', a dry run: no page written' : ''}…`);
+  const got = await loadFloweringDownload(dir);
+  if ('refused' in got) { console.error(`  not counted, nothing written: ${got.refused}`); process.exit(2); }
   const store = diskStore();
-  const day = today();
-  const again = args.includes('--again');
-  console.log(`Reading iNaturalist's flowering observations of wild plants by month, one request a page${again ? ' (every page)' : ' (the pages not read yet)'}, under the day's allowance of ${inatBudget}…`);
-  const c = await fillFlowering(store, upstreamApi(), day, { again, progress: (n) => { if (n.asked % 25 === 0) process.stdout.write(`\r  ${n.asked} asked: ${n.read} read, ${n.unanswered} not answered…   `); } });
-  const left = floweringLeft(store);
-  console.log(`\r${floweringLine(c, day, left)}${c.lines.length ? `\n${c.lines.slice(0, 50).map((l) => `    ${l}`).join('\n')}${c.lines.length > 50 ? `\n    … ${c.lines.length - 50} more` : ''}` : ''}`);
-  if (left) unfinished();
+  const keysOf = (d: FloweringGbifPage): PageKeys => {
+    const own = d.ids.gbif;
+    if (typeof own === 'number') return { own, givenAway: givenAwayOf.get(own)?.keys, extra: extraKeys.get(own) ?? [] };
+    return { extra: kewExtra.get(d.key) ?? [] };
+  };
+  const c = fillFloweringGbif(store, got.table, got.dl, today(), keysOf, { dryRun: dry });
+  console.log(floweringGbifLine(c, got.table, got.dl, dry));
+  const tsv = `${dir}/flowering-compare.tsv`;
+  const head = 'page\tname\tapi\tgbif\tratio\tpeak_api\tpeak_gbif\ttenths_same\tcosine\tsharply_apart';
+  const cell = (x: number | undefined, d = 3) => (x === undefined ? '' : Number.isInteger(x) ? String(x) : x.toFixed(d));
+  writeFileSync(tsv, [head, ...c.compared.map((x) => [x.page, x.name, x.api, x.gbif, cell(x.ratio), x.peakApi === undefined ? '' : x.peakApi + 1, x.peakGbif === undefined ? '' : x.peakGbif + 1, x.tenthSame === undefined ? '' : x.tenthSame ? 'yes' : 'no', cell(x.cosine), sharplyApart(x) ? 'yes' : ''].join('\t'))].join('\n') + '\n');
+  const apart = c.compared.filter(sharplyApart).sort((a, b) => b.api - a.api);
+  console.log(`  every page compared: ${tsv}${apart.length ? `; sharply apart (the API counted ${COMPARE_MIN} or more, and the download none or another shape), most counted first:\n${apart.slice(0, 200).map((x) => `    ${x.name} [${x.page}]: the API ${x.api}, the download ${x.gbif}${x.cosine !== undefined ? `, shape ${x.cosine.toFixed(2)}` : ''}`).join('\n')}${apart.length > 200 ? `\n    … ${apart.length - 200} more in ${tsv}` : ''}` : ''}`);
 }
 
 /**
@@ -2834,10 +2859,11 @@ async function main() {
   if (fill === 'cultigens') return fillCultigensStep();
   if (fill === 'sources') return fillSourcesStep();
   if (fill === 'flowering') return fillFloweringStep();
+  if (fill === 'flowering-gbif') return fillFloweringGbifStep();
   if (fill === 'elsewhere') return fillElsewhereStep();
   if (fill === 'kew-published') return fillKewPublishedStep();
   if (fill === 'bhl') return fillBhlStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra, gbif-media-day, cultigens, sources, credits, flowering, elsewhere, kew-published, bhl, summary-leads (summary-revisions) or genus`);
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra, gbif-media-day, cultigens, sources, credits, flowering-gbif, elsewhere, kew-published, bhl, summary-leads (summary-revisions) or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
   // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.
