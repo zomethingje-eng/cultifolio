@@ -244,3 +244,8 @@ proved by the pages it writes matching the pages the slow way writes, or it is d
 - `tests/unit/r90c-typical-spot.test.ts` on fce7905's `src/lib/climate/provider.ts`: FAILED (the second build's spot
   Shandong's, 36.175, 120.275). `tests/unit/r90d-walk-carry.test.ts` on fce7905's `carry-core.ts` and `offline-list.ts`:
   3 of 4 FAILED (no carry in a re-derivation through "error" or "refused"; no page listed).
+- 14 November 2026, after round 91's commit: `node scripts/deploy.mjs` stopped at svelte-check, before the build (nothing
+  deployed). Deleting the handoff folder after the predeploy changed the tree, so the deploy ran svelte-check and the unit
+  tests itself; svelte-check found 4 type errors in `tests/unit/r90g-bhl-ipni.test.ts` (its fake page typed looser than
+  `BhlPage`; the tests passed). The `--tier=app` predeploy runs no svelte-check, so the round's own gates did not see it.
+  Typed as the fill's own page; svelte-check then 0 errors in 1,810 files; the next gate `--tier=launch`, which adds it.

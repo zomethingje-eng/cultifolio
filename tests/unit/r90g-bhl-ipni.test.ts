@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { fillBhl, bhlAsk, bhlUrl, bhlTitleUrl, ipniNameUrl, ipniBhlTitle, bhlLine, bhlWanted, SEVERAL } from '$dossier/bhl';
+import type { BhlPage } from '$dossier/bhl';
 import { elsewhereView } from '$lib/ui/ref/links-words';
 import { fixtureFetcher } from '$dossier/fetch';
 
@@ -23,12 +24,14 @@ const OTHER = { ...MELET, Url: 'https://www.biodiversitylibrary.org/page/99', Ti
 const answer = (...cs: object[]) => ({ Status: 1, Message: '', citations: cs });
 const IPNI = { name: 'Homalomena occulta', linkedPublication: { abbreviation: 'Melet. Bot.', bhlTitleLink: 'http://www.biodiversitylibrary.org/openurl?ctx_ver=Z39.88-2004&rft_id=http://www.biodiversitylibrary.org/bibliography/40101&rft_val_fmt=info:ofi/fmt:kev:mtx:book&url_ver=z39.88-2004' } };
 
-type Pg = { key: string; name: { scientific: string }; ids?: { ipni?: string }; elsewhere: { published: Record<string, unknown> & { bhl?: Record<string, unknown> } } };
+// The page as the fill reads it (svelte-check: a looser record was not a BhlPage).
+type Published = NonNullable<NonNullable<BhlPage['elsewhere']>['published']>;
+type Pg = { key: string; name: { scientific: string }; ids?: { ipni?: string }; elsewhere: { published: Published } };
 function storeOf(pages: Record<string, Pg>) {
   const urls: string[] = [];
   return { pages, urls, store: { files: () => Object.keys(pages), read: <T,>(f: string) => structuredClone(pages[f]) as T, write: (f: string, d: unknown) => { pages[f] = d as Pg; } } };
 }
-const page = (bhl?: object, ipni: string | undefined = '87255-1'): Pg => ({ key: 'k100023', name: { scientific: 'Homalomena occulta' }, ...(ipni ? { ids: { ipni } } : {}), elsewhere: { published: { ...PUB, ...(bhl ? { bhl } : {}) } } });
+const page = (bhl?: Published['bhl'], ipni: string | undefined = '87255-1'): Pg => ({ key: 'k100023', name: { scientific: 'Homalomena occulta' }, ...(ipni ? { ids: { ipni } } : {}), elsewhere: { published: { ...PUB, ...(bhl ? { bhl } : {}) } } });
 /** A fetcher answering from `table`, recording each address asked. */
 const asking = (table: Record<string, unknown>, urls: string[]) => { const f = fixtureFetcher(table); return (async (u: string, o?: object) => { urls.push(u); return f(u, o as never); }) as typeof f; };
 
