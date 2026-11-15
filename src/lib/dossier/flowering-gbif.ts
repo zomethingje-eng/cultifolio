@@ -38,8 +38,14 @@ export const FLOWERS = 'flowers';
  * The download's query (GBIF's SQL download, SQL_TSV_ZIP; accepted by GBIF's validation on 2026-11-15). The `LIKE` keeps
  * the file small; it also lets "no flowers or fruits" through, which `isFlowering` leaves out. `"month"` is quoted, as
  * GBIF's validator writes it. No comment lines: GBIF's parser refuses them.
+ *
+ * The keys are the GBIF Backbone's, the keys every page holds: in GBIF's SQL table the plain `taxonkey`, `kingdomkey` and
+ * the rest are the Catalogue of Life's (letters and digits, docs/COLXR-87.md), and the backbone's are the
+ * `occurrence.gbif_classification.*` columns, as `sqlQuery` reads them since round seventy-nine. The first download
+ * (0008674-261110092616502, 15 November 2026) asked the plain columns, `kingdomkey = 6`, and held no row.
  */
-export const FLOWERING_SQL = `SELECT taxonkey, acceptedtaxonkey, specieskey, "month", reproductivecondition, COUNT(*) AS n FROM occurrence WHERE datasetkey = '${INAT_GBIF_DATASET}' AND kingdomkey = 6 AND reproductivecondition LIKE '%${FLOWERS}%' GROUP BY taxonkey, acceptedtaxonkey, specieskey, "month", reproductivecondition`;
+const BB = 'occurrence.gbif_classification';
+export const FLOWERING_SQL = `SELECT ${BB}.taxonkey AS taxonkey, ${BB}.acceptedtaxonkey AS acceptedtaxonkey, ${BB}.specieskey AS specieskey, "month", reproductivecondition, COUNT(*) AS n FROM occurrence WHERE datasetkey = '${INAT_GBIF_DATASET}' AND ${BB}.kingdomkey = '6' AND reproductivecondition LIKE '%${FLOWERS}%' GROUP BY ${BB}.taxonkey, ${BB}.acceptedtaxonkey, ${BB}.specieskey, "month", reproductivecondition`;
 
 /** Whether a `reproductiveCondition` value holds the flowers annotation: one of its parts, split on "|", is exactly it. */
 export const isFlowering = (cond: string | undefined): boolean => !!cond && cond.split('|').some((p) => p.trim().toLowerCase() === FLOWERS);

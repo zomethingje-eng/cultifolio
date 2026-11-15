@@ -382,5 +382,8 @@ export async function loadFloweringDownload(dir: string): Promise<{ table: Flowe
   const r = table.read;
   const observations = r.observations + r.noMonth + r.notFlowers + r.noKey;
   if (typeof m.records === 'number' && m.records !== r.lines && m.records !== observations) return { refused: `${m.csv} holds ${r.lines} rows and ${observations} observations, and GBIF counts ${m.records}: not the whole download` };
+  // Rule 2 (15 November 2026: GBIF made 0008674-261110092616502 with no row at all): a download with no observation
+  // annotated flowers is a query that found nothing, not iNaturalist's answer of none on every page.
+  if (r.observations === 0) return { refused: `the download ${m.key} holds no observation annotated flowers (${r.lines} rows): an empty answer from GBIF, not a count of none` };
   return { table, dl: { key: m.key, doi: m.doi, made: m.created.slice(0, 10) } };
 }

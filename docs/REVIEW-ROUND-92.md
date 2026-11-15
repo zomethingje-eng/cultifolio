@@ -86,3 +86,26 @@ Not changed: no /changes line yet. Readers see nothing new until the fill is upl
   boreale, Oxalis smalliana, Rhus copallinum, Valeriana locusta: names GBIF and iNaturalist file apart; Melaleuca citrina
   and Monardella odoratissima, the shape far apart, as lead 1 found). Every stop condition holds on the method's figures;
   on the stand-in as it is, the first review would stop on the 11.3%, which is what it is for.
+- 15 November 2026, after 7897f2a was deployed: GBIF's first flowering download (0008674-261110092616502, DOI
+  10.15468/dl.3wcta5) held no row. The plan's dry run read it, wrote nothing, and its review stopped (the median ratio, the
+  peak month within one month on 0%, 100% of the pages over 100 from the API with none in the download). The cause: the
+  query asked the plain key columns, which in GBIF's SQL table are the Catalogue of Life's (docs/COLXR-87.md, round
+  seventy-nine's `sqlQuery`); `kingdomkey = 6` matched no record. A probe (0008696-261110092616502: Lamium purpureum's
+  species key 2926682 in the plain `specieskey`, April 2024, every dataset) held no row either, where GBIF's search holds
+  iNaturalist's flowering records of it. GBIF's validation checks a column's name, not what it holds, so it had accepted
+  the query. Fixed: `FLOWERING_SQL` reads the backbone's keys, `occurrence.gbif_classification.taxonkey`,
+  `.acceptedtaxonkey`, `.specieskey` and `.kingdomkey = '6'` (validated: HTTP 201; a column GBIF does not have, 400). And
+  the loader now refuses a download with no observation annotated flowers ("an empty answer from GBIF, not a count of
+  none"), exit 2: the monthly plan's review reads only the page counts, and would have let twelve zeros be written on
+  every page with a key.
+- 15 November 2026, the download on the fixed query: 0008715-261110092616502, DOI 10.15468/dl.y8zpkp, 672,819 rows, 16.3
+  MB, its header beginning with a byte-order mark (read by name; a test now holds it). 7,727,578 observations, 6,364,287
+  annotated exactly "flowers", 87,942 species keys, none without a month. Lamium purpureum 24,743 (the API 31,147; peak
+  April), Trifolium repens 18,434 (the API 22,996): the species the stand-in lacked are there. The fill's dry run on it,
+  nothing written (the newest dossier still of 14 November): 536,821 rows taken; 48,375 pages: 32,100 counted, 15,676
+  none in the download, 599 with no GBIF key; against the API's 10,720 pages, median ratio 0.81, the peak month within one
+  month on 95.4% of the 3,228 with 30 or more, the tenths the same on 74.4%, 0.4% of the 1,819 over 100 with none in the
+  download; 25 sharply apart: names GBIF's backbone files apart from iNaturalist's (Oxalis smalliana, Rhus copallinum,
+  Leucopogon parviflorus, Opuntia cespitosa, azurea and bonaerensis, Libanotis pyrenaica, Peucedanum palustre and
+  alsaticum) and shapes far apart (Melaleuca citrina 0.18, Apocynum venetum 0.35, Monardella odoratissima 0.68), the
+  cases decision 2 expects. Every stop condition holds.

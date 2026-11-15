@@ -53,7 +53,10 @@ const html = (props: Record<string, unknown>) => render(Flowering, { props: prop
 describe('r92a 1: the download asked', () => {
   it("one SQL query: iNaturalist's research-grade dataset, Plantae, the flowers annotation, by key, month and annotation", () => {
     expect(INAT_GBIF_DATASET).toBe('50c9509d-22c7-4a22-a47d-8c48425ef4a7');
-    expect(FLOWERING_SQL).toBe(`SELECT taxonkey, acceptedtaxonkey, specieskey, "month", reproductivecondition, COUNT(*) AS n FROM occurrence WHERE datasetkey = '50c9509d-22c7-4a22-a47d-8c48425ef4a7' AND kingdomkey = 6 AND reproductivecondition LIKE '%flowers%' GROUP BY taxonkey, acceptedtaxonkey, specieskey, "month", reproductivecondition`);
+    // On 7897f2a: FAILED. The query asked the plain key columns, which in GBIF's SQL table are the Catalogue of Life's
+    // (docs/COLXR-87.md): `kingdomkey = 6` matched nothing, and GBIF's download of 15 November 2026 held no row.
+    const bb = 'occurrence.gbif_classification';
+    expect(FLOWERING_SQL).toBe(`SELECT ${bb}.taxonkey AS taxonkey, ${bb}.acceptedtaxonkey AS acceptedtaxonkey, ${bb}.specieskey AS specieskey, "month", reproductivecondition, COUNT(*) AS n FROM occurrence WHERE datasetkey = '50c9509d-22c7-4a22-a47d-8c48425ef4a7' AND ${bb}.kingdomkey = '6' AND reproductivecondition LIKE '%flowers%' GROUP BY ${bb}.taxonkey, ${bb}.acceptedtaxonkey, ${bb}.specieskey, "month", reproductivecondition`);
     expect(floweringRequest()).toEqual({ sendNotification: false, format: 'SQL_TSV_ZIP', sql: FLOWERING_SQL });
     expect(floweringRequest({ creator: 'someone', email: 'someone@example.org' })).toMatchObject({ creator: 'someone', notificationAddresses: ['someone@example.org'], format: 'SQL_TSV_ZIP' });
   });
@@ -266,5 +269,24 @@ describe('r92a 7: the loader', () => {
     writeZip(join(d, 'flowering.zip'), { 'x.csv': [HEAD, row(10, 10, 10, 4, 'flowers', 12), ''].join('\n') });
     meta(d, { key: DL.key, doi: DL.doi, created: '2026-11-15', records: 5, csv: 'x.csv', fetched: 'x' });
     expect(await loadFloweringDownload(d)).toEqual({ refused: expect.stringMatching(/holds 1 rows and 12 observations, and GBIF counts 5: not the whole download/) });
+  });
+  // On 7897f2a: FAILED. GBIF's first answer (0008674-261110092616502, 15 November 2026) held no row; the loader took it,
+  // and the fill would have said "none in the download" on every page with a key.
+  // GBIF's download of 15 November 2026 (0008715-261110092616502) begins with a byte-order mark before "taxonkey".
+  it('a header that begins with a byte-order mark, as GBIF writes it, is read by name', async () => {
+    const d = dir();
+    writeZip(join(d, 'flowering.zip'), { 'x.csv': ['﻿' + HEAD, row(10, 10, 10, 4, 'flowers', 12), ''].join('\n') });
+    meta(d, { key: DL.key, doi: DL.doi, created: '2026-11-15', records: 1, csv: 'x.csv', fetched: 'x' });
+    const r = await loadFloweringDownload(d);
+    expect(r).toMatchObject({ table: { read: { lines: 1, rows: 1, observations: 12 } } });
+  });
+  it('refused, nothing taken: a download with no observation annotated flowers', async () => {
+    const d = dir();
+    writeZip(join(d, 'flowering.zip'), { 'x.csv': [HEAD, ''].join('\n') });
+    meta(d, { key: DL.key, doi: DL.doi, created: '2026-11-15', records: 0, csv: 'x.csv', fetched: 'x' });
+    expect(await loadFloweringDownload(d)).toEqual({ refused: expect.stringMatching(/holds no observation annotated flowers \(0 rows\): an empty answer from GBIF, not a count of none/) });
+    writeZip(join(d, 'flowering.zip'), { 'x.csv': [HEAD, row(10, 10, 10, 4, 'no flowers or fruits', 3), ''].join('\n') });
+    meta(d, { key: DL.key, doi: DL.doi, created: '2026-11-15', records: 1, csv: 'x.csv', fetched: 'x' });
+    expect(await loadFloweringDownload(d)).toEqual({ refused: expect.stringMatching(/holds no observation annotated flowers \(1 rows\)/) });
   });
 });
