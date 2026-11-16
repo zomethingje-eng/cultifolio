@@ -70,3 +70,40 @@ figures; upload; live check. Then the deploy.
 Chromium (the page did not hydrate in 30 s, passed on its retry); the strict run counts a retry as a failure, so it ran
 again with nothing changed. The second: svelte-check 0 errors and 0 warnings in 1,814 files, the unit tests 6,267 passed
 in 693 files, the browser suite 2,737 passed in every engine, every test first time.
+
+## The run (16 November 2026)
+
+`node scripts/corpus-step.mjs --plan scripts/corpus-plan-r93-names.txt`, in its own terminal, 07:56 to 12:04.
+
+- Backup; the dry run again (979 derived, 725 change, climates 192 gained and 15 lost, the range rule admitting and
+  dropping none): the review's 12 checks held and the plan went on by itself.
+- The online `--keys` build: 979 built; GBIF's search answered 813 times. It stopped on drops.txt, six lines:
+  - Five of them are pages that leave records out, their photographs of those records left out with them, the records
+    read by the page Kew gives them to:
+    - Heliotropium velutinum: 24 photographs to 0, to Heliotropium arboreum.
+    - Draba hyperborea: 27 to 3, to Draba podolica.
+    - Mandevilla pubescens: 9 to 2, to Elytropus chilensis.
+    - Chrysocoma cernua: 24 to 4, to Chrysocoma coma-aurea.
+    - Huernia lenewtonii: 1 to 0, to Huernia keniensis.
+  - The sixth, Bisnaga hamatacantha [g7281739], was a fault of the list: GBIF's key 7281739 was listed as a page that
+    leaves records out, but it is no page, only GBIF's holder for Kew's Ferocactus hamatacanthus (k2808164), whose page
+    reads its records. The build made it a new page, and the index stood at 48,376. The file was moved out of the corpus
+    by hand before the review was passed (corpus-step.log says so); `--index` scans the dossiers on disk, so the index
+    is 48,375 again. The line is taken out of scripts/rebuild-r93.txt (978 pages), and the plan's first check holds 978.
+- The flowering fill from round 92's download: 48,375 pages read, 32,283 counted (32,100 on 15 November), 15,817 with
+  none annotated flowers in the download, 275 with no GBIF key (599 on 15 November); 47,534 passed by as counted from
+  this download before.
+- The index: 48,375 species, climates for 37,998 (37,821 on 15 November). The review's 10 checks held.
+- Upload and the live check: 23 checks passed; the site serves corpus 34d3ec420b15053d, the one on disk.
+
+### What the index found untrue
+
+The index step read /about/how's search examples against the new index: "echeveria" no longer lists Echeveria elegans
+first. Echeveria elegans is one of the pages that leave records out (Echeveria potosina's, which Kew holds as its own
+name); its photographs went from 46 to 34, and Echeveria pulvinata, with as many English names (four), has 37. The rule
+the page states (English names, then photographs, then the alphabet) holds; its example did not. The example now says
+"echeveria" is Echeveria pulvinata, then Echeveria elegans, four English names each and the first with more
+photographs, and the index's check reads it so. Round 82's /changes line, "echeveria" is Echeveria elegans, is left as
+it was: it says what was true on 24 October.
+
+Between the upload (12:04) and the deploy, the live /about/how gave the old example against the new index.

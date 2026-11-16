@@ -10,6 +10,9 @@
 # and 15 lost (holders left with too few placed records), the range rule admitting and dropping none. The first review
 # holds the run to those. The online build may stop on drops.txt: a page that leaves records out loses the GBIF
 # photographs of those records too, as round 86's holders did; every line of it must be such a page's photograph.
+# Run on 16 November 2026 with 979 pages, one of them no page (GBIF's 7281739, Bisnaga hamatacantha; the record): the
+# build made it a new page, moved out by hand before the build's review was passed. The list holds 978 since, and P is
+# held to 978; the review texts above and below are as the run of 16 November read them.
 backup
 dossier --keys scripts/rebuild-r93.txt --offline --grid climate --bulk bulk --dry-run
 review Read the dry run's totals: "979 pages derived, nothing written; C change under this rule" (725 on 16 November), "climates: G gained, L lost, …" (192 and 15), and "records: +0 admitted on 0 pages, −0 dropped on 0 pages" (the range rule is not this round's).
@@ -19,7 +22,7 @@ expect let G /climates: ([\d,]+) gained/
 expect let L /climates: [\d,]+ gained, ([\d,]+) lost/
 expect let A /records: \+([\d,]+) admitted/
 expect let D /admitted on [\d,]+ pages, .([\d,]+) dropped/
-expect P = 979
+expect P = 978
 expect C ~ 725 ±5%
 expect G >= 170
 expect L <= 20

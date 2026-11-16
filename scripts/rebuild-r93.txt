@@ -1,5 +1,5 @@
 # Round ninety-three (docs/PLAN-93.md): the pages whose GBIF keys the round's rules change, and the pages that leave records out to them.
-# 553 pages without a GBIF key and 69 keyed pages whose lines in scripts/extra-keys-kew.txt, extra-keys-kew-none.txt, extra-keys.txt or extra-keys-infra.txt differ between f382389's code and the round's; 357 pages whose key GBIF files a taken key under (357 not already listed).
+# 553 pages without a GBIF key and 69 keyed pages whose lines in scripts/extra-keys-kew.txt, extra-keys-kew-none.txt, extra-keys.txt or extra-keys-infra.txt differ between f382389's code and the round's; 356 pages whose key GBIF files a taken key under (356 not already listed). GBIF's key 7281739 (Bisnaga hamatacantha), listed here on 16 November, was taken out the same day: it is no page, only GBIF's holder for Kew's Ferocactus hamatacanthus (k2808164), and the build made it a new page (docs/REVIEW-ROUND-93.md).
 # For --keys: --keys scripts/rebuild-r93.txt --grid climate --bulk bulk (online: the gender rule's keys are not in the occurrence download of 21 October, so GBIF's search is asked for them), then --index.
 10713609 Cyphostemma ankirihitrense
 10758429 Leptecophylla parvifolia
@@ -310,7 +310,6 @@
 7281361 Borzicactus icosagonus
 7281482 Cleistocactus winteri
 7281587 Parodia mammulosa
-7281739 Bisnaga hamatacantha
 7281804 Parodia haselbergii
 7282066 Aylostera deminuta
 7282477 Maihueniopsis glomerata
