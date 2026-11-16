@@ -30,12 +30,13 @@ test('r87rec 1: /changes lists round 87, dated, with its live stages\' lines and
 // on /changes, r87rec 1). The test now holds the box to `changedLately(4)`, which the front page reads, line for line,
 // rather than to whichever round's line is fourth this week; and still to no later stage's line of round 87.
 // On b9963f7 plus round 92's /changes line: FAILED, round 87's line looked for and not there.
+// Round ninety-three: the four are round 93's two, then round 92's two.
 test('r87rec 2: the front page\'s "Changed lately" holds the newest lines in order and says no later stage\'s of round 87', async ({ page }) => {
   await page.goto('/');
   await ready(page);
   const lines = page.locator('.lateline');
   const newest = changedLately(4);
-  expect(newest.map((l) => l.round)).toEqual([92, 92, 91, 91]);
+  expect(newest.map((l) => l.round)).toEqual([93, 93, 92, 92]);
   await expect(lines).toHaveCount(4);
   for (const [i, l] of newest.entries()) await expect(lines.nth(i)).toContainText(l.text);
   const all = (await lines.allInnerTexts()).join('\n');

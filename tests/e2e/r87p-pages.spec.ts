@@ -62,13 +62,15 @@ test('r87p 3: /changes lists the rounds, newest first, each with its date and it
   await page.goto('/changes');
   await ready(page);
   const heads = page.locator('article.changes section h2');
-  // Round ninety-two, the newest (flowering from GBIF's download), then round 91 (the icon), then round 87.
-  await expect(heads.first()).toContainText('Round 92');
-  await expect(heads.first()).toContainText('15 November 2026');
-  await expect(heads.nth(1)).toContainText('Round 91');
-  await expect(heads.nth(1)).toContainText('14 November 2026');
-  await expect(heads.nth(2)).toContainText('Round 87');
-  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92]) await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
+  // Round ninety-three, the newest (the names GBIF files apart), then round 92 (flowering from GBIF's download), round 91
+  // (the icon), then round 87.
+  await expect(heads.first()).toContainText('Round 93');
+  await expect(heads.first()).toContainText('16 November 2026');
+  await expect(heads.nth(1)).toContainText('Round 92');
+  await expect(heads.nth(1)).toContainText('15 November 2026');
+  await expect(heads.nth(2)).toContainText('Round 91');
+  await expect(heads.nth(3)).toContainText('Round 87');
+  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92, 93]) await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
   await expect(page.locator('#round-83')).toHaveCount(0);
   // The one row of links, on every about page, the page being read marked.
   for (const [path, label] of [['/about', 'About'], ['/about/how', 'How it is made'], ['/about/formats', 'Formats'], ['/about/data', 'The data'], ['/changes', 'Changes']]) {

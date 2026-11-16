@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 93,
+    date: '2026-11-16',
+    lines: [
+      'A species Kew accepts that GBIF holds as a synonym of another page\'s species now reads its own records, where Kew\'s file holds the name as this plant, of the same type: Oxalis smalliana reads GBIF\'s Oxalis smalliana R.Knuth.',
+      'GBIF\'s name for a plant spelt with its epithet in another gender, by the same author, is read as Kew\'s: Rhus copallinum reads GBIF\'s Rhus copallina L. and its records.'
+    ]
+  },
+  {
     n: 92,
     date: '2026-11-15',
     lines: [

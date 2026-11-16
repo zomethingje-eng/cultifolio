@@ -115,9 +115,13 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // the column is narrower). Measured in Chromium in the launch gate of 15 November 2026 on b9963f7 with round 92's
 // /changes line (the base before: 1069, 1272, 1286, 1427 at 1280; 1114, 1305, 1319, 1461 at 1024); WebKit and Firefox
 // 1372, 1386, 1527 to 1528 and tiles 157 × 183 at 1024, within the 2 px. Tiles unchanged; nothing else in the test moved.
+// Round ninety-three: "Changed lately" holds round 93's two lines (the names GBIF files apart), longer than round 91's
+// they push off, so everything under it is 65 px lower at 1280 and 43 at 1024. Measured in Chromium on 16 November 2026
+// on f382389 with round 93's /changes lines (the base before: 1113, 1316, 1330, 1471 at 1280; 1179, 1370, 1384, 1526 at 1024); tiles unchanged.
+// On f382389 with round 93's lines: FAILED, stripTop 1178 for 1113 at 1280.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1113, stripBottom: 1316, searchTop: 1330, rowTop: 1471, tile: [172, 193] },
-  '1024': { stripTop: 1179, stripBottom: 1370, searchTop: 1384, rowTop: 1526, tile: [155, 182] }
+  '1280': { stripTop: 1178, stripBottom: 1381, searchTop: 1395, rowTop: 1536, tile: [172, 193] },
+  '1024': { stripTop: 1222, stripBottom: 1414, searchTop: 1428, rowTop: 1569, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

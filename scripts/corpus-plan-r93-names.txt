@@ -1,0 +1,43 @@
+# Round ninety-three (docs/PLAN-93.md, docs/REVIEW-ROUND-93.md): the names GBIF files apart, matched by rule. The pages
+# whose GBIF keys the round's lists change, and the pages that leave records out to them (scripts/rebuild-r93.txt, 979
+# pages), built again online, their flowering counted again from round 92's download, then the index, the upload and the
+# live check. Then the deploy (node scripts\deploy.mjs), after the upload: /about/how's new sentences are of the site as
+# served (rule 5).
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r93-names.txt
+# When: after a day's daily run has stopped, never at midnight UTC.
+#
+# The dry run's figures were read by hand on 16 November 2026 (the record): 979 derived, 725 change, climates 192 gained
+# and 15 lost (holders left with too few placed records), the range rule admitting and dropping none. The first review
+# holds the run to those. The online build may stop on drops.txt: a page that leaves records out loses the GBIF
+# photographs of those records too, as round 86's holders did; every line of it must be such a page's photograph.
+backup
+dossier --keys scripts/rebuild-r93.txt --offline --grid climate --bulk bulk --dry-run
+review Read the dry run's totals: "979 pages derived, nothing written; C change under this rule" (725 on 16 November), "climates: G gained, L lost, …" (192 and 15), and "records: +0 admitted on 0 pages, −0 dropped on 0 pages" (the range rule is not this round's).
+expect let P /^\s*([\d,]+) pages derived, nothing written/
+expect let C /nothing written; ([\d,]+) change under this rule/
+expect let G /climates: ([\d,]+) gained/
+expect let L /climates: [\d,]+ gained, ([\d,]+) lost/
+expect let A /records: \+([\d,]+) admitted/
+expect let D /admitted on [\d,]+ pages, .([\d,]+) dropped/
+expect P = 979
+expect C ~ 725 ±5%
+expect G >= 170
+expect L <= 20
+expect A = 0
+expect D = 0
+dossier --keys scripts/rebuild-r93.txt --grid climate --bulk bulk
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+review Read the --keys build's last line ("B built, K kept of 979; index now 48375 species"), the flowering fill's ("48375 pages read: N counted, …, M with no GBIF key, not counted", 32,100 counted and 599 with no key on 15 November: more counted and fewer without a key now) and the index's ("index: 48375 species").
+expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
+expect let F /^\s*([\d,]+) pages read: [\d,]+ counted/
+expect let N /pages read: ([\d,]+) counted/
+expect let M /, ([\d,]+) with no GBIF key, not counted/
+expect let I /index: ([\d,]+) species/
+expect B >= 970
+expect F = 48375
+expect N >= 32100
+expect M <= 599
+expect I = 48375
+upload
+live-check

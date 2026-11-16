@@ -84,23 +84,26 @@ describe('the words, and the file', () => {
   // it. 921 pages read no key in the build; 909 have their reason here, and the other 12 are the pages whose lines became
   // keyless after that file was made, which the rule now gives keys the build's download did not ask (named in the header).
   // Round eighty-five (the merge): the 18 pages of decision 6 run by the same rule, 14 of them lumped (here) and 4 reading
-  // a key: 923 of the 935 that read no key, the same 12 apart.
-  it('scripts/extra-keys-kew-none.txt: 923 of the 935 that read no key, each once, none of them a page that reads keys', () => {
+  // a key: 923 of the 935 that read no key, the same 12 apart. Round ninety-three (the name spelt in another gender):
+  // 10 of them read a key now, 913 of the 925, the same 12 apart; on f382389 this FAILED with 913.
+  it('scripts/extra-keys-kew-none.txt: 913 of the 925 that read no key, each once, none of them a page that reads keys', () => {
     const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     const keyed = new Set(parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8')).map((k) => k.pageId));
     const text = readFileSync('scripts/extra-keys-kew-none.txt', 'utf8');
     const none = parseNoKeys(text);
-    expect(none.size).toBe(923);
+    expect(none.size).toBe(913);
     expect([...none.keys()].every((id) => keyless.has(id) && !keyed.has(id))).toBe(true);
-    expect(keyless.size - keyed.size).toBe(935);
+    expect(keyless.size - keyed.size).toBe(925);
     const later = [...keyless].filter((id) => !keyed.has(id) && !none.has(id));
     expect(later).toHaveLength(12);
     const header = text.split('\n').find((l) => l.startsWith('# Twelve'))!;
     expect(later.every((id) => header.includes(id))).toBe(true);
     const kinds = new Map<string, number>();
     for (const l of none.values()) kinds.set(l.kind, (kinds.get(l.kind) ?? 0) + 1);
-    expect(Object.fromEntries(kinds)).toEqual({ lumped: 657, none: 210, 'other-type': 46, 'other-author': 9, other: 1 });
+    // Round ninety-three: the 10 that read a key now, by the name in another gender, were 1 lumped, 5 none, 3 other-type
+    // and 1 other-author (657, 210, 46 and 9 before).
+    expect(Object.fromEntries(kinds)).toEqual({ lumped: 656, none: 205, 'other-type': 43, 'other-author': 8, other: 1 });
     // every page GBIF files a lumped page's names under is a page of the list, named as the list names it
     const listKeys = new Set(list.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : [])));
     const lumps = [...none.values()].filter((l) => l.kind === 'lumped');

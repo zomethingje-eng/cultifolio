@@ -39,7 +39,10 @@ const keyless = list.filter((e) => e.gbifKey == null && e.kewId);
 const reference = new Set(list.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : [])));
 console.log(`${listFile}: ${keyless.length} species without a GBIF key; the reference's ${reference.size} GBIF keys are the other pages`);
 const infra = args.includes('--infra-from-holder');
-const r = await listExtraKeys({ bulk, backbone, pages: keyless.map((e) => ({ key: null, id: e.pageId, name: { scientific: e.name, kew: { entry: e.kewId! } } })), merges: parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')), reference, infraFromHolder: infra });
+// Round ninety-three: with it, a species GBIF holds as a synonym of another page's plant too (`speciesFromHolder`);
+// `--no-species` lists round eighty-six's varieties and subspecies alone, as that round's list was made.
+const species = infra && !args.includes('--no-species');
+const r = await listExtraKeys({ bulk, backbone, pages: keyless.map((e) => ({ key: null, id: e.pageId, name: { scientific: e.name, kew: { entry: e.kewId! } } })), merges: parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')), reference, infraFromHolder: infra, speciesFromHolder: species });
 if (!r) { console.error(`no backbone export at ${backbone}`); process.exit(2); }
 /*
  * `--infra-from-holder` (round eighty-six; review D's D6, the owner to decide on the count): the keys a variety or subspecies
@@ -54,7 +57,9 @@ if (infra) {
   const byKeyName = new Map(list.flatMap((e) => (e.gbifKey != null ? [[e.gbifKey, `${e.name}${e.kewId ? ` (k${e.kewId})` : ''}`] as const] : [])));
   const nameOf = new Map(list.map((e) => [e.pageId, e.name] as const));
   writeFileSync(out, formatExtraKeys(taken, [
-    "Round eighty-six (review D's D6): the keys of varieties and subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder). Read by the build by default (another file with --infra-keys <file>); the page named in the last but one column leaves their records and photographs out.",
+    species
+      ? "Round eighty-six (review D's D6) and round ninety-three: the keys of varieties and subspecies, and of species GBIF holds as synonyms, that GBIF files under another page's key and Kew's synonymy places, same type, in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder). Read by the build by default (another file with --infra-keys <file>); the page named in the last but one column leaves their records and photographs out."
+      : "Round eighty-six (review D's D6): the keys of varieties and subspecies GBIF files under another page's key that Kew's synonymy places in a page without a GBIF key (scripts/kew-extra-keys.ts --infra-from-holder --no-species). Read by the build by default (another file with --infra-keys <file>); the page named in the last but one column leaves their records and photographs out.",
     `Made ${new Date().toISOString().slice(0, 10)} from ${listFile} and GBIF's backbone export (${backbone.replace(/^.*[\\/]/, '')}): ${taken.length} keys on ${new Set(taken.map((k) => k.pageId)).size} pages.`,
     "page id, key, GBIF's name, GBIF's status, Kew's row, Kew's reading, how, -, the keys under it not read (or -), the page key GBIF files it under, the keys under it read with it (or -)"
   ]));

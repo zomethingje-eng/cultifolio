@@ -85,8 +85,32 @@ export function abbreviates(gbif: string, kew: string): boolean {
   return parentheticalAuthor(gbif) === parentheticalAuthor(kew);
 }
 
+/**
+ * The same words with the last epithet's Latin ending in each other gender (round ninety-three): "rhus copallina" and
+ * "rhus copallinus" of "rhus copallinum"; "-is" and "-e"; "-er", "-ra" and "-rum" (ruber, rubra, rubrum) and "-er",
+ * "-era" and "-erum" (asper, aspera, asperum). An adjectival epithet agrees in gender with its genus, and a name spelt
+ * in another gender is the same name corrected (ICN Art. 23.5, 32.2), as Kew's orthographic variants are; GBIF's
+ * backbone keeps some apart (GBIF's "Rhus copallina L." holds 32,285 of iNaturalist's observations of Kew's Rhus
+ * copallinum L., round ninety-two's record). The stem must keep three letters; the words themselves are left out.
+ */
+export function genderForms(form: string): string[] {
+  const w = form.trim().split(' ');
+  const last = w[w.length - 1];
+  if (w.length < 2 || !/^[a-z]+$/.test(last ?? '')) return [];
+  const out = new Set<string>();
+  const add = (stem: string, ends: readonly string[]) => { if (stem.length >= 3) for (const e of ends) out.add(stem + e); };
+  let m: RegExpExecArray | null;
+  if ((m = /^(.+?)(us|um|a)$/.exec(last))) add(m[1], ['us', 'a', 'um']);
+  if ((m = /^(.+?)(is|e)$/.exec(last))) add(m[1], ['is', 'e']);
+  if ((m = /^(.+)er$/.exec(last))) { add(m[1], ['er', 'ra', 'rum']); add(m[1], ['er', 'era', 'erum']); }
+  if ((m = /^(.+?)(ra|rum)$/.exec(last))) add(m[1], ['er', 'ra', 'rum']);
+  if ((m = /^(.+?)(era|erum)$/.exec(last))) add(m[1], ['er', 'era', 'erum']);
+  out.delete(last);
+  return [...out].sort().map((e) => [...w.slice(0, -1), e].join(' '));
+}
+
 /** What Kew's file makes of one GBIF usage: the rows it reads to, or why none. */
-export type KewReading = { rows: KewRow[]; how: 'author' | 'abbreviation' | 'autonym' } | { rows: []; why: string };
+export type KewReading = { rows: KewRow[]; how: 'author' | 'abbreviation' | 'autonym' | 'gender' } | { rows: []; why: string };
 
 /** The Kew rows a GBIF usage is (`ownByAuthor` over Kew's rows of its words; misapplied rows are never a name's own). */
 export function kewReading(u: Usage, idx: Pick<KewNamesIndex, 'rowsOf'>, parentOf?: (key: number) => Usage | undefined): KewReading {
@@ -101,7 +125,14 @@ export function kewReading(u: Usage, idx: Pick<KewNamesIndex, 'rowsOf'>, parentO
   if (!form) return { rows: [], why: `a rank (${u.rank.toLowerCase()}) Kew's rows are not read at` };
   const rank = KEW_RANK[u.rank];
   const rows = idx.rowsOf(form).filter((r) => r.status !== 'Misapplied' && (!rank || r.rank === rank));
-  if (!rows.length) return { rows: [], why: 'Kew holds no row of these words' };
+  if (!rows.length) {
+    // Round ninety-three: Kew holds no row of GBIF's words, but holds them with the epithet in another gender, by the same
+    // author: the same name (`genderForms`). Read only where every such row by that author is of one form of the words,
+    // so the ending decides nothing between two names.
+    const by = genderForms(form).map((g) => ({ g, own: ownByAuthor(idx.rowsOf(g).filter((r) => r.status !== 'Misapplied' && (!rank || r.rank === rank)), u.author || undefined, (r) => r.authors) })).filter((x) => x.own.length);
+    if (u.author && by.length === 1) return { rows: by[0].own, how: 'gender' };
+    return { rows: [], why: 'Kew holds no row of these words' };
+  }
   const own = ownByAuthor(rows, u.author || undefined, (r) => r.authors);
   if (own.length) return { rows: own, how: 'author' };
   if (rows.length === 1 && abbreviates(u.author, rows[0].authors)) return { rows, how: 'abbreviation' };
@@ -154,7 +185,8 @@ export interface ExtraKey {
   except?: number[];
   /**
    * Round eighty-six (review D's D6; `infraFromHolder`): the reference page's GBIF key under which GBIF files this key, a
-   * variety or subspecies Kew's synonymy places in this page's plant. That page leaves out the records of this key and of
+   * variety or subspecies (or, round ninety-three's `speciesFromHolder`, a species GBIF holds as a synonym) Kew's synonymy
+   * places in this page's plant. That page leaves out the records of this key and of
    * `with`, the keys GBIF files under it that this page reads too; this page reads them.
    */
   from?: number;
@@ -184,7 +216,7 @@ const statusWord = (r: KewRow) => (r.status === 'Accepted' ? 'accepted' : r.stat
  * (a page merged away is not one), `holders` maps a key to the reference pages GBIF files under it, `merged` a merged
  * page's key to its old address and `into` to the page it joins.
  */
-export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map(), opts: { infraFromHolder?: boolean } = {}): { keys: ExtraKey[]; refused: Refused[] } {
+export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'children' | 'under' | 'rowsOf'>, bb: Backbone, reference: ReadonlySet<number>, holders: ReadonlyMap<number, number[]>, merged: ReadonlyMap<number, string> = new Map(), into: ReadonlyMap<number, number | string> = new Map(), opts: { infraFromHolder?: boolean; speciesFromHolder?: boolean } = {}): { keys: ExtraKey[]; refused: Refused[] } {
   const keys: ExtraKey[] = [], refused: Refused[] = [];
   if (!page.entry) return { keys, refused };
   const plant = plantOf(page.entry, idx);
@@ -193,6 +225,8 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
   for (const id of plant) { const r = idx.byId.get(id); if (r) names.add(words(r.name)); for (const s of idx.under.get(id) ?? []) if (s.status !== 'Misapplied') names.add(words(s.name)); }
   // The autonyms of its species names ("ficaria verna subsp. verna"): Kew writes no row of them, GBIF may file records under one.
   for (const n of [...names]) { const w = n.split(' '); if (w.length === 2) for (const m of ['subsp.', 'var.', 'f.']) names.add(`${w[0]} ${w[1]} ${m} ${w[1]}`); }
+  // Round ninety-three: and each in another gender (`genderForms`), which `kewReading` reads back to Kew's row by its author.
+  for (const n of [...names]) for (const g of genderForms(n)) names.add(g);
   const seen = new Set<number>(page.key != null ? [page.key] : []);
   const pageOf = { page: page.key ?? 0, ...(page.key == null && page.id ? { pageId: page.id } : {}) };
   const entry = idx.byId.get(page.entry);
@@ -224,8 +258,15 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     // page's key, which Kew's synonymy places in this page's plant (by the type rule below), is this page's key, and that
     // page leaves its records out (`from`): San Pedro's Trichocereus macrogonus var. pachanoi (11093098), GBIF's key under
     // Echinopsis macrogona (3952140), Kew's homotypic synonym of Echinopsis pachanoi. Matched by identifier, as every extra
-    // key is; never a species, never a key that is itself a page.
-    const fromHolder = opts.infraFromHolder && at !== undefined && at !== u.key && u.rank !== 'SPECIES' && up.slice(1).filter((k) => reference.has(k)).length === 1 ? at : undefined;
+    // key is; a species only by round ninety-three's `speciesFromHolder`, below; never a key that is itself a page.
+    // Round ninety-three (`speciesFromHolder`; round ninety-two's record, the pages sharply apart): a species too, where GBIF
+    // holds it as a synonym of the other page's plant. iNaturalist files its observations under the species' own name, so
+    // round eighty-six's varieties alone left most of them on the other page: Oxalis smalliana R.Knuth (3626515), GBIF's
+    // synonym of Oxalis oregana, Kew's species of its own, held 7,996 observations annotated flowering, counted on Oxalis
+    // oregana; the page of Oxalis smalliana read only GBIF's Oxalis oregana var. smalliana. Never a species GBIF accepts
+    // (that is no other page's to give), and never by the words alone: the type rule below holds as it does for a variety.
+    const byRank = u.rank !== 'SPECIES' ? opts.infraFromHolder : opts.speciesFromHolder && isSynonym(u.status);
+    const fromHolder = byRank && at !== undefined && at !== u.key && up.slice(1).filter((k) => reference.has(k)).length === 1 ? at : undefined;
     if (at !== undefined && fromHolder === undefined) return { why: at === u.key ? 'it is another page of this reference' : `GBIF files it under key ${at}, another page of this reference` };
     const holds = (holders.get(u.key) ?? []).filter((k) => k !== page.key);
     if (holds.length) return { why: `GBIF files another page of this reference under it (${holds.join(', ')})` };
@@ -309,6 +350,7 @@ export function noKeyFor(page: PageIn & { id: string }, idx: Pick<KewNamesIndex,
   for (const id of plant) { const x = idx.byId.get(id); if (x) own.add(words(x.name)); for (const s of idx.under.get(id) ?? []) if (s.status !== 'Misapplied') own.add(words(s.name)); }
   const names = new Set(own);
   for (const n of [...own]) { const w = n.split(' '); if (w.length === 2) for (const m of ['subsp.', 'var.', 'f.']) names.add(`${w[0]} ${w[1]} ${m} ${w[1]}`); }
+  for (const n of [...names]) for (const g of genderForms(n)) names.add(g); // as `extraKeysFor` reads them (round ninety-three)
   const seen = new Set<number>(page.key != null ? [page.key] : []);
   const lumped: Array<{ u: Usage; at: number; own: boolean }> = [], otherType: Usage[] = [], proParte: Usage[] = [], author: Usage[] = [], other: Usage[] = [];
   let any = false;
@@ -369,13 +411,24 @@ export function parseNoKeys(text: string): Map<string, NoKeyLine> {
   return out;
 }
 
+/**
+ * The plant a key's Kew reading names, for the words of the page that leaves its records out: the entry a name is filed
+ * under ("Echinopsis pachanoi (Britton & Rose) H.Friedrich & G.D.Rowley" of "… (synonym under Echinopsis pachanoi …)"),
+ * or the name itself where Kew accepts it (round ninety-three: a species read from another page's, "Oxalis smalliana
+ * R.Knuth (accepted)", which the old words cut to "Oxalis smalliana R.Knuth (accepted").
+ */
+export function kewPlantWords(kewLabel: string): string {
+  if (/ \(accepted\)$/.test(kewLabel)) return kewLabel.replace(/ \(accepted\)$/, '');
+  return kewLabel.replace(/^.*\((?:[a-z]+) under /, '').replace(/\)$/, '');
+}
+
 /** The words the build and the page say of an extra key's Kew reading. */
 export function extraWhy(x: Pick<ExtraKey, 'kewLabel' | 'how'>): string {
   // A key read because the owner merged its page here (round eighty, A), not because Kew's file reads it so.
   // Said to a reader of the page, with no file of the repository in it (round eighty-four; A6e, S7): the list is named in
   // the build's own log and in /about/how, not on a species page.
   if (x.how === 'merged') return 'the key of a page merged into this one';
-  const how = x.how === 'abbreviation' ? ', its author read as an abbreviation of Kew\'s' : x.how === 'autonym' ? ', an autonym of that name' : '';
+  const how = x.how === 'abbreviation' ? ', its author read as an abbreviation of Kew\'s' : x.how === 'autonym' ? ', an autonym of that name' : x.how === 'gender' ? ', the same name with its epithet spelt in another gender' : '';
   return `Kew's file holds it as ${x.kewLabel}${how}`;
 }
 

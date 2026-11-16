@@ -288,7 +288,7 @@ import { offlineFetcher, carryRederivedRows, carriedRow, carriedDetail, literatu
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
 import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, wikidataRetryList, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 import { proofByName } from '../src/lib/dossier/summary-proof';
-import { parseExtraKeys, formatExtraKeys, byPage, byPageId, withKeysUnder, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
+import { parseExtraKeys, formatExtraKeys, byPage, byPageId, withKeysUnder, kewPlantWords, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
 import { listExtraKeys } from './extra-keys-list';
 import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/clean';
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
@@ -908,7 +908,7 @@ const givenAwayOf = new Map<number, { keys: Set<number>; words: string }>();
 for (const k of infraKeys) {
   const g = givenAwayOf.get(k.from!) ?? { keys: new Set<number>(), words: '' };
   for (const x of [k.key, ...(k.with ?? [])]) g.keys.add(x);
-  g.words = [g.words, `of GBIF's key ${k.key}, ${k.label}${k.with?.length ? `, and of the ${k.with.length} key${k.with.length === 1 ? '' : 's'} GBIF files under it,` : ''} left out: Kew's file holds it as ${k.kewLabel.replace(/^.*\((?:synonym|invalid) under /, '').replace(/\)$/, '')}, whose page (${k.pageId}) reads them`].filter(Boolean).join('; ');
+  g.words = [g.words, `of GBIF's key ${k.key}, ${k.label}${k.with?.length ? `, and of the ${k.with.length} key${k.with.length === 1 ? '' : 's'} GBIF files under it,` : ''} left out: Kew's file holds it as ${kewPlantWords(k.kewLabel)}, whose page (${k.pageId}) reads them`].filter(Boolean).join('; ');
   givenAwayOf.set(k.from!, g);
 }
 /**
