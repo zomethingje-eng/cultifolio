@@ -221,7 +221,9 @@ describe("r92a 6: the page's words, the record, the carry", () => {
   });
   it("twelve zeros said as the download's answer, never as a plant that does not flower", () => {
     const h = html({ dossier: { ids: { gbif: 10 }, flowering: { ...gbif, months: Array(12).fill(0) } } });
-    expect(h).toContain("No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated flowering, in GBIF's download.");
+    // On b9963f7: FAILED. The sentence said none "in GBIF's download"; on Peucedanum palustre (GBIF files iNaturalist's
+    // 2,893 observations of it under Apiaceae) the download holds them, under the family, not under the page's keys.
+    expect(h).toContain("No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated flowering under this page's GBIF keys, in GBIF's download.");
     expect(h).not.toMatch(/does not flower|\bnone\b/i);
   });
   it('"not asked" says why: no key, or not counted yet (a page reading other keys has one)', () => {

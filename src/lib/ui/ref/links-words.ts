@@ -85,7 +85,7 @@ export const floweringWhat = (source: 'gbif' | 'api') =>
 /** Twelve months of nothing, said with its source (rule 2: never "does not flower"). */
 export const floweringZero = (source: 'gbif' | 'api') =>
   source === 'gbif'
-    ? "No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated flowering, in GBIF's download."
+    ? "No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated flowering under this page's GBIF keys, in GBIF's download."
     : 'No research-grade observation of a wild plant is annotated flowering on iNaturalist.';
 
 /** Whose months the strip shows. */

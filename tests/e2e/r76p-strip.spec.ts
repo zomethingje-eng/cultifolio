@@ -110,9 +110,14 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // Round ninety-one: "Changed lately" opens with round 91's two lines (the icon), shorter than round 87's they replace there,
 // so everything under it is 44 px higher at 1280 (21 at 1024), measured in Chromium; on 0812e7b the base was 1113, 1316,
 // 1330, 1471 (1135, 1327, 1341, 1482 at 1024). Tiles and gaps unchanged.
+// Round ninety-two: "Changed lately" holds round 92's two lines (flowering from GBIF's download), longer than round 91's
+// and round 87's they push down and off, so everything under it is 44 px lower at 1280 and 65 at 1024 (a line more where
+// the column is narrower). Measured in Chromium in the launch gate of 15 November 2026 on b9963f7 with round 92's
+// /changes line (the base before: 1069, 1272, 1286, 1427 at 1280; 1114, 1305, 1319, 1461 at 1024); WebKit and Firefox
+// 1372, 1386, 1527 to 1528 and tiles 157 × 183 at 1024, within the 2 px. Tiles unchanged; nothing else in the test moved.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1069, stripBottom: 1272, searchTop: 1286, rowTop: 1427, tile: [172, 193] },
-  '1024': { stripTop: 1114, stripBottom: 1305, searchTop: 1319, rowTop: 1461, tile: [155, 182] }
+  '1280': { stripTop: 1113, stripBottom: 1316, searchTop: 1330, rowTop: 1471, tile: [172, 193] },
+  '1024': { stripTop: 1179, stripBottom: 1370, searchTop: 1384, rowTop: 1526, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

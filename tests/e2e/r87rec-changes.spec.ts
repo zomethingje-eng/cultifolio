@@ -7,7 +7,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { ready } from './helpers/smoke';
-import { R87_LINES, R87_LIVE_STAGE } from '../../src/lib/changes/rounds';
+import { R87_LINES, R87_LIVE_STAGE, changedLately } from '../../src/lib/changes/rounds';
 
 const live = R87_LINES.filter((l) => l.stage <= R87_LIVE_STAGE).map((l) => l.text);
 const later = R87_LINES.filter((l) => l.stage > R87_LIVE_STAGE).map((l) => l.text);
@@ -25,12 +25,19 @@ test('r87rec 1: /changes lists round 87, dated, with its live stages\' lines and
   for (const t of later) expect(all, t).not.toContain(t);
 });
 
-// Round ninety-one: "Changed lately" opens on round 91's lines; round 87's first live line follows them.
-test('r87rec 2: the front page\'s "Changed lately" holds round 87\'s first live line and says no later stage\'s', async ({ page }) => {
+// Round ninety-two: "Changed lately" holds the four newest lines, round 92's two then round 91's two, so round 87's first
+// live line, which round ninety-one's version of this test found under round 91's, has passed off the front page (it is
+// on /changes, r87rec 1). The test now holds the box to `changedLately(4)`, which the front page reads, line for line,
+// rather than to whichever round's line is fourth this week; and still to no later stage's line of round 87.
+// On b9963f7 plus round 92's /changes line: FAILED, round 87's line looked for and not there.
+test('r87rec 2: the front page\'s "Changed lately" holds the newest lines in order and says no later stage\'s of round 87', async ({ page }) => {
   await page.goto('/');
   await ready(page);
   const lines = page.locator('.lateline');
-  await expect(lines.filter({ hasText: live[0] })).toHaveCount(1);
+  const newest = changedLately(4);
+  expect(newest.map((l) => l.round)).toEqual([92, 92, 91, 91]);
+  await expect(lines).toHaveCount(4);
+  for (const [i, l] of newest.entries()) await expect(lines.nth(i)).toContainText(l.text);
   const all = (await lines.allInnerTexts()).join('\n');
   for (const t of later) expect(all, t).not.toContain(t);
 });

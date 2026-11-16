@@ -33,7 +33,7 @@ The plan and its decisions are docs/PLAN-92.md (the owner asked Claude to decide
    iNaturalist shares them with GBIF: GBIF.org (<day>) GBIF Occurrence Download https://doi.org/<doi>: N observations,
    research grade, openly licensed (CC0, CC BY or CC BY-NC), counted under the page's GBIF keys", the DOI the link (GBIF's
    citation form). None: "No research-grade observation of a wild plant that iNaturalist shares with GBIF is annotated
-   flowering, in GBIF's download." Not asked: "this page has no GBIF key to count its observations under", or "this page
+   flowering under this page's GBIF keys, in GBIF's download." Not asked: "this page has no GBIF key to count its observations under", or "this page
    has not been counted from GBIF's download yet". A page still on the API's count keeps its line until the fill runs.
 5. **The about pages** (rule 5): /about/how's rules for flowering (the download, the keys, none, the monthly refresh, the
    API's count on a page not yet counted, which is higher because it holds observations iNaturalist does not share);
@@ -45,7 +45,7 @@ The plan and its decisions are docs/PLAN-92.md (the owner asked Claude to decide
    the fill, a review on its own line, the index, the upload, the live check. The daily plan runs `--fill bhl` alone, and
    `--fill flowering` asks nothing and says why (exit 2), so nothing puts the API's count back.
 
-Not changed: no /changes line yet. Readers see nothing new until the fill is uploaded; the line goes in with that upload.
+The /changes line went in after the fill was uploaded (below), so it never said what a reader could not yet see.
 
 ## Tests
 
@@ -109,3 +109,19 @@ Not changed: no /changes line yet. Readers see nothing new until the fill is upl
   Leucopogon parviflorus, Opuntia cespitosa, azurea and bonaerensis, Libanotis pyrenaica, Peucedanum palustre and
   alsaticum) and shapes far apart (Melaleuca citrina 0.18, Apocynum venetum 0.35, Monardella odoratissima 0.68), the
   cases decision 2 expects. Every stop condition holds.
+- 15 November 2026, the first run (scripts/corpus-plan-r92-flowering.txt, the run on the empty download set aside by
+  hand and noted in corpus-step.log): the first review passed by its 11 checks; the 25 pages sharply apart read with
+  Claude, asking GBIF where iNaturalist's observations under each name are filed. Four kinds: the same plant under
+  another GBIF key (Rhus copallinum, 32,285 as "Rhus copallina"; Libanotis pyrenaica as Seseli libanotis subsp.
+  libanotis; Opuntia cespitosa, azurea and bonaerensis and Vaccinium fuscatum lumped by GBIF into another species);
+  names GBIF matched only to a genus or a family (Peucedanum palustre and alsaticum to Apiaceae, Veronica umbrosa,
+  Lespedeza frutescens, Varronia globosa, Apocynum venetum); another plant's observations under a page's key (Oxalis
+  smalliana's 7,996 under Oxalis oregana, whose download count is 2,147 to the API's 1,167; Metrosideros angustifolia's
+  under Melaleuca citrina's key; Leucopogon parviflorus's under Leptecophylla parvifolia); and names iNaturalist does not
+  use (Nicoteba betonica, Morinda pubescens). The maps and ranges read the same keys, so none of this is new with
+  flowering; the fill went on (--go-on): 32,100 pages counted, 15,676 none, 599 no key, the index, the upload (corpus
+  3a670efa602351c1) and the live check, 23 of 23. Lamium purpureum live: 24,743 observations, citing
+  10.15468/dl.y8zpkp.
+- After it: the none sentence says "under this page's GBIF keys", since on the second kind the download holds the
+  observations under the family (/about/how says the same); the /changes line. Left for a round of its own: the keys
+  for the first kind (scripts/extra-keys.txt) and a rule for the third, which the `except` mechanism cannot split.

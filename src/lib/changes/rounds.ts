@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 92,
+    date: '2026-11-15',
+    lines: [
+      'Flowering months in the wild are counted for every species page at once, from one GBIF download of iNaturalist\'s research-grade observations, where before iNaturalist was asked a page at a time; each page cites the download by its DOI.',
+      'A page with none says it found none under its own GBIF keys: GBIF files some names under another plant, a genus or a family, and those observations are counted there, not here.'
+    ]
+  },
+  {
     n: 91,
     date: '2026-11-14',
     lines: [
