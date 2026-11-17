@@ -2,6 +2,7 @@
 # Made 2026-10-20 by scripts/kew-extra-keys.ts from scripts/species-list.txt (Kew's file of 2026-06-04) and GBIF's backbone export (simple.txt.gz): 1956 keys on 1415 of the 2327 pages without a GBIF key.
 # The merge, round eighty-five: the 18 pages of decision 6 (scripts/species-new-r85.txt) were run by the same script on 2026-10-31, with their names' usages read from GBIF's API (api.gbif.org/v1/species, the backbone dataset) in place of the export: 4 of them read a key of their own name and author, added below; the other 14 are in scripts/extra-keys-kew-none.txt.
 # Round ninety-three (2026-11-16): the difference the round's rule makes, applied to this file: scripts/kew-extra-keys.ts run on f382389's code and on the round's, from the same files, and only the lines that differ taken (59 added, 30 replaced, 111 removed, on 87 pages; the same name with its epithet in another gender, and what that reads).
+# Round ninety-four (2026-11-16, docs/PLAN-94.md): the list made again whole on 62e9343's code from the same files (1935 keys on 1442 pages) and taken whole but three lines: 24 keys on the 12 pages scripts/extra-keys-kew-none.txt said wait for the next refresh (round eighty's species list), round eighty-five's key not read under Viola stipularis (5665280, Viola fruticosa W.Becker, which Kew accepts), and k505095's 9574874 named as the merge it is. Held: the two merged keys the script lists and the build adds itself from scripts/merged-pages.txt (k2781125's 7530398; k2808164's 7281739, a key of the species list, which no line here may be); k505095's line for 9592399 (Ceropegia nubica), whose keys not read would replace the owner's (scripts/merged-pages.txt, except:3577721). 1932 keys on 1441 pages.
 # page id, key, GBIF's name, GBIF's status, Kew's row (plant_name_id), Kew's reading, how, - , the keys under it not read (or -)
 k3311876	7707106	Sorbus ×thuringiaca (Nyman) Schönach.	ACCEPTED	2992433	Sorbus × thuringiaca (Nyman) Fritsch (synonym under × Arsorbus thuringiaca (Nyman) Z.H.Feng & Su Liu)	filed	-	-
 k3311876	9471386	Hedlundia ×thuringiaca (Ilse ex Nyman) Sennikov & Kurtto	ACCEPTED	3015014	Hedlundia × thuringiaca (Nyman) Sennikov & Kurtto (synonym under × Arsorbus thuringiaca (Nyman) Z.H.Feng & Su Liu)	filed	-	3012797,3012968,5362595,5362999,5365074,7617898,7810438,7876385,8146634,8404723,9408784,12045486,12285873,12290899,12304121,12336690,12355763,12388481
@@ -13,11 +14,13 @@ k2609622	7278751	Hibiscus rhodopetalus (F.Muell.) F.Muell. ex Benth.	SYNONYM	285
 k2609622	12337623	Hibiscus rhodopetalus (F.Muell.) F.Muell.	HOMOTYPIC_SYNONYM	2850422	Hibiscus rhodopetalus (F.Muell.) F.Muell. ex Benth. (synonym under Abelmoschus rhodopetalus F.Muell.)	filed	-	-
 k2610572	7279441	Bastardiopsis densiflora (Hook. & Arn.) Hassl.	ACCEPTED	2670994	Bastardiopsis densiflora (Hook. & Arn.) Hassl. (synonym under Abutilon densiflorum (Hook. & Arn.) Walp.)	filed	-	3939109,3939370
 k2611058	3939098	Bastardiopsis eggersii (Baker fil.) Fuertes & Fryxell	ACCEPTED	2670996	Bastardiopsis eggersii (Baker f.) Fuertes & Fryxell (synonym under Abutilon virginianum Krapov.)	filed	-	-
+k2938230	5371172	Acaena echinata Nees	ACCEPTED	2938230	Acaena echinata Nees (accepted)	entry	-	5370785,5371167,5371168,5371173,5371174,5371176,11016656
 k3315941	3084975	Nototrichium sandwicense (A.Gray) Hillebr.	ACCEPTED	2380288	Nototrichium sandwicense (A.Gray) Hillebr. (synonym under Achyranthes sandwicensis (A.Gray) Di Vincenzo, Berends., Wondafr. & Borsch)	filed	-	3084996,3673103,3674487,3675352,9173385,11277429
 k2922375	7336856	Gnaphalium saturejoides Lam.	SYNONYM	2922376	Gnaphalium saturejoides Lam. (synonym under Achyrocline saturejoides (Lam.) DC.)	filed	-	-
 k2922375	10718763	Stenocline saturejoides (Lam.) Benth. & Hook.fil. ex B.D.Jacks.	SYNONYM	3217145	Stenocline saturejoides (Lam.) Benth. & Hook.f. ex B.D.Jacks. (synonym under Achyrocline saturejoides (Lam.) DC.)	filed	-	-
 k2922375	10939797	Stenocline saturejoides (Lam.) Benth. & Hook.fil.	HOMOTYPIC_SYNONYM	3217145	Stenocline saturejoides (Lam.) Benth. & Hook.f. ex B.D.Jacks. (synonym under Achyrocline saturejoides (Lam.) DC.)	filed	-	-
 k2621136	7807931	Adansonia fony Baill.	SYNONYM	2621136	Adansonia fony Baill. (accepted)	entry	-	-
+k3003699	7830017	Adelinia grande (Douglas ex Lehm.) J.I.Cohen	ACCEPTED	3003699	Adelinia grandis (Douglas ex Lehm.) J.I.Cohen (accepted)	gender	-	4063805,4064066,10991044
 k2621176	7379873	Paracaryum coelestinum (Lindl.) Benth. ex C.B.Clarke	ACCEPTED	2404604	Paracaryum coelestinum (Lindl.) Benth. ex C.B.Clarke (synonym under Adelocaryum coelestinum (Lindl.) Brand)	filed	-	-
 k2621997	2961765	Patagonium arboreum (Bertero) Kuntze	SYNONYM	2531352	Patagonium arboreum (Bertero) Kuntze (synonym under Adesmia arborea Bertero)	filed	-	-
 k2621997	5630354	Adesmia berteroniana Steud.	SYNONYM	2622018	Adesmia berteroniana Steud. (illegitimate under Adesmia arborea Bertero)	filed	-	-
@@ -46,6 +49,8 @@ k2629560	5578253	Schmidelia timoriensis DC.	SYNONYM	2582363	Schmidelia timoriens
 k2629560	7610420	Allophylus timoriensis (DC.) Blume	SYNONYM	2629560	Allophylus timoriensis (DC.) Blume (accepted)	entry	-	-
 k297937	9606936	Aloidendron sabaeum (Schweinf.) Boatwr. & J.C.Manning	ACCEPTED	487748	Aloidendron sabaeum (Schweinf.) Boatwr. & J.C.Manning (synonym under Aloe sabaea Schweinf.)	filed	-	2777707
 k391375	4152614	Cornucopiae cucullatum L.	ACCEPTED	405769	Cornucopiae cucullatum L. (synonym under Alopecurus cucullatus (L.) Raspail)	filed	-	-
+k3320793	3598702	Cyathea dealbata (G.Forst.) Sw.	SYNONYM	3145423	Cyathea dealbata (G.Forst.) Sw. (synonym under Alsophila dealbata (G.Forst.) Corda)	filed	-	-
+k3320793	5650675	Polypodium dealbatum G.Forst.	SYNONYM	3158918	Polypodium dealbatum G.Forst. (synonym under Alsophila dealbata (G.Forst.) Corda)	filed	-	-
 k7016	7316876	Alstonia constricta F.Muell.	SYNONYM	7016	Alstonia constricta F.Muell. (accepted)	entry	-	-
 k2631715	3936909	Hibiscus hakeifolius Giord.	ACCEPTED	2849958	Hibiscus hakeifolius Giord. (synonym under Alyogyne hakeifolia (Giord.) Alef.)	filed	-	3935297,3935493,3935939,3937983,3938298,3938735,3938873,3940961,3940971,7490428,8531557
 k7326	3615248	Alyxia ilicifolia subsp. magnifolia (Bailey) P.I.Forst.	ACCEPTED	7286	Alyxia ilicifolia subsp. magnifolia (F.M.Bailey) P.I.Forst. (synonym under Alyxia magnifolia F.M.Bailey)	filed	-	-
@@ -88,6 +93,8 @@ k220654	9245056	Ceropegia europaea (Guss.) Bruyns	ACCEPTED	525074	Ceropegia euro
 k220669	9407136	Ceropegia joannis (Maire) Bruyns	ACCEPTED	525076	Ceropegia joannis (Maire) Bruyns (synonym under Apteranthes joannis (Maire) Plowes)	filed	-	-
 k2645376	8002649	Arabis bellidifolia Crantz	HETEROTYPIC_SYNONYM	2645376	Arabis bellidifolia Crantz (accepted)	entry	-	-
 k2645919	5374967	Arabis mollis Steven	SYNONYM	2645919	Arabis mollis Steven (accepted)	entry	-	-
+k2647107	3601459	Arctomecon californicum Torr. & Frém.	ACCEPTED	2647107	Arctomecon californica Torr. & Frém. (accepted)	gender	-	-
+k2647463	8317978	Arctostaphylos alpinus (L.) Spreng.	ACCEPTED	2647118	Arctostaphylos alpina (L.) Spreng. (synonym under Arctous alpina (L.) Nied.)	gender	-	4170829,7775521,8107199,8176133
 k2647469	2882596	Arctostaphylos rubra (Rehder & E.H.Wilson) Fernald	ACCEPTED	2647366	Arctostaphylos rubra (Rehder & E.H.Wilson) Fernald (synonym under Arctous rubra (Rehder & E.H.Wilson) Nakai)	filed	-	2882599,4165153
 k3322820	5294572	Wallichia disticha T.Anderson	ACCEPTED	214130	Wallichia disticha T.Anderson (synonym under Arenga disticha (T.Anderson) Jeanson)	filed	-	5294573
 k3323237	5294575	Wallichia oblongifolia Griff.	ACCEPTED	214136	Wallichia oblongifolia Griff. (synonym under Arenga oblongifolia (Griff.) Jeanson)	filed	-	2738157,5294576,8241702
@@ -120,6 +127,7 @@ k3322668	9248585	Karpatiosorbus pseudobakonyensis (Kárpáti) Sennikov & Kurtto	
 k3322956	3012292	Sorbus subfusca (Ledeb. ex Nordm.) Boiss.	ACCEPTED	2992399	Sorbus subfusca (Ledeb. ex Nordm.) Boiss. (synonym under Aria subfusca (Ledeb. ex Nordm.) Mosyakin, Fedor. & McNeill)	filed	-	3012293,3012296,3012704,3012759,3012780,3012798,3012877,3013166,3013190,5365059,7607586,8330575,9665404,9696103,9746938,9756021,9775779,10956749,10966844,10979036,11082940,11094989,11109146
 k2942083	7754719	Sorbus sudetica (Tausch) Fritsch	ACCEPTED	2992410	Sorbus sudetica (Tausch) Bluff, Nees & Schauer (synonym under Aria sudetica (Tausch) Beck)	filed	-	-
 k2942083	9238979	Majovskya sudetica (Tausch) Sennikov & Kurtto	ACCEPTED	3015333	Majovskya sudetica (Tausch) Sennikov & Kurtto (synonym under Aria sudetica (Tausch) Beck)	filed	-	3013229,3015611,3025094,7789378,12307451,12330599,12388478
+k2651161	8478516	Isotrema arborea (Linden) Eb.Fisch.	ACCEPTED	3009516	Isotrema arboreum (Linden) Eb.Fisch. (synonym under Aristolochia arborea Linden)	gender	-	3588814,11045180
 k3008592	10944407	Isotrema bidoupense (T.V.Do) X.X.Zhu, S.Liao & J.S.Ma	ACCEPTED	3235965	Isotrema bidoupense (T.V.Do) X.X.Zhu, S.Liao & J.S.Ma (synonym under Aristolochia bidoupensis T.V.Do)	filed	-	-
 k2651259	10954710	Isotrema caulialatum (C.Y.Wu ex C.Y.Cheng & J.S.Ma) X.X.Zhu, S.Liao & J.S.Ma	ACCEPTED	3235962	Isotrema caulialatum (C.Y.Wu ex C.Y.Cheng & J.S.Ma) X.X.Zhu, S.Liao & J.S.Ma (synonym under Aristolochia caulialata C.Y.Wu ex C.Y.Cheng & J.S.Ma)	filed	-	-
 k2651325	10900093	Isotrema cucurbitifolium (Hayata) X.X.Zhu, S.Liao & J.S.Ma	ACCEPTED	3236145	Isotrema cucurbitifolium (Hayata) X.X.Zhu, S.Liao & J.S.Ma (synonym under Aristolochia cucurbitifolia Hayata)	filed	-	-
@@ -302,6 +310,7 @@ k2606579	9465030	Nitrosalsola vermiculata (L.) Theodorova	ACCEPTED	3011083	Nitro
 k2701307	5706003	Berrya cubensis (Griseb.) Kosterm.	ACCEPTED	2675073	Berrya cubensis (Griseb.) M.Gómez (synonym under Carpodiptera cubensis Griseb.)	filed	-	4259315,4261859,4261871,4261892,4261916,4261928,5705999,5706002,5706007
 k488274	7226230	Osmanthus americanus (L.) Knobl., 1933	DOUBTFUL	355029	Osmanthus americanus (L.) A.Gray (synonym under Cartrema americanum (L.) G.L.Nesom)	filed	-	-
 k488274	7374337	Cartrema americana (L.) G.L.Nesom	ACCEPTED	488274	Cartrema americanum (L.) G.L.Nesom (accepted)	gender	-	3683146,3683840
+k488279	9260733	Cartrema floridana (Chapm.) G.L.Nesom	ACCEPTED	488279	Cartrema floridanum (Chapm.) G.L.Nesom (accepted)	gender	-	3683160,3683851,3684055,6433179,7954067
 k2701867	3054304	Carya tomentosa (Lam.) Nutt.	SYNONYM	2701867	Carya tomentosa (Lam.) Nutt. (accepted)	entry	-	-
 k2701867	4205414	Carya alba subsp. tomentosa (Lam. ex Poir.) Schwer.	SYNONYM	2701745	Carya alba subsp. tomentosa (Lam.) Schwer. (synonym under Carya tomentosa (Lam.) Nutt.)	filed	-	-
 k2701867	4205632	Juglans tomentosa Lam.	SYNONYM	2331727	Juglans tomentosa Lam. (synonym under Carya tomentosa (Lam.) Nutt.)	filed	-	-
@@ -392,6 +401,7 @@ k2727453	11082911	Dactylaena monandra (DC.) Soares Neto & Roalson	ACCEPTED	32438
 k2727455	9649267	Sieruela monophylla (L.) Roalson & J.C.Hall	ACCEPTED	3225060	Sieruela monophylla (L.) Roalson & J.C.Hall (synonym under Cleome monophylla L.)	filed	-	3871907,3872804,3872979,3873015,3873296,7896044,12379120
 k2727573	9778787	Sieruela rutidosperma (DC.) Roalson & J.C.Hall	ACCEPTED	3225040	Sieruela rutidosperma (DC.) Roalson & J.C.Hall (synonym under Cleome rutidosperma DC.)	filed	-	3054197,3871249,3872578,3872652,3873172,3873178,9646582
 k2727606	3871995	Cleoserrata speciosa (Raf.) Iltis	ACCEPTED	2606731	Cleoserrata speciosa (Raf.) Iltis (synonym under Cleome speciosa Raf.)	filed	-	3054229,3871555,3871977,3872478,3872487,3872644,3872750,3873356,3873503,7504922,8085821
+k2727610	3872451	Tarenaya spinosa (Jacq.) Raf.	ACCEPTED	2431243	Tarenaya spinosa (Jacq.) Raf. (synonym under Cleome spinosa Jacq.)	filed	-	3054203,3054218,3872430,3872617,3872860,3872864,3872962,3873363,3873403,7961903,8372281
 k2727648	3871569	Polanisia trachysperma Torr. & A.Gray	ACCEPTED	2409254	Polanisia trachysperma Torr. & A.Gray (synonym under Cleome trachysperma (Torr. & A.Gray) Pax & K.Hoffm.)	filed	-	-
 k2727658	3054267	Polanisia uniglandulosa (Cav.) DC.	ACCEPTED	2409252	Polanisia uniglandulosa (Cav.) DC. (synonym under Cleome uniglandulosa Cav.)	filed	-	-
 k2727669	6370562	Arivela viscosa (L.) Raf.	ACCEPTED	2652059	Arivela viscosa (L.) Raf. (synonym under Cleome viscosa L.)	filed	-	3054215,3871355,3871484,3871498,3871506,3871623,3871652,3871718,3872378,3872642,7393738,7505498,7606599,8197171,8416815,8682531,9026270,11244708,12283150
@@ -456,10 +466,12 @@ k2747401	7283705	Tephrocactus pentlandii (Salm-Dyck) Backeb.	SYNONYM	2432796	Tep
 k2747401	7284030	Opuntia pentlandii Salm-Dyck	SYNONYM	2391848	Opuntia pentlandii Salm-Dyck (synonym under Cumulopuntia pentlandii (Salm-Dyck) F.Ritter)	filed	-	-
 k2747401	7894664	Cactus pentlandii Lem.	DOUBTFUL	2689398	Cactus pentlandii (Salm-Dyck) Lem. (synonym under Cumulopuntia pentlandii (Salm-Dyck) F.Ritter)	filed	-	-
 k2747409	5624719	Puna subterranea (R.E.Fr.) R.Kiesling	ACCEPTED	2413822	Puna subterranea (R.E.Fr.) R.Kiesling (synonym under Cumulopuntia subterranea (R.E.Fr.) F.Ritter)	filed	-	3951824,3955962,10959798,11049767,12280067,12309904,12314719
+k303770	2865314	Cycnogeton procerum (R.Br.) Buchenau	ACCEPTED	303770	Cycnogeton procerus (R.Br.) Buchenau (accepted)	gender	-	-
 k2750365	3956732	Grusonia bigelovii (Engelm.) G.D.Rowley	SYNONYM	2607275	Grusonia bigelovii (Engelm.) G.D.Rowley (synonym under Cylindropuntia bigelovii (Engelm.) F.M.Knuth)	filed	-	-
 k2750365	5384077	Opuntia bigelovii Engelm.	SYNONYM	2393145	Opuntia bigelovii Engelm. (synonym under Cylindropuntia bigelovii (Engelm.) F.M.Knuth)	filed	-	-
 k2751903	7295152	Pardoglossum cheirifolium (L.) E.Barbier & Mathez	ACCEPTED	2412631	Pardoglossum cheirifolium (L.) E.Barbier & Mathez (synonym under Cynoglossum cheirifolium L.)	filed	-	4064005,4064407,4064413,4064438,4064490,4064563,4064598,4064741,4064896,4064912,7575751,7612901,8123120,8410120,8632337,9094869,9741539,12273050,12281298,12295489,12329345,12348284,12359398,12364547,12378929
 k2752016	4064484	Paracynoglossum lanceolatum (Forssk.) R.R.Mill	ACCEPTED	2412642	Paracynoglossum lanceolatum (Forssk.) R.R.Mill (synonym under Cynoglossum lanceolatum Forssk.)	filed	-	4060890,4062765,4062837,4062907,4063736,4064205,4065096,5660243,7682224,7801552,7979960,8320411,8408501,10930510,12270762,12313655,12348711,12354399
+k2752784	8245844	Cyphostemma lazum Desc.	ACCEPTED	2752784	Cyphostemma laza Desc. (accepted)	gender	-	7819567
 k2752880	7381475	Cyphostemma rupicolum (Gilg & M.Brandt) Desc.	ACCEPTED	2752880	Cyphostemma rupicola (Gilg & M.Brandt) Desc. (accepted)	gender	-	-
 k2756845	5523338	Wikstroemia aurantiaca (Diels) Domke	ACCEPTED	2465318	Wikstroemia aurantiaca (Diels) Domke (synonym under Daphne aurantiaca Diels)	filed	-	5523273,5523327,5523736,5523840,8049101,8233344
 k2756973	5524761	Wikstroemia gemmata (E.Pritz.) Domke	ACCEPTED	2466944	Wikstroemia gemmata (E.Pritz.) Domke (synonym under Daphne gemmata E.Pritz.)	filed	-	5523953
@@ -482,6 +494,9 @@ k2759162	3704231	Ectotropis alpina N.E.Br.	ACCEPTED	2784503	Ectotropis alpina N.
 k2759311	9407644	Daggodora sphalmanthoides (S.A.Hammer) S.A.Hammer	ACCEPTED	3009199	Daggodora sphalmanthoides (S.A.Hammer) S.A.Hammer (synonym under Delosperma sphalmanthoides S.A.Hammer)	filed	-	-
 k2759320	3708303	Corpuscularia taylorii (N.E.Br.) Schwantes	ACCEPTED	2738147	Corpuscularia taylorii (N.E.Br.) Schwantes (synonym under Delosperma taylorii (N.E.Br.) Schwantes)	filed	-	3706870,7878652
 k2759903	3033762	Delphinium formosum Boiss. & A.Huet	ACCEPTED	2759791	Delphinium formosum Boiss. & A.Huet (illegitimate under Delphinium huetianum Meikle)	filed	-	-
+k2760205	3033779	Delphinium patens Benth.	SYNONYM	2760205	Delphinium patens Benth. (accepted)	entry	-	-
+k2760205	3921674	Delphinium decorum var. patens A.Gray	SYNONYM	2759667	Delphinium decorum var. patens (Benth.) A.Gray (synonym under Delphinium patens Benth.)	filed	-	-
+k2760205	3926650	Delphinium tricorne var. patens (Benth.) Huth	SYNONYM	2760496	Delphinium tricorne var. patens (Benth.) Huth (synonym under Delphinium patens Benth.)	filed	-	-
 k3143697	12176864	Mucura bipinnata (Cav.) L.A.Triana & Sundue	ACCEPTED	3306356	Mucura bipinnata (Cav.) L.A.Triana & Sundue (synonym under Dennstaedtia bipinnata (Cav.) Maxon)	filed	-	2650783,5650349,5687200,5687228,7309843,7449587,11048110
 k3143710	12211674	Mucura globulifera (Poir.) L.A.Triana & Sundue	ACCEPTED	3306360	Mucura globulifera (Poir.) L.A.Triana & Sundue (synonym under Dennstaedtia globulifera (Poir.) Hieron.)	filed	-	3605128,3605285,3605437,3605571,3605738,3605808,3605976,3605989,5687248,5687257,5687269,5687307,5687312,5687336,7265922,7309850,8052391,8356670,10927615
 k3143711	12243617	Sitobolium hirsutum (Sw.) L.A.Triana & Sundue	ACCEPTED	3307757	Sitobolium hirsutum (Sw.) L.A.Triana & Sundue (synonym under Dennstaedtia hirsuta (Sw.) Mett. ex Miq.)	filed	-	3605493,3605548,3605937,3606389,4204621,7498298,7807580,8173464
@@ -530,7 +545,7 @@ k505083	9323440	Ceropegia dioscoridis (Lavranos) Bruyns	ACCEPTED	525137	Ceropegi
 k2781103	4202575	Echeveria corallina Alexander	SYNONYM	2781103	Echeveria corallina Alexander (accepted)	entry	-	-
 k2781125	4202274	Echeveria desmetiana De Smet ex É.Morren	SYNONYM	2781125	Echeveria desmetiana De Smet ex É.Morren (accepted)	entry	-	-
 k2781125	5688475	Cotyledon desmetiana (De Smet ex É.Morren) Hemsl.	SYNONYM	2740111	Cotyledon desmetiana (De Smet ex É.Morren) Hemsl. (synonym under Echeveria desmetiana De Smet ex É.Morren)	filed	-	-
-k505095	9574874	Ceropegia cereiformis (Hook.fil.) Bruyns	ACCEPTED	525085	Ceropegia cereiformis (Hook.f.) Bruyns (synonym under Echidnopsis cereiformis Hook.f.)	filed	-	3576635,3577724,3580158,3580375,3581398,7556116,7941908,8067791
+k505095	9574874	Ceropegia cereiformis (Hook.fil.) Bruyns	ACCEPTED	525085	Ceropegia cereiformis (Hook.f.) Bruyns (synonym under Echidnopsis cereiformis Hook.f.)	filed	ceropegia-cereiformis	3576635,3577724,3580158,3580375,3581398,7556116,7941908,8067791
 k505117	8154869	Echidnopsis kohaitoensis Plowes	SYNONYM	505117	Echidnopsis kohaitoensis Plowes (accepted)	entry	-	-
 k505156	3577721	Echidnopsis uraiqatiana Dioli	SYNONYM	505156	Echidnopsis uraiqatiana Dioli (accepted)	entry	-	-
 k3314382	9553289	Agave gracielae Galvan & Zamudio	ACCEPTED	489175	Agave gracielae Galvan & Zamudio (synonym under Echinoagave gracielae (Galvan & Zamudio) A.Vázquez, Rosales & García-Mor.)	filed	-	-
@@ -607,6 +622,7 @@ k3125956	3095499	Bahia ambrosioides Lag.	ACCEPTED	3125705	Bahia ambrosioides Lag
 k3325414	7268870	Philotheca buxifolia (Sm.) Paul G.Wilson	ACCEPTED	2541792	Philotheca buxifolia (Sm.) Paul G.Wilson (synonym under Erioseira buxifolia (Sm.) H.K.Orel & Bayly)	filed	-	3831560,3831570,5594014,5594019,8062047
 k3325714	7268825	Philotheca myoporoides (DC.) Bayly	ACCEPTED	2541490	Philotheca myoporoides (DC.) Bayly (synonym under Erioseira myoporoides (DC.) H.K.Orel & Bayly)	filed	-	3831118,3831138,3831147,3833938,3838275,5593287,5593557,5593575,5593592,5593666,5593933,5594094,7808628
 k3325449	3837989	Philotheca verrucosa (A.Rich.) Paul G.Wilson	ACCEPTED	2541726	Philotheca verrucosa (A.Rich.) Paul G.Wilson (synonym under Erioseira verrucosa (A.Rich.) H.K.Orel & Bayly)	filed	-	5593534,8357628
+k2800308	3048503	Erysimum humile Pers.	ACCEPTED	2800120	Erysimum humile Pers. (illegitimate under Erysimum ochroleucum (Haller f. ex Schleich.) DC.)	filed	-	3048505,3048509,3048510,3048511,3048513,3687837,3688700,3688904,3691881,3693001,3693222,3693421,3693892,5375638,5375639,5552583,5552678,5552681,7349399,7770701,8546816,9016745,9492995
 k2802296	8659284	Myrtillocactus chiotilla (F.A.C.Weber ex K.Schum.) P.V.Heath	ACCEPTED	2370379	Myrtillocactus chiotilla (F.A.C.Weber ex K.Schum.) P.V.Heath (synonym under Escontria chiotilla (F.A.C.Weber ex K.Schum.) Rose)	filed	-	3941616
 k2802523	7328839	Leucothoe grayana Maxim.	ACCEPTED	2349826	Leucothoe grayana Maxim. (synonym under Eubotryoides grayana (Maxim.) H.Hara)	filed	-	4173504,5684473,5684705,5684708,5684714,5684796,7400016,7465492,7483299,7534023,7537418,7578688,7651324,7654736,7724615,7847665,7900969,7922353,7968790,8021854,8040496,8087375,8291169,8365178,8368775,8528784,10924187,12268451,12316459
 k2802530	2882654	Eubotrys racemosa (L.) Nutt.	ACCEPTED	2802530	Eubotrys racemosus (L.) Nutt. (accepted)	gender	-	2882652,5333364,5333365,5683939,5684410,5684501,7223564,7533777,7918671
@@ -709,8 +725,13 @@ k2834774	3042551	Brassica repanda (Willd.) DC.	ACCEPTED	2682728	Brassica repanda
 k3220403	5396914	Vernonia colorata (Willd.) Drake	ACCEPTED	3052484	Vernonia colorata (Willd.) Drake (synonym under Gymnanthemum coloratum (Willd.) H.Rob. & B.Kahn)	filed	-	4213857,4213884,4213982,4245979,4247568,5396915,5691993,5692968,5699749,5700952,5700972,5701334,5701543,5701741,5702196,5703499,5703520,5704039,8260875,8459330,8582690
 k2836011	3981349	Leontice smirnowii Trautv.	SYNONYM	2344401	Leontice smirnowii Trautv. (synonym under Gymnospermium smirnowii (Trautv.) Takht.)	filed	-	-
 k2836011	4938127	Gymnospermium smirnowii (Trautv.) Takht.	SYNONYM	2836011	Gymnospermium smirnowii (Trautv.) Takht. (accepted)	entry	-	-
+k2836016	3791158	Maytenus oxyphylla Grierson & D.G.Long	SYNONYM	2369845	Maytenus oxyphylla Grierson & D.G.Long (illegitimate under Gymnosporia acuminata Hook.f. ex M.A.Lawson)	filed	-	-
+k2836016	7265620	Maytenus hookeri Loes.	SYNONYM	2370222	Maytenus hookeri Loes. (synonym under Gymnosporia acuminata Hook.f. ex M.A.Lawson)	filed	-	-
+k2836016	7662985	Gymnosporia acuminata Hook.fil. ex M.A.Lawson	HETEROTYPIC_SYNONYM	2836016	Gymnosporia acuminata Hook.f. ex M.A.Lawson (accepted)	entry	-	-
 k2836868	5586060	Gypsophila saligna Schrad.	SYNONYM	2836868	Gypsophila saligna Schrad. (accepted)	entry	-	-
 k495316	4091918	Handroanthus vellosoi (Toledo) Mattos	ACCEPTED	317159	Handroanthus vellosoi (Toledo) Mattos (synonym under Handroanthus speciosus (DC. ex Mart.) M.Nascim., J.F.B.Pastore & Zuntini)	filed	-	4092933,4093992
+k3234994	3100504	Diplopappus coronopifolius Less.	SYNONYM	3103067	Diplopappus coronopifolius Less. (synonym under Haplopappus glutinosus Cass.)	filed	-	-
+k3234994	8213611	Haplopappus glutinosus Cass.	SYNONYM	3234994	Haplopappus glutinosus Cass. (accepted)	entry	-	-
 k2840712	3721462	Myrsine heberdenia (Aiton) Roem. & Schult.	SYNONYM	2503352	Myrsine heberdenia Roem. & Schult. (illegitimate under Heberdenia bahamensis (Gaertn.) Sprague)	filed	-	-
 k2840712	3722395	Heberdenia bahamensis (Gaertn.) Sprague	SYNONYM	2840712	Heberdenia bahamensis (Gaertn.) Sprague (accepted)	entry	-	-
 k2840712	5557835	Ardisia bahamensis (Gaertn.) A.DC.	SYNONYM	2647582	Ardisia bahamensis (Gaertn.) A.DC. (synonym under Heberdenia bahamensis (Gaertn.) Sprague)	filed	-	-
@@ -874,6 +895,7 @@ k3226387	3084091	Echinocactus polycephalus Engelm. & J.M.Bigelow	ACCEPTED	278217
 k2852976	3084092	Echinocactus texensis Hopffer	ACCEPTED	2782367	Echinocactus texensis Hopffer (synonym under Homalocephala texensis (Hopffer) Britton & Rose)	filed	-	3941269,3943140,7444592,7551737,7947046,8268870,8384228
 k3326753	10738346	Sinosidus albescens (DC.) G.L.Nesom	ACCEPTED	3276925	Sinosidus albescens (DC.) G.L.Nesom (synonym under Homostylium albescens (DC.) Z.X.Fu)	filed	-	4234060,5387483,5387534,5387535,5387613,5692719,5694510,5694626,5695375,5695378,5695381,5698294,5698326,5698362,5704605,5929388,5929391,6296978,6296989,6710988,6710990,6710997,6710998,6710999,8021556,8330887,8838772,9185162,9325258,9369681,9591401,10681187,10751399,10767253,10805560,10831121,10859881,10875730,10885451,10898132
 k2853332	10967391	Hormathophylla ligustica (Breistr.) Španiel, Al-Shehbaz, D.A.German & Marhold	ACCEPTED	3009416	Hormathophylla ligustica (Breistr.) Španiel, Al-Shehbaz, D.A.German & Marhold (synonym under Hormathophylla halimifolia (Boiss.) P.Küpfer)	filed	-	3050726
+k506721	3577063	Eriostemma coronaria (Blume) Kloppenb. & Gilding	ACCEPTED	505227	Eriostemma coronarium (Blume) Kloppenb. & Gilding (synonym under Hoya coronaria Blume)	gender	-	7544686,7702062
 k506894	3577035	Eriostemma lauterbachii (K.Schum.) Kloppenb.	ACCEPTED	505230	Eriostemma lauterbachii (K.Schum.) Kloppenb. (synonym under Hoya lauterbachii K.Schum.)	filed	-	-
 k3002308	7891136	Hubera cerasoides (Roxb.) Chaowasku	ACCEPTED	2913975	Hubera cerasoides (Roxb.) Chaowasku (synonym under Huberantha cerasoides (Roxb.) Chaowasku)	filed	-	3156465
 k3002428	7425146	Hubera nitidissima (Dunal) Chaowasku	ACCEPTED	2914070	Hubera nitidissima (Dunal) Chaowasku (synonym under Huberantha nitidissima (Dunal) Chaowasku)	filed	-	3156457,3648731
@@ -895,12 +917,17 @@ k3140602	7383551	Phlegmariurus squarrosus (G.Forst.) Á.Löve & D.Löve	ACCEPTED
 k3140671	8156387	Phlegmariurus tetrastichus (Kunze) A.R.Field & Bostock	ACCEPTED	2997945	Phlegmariurus tetrastichus (Kunze) A.R.Field & Bostock (synonym under Huperzia tetrasticha (Kunze) Holub)	filed	-	-
 k3140703	7917571	Phlegmariurus varius (R.Br.) A.R.Field & Bostock	ACCEPTED	2997956	Phlegmariurus varius (R.Br.) A.R.Field & Bostock (synonym under Huperzia varia (R.Br.) Trevis.)	filed	-	3991105,3991470,3991868,3991876,3992051,7553166,7992528,8340718,8385752,12292351,12345879
 k2855763	3645154	Hydrangea pottingeri Prain	SYNONYM	2855763	Hydrangea pottingeri Prain (accepted)	entry	-	-
+k2856924	7404520	Hylomecon japonicum (Thunb.) Prantl	ACCEPTED	2856924	Hylomecon japonica (Thunb.) Prantl (accepted)	gender	-	3601551,3601572,3601938,3601947,3601958,5531750,5531818,7661724,7711017,8203212,8366663,11103561,11358741,12327499,12345332
 k2857158	6026620	Pleurospermum hookeri C.B.Clarke	ACCEPTED	2405176	Pleurospermum hookeri C.B.Clarke (synonym under Hymenidium hookeri (C.B.Clarke) Pimenov & Kljuykov)	filed	-	3632493,5831911,7582154,8047383
 k515505	3189588	Triadenum fraseri (Spach) Gleason	ACCEPTED	517208	Triadenum fraseri (Spach) Gleason (synonym under Hypericum fraseri (Spach) Steud.)	filed	-	-
 k516878	3189592	Triadenum virginicum (L.) Raf.	ACCEPTED	517222	Triadenum virginicum (L.) Raf. (synonym under Hypericum virginicum L.)	filed	-	3712945,3712981,3713032,3714509,3714983,3715317,5555818,7346063,7668862,8062223,9348286
 k516894	3189582	Triadenum walteri (J.F.Gmel.) Gleason	ACCEPTED	517225	Triadenum walteri (J.F.Gmel.) Gleason (synonym under Hypericum walteri J.F.Gmel.)	filed	-	3710910,5555630,5555813,7694490,8038124,8181721,9549583,11038577
 k3074611	5387328	Trommsdorffia maculata (L.) Bernh.	ACCEPTED	3211412	Trommsdorffia maculata (L.) Bernh. (synonym under Hypochaeris maculata L.)	filed	-	3093694,3093696,3093697,4222526,4228585,4229012,4229327,4229445,4230026,4230033,4237794,5691547,6082644,6082645,8316590,10843927,12364658,12381940
 k3074771	5387347	Trommsdorffia uniflora (Vill.) Soják	ACCEPTED	3211413	Trommsdorffia uniflora (Vill.) Soják (synonym under Hypochaeris uniflora Vill.)	filed	-	3093737,3093811,4222531,4230039,4237718,7591511,7955521,8277588
+k2861129	5414227	Ilex myrtifolia Walter	SYNONYM	2861129	Ilex myrtifolia Walter (accepted)	entry	-	-
+k2861129	5414228	Ilex cassine var. myrtifolia (Walter) Sarg.	SYNONYM	2875039	Ilex cassine var. myrtifolia (Walter) Sarg. (synonym under Ilex myrtifolia Walter)	filed	-	-
+k2861129	5533662	Ilex dahoon var. myrtifolia (Walter) Chapm.	SYNONYM	2875081	Ilex dahoon var. myrtifolia (Walter) Chapm. (synonym under Ilex myrtifolia Walter)	filed	-	-
+k2861129	7708282	Ilex cassine subsp. myrtifolia (Walter) A.E.Murray	SYNONYM	2860511	Ilex cassine subsp. myrtifolia (Walter) A.E.Murray (synonym under Ilex myrtifolia Walter)	filed	-	-
 k317201	4091340	Incarvillea diffusa Royle	ACCEPTED	317214	Incarvillea diffusa Royle (synonym under Incarvillea arguta Royle)	filed	-	7456090,7543459
 k2863852	2972450	Indigofera decora Lindl.	SYNONYM	2863852	Indigofera decora Lindl. (accepted)	entry	-	-
 k2863852	7650062	Anil decora (Lindl.) Kuntze	SYNONYM	2639854	Anil decora (Lindl.) Kuntze (synonym under Indigofera decora Lindl.)	filed	-	-
@@ -914,6 +941,7 @@ k322036	5297965	Iris xiphioides Ehrh.	SYNONYM	322597	Iris xiphioides Ehrh. (ille
 k322036	9238130	Iris xiphium subsp. xiphioides Bonnier & Layens	SYNONYM	499788	Iris xiphium subsp. xiphioides Bonnier & Layens (synonym under Iris latifolia (Mill.) Voss)	filed	-	-
 k3112289	3091999	Glebionis carinata (Schousb.) Tzvelev	ACCEPTED	3112292	Glebionis carinata (Schousb.) Tzvelev (synonym under Ismelia carinata (Schousb.) Sch.Bip.)	filed	-	3092001,4234419,12270295,12354815
 k2867317	3960644	Stenocereus dumortieri (Scheidw.) Buxb.	ACCEPTED	2485953	Stenocereus dumortieri (Scheidw.) Buxb. (synonym under Isolatocereus dumortieri (Scheidw.) Backeb.)	filed	-	3943148
+k322761	7665536	Ixia fuscocitrina Desf. ex Redouté	ACCEPTED	322761	Ixia fuscocitrina Desf. ex Redouté (accepted)	entry	-	-
 k322868	5296939	Ixia serotina Salisb.	SYNONYM	322922	Ixia serotina Salisb. (illegitimate under Ixia polystachia L.)	filed	-	-
 k3082385	3097241	Senecio auricula Bourgeau ex Coss.	ACCEPTED	3082381	Senecio auricula Bourg. ex Coss. (synonym under Jacobaea auricula (Bourg. ex Coss.) Pelser)	filed	-	7680414,8169964,8398107
 k3305683	7350663	Pachyphytum cuicatecanum (J.Reyes, Joel Pérez & Brachet) Kimnach	ACCEPTED	2900473	Pachyphytum cuicatecanum (J.Reyes, Joel Pérez & Brachet) Kimnach (synonym under Jeronimoa cuicatecana (J.Reyes, Joel Pérez & Brachet) A.Vázquez, Islas & Rosales)	filed	-	-
@@ -932,8 +960,8 @@ k2334920	5564385	Myristica corticosa (Lour.) Hook.fil. & Thomson	SYNONYM	2501770
 k3305815	4036910	Persicaria angustifolia (Pall.) Ronse Decr.	ACCEPTED	2571962	Persicaria angustifolia (Pall.) Ronse Decr. (synonym under Koenigia angustifolia (Pall.) Chepinoga)	filed	-	5651349,5652183,5652400,5652677
 k3306092	2884422	Pouteria gardneriana (A.DC.) Radlk.	ACCEPTED	164135	Pouteria gardneriana (A.DC.) Radlk. (synonym under Labatia gardneriana (A.DC.) Alves-Araújo)	filed	-	2884423,2884424,2884428,5333600,5333601,5333602,5333603,7613709
 k3062238	3139040	Mycelis muralis (L.) Dumort.	ACCEPTED	3062230	Mycelis muralis (L.) Dumort. (synonym under Lactuca muralis (L.) Gaertn.)	filed	-	3140321,4207845,4212165,4220270,4220748,4220818,4221103,4253254,5402265,5402266,8413049,11038944
-k2342600	3707676	Oscularia falciformis (Haw.) H.E.K.Hartmann	ACCEPTED	2390901	Oscularia falciformis (Haw.) H.E.K.Hartmann (synonym under Lampranthus falciformis (Haw.) N.E.Br.)	filed	-	-
 k2342600	3705320	Mesembryanthemum falciformis Haw., 1812	ACCEPTED	2361674	Mesembryanthemum falciforme Haw. (synonym under Lampranthus falciformis (Haw.) N.E.Br.)	gender	-	-
+k2342600	3707676	Oscularia falciformis (Haw.) H.E.K.Hartmann	ACCEPTED	2390901	Oscularia falciformis (Haw.) H.E.K.Hartmann (synonym under Lampranthus falciformis (Haw.) N.E.Br.)	filed	-	-
 k2497519	5523515	Gnidia anthylloides (L.fil.) Gilg	ACCEPTED	2827869	Gnidia anthylloides (L.f.) Gilg (synonym under Lasiosiphon anthylloides (L.f.) Meisn.)	filed	-	3569239,5524422,5524472,7560104,7673558,7941700,7988110,8333759,8345285,8393276
 k2497437	3569311	Dais linifolia Lam.	SYNONYM	2755335	Dais linifolia Lam. (synonym under Lasiosiphon capitatus (Lam.) Burtt Davy)	filed	-	-
 k2497437	5524477	Lasiosiphon linifolius (Lam.) Decne.	SYNONYM	2496995	Lasiosiphon linifolius (Lam.) Decne. (synonym under Lasiosiphon capitatus (Lam.) Burtt Davy)	filed	-	-
@@ -952,6 +980,7 @@ k2342051	3778152	Hypoestes cephalotes Link	SYNONYM	2859327	Hypoestes cephalotes 
 k3274735	3041114	Lithodraba mendocinensis (Hauman) Boelcke	ACCEPTED	2338458	Lithodraba mendocinensis (Hauman) Boelcke (synonym under Lepidium medocinense (Hauman) Al-Shehbaz)	filed	-	-
 k2495042	7130897	Leptosiphon floribundum (A.Gray) J.M.Porter & L.A.Johnson	ACCEPTED	2495042	Leptosiphon floribundus (A.Gray) J.M.Porter & L.A.Johnson (accepted)	gender	-	4056700,4057290,4057793,5659393,5659396,5659780,7223695
 k3306319	3181934	Leptospermum sericeum Labill.	ACCEPTED	111497	Leptospermum sericeum Labill. (synonym under Leptospermopsis sericea (Labill.) Peter G.Wilson)	filed	-	-
+k3104694	3111603	Leptostelma maxima D.Don	ACCEPTED	3104694	Leptostelma maximum D.Don (accepted)	gender	-	3111604,3111605,3111609,3146915,4215103,4215111,5393306,6301109,7669230,7828297,12390420
 k3116740	8354997	Coreopsis bigelovii (A.Gray) Voss	ACCEPTED	3117272	Coreopsis bigelovii (A.Gray) Voss (synonym under Leptosyne bigelovii (A.Gray) A.Gray)	filed	-	4209385
 k3117320	3134001	Coreopsis gigantea (Kellogg) H.M.Hall	ACCEPTED	3117322	Coreopsis gigantea (Kellogg) H.M.Hall (synonym under Leptosyne gigantea Kellogg)	filed	-	-
 k3117397	3133980	Coreopsis maritima (Nutt.) Hook.fil.	ACCEPTED	3117399	Coreopsis maritima (Nutt.) Hook.f. (synonym under Leptosyne maritima (Nutt.) A.Gray)	filed	-	-
@@ -961,6 +990,7 @@ k3090282	5406261	Calocephalus brownii (Cass.) F.Muell.	ACCEPTED	3090283	Caloceph
 k2339637	4010731	Styphelia affinis (R.Br.) Spreng.	SYNONYM	2593101	Styphelia affinis (R.Br.) Spreng. (synonym under Leucopogon affinis R.Br.)	filed	-	-
 k2339637	4011151	Leucopogon affinis R.Br.	SYNONYM	2339637	Leucopogon affinis R.Br. (accepted)	entry	-	-
 k3274783	4243588	Liatris elegans var. carizzana Gaiser	SYNONYM	3131042	Liatris elegans var. carizzana Gaiser (synonym under Liatris carrizana (Gaiser) G.L.Nesom)	filed	-	-
+k2344177	3633282	Coristospermum ferulaceum (All.) Reduron, Charpin & Pimenov	ACCEPTED	2737780	Coristospermum ferulaceum (All.) Reduron, Charpin & Pimenov (synonym under Ligusticum ferulaceum All.)	filed	-	9298593,10668673,12380438
 k2344115	7318455	Coristospermum lucidum (Mill.) Reduron, Charpin & Pimenov	ACCEPTED	2737782	Coristospermum lucidum (Mill.) Reduron, Charpin & Pimenov (synonym under Ligusticum lucidum Mill.)	filed	-	3631546,3632264,3633215,3633228,3633273,3637427,3637924,3638424,3638434,3638763,3639485,3640473,5538102,5538157,5538712,5539925,5793014,5793015,6307848,7474895,7597073,7715138,7829026,7834648,7984264,8182742,9701072,9719269,9770652,9810811,11040548
 k2342325	3034811	Limnosciadium pumilum (Engelm. & A.Gray) Mathias & Constance	SYNONYM	2342325	Limnosciadium pumilum (Engelm. & A.Gray) Mathias & Constance (accepted)	entry	-	-
 k2342325	3628529	Cynosciadium pumilum (Engelm. & A.Gray) J.M.Coult. & Rose	SYNONYM	2752426	Cynosciadium pumilum (Engelm. & A.Gray) J.M.Coult. & Rose (synonym under Limnosciadium pumilum (Engelm. & A.Gray) Mathias & Constance)	filed	-	-
@@ -1006,13 +1036,15 @@ k3139555	3991094	Diphasiastrum thyoides (Humb. & Bonpl. ex Willd.) Holub	ACCEPTE
 k3139566	2688412	Diphasiastrum tristachyum (Pursh) Holub	ACCEPTED	3137989	Diphasiastrum tristachyum (Pursh) Holub (synonym under Lycopodium tristachyum Pursh)	filed	-	2688414,3990967,3991732,6385697,7469768,7559819,7753870,7863961,7941992,11066059,12387225
 k2492286	4005581	Lysimachia simulans Hemsl.	SYNONYM	2492286	Lysimachia simulans Hemsl. (accepted)	entry	-	-
 k2367090	7304613	Persea japonica (Siebold & Zucc. ex Blume) Kosterm.	SYNONYM	2529653	Persea japonica (Siebold & Zucc. ex Blume) Kosterm. (synonym under Machilus japonicus Siebold & Zucc. ex Blume)	filed	-	-
-k2367090	11080387	Machilus japonicus Siebold & Zucc. ex Blume	SYNONYM	2367090	Machilus japonicus Siebold & Zucc. ex Blume (accepted)	entry	-	-
 k2367090	7786687	Machilus thunbergii var. japonica (Siebold & Zucc.) Yatabe	SYNONYM	2884952	Machilus thunbergii var. japonicus (Siebold & Zucc.) Yatabe (synonym under Machilus japonicus Siebold & Zucc. ex Blume)	gender	-	-
+k2367090	11080387	Machilus japonicus Siebold & Zucc. ex Blume	SYNONYM	2367090	Machilus japonicus Siebold & Zucc. ex Blume (accepted)	entry	-	-
 k2367061	4178688	Machilus leptophylla Hand.-Mazz.	ACCEPTED	2367061	Machilus leptophyllus Hand.-Mazz. (accepted)	gender	-	-
-k2367117	4180895	Persea macrantha (Nees) Kosterm.	SYNONYM	2529779	Persea macrantha (Nees) Kosterm. (synonym under Machilus macranthus Nees)	filed	-	-
 k2367117	4178536	Machilus macrantha Nees	SYNONYM	2367117	Machilus macranthus Nees (accepted)	gender	-	-
+k2367117	4180895	Persea macrantha (Nees) Kosterm.	SYNONYM	2529779	Persea macrantha (Nees) Kosterm. (synonym under Machilus macranthus Nees)	filed	-	-
 k2367007	4178023	Machilus salicina Hance	ACCEPTED	2367007	Machilus salicinus Hance (accepted)	gender	-	12270701
+k2367056	7304278	Machilus velutina Champ. ex Benth.	ACCEPTED	2367056	Machilus velutinus Champ. ex Benth. (accepted)	gender	-	4177374,12332639
 k2950363	3001232	Malus tschonoskii (Maxim.) C.K.Schneid.	ACCEPTED	2951099	Malus tschonoskii (Maxim.) C.K.Schneid. (synonym under Macromeles tschonoskii (Maxim.) Koidz.)	filed	-	-
+k2502730	7330845	Maesa perlaria (Lour.) Merr.	ACCEPTED	2502730	Maesa perlarius (Lour.) Merr. (accepted)	gender	-	3718620,3719205,3719605,3722889,3722923,3723004,7864961
 k2950639	2987819	Tormimalus ×florentina (Zuccagni) Holub	ACCEPTED	2994053	× Tormimalus florentina (Zuccagni) Holub (synonym under Malus florentina (Zuccagni) C.K.Schneid.)	filed	-	3001572,3013269,5363293
 k2951097	7272334	Eriolobus trilobatus (Labill. ex Poir.) M.Roem.	ACCEPTED	2948389	Eriolobus trilobatus (Labill. ex Poir.) M.Roem. (synonym under Malus trilobata (Labill. ex Poir.) C.K.Schneid.)	filed	-	3001358,3014038,9015532,10904971,12326388,12333263
 k2504097	3940638	Malva setigera K.F.Schimp. & Spenn.	SYNONYM	2504097	Malva setigera K.F.Schimp. & Spenn. (accepted)	entry	-	-
@@ -1027,6 +1059,7 @@ k508685	3170553	Matelea reticulata (Engelm. ex A.Gray) Woodson	SYNONYM	508685	Ma
 k508685	3170554	Gonolobus reticulatus Engelm. ex A.Gray	SYNONYM	505956	Gonolobus reticulatus Engelm. ex A.Gray (synonym under Matelea reticulata (Engelm. ex A.Gray) Woodson)	filed	-	-
 k508685	5525363	Vincetoxicum reticulatum A.Heller	SYNONYM	513772	Vincetoxicum reticulatum (Engelm. ex A.Gray) A.Heller (synonym under Matelea reticulata (Engelm. ex A.Gray) Woodson)	filed	-	-
 k317579	4092370	Radermachera ignea (Kurz) Steenis	ACCEPTED	317275	Radermachera ignea (Kurz) Steenis (synonym under Mayodendron igneum (Kurz) Kurz)	filed	-	-
+k2360109	3791985	Gymnosporia acuminata (L.fil.) Szyszyl.	ACCEPTED	2836017	Gymnosporia acuminata (L.f.) Szyszył. (illegitimate under Maytenus acuminata (L.f.) Loes.)	filed	-	3672564,3791071,3791315,3791590,3791637,3791817,3791946,3792159,3792188,3792350,3792856,3794121,3794403,3794446,3794643,3794654,5534390,5534553,7485511,7586092,7727474,7862645,8112065,8218715,8365704,8719426
 k2370220	9798870	Monteverdia ilicifolia (Mart. ex Reissek) Biral	ACCEPTED	3228762	Monteverdia ilicifolia (Mart. ex Reissek) Biral (synonym under Maytenus ilicifolia Mart. ex Reissek)	filed	-	3790946,3791193,3791331,3791644,3792053,3792782,3792915,3794407
 k2370133	9690522	Monteverdia laevigata (Vahl) Biral	ACCEPTED	3228737	Monteverdia laevigata (Vahl) Biral (synonym under Maytenus laevigata (Vahl) Griseb. ex Eggers)	filed	-	3169099,3646086,3875257,3875485,3877183,7462654
 k2370144	3793062	Celastrus meridensis Pittier	ACCEPTED	2707591	Celastrus meridensis Pittier (synonym under Maytenus meridensis (Pittier) Cuatrec.)	filed	-	-
@@ -1078,6 +1111,7 @@ k347395	3173373	Callistemon pungens Lumley & R.D.Spencer	ACCEPTED	31480	Calliste
 k463491	3173398	Callistemon wimmerensis Marriott & G.W.Carr	ACCEPTED	372445	Callistemon wimmerensis Marriott & G.W.Carr (synonym under Melaleuca wimmerensis (Marriott & G.W.Carr) Craven)	filed	-	-
 k3028681	3870687	Melastoma scaberrima (Hayata) Yuen P.Yang & H.Y.Liu	ACCEPTED	3028681	Melastoma scaberrimum (Hayata) Yuen P.Yang & H.Y.Liu (accepted)	gender	-	3860148
 k3275244	11191293	Melhania ebena (Cronk) Dorr	ACCEPTED	3275244	Melhania ebenus (Cronk) Dorr (accepted)	gender	-	-
+k2510553	8197324	Melicoccus lepidopetala Radlk.	ACCEPTED	2510553	Melicoccus lepidopetalus Radlk. (accepted)	gender	-	-
 k3327707	3836910	Jambolifera baueri (Schott) Kuntze	SYNONYM	2332372	Jambolifera baueri (Schott) Kuntze (synonym under Melicope baueri (Schott) Appelhans & W.L.Wagner)	filed	-	-
 k3327707	5593486	Bauerella baueri (Schott) Däniker	SYNONYM	2929173	Bauerella baueri (Schott) Engl. ex Däniker (synonym under Melicope baueri (Schott) Appelhans & W.L.Wagner)	filed	-	-
 k3327707	5593488	Bauerella australiana Borzi	SYNONYM	2671266	Bauerella australiana Borzì (illegitimate under Melicope baueri (Schott) Appelhans & W.L.Wagner)	filed	-	-
@@ -1156,6 +1190,7 @@ k3306505	3042925	Brassica carinata A.Braun	ACCEPTED	2682106	Brassica carinata A.
 k2359243	3042658	Brassica nigra (L.) W.D.J.Koch	ACCEPTED	2682421	Brassica nigra (L.) W.D.J.Koch (synonym under Mutarda nigra (L.) Bernh.)	filed	-	3042661,3042662,3042663,3042665,3042668,3042671,3042672,3042673,3042674,3042675,3047614,3689983,3690179,3690236,3690404,3690538,3691274,3691886,3692032,3692925,7349257,7418585,7654051,7699276,7919640,7968063,7994698,8041217,8154719,8158320,8318078,12279323,12310663,12327347
 k2359243	7509066	Brassica nigra (L.) K.Koch	DOUBTFUL	2682421	Brassica nigra (L.) W.D.J.Koch (synonym under Mutarda nigra (L.) Bernh.)	filed	-	-
 k2359243	8010384	Brassica nigra (L.) Andrz.	DOUBTFUL	2682421	Brassica nigra (L.) W.D.J.Koch (synonym under Mutarda nigra (L.) Bernh.)	filed	-	-
+k2510558	3789275	Myoschilos oblongum Ruiz & Pav.	ACCEPTED	2510558	Myoschilos oblongus Ruiz & Pav. (accepted)	gender	-	3789281,3990574
 k2501754	3745152	Morella adenophora (Hance) J.Herb.	ACCEPTED	2508356	Morella adenophora (Hance) J.Herb. (synonym under Myrica adenophora Hance)	filed	-	7924552,7937244,12322307
 k2500721	3169005	Morella caroliniensis (Mill.) Small	ACCEPTED	2501793	Morella caroliniensis (Mill.) Small (synonym under Myrica caroliniensis Mill.)	filed	-	3745062,5414219,5414220,5565352,5565358,5565370,5565443,7469453,7633174,7866234
 k2500703	3745031	Morella cordifolia (L.) Killick	ACCEPTED	2501790	Morella cordifolia (L.) Killick (synonym under Myrica cordifolia L.)	filed	-	5565342,5565396,5565449
@@ -1167,6 +1202,7 @@ k2500830	3745006	Morella pilulifera (Rendle) Killick	ACCEPTED	2501829	Morella pi
 k2500826	3744993	Morella pubescens (Humb. & Bonpl. ex Willd.) Wilbur	ACCEPTED	2501815	Morella pubescens (Humb. & Bonpl. ex Willd.) Wilbur (synonym under Myrica pubescens Humb. & Bonpl. ex Willd.)	filed	-	5565330,5565399,5565425,5565438,5565445,5565452,5565462,5565466,7335114,8114128
 k2500835	5414214	Myrica pusilla Raf.	SYNONYM	2500835	Myrica pusilla Raf. (accepted)	entry	-	-
 k2500822	3745182	Morella quercifolia (L.) Killick	ACCEPTED	2501813	Morella quercifolia (L.) Killick (synonym under Myrica quercifolia L.)	filed	-	5565313,5565322,5565366,5565390,5565407
+k2366546	5555327	Myriophyllum mattogrossensis Hoehne	ACCEPTED	2366546	Myriophyllum mattogrossense Hoehne (accepted)	gender	-	-
 k2503217	3721881	Myrsine cubana A.DC.	SYNONYM	2503217	Myrsine cubana A.DC. (accepted)	entry	-	-
 k3061649	3090757	Nabalus altissima (L.) Hook.	ACCEPTED	3061649	Nabalus altissimus (L.) Hook. (accepted)	gender	-	4215387,4215398,4215427,4215437,4215445,4221204,4221388,5705657,6560072,7410197,7417610,7433273,7664646,7799038,7934770,8354712,8515368,9316721
 k3061943	3090775	Nabalus serpentarius (Pursh) Hook.	ACCEPTED	3061943	Nabalus serpentaria (Pursh) Hook. (accepted)	gender	-	3090771,3090773,3090774,4215128,4215228,4215375,4221077,5705648,7808564,8396958
@@ -1211,6 +1247,7 @@ k3306872	3684014	Nestegis apetala (Vahl) L.A.S.Johnson	ACCEPTED	354951	Nestegis 
 k3306746	3683988	Nestegis cunninghamii (Hook.f.) L.A.S.Johnson	ACCEPTED	354945	Nestegis cunninghamii (Hook.f.) L.A.S.Johnson (synonym under Notelaea cunninghamii (Hook.f.) Hong-Wa & Besnard)	filed	-	-
 k3306769	3683942	Nestegis montana (Hook.f.) L.A.S.Johnson	ACCEPTED	351611	Nestegis montana (Hook.f.) L.A.S.Johnson (synonym under Notelaea montana (Hook.f.) Hong-Wa & Besnard)	filed	-	7696854
 k3306765	3172287	Nestegis sandwicensis (A.Gray) O.Deg., I.Deg. & L.A.S.Johnson	ACCEPTED	351613	Nestegis sandwicensis (A.Gray) O.Deg., I.Deg. & L.A.S.Johnson (synonym under Notelaea sandwicensis (A.Gray) Hong-Wa & Besnard)	filed	-	-
+k2383347	2882425	Nymphaea amazonum Mart. & Zucc.	ACCEPTED	2383347	Nymphaea amazonum Mart. & Zucc. (accepted)	entry	-	3697309,3697411,3697414,3697501,3697550,3697647,3697690,6434960,7745755
 k2385075	5592249	Nymphoides hydrophylla (Lour.) Kuntze	ACCEPTED	2385075	Nymphoides hydrophyllum (Lour.) Kuntze (accepted)	gender	-	3825732,3825873,5592225,5592341,5592375,5592384
 k136388	2802793	Hippeophyllum hamadryas (Ridl.) Schltr.	ACCEPTED	99347	Hippeophyllum hamadryas (Ridl.) Schltr. (synonym under Oberonia hamadryas Ridl.)	filed	-	-
 k2401101	8629951	Discaria nana (Clos) Benth. & Hook.fil. ex Weberb.	ACCEPTED	2772429	Discaria nana (Clos) Benth. & Hook.f. ex Weberb. (synonym under Ochetophila nana (Clos) Kellermann, Medan & Aagesen)	filed	-	3877255,5603073,5603081,5603101,5603202
@@ -1381,6 +1418,9 @@ k2608234	5670163	Urtica simsii Voigt	SYNONYM	2448899	Urtica simsii Voigt (illegi
 k2608234	5671108	Pilea pubescens var. involucrata (Sims) Wedd.	SYNONYM	2554724	Pilea pubescens var. involucrata (Sims) Wedd. (synonym under Pilea involucrata (Sims) C.H.Wright & Dewar)	filed	-	-
 k2608234	7698424	Pilea involucrata (Sims) C.H.Wright & Dewar	HETEROTYPIC_SYNONYM	2608234	Pilea involucrata (Sims) C.H.Wright & Dewar (accepted)	entry	-	-
 k2608234	7764254	Pilea involucrata (Sims) Small	SYNONYM	2608234	Pilea involucrata (Sims) C.H.Wright & Dewar (accepted)	entry	-	-
+k156079	3717767	Pilidiostigma rhytisperma (F.Muell.) Burret	ACCEPTED	156079	Pilidiostigma rhytispermum (F.Muell.) Burret (accepted)	gender	-	-
+k2551191	6021585	Banksia villosa (Banks & Sol.) Kuntze	SYNONYM	2669294	Banksia villosa (Sol. ex Sm.) Kuntze (synonym under Pimelea villosa Sol. ex Sm.)	filed	-	-
+k2551191	7716669	Pimelea villosa Sol. ex Sm.	SYNONYM	2551191	Pimelea villosa Sol. ex Sm. (accepted)	entry	-	-
 k2608262	4186560	Macropiper hooglandii I.Hutton & P.S.Green	ACCEPTED	2509407	Macropiper hooglandii I.Hutton & P.S.Green (synonym under Piper hooglandii (I.Hutton & P.S.Green) M.A.Jaram.)	filed	-	-
 k2608266	4186489	Macropiper melchior Sykes	ACCEPTED	2509414	Macropiper melchior Sykes (synonym under Piper melchior (Sykes) M.A.Jaram.)	filed	-	-
 k2569602	4186474	Macropiper methysticum (G.Forst.) Hook. & Arn.	ACCEPTED	2509412	Macropiper methysticum (G.Forst.) Miq. (synonym under Piper methysticum G.Forst.)	filed	-	4184191,4185332,4186242,4187213,4187720,4188169,7600995
@@ -1427,6 +1467,7 @@ k3329254	5355870	Millettia brandisiana Kurz	ACCEPTED	2368199	Millettia brandisia
 k3328389	5355687	Millettia peguensis Ali	ACCEPTED	2367907	Millettia peguensis Ali (synonym under Pongamia peguensis (Ali) Z.Q.Song)	filed	-	-
 k3328134	5355677	Millettia pulchra (Voigt) Kurz	ACCEPTED	2367955	Millettia pulchra (Voigt) Kurz (synonym under Pongamia pulchra (Voigt) Z.Q.Song)	filed	-	3962928,3970704,5350422,5355678,5355679,5626462,5626464,5626731,5626809,5634334,5733621,5823209,5938964,5938965,5938967,8123199,11378880
 k2921943	3040245	Populus ×generosa A.Henry	SYNONYM	2921943	Populus × generosa A.Henry (accepted)	entry	-	-
+k2953596	11336234	Potentilla atropurpurea DeVriese	SYNONYM	2953593	Potentilla atropurpurea de Vriese (orthographic under Potentilla atrosanguinea G.Lodd.)	filed	-	-
 k2955258	3031928	Duchesnea chrysantha (Zoll. & Moritzi) Miq.	SYNONYM	2948233	Duchesnea chrysantha (Zoll. & Moritzi) Miq. (synonym under Potentilla hebiichigo Yonek. & H.Ohashi)	filed	-	-
 k2955258	3031936	Fragaria chrysantha Zoll. & Moritzi	SYNONYM	2948684	Fragaria chrysantha Zoll. & Moritzi (synonym under Potentilla hebiichigo Yonek. & H.Ohashi)	filed	-	-
 k2955258	5367509	Potentilla hebiichigo Yonek. & H.Ohashi	SYNONYM	2955258	Potentilla hebiichigo Yonek. & H.Ohashi (accepted)	entry	-	-
@@ -1474,6 +1515,7 @@ k2535555	2940467	Psorothamnus arborescens (Torr. ex A.Gray) Barneby	ACCEPTED	253
 k2535553	2940502	Psorothamnus fremontii (Torr. ex A.Gray) Barneby	ACCEPTED	2535491	Psorothamnus fremontii (Torr. ex A.Gray) Barneby (synonym under Psorodendron fremontii (Torr. ex A.Gray) Rydb.)	filed	-	2940504,2940506,2940507,2940509,5347888,5347890
 k2535547	2940454	Psorothamnus schottii (Torr.) Barneby	ACCEPTED	2535485	Psorothamnus schottii (Torr.) Barneby (synonym under Psorodendron schottii (Torr.) Rydb.)	filed	-	2940455,2940459,2940460,5347874
 k2535546	2940449	Psorothamnus spinosus (A.Gray) Barneby	ACCEPTED	2535483	Psorothamnus spinosus (A.Gray) Barneby (synonym under Psorodendron spinosum (A.Gray) Rydb.)	filed	-	-
+k2408729	7805829	Pterocephalus dumetorus (Brouss.) Coult.	ACCEPTED	2408729	Pterocephalus dumetorum (Brouss. ex Willd.) Coult. (accepted)	gender	-	-
 k2411460	8320238	Pterocephalus perennis Coult.	ACCEPTED	2411466	Pterocephalus perennis Coult. (illegitimate under Pterocephalus pterocephala (L.) Dörfl.)	filed	-	7492324,7950377,7996822,8012347,8715943,12281718,12295018,12373278
 k2413832	3951692	Pachycereus gaumeri Britton & Rose	ACCEPTED	2414278	Pachycereus gaumeri Britton & Rose (synonym under Pterocereus gaumeri (Britton & Rose) T.MacDoug. & Miranda)	filed	-	3951726,3955235,3955374,8302978
 k2413251	7682192	Stevenia canescens (DC.) D.A.German	ACCEPTED	3001083	Stevenia canescens (DC.) D.A.German (synonym under Ptilotrichum canescens (DC.) C.A.Mey.)	filed	-	3044756,3687411,3689040,3691743,3692305,7933047,8076724,8276697
@@ -1608,6 +1650,8 @@ k2593370	4102984	Sixalix farinosa (Coss.) Greuter & Burdet	ACCEPTED	2594181	Sixa
 k2486311	3942548	Phyllocactus russellianus (Gardner) Salm-Dyck	SYNONYM	2413652	Phyllocactus russellianus (Hook.) Salm-Dyck (synonym under Schlumbergera russelliana (Hook.) Britton & Rose)	filed	-	-
 k2486311	7280587	Epiphyllum russellianum (Gardner) Hook.	SYNONYM	2791486	Epiphyllum russellianum Hook. (synonym under Schlumbergera russelliana (Hook.) Britton & Rose)	filed	-	-
 k2486311	7542356	Cereus russellianus Gardner	SYNONYM	2712337	Cereus russellianus (Hook.) Gardner (synonym under Schlumbergera russelliana (Hook.) Britton & Rose)	filed	-	-
+k493145	9292516	Scilla albinerve Yildirim & Gemici	ACCEPTED	493145	Scilla albinervis Yıldırım & Gemici (accepted)	gender	-	-
+k3330249	3647564	Oncostema maireana Brullo, Giusso & Terrasi	DOUBTFUL	373552	Oncostema maireanum Brullo, Giusso & Terrasi (synonym under Scilla maireana (Brullo, Giusso & Terrasi) S.S.Ying)	gender	-	-
 k3319107	3083338	Eschweilera antioquensis Dugand & H.Daniel	ACCEPTED	313757	Eschweilera antioquensis Dugand & H.Daniel (synonym under Scottmoria antioquensis (Dugand & H.Daniel) Cornejo)	filed	-	3083339,3083340,7854919
 k3330027	3083288	Eschweilera bogotensis R.Knuth	ACCEPTED	313763	Eschweilera bogotensis R.Knuth (synonym under Scottmoria bogotensis (R.Knuth) Cornejo & Prance)	filed	-	3083289,3083290,3083291
 k2998760	8321739	Sedum mendozae (Glass & Cházaro) V.V.Byalt	SYNONYM	2998760	Sedum mendozae (Glass & Cházaro) V.V.Byalt (accepted)	entry	-	-
@@ -1671,8 +1715,8 @@ k3096346	5405231	Olearia virgata (Hook.fil.) Hook.fil.	ACCEPTED	3096340	Olearia 
 k3096366	5405373	Olearia viscosa (Labill.) Benth.	ACCEPTED	3096367	Olearia viscosa (Labill.) Benth. (synonym under Shawia viscosa (Labill.) Sch.Bip.)	filed	-	8613970,9651829
 k2601791	5617830	Sida petrophila F.Muell.	SYNONYM	2601791	Sida petrophila F.Muell. (accepted)	entry	-	-
 k3330202	3150459	Xanthisma coloradoense (A.Gray) D.R.Morgan & R.L.Hartm.	ACCEPTED	3100870	Xanthisma coloradoense (A.Gray) D.R.Morgan & R.L.Hartm. (synonym under Sideranthus coloradoensis (A.Gray) D.R.Morgan & R.L.Hartm. ex M.A.Paz)	filed	-	4237161,5405888,8659174
-k3100879	3150453	Xanthisma gracile (Nutt.) D.R.Morgan & R.L.Hartm.	ACCEPTED	3100880	Xanthisma gracile (Nutt.) D.R.Morgan & R.L.Hartm. (synonym under Sideranthus gracilis (Nutt.) A.Nelson)	filed	-	3150456
 k3100879	3150450	Xanthisma gracilis D.R.Morgan & R.L.Hartm.	ACCEPTED	3100880	Xanthisma gracile (Nutt.) D.R.Morgan & R.L.Hartm. (synonym under Sideranthus gracilis (Nutt.) A.Nelson)	gender	-	-
+k3100879	3150453	Xanthisma gracile (Nutt.) D.R.Morgan & R.L.Hartm.	ACCEPTED	3100880	Xanthisma gracile (Nutt.) D.R.Morgan & R.L.Hartm. (synonym under Sideranthus gracilis (Nutt.) A.Nelson)	filed	-	3150456
 k3330212	3150458	Xanthisma texanum DC.	ACCEPTED	3100893	Xanthisma texanum DC. (synonym under Sideranthus texanus (DC.) M.A.Paz)	filed	-	4226148,4226159,4226172,4226186,4226283,4226300,4236986,4246394,6294006,6444647,6444648,7913931
 k2991243	5369913	Geum pentapetalum (L.) Makino	ACCEPTED	2949432	Geum pentapetalum (L.) Makino (synonym under Sieversia pentapetala (L.) Greene)	filed	-	3030163,5364213,5364222,5369735,5370009,5371514,7561654
 k287770	2778343	Pubilaria mattiazzii (Vand.) Samp.	SYNONYM	283917	Pubilaria mattiazzii (Vand.) Samp. (synonym under Simethis mattiazzi (Vand.) Sacc.)	filed	-	-
@@ -1683,6 +1727,7 @@ k3033125	2930929	Androcera rostrata (Dunal) Rydb.	SYNONYM	2637033	Androcera rost
 k3062456	3143051	Aetheorhiza bulbosa (L.) Cass.	ACCEPTED	3062448	Aetheorhiza bulbosa (L.) Cass. (synonym under Sonchus bulbosus (L.) N.Kilian & Greuter)	filed	-	3123365,4207719,4207726,4207729,4238197,4248949,4250578,5702566,6082195,6082197,7818205,12307125,12387634
 k2991293	3012125	Sorbaria pallasii (G.Don) Pojark.	ACCEPTED	2991299	Sorbaria pallasii Pojark. (illegitimate under Sorbaria grandiflora (Sweet) Maxim.)	filed	-	3012077,3012079,3012082,3012085,3012086,3012126,3853391,7841740,12328579
 k3319465	5634534	Lophanthera lactescens Ducke	ACCEPTED	2494332	Lophanthera lactescens Ducke (synonym under Spachea lactescens (Ducke) R.F.Almeida & M.Pell.)	filed	-	-
+k193214	2869687	Spathiphyllum uspanapaensis Matuda	ACCEPTED	193214	Spathiphyllum uspanapaense Matuda (accepted)	gender	-	-
 k2596768	2977792	Havardia acatlensis (Benth.) Britton & Rose	ACCEPTED	2840292	Havardia acatlensis (Benth.) Britton & Rose (synonym under Sphinga acatlensis (Benth.) Barneby & J.W.Grimes)	filed	-	-
 k3225381	5550191	Turpinia formosana Nakai	ACCEPTED	2513778	Turpinia formosana Nakai (synonym under Staphylea formosana (Nakai) Byng & Christenh.)	filed	-	-
 k3225278	5550203	Turpinia indochinensis Merr.	ACCEPTED	2513770	Turpinia indochinensis Merr. (synonym under Staphylea indochinensis (Merr.) Byng & Christenh.)	filed	-	-
@@ -1693,6 +1738,9 @@ k3088310	3151373	Seriphium plumosum L.	ACCEPTED	3088307	Seriphium plumosum L. (s
 k3088099	3104052	Dicerothamnus rhinocerotis (L.fil.) Koek.	ACCEPTED	3238419	Dicerothamnus rhinocerotis (L.f.) Koek. (synonym under Stoebe rhinocerotis L.f.)	filed	-	3104054,3104056,3104058,4212076,4239469,4244793,7651960,8671828
 k3308757	5364025	Photinia lasiogyna (Franch.) C.K.Schneid.	ACCEPTED	2952629	Photinia lasiogyna (Franch.) C.K.Schneid. (synonym under Stranvaesia lasiogyna (Franch.) B.B.Liu)	filed	-	3000559,5364027,5364028
 k2588810	5590584	Streptocarpus primuliflorus Gand.	ACCEPTED	2588809	Streptocarpus primuliflorus Gand. (orthographic under Streptocarpus primulifolius Gand.)	filed	-	5591036
+k2476687	3776920	Sympagis maculata (Wall. ex Nees) Bremek.	SYNONYM	2477359	Sympagis maculata (Wall.) Bremek. (synonym under Strobilanthes maculata (Wall.) Nees)	filed	-	-
+k2476687	7655635	Strobilanthes maculata (Wall.) Nees	SYNONYM	2476687	Strobilanthes maculata (Wall.) Nees (accepted)	entry	-	-
+k2476687	7852781	Ruellia maculata Wall.	SYNONYM	2420125	Ruellia maculata Wall. (synonym under Strobilanthes maculata (Wall.) Nees)	filed	-	-
 k3296139	5358562	Prosopis ferox Griseb.	ACCEPTED	2536076	Prosopis ferox Griseb. (synonym under Strombocarpa ferox (Griseb.) C.E.Hughes & G.P.Lewis)	filed	-	-
 k2596955	5358508	Prosopis pubescens Benth.	ACCEPTED	2536030	Prosopis pubescens Benth. (synonym under Strombocarpa pubescens (Benth.) A.Gray)	filed	-	3971537,5630327
 k2596954	5358486	Prosopis reptans Benth.	ACCEPTED	2536114	Prosopis reptans Benth. (synonym under Strombocarpa reptans (Benth.) A.Gray)	filed	-	5358489
@@ -1848,6 +1896,7 @@ k2460183	7296472	Viola dissecta Ledeb.	SYNONYM	2460183	Viola dissecta Ledeb. (ac
 k2460183	7954075	Viola pinnata var. dissecta (Ledeb.) Regel	SYNONYM	2894894	Viola pinnata var. dissecta (Ledeb.) Turcz. (synonym under Viola dissecta Ledeb.)	filed	-	-
 k2460183	8185027	Viola pinnata var. dissecta (Ledeb.) Turcz.	SYNONYM	2894894	Viola pinnata var. dissecta (Ledeb.) Turcz. (synonym under Viola dissecta Ledeb.)	filed	-	-
 k2460663	5663374	Viola kamtschadalorum W.Becker & Hultén	SYNONYM	2460663	Viola kamtschadalorum W.Becker & Hultén (accepted)	entry	-	-
+k2461487	8347707	Viola stipularis Sw.	ACCEPTED	2461487	Viola stipularis Sw. (accepted)	entry	-	5663302,5663498,5664202,5665193,5665280
 k357563	9612996	Hesperocodon hederaceus (L.) Eddie & Cupido	ACCEPTED	490751	Hesperocodon hederaceus (L.) Eddie & Cupido (synonym under Wahlenbergia hederacea (L.) Rchb.)	filed	-	5413555,5413558
 k2994170	5370015	Geum fragarioides (Michx.) Smedmark	ACCEPTED	2949259	Geum fragarioides (Michx.) Smedmark (synonym under Waldsteinia fragarioides (Michx.) Tratt.)	filed	-	5364181
 k2994173	5362114	Geum waldsteinia Baill.	ACCEPTED	2949634	Geum waldsteinia Baill. (synonym under Waldsteinia geoides Willd.)	filed	-	-
@@ -1872,11 +1921,13 @@ k3149405	5275079	Woodsia scopulina D.C.Eaton	SYNONYM	3149405	Woodsia scopulina D
 k3149405	9789079	Woodsiopsis scopulina (D.C.Eaton) Shmakov	SYNONYM	3217055	Woodsiopsis scopulina (D.C.Eaton) Shmakov (synonym under Woodsia scopulina D.C.Eaton)	filed	-	-
 k3175162	2651516	Lorinseria areolata (L.) C.Presl	ACCEPTED	3150306	Lorinseria areolata (L.) C.Presl (synonym under Woodwardia areolata (L.) T.Moore)	filed	-	3645947,4015454,4079300,4079315,5665862,5665900,5665931,7296875,7935861,8120723,10666818
 k3175151	8057727	Anchistea virginica (L.) C.Presl	ACCEPTED	3150305	Anchistea virginica (L.) C.Presl (synonym under Woodwardia virginica (L.) Sm.)	filed	-	4078874,4078887,4079287,4079340,5665838,5665839,5665841,7857625
+k2467608	7221300	Xanthoceras sorbifolia Bunge	ACCEPTED	2467608	Xanthoceras sorbifolium Bunge (accepted)	gender	-	-
 k3331370	7642703	Patzkea paniculata (L.) G.H.Loos	ACCEPTED	463990	Patzkea paniculata (L.) G.H.Loos (synonym under Xanthochloa paniculata (L.) P.M.Peterson, Romasch. & Soreng)	filed	-	4110620,4113691,4117957,4117962,4117968,4117982,4117988,4118018,4118046,4120153,4124383,4124410,4125782,4126101,4126156,4126201,4126207,4126287,4128124,4128125,4128222,4128898,5827787,5941081,5941082,6085135,6312879,6312881,6312882,7402243,7474058,7545938,7572000,7590679,7616603,7708692,7715978,7763304,7782242,7835462,7856475,7883310,7929369,7956338,7985095,8053069,8080392,8099285,8231061,8250677,8348340,8406121,8416889,8426111,8598819,9636378,12315688
 k2468447	2882684	Arctostaphylos bicolor (Nutt.) A.Gray	ACCEPTED	2647144	Arctostaphylos bicolor (Nutt.) A.Gray (synonym under Xylococcus bicolor Nutt.)	filed	-	4165331,8277887
 k2923415	3059908	Croton congestus Lour.	SYNONYM	49673	Croton congestus Lour. (synonym under Xylosma congesta (Lour.) Merr.)	filed	-	-
 k2923415	3059909	Kurkas congestum (Lour.) Raf.	SYNONYM	334805	Kurkas congestum (Lour.) Raf. (synonym under Xylosma congesta (Lour.) Merr.)	filed	-	-
 k2923415	7110846	Xylosma congesta (Lour.) Merr.	SYNONYM	2923415	Xylosma congesta (Lour.) Merr. (accepted)	entry	-	-
+k2923275	8127496	Xylosma hawaiense Seem.	ACCEPTED	2923275	Xylosma hawaiensis Seem. (accepted)	gender	-	2874127,3879928,7882828
 k2470540	3842844	Zeltnera muehlenbergii (Griseb.) G.Mans.	SYNONYM	2470540	Zeltnera muehlenbergii (Griseb.) G.Mans. (accepted)	entry	-	-
 k2470540	5414450	Centaurium muehlenbergii (Griseb.) W.Wight ex Piper	SYNONYM	2708720	Centaurium muehlenbergii (Griseb.) W.Wight ex Piper (synonym under Zeltnera muehlenbergii (Griseb.) G.Mans.)	filed	-	-
 k2470540	5595813	Erythraea muehlenbergii Griseb.	SYNONYM	2800691	Erythraea muehlenbergii Griseb. (synonym under Zeltnera muehlenbergii (Griseb.) G.Mans.)	filed	-	-
@@ -1885,29 +1936,3 @@ k2469557	3987181	Tetraena fontanesii (Webb & Berthel.) Beier & Thulin	ACCEPTED	2
 k3225995	6384908	Fagonia mollis Delile	ACCEPTED	2807237	Fagonia mollis Delile (synonym under Zygophyllum molle (Delile) Christenh. & Byng)	filed	-	3986901,3987073,3987106,3987423,3987432,3987441,7389054,7452853,7546703,8209230,8547291,11330553
 k2469698	9562766	Tetraena hamiensis var. qatarensis (Hadidi) Alzahrani & Albokhari	ACCEPTED	3016488	Tetraena hamiensis var. qatarensis (Hadidi) Alzahrani & Albokhari (synonym under Zygophyllum qatarense Hadidi)	filed	-	-
 k2469722	3986990	Tetraena simplex (L.) Beier & Thulin	ACCEPTED	2522131	Tetraena simplex (L.) Beier & Thulin (synonym under Zygophyllum simplex L.)	filed	-	3986690,3986733,3986873,3987175,7584835,7880563,7896681,12270430,12354693
-k2938230	5371172	Acaena echinata Nees	ACCEPTED	2938230	Acaena echinata Nees (accepted)	entry	-	5370785,5371167,5371168,5371173,5371174,5371176,11016656
-k322761	7665536	Ixia fuscocitrina Desf. ex Redouté	ACCEPTED	322761	Ixia fuscocitrina Desf. ex Redouté (accepted)	entry	-	-
-k2383347	2882425	Nymphaea amazonum Mart. & Zucc.	ACCEPTED	2383347	Nymphaea amazonum Mart. & Zucc. (accepted)	entry	-	3697309,3697411,3697414,3697501,3697550,3697647,3697690,6434960,7745755
-k2461487	8347707	Viola stipularis Sw.	ACCEPTED	2461487	Viola stipularis Sw. (accepted)	entry	-	5663302,5663498,5664202,5665193
-k156079	3717767	Pilidiostigma rhytisperma (F.Muell.) Burret	ACCEPTED	156079	Pilidiostigma rhytispermum (F.Muell.) Burret (accepted)	gender	-	-
-k193214	2869687	Spathiphyllum uspanapaensis Matuda	ACCEPTED	193214	Spathiphyllum uspanapaense Matuda (accepted)	gender	-	-
-k2366546	5555327	Myriophyllum mattogrossensis Hoehne	ACCEPTED	2366546	Myriophyllum mattogrossense Hoehne (accepted)	gender	-	-
-k2367056	7304278	Machilus velutina Champ. ex Benth.	ACCEPTED	2367056	Machilus velutinus Champ. ex Benth. (accepted)	gender	-	4177374,12332639
-k2408729	7805829	Pterocephalus dumetorus (Brouss.) Coult.	ACCEPTED	2408729	Pterocephalus dumetorum (Brouss. ex Willd.) Coult. (accepted)	gender	-	-
-k2467608	7221300	Xanthoceras sorbifolia Bunge	ACCEPTED	2467608	Xanthoceras sorbifolium Bunge (accepted)	gender	-	-
-k2502730	7330845	Maesa perlaria (Lour.) Merr.	ACCEPTED	2502730	Maesa perlarius (Lour.) Merr. (accepted)	gender	-	3718620,3719205,3719605,3722889,3722923,3723004,7864961
-k2510553	8197324	Melicoccus lepidopetala Radlk.	ACCEPTED	2510553	Melicoccus lepidopetalus Radlk. (accepted)	gender	-	-
-k2510558	3789275	Myoschilos oblongum Ruiz & Pav.	ACCEPTED	2510558	Myoschilos oblongus Ruiz & Pav. (accepted)	gender	-	3789281,3990574
-k2647107	3601459	Arctomecon californicum Torr. & Frém.	ACCEPTED	2647107	Arctomecon californica Torr. & Frém. (accepted)	gender	-	-
-k2647463	8317978	Arctostaphylos alpinus (L.) Spreng.	ACCEPTED	2647118	Arctostaphylos alpina (L.) Spreng. (synonym under Arctous alpina (L.) Nied.)	gender	-	4170829,7775521,8107199,8176133
-k2651161	8478516	Isotrema arborea (Linden) Eb.Fisch.	ACCEPTED	3009516	Isotrema arboreum (Linden) Eb.Fisch. (synonym under Aristolochia arborea Linden)	gender	-	3588814,11045180
-k2752784	8245844	Cyphostemma lazum Desc.	ACCEPTED	2752784	Cyphostemma laza Desc. (accepted)	gender	-	7819567
-k2856924	7404520	Hylomecon japonicum (Thunb.) Prantl	ACCEPTED	2856924	Hylomecon japonica (Thunb.) Prantl (accepted)	gender	-	3601551,3601572,3601938,3601947,3601958,5531750,5531818,7661724,7711017,8203212,8366663,11103561,11358741,12327499,12345332
-k2923275	8127496	Xylosma hawaiense Seem.	ACCEPTED	2923275	Xylosma hawaiensis Seem. (accepted)	gender	-	2874127,3879928,7882828
-k3003699	7830017	Adelinia grande (Douglas ex Lehm.) J.I.Cohen	ACCEPTED	3003699	Adelinia grandis (Douglas ex Lehm.) J.I.Cohen (accepted)	gender	-	4063805,4064066,10991044
-k303770	2865314	Cycnogeton procerum (R.Br.) Buchenau	ACCEPTED	303770	Cycnogeton procerus (R.Br.) Buchenau (accepted)	gender	-	-
-k3104694	3111603	Leptostelma maxima D.Don	ACCEPTED	3104694	Leptostelma maximum D.Don (accepted)	gender	-	3111604,3111605,3111609,3146915,4215103,4215111,5393306,6301109,7669230,7828297,12390420
-k3330249	3647564	Oncostema maireana Brullo, Giusso & Terrasi	DOUBTFUL	373552	Oncostema maireanum Brullo, Giusso & Terrasi (synonym under Scilla maireana (Brullo, Giusso & Terrasi) S.S.Ying)	gender	-	-
-k488279	9260733	Cartrema floridana (Chapm.) G.L.Nesom	ACCEPTED	488279	Cartrema floridanum (Chapm.) G.L.Nesom (accepted)	gender	-	3683160,3683851,3684055,6433179,7954067
-k493145	9292516	Scilla albinerve Yildirim & Gemici	ACCEPTED	493145	Scilla albinervis Yıldırım & Gemici (accepted)	gender	-	-
-k506721	3577063	Eriostemma coronaria (Blume) Kloppenb. & Gilding	ACCEPTED	505227	Eriostemma coronarium (Blume) Kloppenb. & Gilding (synonym under Hoya coronaria Blume)	gender	-	7544686,7702062

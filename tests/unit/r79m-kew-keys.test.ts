@@ -57,7 +57,7 @@ describe('the rule, for a page without a GBIF key', () => {
 describe('the download asks for them', () => {
   const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
   const kew = parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8'));
-  it('scripts/extra-keys-kew.txt: 1,908 keys on 1,429 of the list\'s 2,354 pages without a GBIF key (round eighty, A: Xanthoceras sorbifolium\'s key refused), none of them a list key', () => {
+  it('scripts/extra-keys-kew.txt: 1,932 keys on 1,441 of the list\'s 2,354 pages without a GBIF key (round eighty, A: Xanthoceras sorbifolium\'s key refused), none of them a list key', () => {
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     // Round eighty (X): 11 that a reference page holds through its range left out of the list, none of which read a key;
     // 19 whose key Kew's file reads as another species' name read none now, and no key of Kew's synonymy yet.
@@ -66,18 +66,22 @@ describe('the download asks for them', () => {
     // Round ninety-three: the name spelt in another gender (docs/PLAN-93.md): 59 keys added on the pages it gives a key,
     // whose own synonyms' 111 lines go with the accepted name GBIF files them under, and 30 lines whose keys not read
     // changed; 10 pages that read none read one now. 1,960 keys on 1,419 pages before; on f382389 these FAILED with 1908.
+    // Round ninety-four (docs/PLAN-94.md): the list made again whole on main's code and taken but three lines: 24 keys on
+    // the 12 pages round eighty's species list left keyless until the next refresh; held, the two merged keys the build
+    // adds itself from scripts/merged-pages.txt (k2808164's 7281739 is a key of the list) and k505095's 9592399, whose keys
+    // not read would replace the owner's. 1,908 keys on 1,429 pages before; on 62e9343 these FAILED with 1932.
     expect(keyless.size).toBe(2354);
-    expect(kew.length).toBe(1908);
+    expect(kew.length).toBe(1932);
     expect(kew.every((k) => k.pageId && keyless.has(k.pageId) && k.page === 0)).toBe(true);
-    expect(new Set(kew.map((k) => k.pageId)).size).toBe(1429);
+    expect(new Set(kew.map((k) => k.pageId)).size).toBe(1441);
     const listKeys = new Set(downloadKeysOf(list).keys);
     expect(kew.some((k) => listKeys.has(k.key))).toBe(false);
-    expect(new Set(kew.map((k) => k.key)).size).toBe(1908); // no key read by two pages
+    expect(new Set(kew.map((k) => k.key)).size).toBe(1932); // no key read by two pages
   });
   it('every request\'s keys hold them beside the list\'s, written into keys.json by page id', () => {
     const k = kewDownloadKeysOf(list, kew);
-    expect(k.keys.length).toBe(1908);
-    expect(k.pages).toBe(1429);
+    expect(k.keys.length).toBe(1932);
+    expect(k.pages).toBe(1441);
     expect(Object.keys(k.byName)[0]).toMatch(/^k\d+ by /);
     const fetch = readFileSync('scripts/bulk-fetch.ts', 'utf8');
     expect(fetch).toContain("const kewFile = 'scripts/extra-keys-kew.txt';");

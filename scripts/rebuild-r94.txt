@@ -1,0 +1,16 @@
+# Round ninety-four (docs/PLAN-94.md): the pages whose GBIF keys the lists made again whole on main's code change, as applied: the 12 pages without a GBIF key that round eighty's species list left to wait for the next refresh (24 keys of Kew's synonymy), and Viola stipularis (k2461487), which leaves out GBIF's Viola fruticosa W.Becker (5665280), a species Kew accepts.
+# No page leaves records out to them: none of the 24 keys is filed by GBIF under a page of the reference, and none is read by another page in scripts/extra-keys*.txt. Every line is a page of static/s/v3/index.json without a GBIF key, and its dossier is on disk (checked 16 November 2026, index of 16 November, 48,375 species).
+# For --keys: --keys scripts/rebuild-r94.txt --grid climate --bulk bulk (online: 23 of the 24 keys are not in the occurrence download of 21 October, so GBIF's search is asked for them; the 24th, 3791985, is, asked then for Gymnosporia acuminata by the species list's key before round eighty's homonym fix, and now read by Maytenus acuminata, whose name it is), then --index.
+k2344177 Ligusticum ferulaceum
+k2360109 Maytenus acuminata
+k2461487 Viola stipularis
+k2476687 Strobilanthes maculata
+k2551191 Pimelea villosa
+k2727610 Cleome spinosa
+k2760205 Delphinium patens
+k2800308 Erysimum ochroleucum
+k2836016 Gymnosporia acuminata
+k2861129 Ilex myrtifolia
+k2953596 Potentilla atrosanguinea
+k3234994 Haplopappus glutinosus
+k3320793 Alsophila dealbata

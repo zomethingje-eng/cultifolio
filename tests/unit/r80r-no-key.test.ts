@@ -85,25 +85,30 @@ describe('the words, and the file', () => {
   // keyless after that file was made, which the rule now gives keys the build's download did not ask (named in the header).
   // Round eighty-five (the merge): the 18 pages of decision 6 run by the same rule, 14 of them lumped (here) and 4 reading
   // a key: 923 of the 935 that read no key, the same 12 apart. Round ninety-three (the name spelt in another gender):
-  // 10 of them read a key now, 913 of the 925, the same 12 apart; on f382389 this FAILED with 913.
-  it('scripts/extra-keys-kew-none.txt: 913 of the 925 that read no key, each once, none of them a page that reads keys', () => {
+  // 10 of them read a key now, 913 of the 925, the same 12 apart; on f382389 this FAILED with 913. Round ninety-four
+  // (docs/PLAN-94.md): the list made again whole; the 12 read keys now, and k2808164 (Ferocactus hamatacanthus) reads its
+  // merge's key (scripts/merged-pages.txt, which the build adds itself) and round 86's: 912 of the 913 apart from it; on
+  // 62e9343 this FAILED with 912.
+  it('scripts/extra-keys-kew-none.txt: 912 of the 913 that read no key, each once, none of them a page that reads keys', () => {
     const list = parseSpeciesList(readFileSync('scripts/species-list.txt', 'utf8'));
     const keyless = new Set(list.filter((e) => e.gbifKey == null).map((e) => e.pageId as string));
     const keyed = new Set(parseExtraKeys(readFileSync('scripts/extra-keys-kew.txt', 'utf8')).map((k) => k.pageId));
     const text = readFileSync('scripts/extra-keys-kew-none.txt', 'utf8');
     const none = parseNoKeys(text);
-    expect(none.size).toBe(913);
+    expect(none.size).toBe(912);
     expect([...none.keys()].every((id) => keyless.has(id) && !keyed.has(id))).toBe(true);
-    expect(keyless.size - keyed.size).toBe(925);
+    expect(keyless.size - keyed.size).toBe(913);
     const later = [...keyless].filter((id) => !keyed.has(id) && !none.has(id));
-    expect(later).toHaveLength(12);
-    const header = text.split('\n').find((l) => l.startsWith('# Twelve'))!;
-    expect(later.every((id) => header.includes(id))).toBe(true);
+    expect(later).toEqual(['k2808164']);
+    expect(readFileSync('scripts/merged-pages.txt', 'utf8')).toMatch(/^7281739\tk2808164\t/m);
+    // round eighty's twelve, said to wait for the next refresh until round ninety-four, read keys
+    expect(['k2344177', 'k2360109', 'k2476687', 'k2551191', 'k2727610', 'k2760205', 'k2800308', 'k2836016', 'k2861129', 'k2953596', 'k3234994', 'k3320793'].every((id) => keyed.has(id))).toBe(true);
+    expect(text).not.toContain('# Twelve');
     const kinds = new Map<string, number>();
     for (const l of none.values()) kinds.set(l.kind, (kinds.get(l.kind) ?? 0) + 1);
     // Round ninety-three: the 10 that read a key now, by the name in another gender, were 1 lumped, 5 none, 3 other-type
-    // and 1 other-author (657, 210, 46 and 9 before).
-    expect(Object.fromEntries(kinds)).toEqual({ lumped: 656, none: 205, 'other-type': 43, 'other-author': 8, other: 1 });
+    // and 1 other-author (657, 210, 46 and 9 before). Round ninety-four: k2808164, lumped, reads its merge's key.
+    expect(Object.fromEntries(kinds)).toEqual({ lumped: 655, none: 205, 'other-type': 43, 'other-author': 8, other: 1 });
     // every page GBIF files a lumped page's names under is a page of the list, named as the list names it
     const listKeys = new Set(list.flatMap((e) => (e.gbifKey != null ? [e.gbifKey] : [])));
     const lumps = [...none.values()].filter((l) => l.kind === 'lumped');

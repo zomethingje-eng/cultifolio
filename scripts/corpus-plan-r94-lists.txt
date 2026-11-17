@@ -1,0 +1,34 @@
+# Round ninety-four (docs/PLAN-94.md): the extra-keys lists made again whole on main's code, applied but three lines.
+# The pages whose keys that changes (scripts/rebuild-r94.txt, 13 pages: round eighty's twelve that waited for the next
+# refresh, and Viola stipularis), built again online, their flowering counted again from round 92's download, then the
+# index, the upload and the live check. No app change, so no deploy.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r94-lists.txt
+# Run only once the lists and the two tests are committed (the round's gate first). When: after a day's daily run has
+# stopped, never at midnight UTC.
+#
+# The first review always stops: the dry run's figures have not been read by anyone yet. Its checks hold what is known
+# before it: 13 pages, the range rule admitting and dropping none. Read the 13 pages' records before and after: the 12
+# gain records (none had any), Viola stipularis loses those GBIF identifies as Viola fruticosa W.Becker (5665280).
+backup
+dossier --keys scripts/rebuild-r94.txt --offline --grid climate --bulk bulk --dry-run
+review Read the dry run's totals and each page's records before and after. Offline, of the 12 pages without records only Maytenus acuminata can gain (its key 3791985 is in the download of 21 October); the other 23 keys are asked in the online build. Viola stipularis loses the records GBIF identifies as Viola fruticosa. Then --go-on.
+expect let P /^\s*([\d,]+) pages derived, nothing written/
+expect let A /records: \+([\d,]+) admitted/
+expect let D /admitted on [\d,]+ pages, .([\d,]+) dropped/
+expect P = 13
+expect A = 0
+expect D = 0
+dossier --keys scripts/rebuild-r94.txt --grid climate --bulk bulk
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+review Read the --keys build's last line ("B built, K kept of 13; index now 48375 species"), the flowering fill's ("48375 pages read: N counted, …", 32,283 counted on 16 November) and the index's ("index: 48375 species").
+expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
+expect let F /^\s*([\d,]+) pages read: [\d,]+ counted/
+expect let N /pages read: ([\d,]+) counted/
+expect let I /index: ([\d,]+) species/
+expect B = 13
+expect F = 48375
+expect N >= 32283
+expect I = 48375
+upload
+live-check
