@@ -7,7 +7,7 @@
 import { scan } from './kew-names-load';
 import { loadBackbone } from './backbone-load';
 import { KewNamesIndex, words, type KewRow } from '../src/lib/dossier/kew-names';
-import { extraKeysFor, noKeyFor, kewForm, genderForms, mergeKeys, mergeTarget, mergedExcept, type ExtraKey, type Refused, type Merge, type NoKeyReading } from '../src/lib/dossier/extra-keys';
+import { extraKeysFor, noKeyFor, kewForm, genderForms, mergeKeys, mergeTarget, mergedExcept, withMergeExcept, formatExtraKeys, type ExtraKey, type Refused, type Merge, type NoKeyReading } from '../src/lib/dossier/extra-keys';
 import { slugify } from '../src/lib/core/names';
 
 /** A page: its GBIF key, or (round seventy-nine) none and its id `k<plant_name_id>`; its Kew entry. */
@@ -67,5 +67,13 @@ export async function listExtraKeys(o: { bulk: string; backbone: string; pages: 
   // (a page that reads a merged key, A's `forced`, reads a key, so it is not one of them; M).
   const forcedPages = new Set(forced.flatMap((k) => (k.pageId ? [k.pageId] : [])));
   const none = pages.flatMap((p, i) => (p.key == null && p.id && !all[i].keys.length && !forcedPages.has(p.id) ? [noKeyFor({ key: null, entry: p.name.kew?.entry ?? '', id: p.id }, idx, bb, reference, holders, merged, into)] : [])).filter((x): x is NoKeyReading => !!x);
-  return { keys: [...all.flatMap((r) => r.keys), ...forced], refused: all.flatMap((r) => r.refused), pages: pages.length, usages: bb.size, noEntry: pages.filter((p) => !p.name.kew?.entry).length, none };
+  // Round ninety-five (docs/PLAN-95.md, 3): a forced line the build makes the same itself (`mergeKeys` with only the
+  // merge's own exceptions, `withMergeKeys`) is left out of the list: it changes nothing the build reads, and a list made
+  // again then equals the committed one. One that differs (GBIF's name, or exceptions `mergedExcept` adds) is kept.
+  const own = mergeKeys(o.merges, all.flatMap((r) => r.keys), slugify);
+  const line = (k: ExtraKey) => formatExtraKeys([k], []).trim();
+  const same = forced.filter((k) => own.some((b) => line(b) === line(k)));
+  if (same.length) console.log(`  ${same.length} of them left out of the list: the build adds the same line itself (${same.map((k) => `${k.key} into ${k.pageId ?? k.page}`).join(', ')})`);
+  const keys = withMergeExcept([...all.flatMap((r) => r.keys), ...forced.filter((k) => !same.includes(k))], o.merges);
+  return { keys, refused: all.flatMap((r) => r.refused), pages: pages.length, usages: bb.size, noEntry: pages.filter((p) => !p.name.kew?.entry).length, none };
 }

@@ -37,6 +37,7 @@ import type { KewInfra } from './kew-infra';
 import { DOSSIER_V, parseDossier, setAsideExtremes, lapseSetAside, askedDetail, carriedParts, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import { shownPhotos, kindNamesOf, photoIdentity, type HeldNames } from './photo-kind';
 import { gbifPage, type PageId } from '../core/page-id';
+import { leftWords } from '../core/no-gbif';
 import { countryOf, placeWords } from '../core/place-words';
 import { extraWhy, type ExtraKey } from './extra-keys';
 import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean';
@@ -1261,7 +1262,7 @@ export type ExtraKeyRead = NonNullable<Dossier['occurrences']['keys']>[number];
 const read = (x: ExtraKey, taxonKey?: number) => !x.except?.length || (taxonKey != null && !x.except.includes(taxonKey));
 
 /** The record's words for one other key the page's records come from. */
-export const extraKeyWords = (k: ExtraKeyRead) => `${k.n} record${k.n === 1 ? '' : 's'} of GBIF's key ${k.key}, ${k.name} (${k.kew}): ${k.from === 'download' ? 'the GBIF download' : 'GBIF occurrence search API'}`;
+export const extraKeyWords = (k: ExtraKeyRead) => `${k.n} record${k.n === 1 ? '' : 's'} of GBIF's key ${k.key}, ${k.name} (${k.kew}): ${k.from === 'download' ? 'the GBIF download' : 'GBIF occurrence search API'}${k.left ? `; ${leftWords(k.left)}` : ''}`;
 
 /**
  * The records of the page's other keys (round seventy-three), joined to its own key's, one record once (a key GBIF files
@@ -1277,9 +1278,14 @@ export async function extraOccurrences(f: JsonFetcher, own: FetchResult<gbif.Gbi
     // Sampled as the page's own key is (the merge, round eighty-five; decision 5): region by region where GBIF's search holds more.
     const r = await gbif.occurrences(f, x.key, 3, boxes);
     if (r.status !== 'ok' && r.status !== 'none') return { occ: { status: r.status, detail: `GBIF's key ${x.key} (${x.label}), whose records this page reads too: ${r.detail}` }, keys: [] };
-    const got = r.status === 'ok' ? r.data.filter((g) => !seen.has(g.key) && read(x, g.taxonKey)) : [];
+    const fresh = r.status === 'ok' ? r.data.filter((g) => !seen.has(g.key)) : [];
+    const got = fresh.filter((g) => read(x, g.taxonKey));
     for (const g of got) { seen.add(g.key); rows.push(g); }
-    keys.push({ key: x.key, name: x.label, kew: extraWhy(x), n: got.length, from: r.status === 'ok' && r.data.some((g) => g.downloadDoi) ? 'download' : 'api', ...(x.merged ? { slug: x.merged } : {}) });
+    // Round ninety-five (docs/PLAN-95.md, 4): what the line's exceptions left out is said, key by key read (rule 3: the
+    // record says which). Before, the records were dropped and no page said so.
+    const out = fresh.filter((g) => !read(x, g.taxonKey)), unnamed = out.filter((g) => g.taxonKey == null).length;
+    const left = x.except?.length ? { keys: [...x.except], n: out.length - unnamed, ...(unnamed ? { unnamed } : {}) } : undefined;
+    keys.push({ key: x.key, name: x.label, kew: extraWhy(x), n: got.length, from: r.status === 'ok' && r.data.some((g) => g.downloadDoi) ? 'download' : 'api', ...(x.merged ? { slug: x.merged } : {}), ...(left ? { left } : {}) });
   }
   return { occ: rows.length ? { status: 'ok', data: rows } : { status: 'none' }, keys };
 }

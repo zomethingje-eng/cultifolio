@@ -43,7 +43,7 @@ describe('r89b 1: the checks', () => {
     expect(() => parseExpect('R ~ 44000')).toThrow(/~ needs ±N%/);
     expect(() => parseExpect('R = 4 ±5%')).toThrow(/±N% goes with ~ only/);
     expect(() => parseExpect('let R no pattern')).toThrow(/not a check this script reads/);
-    expect(() => parsePlan('dossier --index\nexpect let I /index: (\\d+)/')).toThrow(/line 2: .*an expect line goes under a review line/);
+    expect(() => parsePlan('dossier --index\nexpect let I /index: (\\d+)/')).toThrow(/line 2: .*an expect line goes under a review or stop line/);
     expect(() => parsePlan('review Read it.\nexpect I => 4')).toThrow(/line 2: /);
   });
   it('expect lines belong to the review above them, not steps of their own: a plan given them keeps where its run is', () => {

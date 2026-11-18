@@ -32,7 +32,7 @@
   import { heroOf, spreadByObserver } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
   import { notAnswered, climateDetail, registersNotChecked, namesSource } from '$lib/ui/ref/upstream';
-  import { noGbif, recordsUnchecked, kewKeysSentence, uncheckedSentence } from '$core/no-gbif';
+  import { noGbif, recordsUnchecked, kewKeysSentence, uncheckedSentence, leftWords, type KeyLeft } from '$core/no-gbif';
   import { climateReason, outsideOnly, outsideUnused, wideRange, wideRangeSaid } from '$dossier/range-via';
   import { citedNote, rangeNote, olderNames, summaryOlderName } from '$lib/ui/ref/notes';
   import { wasLine, gbifNameLine, plainWords } from '$lib/ui/ref/was-words';
@@ -338,7 +338,7 @@
    * each key, GBIF's name for it, how Kew's file holds it as this plant, the records it added, where they came from, and,
    * for a page merged into this one, its old address. None on a dossier built before.
    */
-  type OtherKey = { key: number; name: string; kew: string; n: number; from: 'download' | 'api'; slug?: string };
+  type OtherKey = { key: number; name: string; kew: string; n: number; from: 'download' | 'api'; slug?: string; left?: KeyLeft };
   const otherKeys = $derived(((d.occurrences as { keys?: OtherKey[] }).keys ?? []) as OtherKey[]);
   const otherKeySet = $derived(new Set(otherKeys.map((k) => k.key)));
   const otherSlugs = $derived(new Set(otherKeys.map((k) => k.slug).filter((s): s is string => !!s)));
@@ -928,7 +928,7 @@
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed only roughly (to worse than 10 km, or with no stated accuracy) and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but out of the climate (<a class="help" href="/about/how#records">which records count</a>).{/if}</div>
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: {wide ? `${wideRangeSaid(wide)}, so records are not tested against it` : 'country level only, so records are not tested against it'}.</div>{/if}
     <!-- The other GBIF keys the records come from, each named with its Kew reading and its source (round seventy-three; K). -->
-    {#if otherKeys.length}<div class="wide" id="other-keys"><b>Other GBIF keys</b>{#each otherKeys as k (k.key)}<span class="otherkey">Records also from GBIF's key <a href="https://www.gbif.org/species/{k.key}" rel="noopener">{k.key}</a> ({k.name}): {readerWords(k.kew)}; {k.n.toLocaleString('en-US')} record{k.n === 1 ? '' : 's'}, from {fromWords(k.from)}.</span>{/each}</div>{/if}
+    {#if otherKeys.length}<div class="wide" id="other-keys"><b>Other GBIF keys</b>{#each otherKeys as k (k.key)}<span class="otherkey">Records also from GBIF's key <a href="https://www.gbif.org/species/{k.key}" rel="noopener">{k.key}</a> ({k.name}): {readerWords(k.kew)}; {k.n.toLocaleString('en-US')} record{k.n === 1 ? '' : 's'}, from {fromWords(k.from)}{#if k.left}; <span class="keyleft">{leftWords(k.left)}</span>{/if}.</span>{/each}</div>{/if}
   </div>
   <!-- When wild plants were seen in flower, by month (round eighty-seven, stage 2; the links agent's section). -->
   <Flowering dossier={d} />

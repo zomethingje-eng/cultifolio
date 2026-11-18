@@ -275,15 +275,21 @@ export function extraKeysFor(page: PageIn, idx: Pick<KewNamesIndex, 'byId' | 'ch
     // are Kew's heterotypic synonyms of it). What GBIF files under it is still judged name by name, below.
     // The page joined is named by its GBIF key, or (round eighty) by its id where it has none.
     const joins = into.get(u.key);
-    const other = joins !== undefined && (joins === page.key || joins === page.id) ? null : mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
+    const isMerge = joins !== undefined && (joins === page.key || joins === page.id);
+    const other = isMerge ? null : mine.map((r) => typeWhy(r, page.entry, idx)).find(Boolean);
     if (other) return { why: other };
     // What GBIF files under it that is another plant's (or a pro parte synonym), and what GBIF files under those: left out.
+    // Round ninety-five (docs/PLAN-95.md, 2): under a key merged into the page, only those, as `mergedExcept` leaves them
+    // out of a merge the rule gives no line. The merge is the owner's claim that the merged name is this plant, so a name
+    // GBIF files under it that Kew holds as this plant is this plant's too, whatever its type: Ceropegia nubica (9592399),
+    // merged into Echidnopsis cereiformis, reads its basionym Echidnopsis nubica (3577904, Kew's 505128); before, the type
+    // rule left it out as heterotypic to the entry, which the merged key itself is.
     const below = bb.under?.(u.key) ?? [];
     const out = new Set<number>();
     for (const c of below) {
       if (proParte(c)) { out.add(c.key); continue; }
       const r = kewReading(c, idx, (k) => bb.usage(k));
-      if (r.rows.some((x) => elsewhere(x, plant) || (ofPlant(x, plant) && typeWhy(x, page.entry, idx)))) out.add(c.key);
+      if (r.rows.some((x) => elsewhere(x, plant) || (!isMerge && ofPlant(x, plant) && typeWhy(x, page.entry, idx)))) out.add(c.key);
     }
     for (const c of below) if (!out.has(c.key) && bb.lineage(c.key).slice(1).some((a) => out.has(a))) out.add(c.key);
     const except = [...out].sort((a, b) => a - b);
@@ -549,6 +555,23 @@ export function mergeKeys(merges: readonly Merge[], have: readonly ExtraKey[], s
     out.push({ page: m.intoPage ? 0 : m.into, ...(m.intoPage ? { pageId: m.intoPage } : {}), key: m.from, label: u?.label ?? m.name, status: u?.status ?? 'ACCEPTED', kew: '-', kewLabel: 'the page merged into this one', how: 'merged', merged: slugOf(m.name), ...(ex.length ? { except: ex } : {}) });
   }
   return out;
+}
+
+/**
+ * A merged key's line with its merge's own `except:` (scripts/merged-pages.txt) joined to the line's, whichever line it is
+ * (round ninety-five, docs/PLAN-95.md, 3). A list's line for a merged key takes the place of the line `mergeKeys` makes, so
+ * before, a list line made without the merge's own exceptions read what the owner left out: Ceropegia nubica (9592399)
+ * into k505095 leaves out Echidnopsis uraiqatiana (3577721), which GBIF's API files under it and the backbone export
+ * does not, so the rule's line for it lists no exception (round ninety-four held it for that).
+ */
+export function withMergeExcept(keys: readonly ExtraKey[], merges: readonly Merge[]): ExtraKey[] {
+  const own = new Map(merges.filter((m) => m.except?.length).map((m) => [`${mergeTarget(m)}:${m.from}`, m.except!] as const));
+  return keys.map((k) => {
+    const ex = own.get(`${k.pageId ?? k.page}:${k.key}`);
+    if (!ex) return k;
+    const all = [...new Set([...(k.except ?? []), ...ex])].sort((a, b) => a - b);
+    return all.length === (k.except?.length ?? 0) ? k : { ...k, except: all };
+  });
 }
 
 /**

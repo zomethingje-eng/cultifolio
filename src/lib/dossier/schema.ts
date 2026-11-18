@@ -211,7 +211,7 @@ export const Occurrences = v.object({
    * name for it, how Kew's file holds it as this plant, the records it added, whether they came from the download or the
    * search API, and, for a page merged into this one, its old address. Absent: the page's own key alone.
    */
-  keys: v.optional(v.array(v.object({ key: v.number(), name: v.string(), kew: v.string(), n: v.number(), from: v.picklist(['download', 'api']), slug: v.optional(v.string()) }))),
+  keys: v.optional(v.array(v.object({ key: v.number(), name: v.string(), kew: v.string(), n: v.number(), from: v.picklist(['download', 'api']), slug: v.optional(v.string()), left: v.optional(v.object({ keys: v.array(v.number()), n: v.number(), unnamed: v.optional(v.number()) })) }))),
   /**
    * A page without a GBIF key that read no key (round eighty): why, for that page (`noKeyWhy` in `$core/no-gbif`, from what
    * GBIF's backbone holds of the names Kew's file gives it), and, where GBIF files those names under other pages of the

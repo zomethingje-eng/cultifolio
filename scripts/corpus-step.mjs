@@ -24,7 +24,8 @@
 // job (Y/N)?", which this script cannot answer for you (either answer is safe; the state is written before it asks).
 //
 // Each step of the plan is a line: `backup`, `dossier <the builder's arguments>`, `if-exists <file> dossier ...`,
-// `review <what to read>`, `upload`, `live-check`, and `daily dossier <a fill>` (round ninety): the day's fills, each under
+// `review <what to read>`, `stop <what to read>` (round ninety-five: a review that stops even when its checks hold),
+// `upload`, `live-check`, and `daily dossier <a fill>` (round ninety): the day's fills, each under
 // a daily allowance of its own; one that stops at its allowance hands over to the next daily step, and the run stops
 // before the first step after them until every one has finished. A step that finishes is recorded in corpus-step.json and not run again;
 // one that stops is run again by the next run, and every builder step is itself resumable. Everything the steps print
@@ -83,7 +84,7 @@ export function builderHeap(total = totalmem(), env = process.env) {
 
 /** The plan: one step a line, `#` starts a comment. Throws on a line it does not know, so a typo stops before anything runs. */
 export function parsePlan(text) {
-  /** @type {Array<{ line: any, kind: any, args: any, when?: string, expects?: any[], daily?: boolean }>} */
+  /** @type {Array<{ line: any, kind: any, args: any, when?: string, expects?: any[], daily?: boolean, always?: boolean }>} */
   const steps = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
     const line = raw.replace(/#.*$/, '').trim();
@@ -96,7 +97,7 @@ export function parsePlan(text) {
     // steps of their own, so adding them to a plan under way keeps where its run is.
     if (kind === 'expect') {
       const last = steps[steps.length - 1];
-      if (!last || last.kind !== 'review' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": an expect line goes under a review line`);
+      if (!last || last.kind !== 'review' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": an expect line goes under a review or stop line`);
       try { (last.expects ??= []).push(parseExpect(rest.slice('expect'.length))); } catch (e) { throw new Error(`corpus plan line ${i + 1}: ${e instanceof Error ? e.message : String(e)}`); }
       continue;
     }
@@ -107,6 +108,14 @@ export function parsePlan(text) {
       const [inner, ...innerArgs] = args;
       if (inner !== 'dossier' || when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": daily goes before a dossier step, as "daily dossier --fill <source>"`);
       steps.push({ line, kind: inner, args: innerArgs, daily: true });
+      continue;
+    }
+    // Round ninety-five: `stop <what to read>` is a review that always stops. Its expect lines are checked and said first,
+    // as a review's are, but holding they do not carry the run on (round ninety-four's plan meant its first review to stop
+    // every time, gave it three checks, and it carried on: docs/REVIEW-ROUND-94.md).
+    if (kind === 'stop') {
+      if (when) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}": a stop is not conditional`);
+      steps.push({ line, kind: 'review', args: [rest.slice('stop'.length).trim()], always: true });
       continue;
     }
     if (!['backup', 'dossier', 'review', 'upload', 'live-check'].includes(kind)) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}" is not a step this script knows`);
@@ -368,12 +377,12 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         // Its checks (round eighty-nine), on what the builder steps since the review before printed: every one holding, the
         // run carries on, saying each figure; any not, or any figure not found, a stop as always, the checks first.
         const checked = step.expects?.length ? reviewChecks(i) : null;
-        if (checked?.pass) {
+        if (checked?.pass && !step.always) {
           say(`  the review's ${step.expects.length} checks hold:\n${checked.lines.join('\n')}\n  carrying on (the review: ${step.args[0].slice(0, 160)}${step.args[0].length > 160 ? '…' : ''})\n`);
           rec.status = 'done'; rec.note = `passed by its ${step.expects.length} checks ${stamp()}`; save();
           continue;
         }
-        const first = checked ? `${checked.why}\n${checked.lines.join('\n')}\n` : '';
+        const first = checked ? `${checked.pass ? `Its ${step.expects.length} checks hold (a stop all the same: the plan says stop):` : checked.why}\n${checked.lines.join('\n')}\n` : '';
         result = { status: 'review', why: first + step.args[0] + facts(root, state.corpusBefore, state.backupDir) };
       } else if (step.kind === 'backup') {
         if (!existsSync(at(CORPUS)) && existsSync(at(BEFORE))) {

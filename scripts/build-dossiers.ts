@@ -288,7 +288,7 @@ import { offlineFetcher, carryRederivedRows, carriedRow, carriedDetail, literatu
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
 import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, wikidataRetryList, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 import { proofByName } from '../src/lib/dossier/summary-proof';
-import { parseExtraKeys, formatExtraKeys, byPage, byPageId, withKeysUnder, kewPlantWords, parseMerges, mergedToPrune, mergeKeys, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
+import { parseExtraKeys, formatExtraKeys, byPage, byPageId, withKeysUnder, kewPlantWords, parseMerges, mergedToPrune, mergeKeys, withMergeExcept, extraRebuild, parseNoKeys, type ExtraKey, type Merge } from '../src/lib/dossier/extra-keys';
 import { listExtraKeys } from './extra-keys-list';
 import { parsePlaces, PlaceIndex, InstitutionEffect } from '../src/lib/dossier/clean';
 import { aliasesOf, type Alias } from '../src/lib/dossier/products';
@@ -945,7 +945,7 @@ const regions: RegionTester | undefined = !fixtures && existsSync(SHAPES_FILE) ?
 /** The list's lines and a line for every merge the list does not give one (round eighty, A; `mergeKeys`). */
 function withMergeKeys(keys: ExtraKey[]): ExtraKey[] {
   const ms = existsSync('scripts/merged-pages.txt') ? parseMerges(readFileSync('scripts/merged-pages.txt', 'utf8')) : [];
-  return oneLineAKey([...keys, ...mergeKeys(ms, keys, slugify)]);
+  return withMergeExcept(oneLineAKey([...keys, ...mergeKeys(ms, keys, slugify)]), ms);
 }
 /** Of a page's lines for one key, one: a merge's (which names the old address) before any other (round eighty, A). */
 function oneLineAKey(keys: ExtraKey[]): ExtraKey[] {

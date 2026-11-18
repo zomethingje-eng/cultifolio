@@ -2,6 +2,7 @@
 # Made 2026-10-21 by --list-extra-keys from Kew's file of 2026-06-04 and GBIF's backbone export (simple.txt.gz): 1340 keys on 1200 of 46024 pages.
 # Round ninety-three (2026-11-16): the difference the round's rule makes, applied to this file: --list-extra-keys run on f382389's code and on the round's, from the same files, and only the lines that differ taken (63 added, 7 replaced, 11 removed, on 69 pages; the same name with its epithet in another gender, and what that reads).
 # Round ninety-four (2026-11-16, docs/PLAN-94.md): made again whole by --list-extra-keys on 62e9343's code from the corpus on disk and the same files: 1391 keys on 1252 pages, the committed list but one line: 9574874's 9592399, a page merged into k505095 by round eighty (scripts/merged-pages.txt), whose line nothing has read since.
+# Round ninety-five (2026-11-18, docs/PLAN-95.md, 2): made again whole on the round's code from the corpus on disk and the same files: the four merges of keyed pages read what GBIF files under the merged key that Kew's file holds as the page's plant, whatever its type (Weingartia pulchra 34 names, among them its basionym Rebutia pulchra; Copiapoa boliviana its basionym Echinocactus bolivianus; Drosera parvula its autonym; Rebutia fidana subsp. cintiensis). 1391 keys on 1252 pages.
 # page key, key, GBIF's name, GBIF's status, Kew's row (plant_name_id), Kew's reading, how, the old address of a page merged here (or -), the keys under it not read (or -)
 8793122	2905493	Ixora coccinea L.	DOUBTFUL	103356	Ixora coccinea L. (accepted)	entry	-	2905349,2905601,2905604,2905605,2905606,2905607,2905608,2905610,2905611,2905612,2905613,2905614,2905615,2905617,2905618,2905619,2905620,2905621,2905622,2905623,2905624,2905625,2905626,2924708,3846033,6288722,7429843,7463698,8078300,8165259,8535940,9281276,11059692,11235118,11276741,11346026
 8140555	2905335	Ixora macrothyrsa (Teijsm. & Binn.) T.Moore	DOUBTFUL	103707	Ixora macrothyrsa (Teijsm. & Binn.) N.E.Br. (accepted)	entry	-	-
@@ -252,8 +253,8 @@
 7332233	5559887	Hebe hulkeana (F.Muell.) Cockayne & Allan	SYNONYM	2840482	Hebe hulkeana (F.Muell. ex Hook.f.) Andersen (synonym under Veronica hulkeana F.Muell. ex Hook.f.)	filed	-	-
 5663831	11287169	Viola altaica KerGawl.	DOUBTFUL	2463436	Viola altaica Ker Gawl. (accepted)	entry	-	-
 2888746	8353967	Valeriana edulis Nutt.	DOUBTFUL	2464355	Valeriana edulis Nutt. (accepted)	entry	-	-
-7281301	7906297	Rebutia fidana (Backeb.) D.R.Hunt	ACCEPTED	2417022	Rebutia fidana (Backeb.) D.R.Hunt (synonym under Weingartia fidana (Backeb.) Werderm.)	filed	rebutia-fidana	7477746
-3948341	3947359	Weingartia pulchra (Cárdenas) F.H.Brandt	ACCEPTED	2465944	Weingartia pulchra (Cárdenas) F.H.Brandt (synonym under Weingartia canigueralii (Cárdenas) F.H.Brandt)	filed	weingartia-pulchra	3947135,3947285,3947958,3948070,3948079,3948246,3948325,3948477,3948564,3949770,3951073,3952274,3952285,3952294,3958446,3958468,3958750,3958757,3958767,3959161,3959200,3959272,3959281,3959284,3959291,3959295,3959302,3959412,3959418,3959503,3959680,7281342,7281430,7284259,7284380,7284404,7284437,8484593,8694832,9219648,10907445,11024133,11051747,11103521,11232977,11320684,12007072
+7281301	7906297	Rebutia fidana (Backeb.) D.R.Hunt	ACCEPTED	2417022	Rebutia fidana (Backeb.) D.R.Hunt (synonym under Weingartia fidana (Backeb.) Werderm.)	filed	rebutia-fidana	-
+3948341	3947359	Weingartia pulchra (Cárdenas) F.H.Brandt	ACCEPTED	2465944	Weingartia pulchra (Cárdenas) F.H.Brandt (synonym under Weingartia canigueralii (Cárdenas) F.H.Brandt)	filed	weingartia-pulchra	3948079,3948477,3952294,3959284,3959291,3959295,3959302,7281342,7284404,7284437,8694832,9219648,12007072
 3190517	9710870	Xylocarpus granatum K.D.Koenig, 1784	DOUBTFUL	2467231	Xylocarpus granatum J.Koenig (accepted)	entry	-	-
 3034521	7756102	Carum aureum (L.) J.M.Coult. & Rose	ACCEPTED	2701480	Carum aureum (L.) Alph.Wood (synonym under Zizia aurea (L.) W.D.J.Koch)	filed	-	-
 2764908	3697159	Aneilema lineare (Benth.) Woodson, 1942	ACCEPTED	220094	Aneilema linearis (Benth.) Woodson (synonym under Gibasis linearis (Benth.) Rohweder)	gender	-	-
@@ -550,7 +551,7 @@
 3993157	7790236	Commiphora staphyleifolia Chiov.	DOUBTFUL	2733693	Commiphora staphyleifolia Chiov. (accepted)	entry	-	-
 8270983	3703683	Conophytum ratum S.N.Hammer, 1991	DOUBTFUL	2735181	Conophytum ratum S.A.Hammer (accepted)	entry	-	-
 7329173	11234333	Conophytum smorenskaduense DeBoer	DOUBTFUL	2735232	Conophytum smorenskaduense de Boer (accepted)	entry	-	-
-7284393	3959296	Copiapoa boliviana (Pfeiff.) F.Ritter	ACCEPTED	2735920	Copiapoa boliviana (Pfeiff.) F.Ritter (synonym under Copiapoa calderana F.Ritter)	filed	copiapoa-boliviana	3947187,3959266,7284409,7369645
+7284393	3959296	Copiapoa boliviana (Pfeiff.) F.Ritter	ACCEPTED	2735920	Copiapoa boliviana (Pfeiff.) F.Ritter (synonym under Copiapoa calderana F.Ritter)	filed	copiapoa-boliviana	3959266,7284409,7369645
 5531074	8242141	Corydalis calycosa X.Zhuang	DOUBTFUL	2738539	Corydalis calycosa X.Zhuang (accepted)	entry	-	5531763
 8186550	7314770	Corydalis curviflora Maxim. ex Hemsl.	DOUBTFUL	2738624	Corydalis curviflora Maxim. ex Hemsl. (accepted)	entry	-	-
 7314813	7451571	Corydalis maracandica Michajlova	DOUBTFUL	2738972	Corydalis maracandica Michajlova (accepted)	entry	-	8276204
@@ -1371,7 +1372,7 @@
 8380381	3191107	Drosera fimbriata DeBuhr	DOUBTFUL	64350	Drosera fimbriata DeBuhr (accepted)	entry	-	-
 3190953	8011305	Drosera glabripes (Harv.) T.M.Salter	DOUBTFUL	64362	Drosera glabripes (Harv. ex Planch.) Stein (accepted)	entry	-	-
 3191147	8237847	Drosera marchantii DeBuhr	DOUBTFUL	64435	Drosera marchantii DeBuhr (accepted)	entry	-	-
-3190812	3190985	Drosera parvula Planch.	ACCEPTED	64508	Drosera parvula Planch. (synonym under Drosera paleacea DC.)	filed	drosera-parvula	3190986,3190987,7069149
+3190812	3190985	Drosera parvula Planch.	ACCEPTED	64508	Drosera parvula Planch. (synonym under Drosera paleacea DC.)	filed	drosera-parvula	3190986,3190987
 2827370	12117587	Encyclia papillosa (Bateman) Ag.	HOMOTYPIC_SYNONYM	67200	Encyclia papillosa (Bateman ex Lindl.) Aguirre-Olav. (accepted)	entry	-	-
 11344748	12293197	Alocasia zebrina G.W.Johnson & R.Hogg	DOUBTFUL	6868	Alocasia zebrina G.W.Johnson & R.Hogg (accepted)	entry	-	-
 7297208	7775299	Aloysia virgata (Ruiz & Pav.) Pers.	DOUBTFUL	6956	Aloysia virgata (Ruiz & Pav.) Pers. (accepted)	entry	-	-

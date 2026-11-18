@@ -47,13 +47,33 @@ export function recordsUnchecked(d: { ids?: { gbif?: number | null } | null; gbi
 }
 
 /**
+ * The keys GBIF files under a key a page reads whose records the page leaves out (round ninety-five, docs/PLAN-95.md, 4;
+ * `ExtraKey.except`): names Kew's file holds as another plant, or of another type than the page's entry, pro parte
+ * synonyms, and what GBIF files under those. `n` counts the records GBIF gave under the key read that it identifies as
+ * one of them, `unnamed` those it identifies as no name (left out too, since nothing says they are not one of them).
+ * Before, the build dropped those records and the page said nothing of them.
+ */
+export interface KeyLeft { keys: readonly number[]; n: number; unnamed?: number }
+const recs = (n: number) => `${n.toLocaleString('en-US')} record${n === 1 ? '' : 's'}`;
+const keyList = (keys: readonly number[]) => `GBIF's key${keys.length === 1 ? '' : 's'} ${keys.join(', ')}`;
+/** As the record and the page's "Other GBIF keys" say it. */
+export function leftWords(l: KeyLeft): string {
+  const said = l.n ? `${recs(l.n)} GBIF gave under it left out as one of them` : 'none of the records GBIF gave under it was one of them';
+  return `not read under it: ${keyList(l.keys)}, names Kew's World Checklist holds as another plant or of another type, or pro parte synonyms (${said}${l.unnamed ? `; ${recs(l.unnamed)} GBIF names no taxon for, left out too` : ''})`;
+}
+/** As the sentence of a page without a GBIF key says it, inside a key's brackets. */
+export function leftShort(l: KeyLeft): string {
+  return `${keyList(l.keys)} under it not read, ${l.n ? `${recs(l.n)} left out` : 'no record left out'}${l.unnamed ? `, and ${recs(l.unnamed)} with no name` : ''}`;
+}
+
+/**
  * What a page without a GBIF key says of the records it read under the keys Kew's synonymy gives it, as a sentence. A key
  * read because a page was merged into this one (it carries that page's old address, `slug`) is named apart: it is the
  * reference's merge, not Kew's synonymy (round eighty-four; review S's 7: Echeveria desmetiana said Echeveria peacockii's
  * key came from Kew's synonymy, while Kew files that name under Dudleya pulverulenta).
  */
-export function kewKeysSentence(keys: ReadonlyArray<{ key: number; name: string; n: number; slug?: string }>): string {
-  const item = (k: (typeof keys)[number]) => `${k.key} (${k.name}, ${k.n} record${k.n === 1 ? '' : 's'})`;
+export function kewKeysSentence(keys: ReadonlyArray<{ key: number; name: string; n: number; slug?: string; left?: KeyLeft }>): string {
+  const item = (k: (typeof keys)[number]) => `${k.key} (${k.name}, ${k.n} record${k.n === 1 ? '' : 's'}${k.left ? `; ${leftShort(k.left)}` : ''})`;
   const kew = keys.filter((k) => !k.slug), merged = keys.filter((k) => k.slug);
   const kewPart = kew.length ? `under the key${kew.length === 1 ? '' : 's'} of the name${kew.length === 1 ? '' : 's'} Kew's World Checklist holds as this plant: ${kew.map(item).join(', ')}` : '';
   const mergedPart = merged.length ? `under the key${merged.length === 1 ? '' : 's'} of ${merged.length === 1 ? 'a page' : 'pages'} merged into this one: ${merged.map(item).join(', ')}` : '';
