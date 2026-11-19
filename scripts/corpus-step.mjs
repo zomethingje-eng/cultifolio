@@ -383,7 +383,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
           continue;
         }
         const first = checked ? `${checked.pass ? `Its ${step.expects.length} checks hold (a stop all the same: the plan says stop):` : checked.why}\n${checked.lines.join('\n')}\n` : '';
-        result = { status: 'review', why: first + step.args[0] + facts(root, state.corpusBefore, state.backupDir) };
+        result = { status: 'review', why: first + step.args[0] + facts(root, state.corpusBefore, state.backupDir, state.backupAt) };
       } else if (step.kind === 'backup') {
         if (!existsSync(at(CORPUS)) && existsSync(at(BEFORE))) {
           // Round seventy-eight: this version's corpus is written from the version before's (`--rekey`), which is read and
@@ -393,12 +393,15 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
           state.speciesBefore = readJson(at(`${BEFORE}/index.json`))?.length ?? state.speciesBefore;
           state.corpusBefore = id;
           state.backupDir = BEFORE;
+          state.backupAt = undefined;
           result = { status: 'done' };
         } else {
         const id = readJson(at(`${CORPUS}/manifest.json`))?.id ?? 'no-manifest';
         const to = at(`backups/v${VERSION}-${id}`);
-        if (existsSync(to)) say(`  backups/v${VERSION}-${id} is there already: the corpus as it was is kept.\n`);
-        else { say(`  copying ${CORPUS} to backups/v${VERSION}-${id} (a minute or two)…\n`); cpSync(at(CORPUS), to, { recursive: true }); say(`  done: to go back, delete ${CORPUS} and copy backups/v${VERSION}-${id} in its place.\n`); }
+        // Round ninety-seven: the moment the copy began, so a review compares with the backup only the dossiers written
+        // since (`facts`' `since`); a backup already there was made at another moment, and every dossier is compared.
+        if (existsSync(to)) { say(`  backups/v${VERSION}-${id} is there already: the corpus as it was is kept.\n`); state.backupAt = undefined; }
+        else { state.backupAt = Date.now(); say(`  copying ${CORPUS} to backups/v${VERSION}-${id} (a minute or two)…\n`); cpSync(at(CORPUS), to, { recursive: true }); say(`  done: to go back, delete ${CORPUS} and copy backups/v${VERSION}-${id} in its place.\n`); }
         state.speciesBefore = readJson(at(`${CORPUS}/index.json`))?.length ?? state.speciesBefore;
         state.corpusBefore = id;
         state.backupDir = `backups/v${VERSION}-${id}`;
@@ -625,8 +628,16 @@ const samePage = (a, b, acrossIds, gbifOf) => {
   return acrossIds ? JSON.stringify(withoutIds(x, gbifOf)) === JSON.stringify(withoutIds(y, gbifOf)) : JSON.stringify(withSets(x)) === JSON.stringify(withSets(y));
 };
 
-/** What the review before the upload states: the corpus on disk against the backup, and drops.txt. */
-export function facts(root, before, backupDir) {
+/**
+ * What the review before the upload states: the corpus on disk against the backup, and drops.txt.
+ *
+ * `since` (round ninety-seven): the moment the run's backup step began copying (`state.backupAt`). A dossier whose file was
+ * last written before it is the backup's copy byte for byte, so it is not read from the backup; every dossier is still
+ * read once, for the rows a source did not answer. Without `since` (`--compare`, a backup made before this run), every
+ * dossier is compared, as before. Round ninety-six's stop read the whole corpus three times over, 4.9 GB a time: 65 s
+ * with the files in memory and about ten minutes after the build had streamed the 62 GB GBIF download through it.
+ */
+export function facts(root, before, backupDir, since) {
   const m = readJson(join(root, CORPUS, 'manifest.json'));
   const idx = readJson(join(root, CORPUS, 'index.json'));
   const drops = existsSync(join(root, 'drops.txt')) ? readFileSync(join(root, 'drops.txt'), 'utf8').split(/\r?\n/).filter(Boolean).length : 0;
@@ -638,18 +649,30 @@ export function facts(root, before, backupDir) {
   let acrossIds = false;
   // Rows a source did not answer ("error"), by source, and the pages that hold one (round eighty-one, review B2): the review
   // before an upload counts them, so a fill that ended with pages left unanswered is seen there, not only in its own lines.
-  const errors = errorRows(root);
-  if (back && existsSync(back) && existsSync(join(root, CORPUS))) {
+  const comparing = !!back && existsSync(back) && existsSync(join(root, CORPUS));
+  if (comparing) acrossIds = !readdirSync(back).some((x) => DOSSIER_FILE.test(x)) && readdirSync(back).some((x) => V2_FILE.test(x));
+  let errors;
+  if (comparing && !acrossIds) {
+    // One read of each dossier, for its error rows and, where it was written since the backup began, against the backup.
     changed = [];
-    acrossIds = !readdirSync(back).some((x) => DOSSIER_FILE.test(x)) && readdirSync(back).some((x) => V2_FILE.test(x));
-    const files = readdirSync(join(root, CORPUS)).filter((x) => DOSSIER_FILE.test(x));
-    // Each page's id and its GBIF key, read once: a reference to a page by id is compared as version 2's GBIF key.
-    const gbifOf = new Map();
-    if (acrossIds) for (const f of files) { const g = readJson(join(root, CORPUS, f))?.ids?.gbif; if (typeof g === 'number') gbifOf.set(f.slice(0, -5), g); }
-    for (const f of files) {
-      const now = readFileSync(join(root, CORPUS, f));
-      const was = join(back, acrossIds ? `${gbifOf.get(f.slice(0, -5))}.json` : f);
-      if (!existsSync(was) || !samePage(readFileSync(was), now, acrossIds, gbifOf)) changed.push(f.slice(0, -5));
+    errors = errorRows(root, (f, now) => {
+      if (typeof since === 'number' && statSync(join(root, CORPUS, f)).mtimeMs < since) return;
+      const was = join(back, f);
+      if (!existsSync(was) || !samePage(readFileSync(was), now, false, null)) changed.push(f.slice(0, -5));
+    });
+  } else {
+    errors = errorRows(root);
+    if (comparing) {
+      changed = [];
+      const files = readdirSync(join(root, CORPUS)).filter((x) => DOSSIER_FILE.test(x));
+      // Each page's id and its GBIF key, read once: a reference to a page by id is compared as version 2's GBIF key.
+      const gbifOf = new Map();
+      for (const f of files) { const g = readJson(join(root, CORPUS, f))?.ids?.gbif; if (typeof g === 'number') gbifOf.set(f.slice(0, -5), g); }
+      for (const f of files) {
+        const now = readFileSync(join(root, CORPUS, f));
+        const was = join(back, `${gbifOf.get(f.slice(0, -5))}.json`);
+        if (!existsSync(was) || !samePage(readFileSync(was), now, true, gbifOf)) changed.push(f.slice(0, -5));
+      }
     }
   }
   const ch = changed ? `; ${changed.length} dossier${changed.length === 1 ? ' differs' : 's differ'} from the backup of corpus ${before}${acrossIds ? ' apart from their ids' : ''}${changed.length ? ` (${changed.slice(0, 12).join(', ')}${changed.length > 12 ? ', …' : ''})` : ''}` : '';
@@ -662,14 +685,17 @@ export function facts(root, before, backupDir) {
 }
 
 /** Every dossier's rows whose status is "error", by source (round eighty-one, review B2), read whole from the corpus on disk. */
-export function errorRows(root) {
+export function errorRows(root, each) {
   const dir = join(root, CORPUS);
   const by = new Map();
   const sample = [];
   let pages = 0;
   if (!existsSync(dir)) return { pages, by, sample };
   for (const f of readdirSync(dir).filter((x) => DOSSIER_FILE.test(x))) {
-    const text = readFileSync(join(dir, f), 'utf8');
+    // `each` (round ninety-seven): the file's bytes as read here, so `facts` reads each dossier once.
+    const bytes = readFileSync(join(dir, f));
+    if (each) each(f, bytes);
+    const text = bytes.toString('utf8');
     if (!/"status"\s*:\s*"error"/.test(text)) continue;
     let d;
     try { d = JSON.parse(text); } catch { continue; }

@@ -165,8 +165,21 @@ test('r76p strip 2: the desktop\'s strip, search and first row where round eight
 /** Long credits from the live corpus, written into the tiles in turn: each wraps to three lines or more in a 112 px tile. */
 const LONG = ['Photo: CC BY, Sandy Wolkenberg', 'Photo: CC BY, Николай Соболев', 'Photo: CC BY, Ricard Busquets Reverte', 'Photo: CC BY-SA, Dilrukshan Priyantha Wijesinghe', 'Photo: CC0'];
 
-/** Every credit in the boxes `tiles` names: its text whole (nothing scrolled out of its box) and inside its tile; and the tiles' heights. */
-const fit = (page: Page, tiles: string, cred: string) => page.evaluate(([tSel, cSel]) => {
+/**
+ * Every credit in the boxes `tiles` names: its text whole (nothing scrolled out of its box) and inside its tile; and the tiles' heights.
+ *
+ * Measured two frames after it is called (round ninety-seven). A catalogue tile is `content-visibility: auto` with a 260 px
+ * placeholder (theme.css): until the frame that finds it on screen, its contents are skipped and it stands 260 px high
+ * whatever they hold. Measured frame by frame from load in Chromium on a8bb7e8, the opened row's first tile was 260 px
+ * with its credit below it in frames 0 and 1, and 383 px (377 at 390 px, 200% text) with the credit inside from frame 2 on,
+ * in two of four page loads; a reader never sees the placeholder, since a tile is drawn before it shows. So strip 4 failed
+ * "tile … outside its card" when it measured inside those frames: once in each of rounds 93, 94 and 95, passing on its retry.
+ * On a8bb7e8 (measured at once): FAILED in two of four page loads of the frame-by-frame measure; waited two frames, every frame
+ * after is the drawn tile. Run alone, twenty times at four workers, strip 4 passed 20 of 20 both before and after: the race
+ * shows only under the whole gate's load, so the frame-by-frame measure is what shows it.
+ */
+const fit = (page: Page, tiles: string, cred: string) => page.evaluate(async ([tSel, cSel]) => {
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   return [...document.querySelectorAll<HTMLElement>(tSel)].filter((t) => t.offsetParent !== null && t.getBoundingClientRect().height > 0).map((t) => {
     const c = t.querySelector<HTMLElement>(cSel);
     const tr = t.getBoundingClientRect();

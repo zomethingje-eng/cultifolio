@@ -1,0 +1,18 @@
+# Round ninety-seven (docs/PLAN-97.md, 3): group A of scripts/dev/r97-commons-count.mjs (read 2026-11-19), the pages whose item's P373
+# category holds no files while its Commons sitelink's holds them; round 96's code reads the sitelink's once a page is built online.
+k240599 Dioscorea oppositifolia
+k2486750 Stenocactus phyllacanthus
+k2492991 Lysimachia linum-stellatum
+k2502730 Maesa perlarius
+k2647469 Arctous rubra
+k2904230 Persicaria runcinata
+k2947953 Dichotomanthes tristaniicarpa
+k305815 Erythronium tuolumnense
+k3073190 Scorzonera cana
+k3086686 Delairea odorata
+k3088397 Acanthocladium dockeri
+k378192 Nageia fleuryi
+k458277 Magnolia jardinensis
+k512005 Stapelia gettliffei
+k66393 Eleiodoxa conferta
+k88686 Gastrochilus formosanus
