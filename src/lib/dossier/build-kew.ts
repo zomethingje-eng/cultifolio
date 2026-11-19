@@ -406,10 +406,10 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
   if (skip('commons')) skipped('commons');
   // Counted as the page will show them, as `buildDossier` counts (round eighty-seven; `ownShown`).
   else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, name: { scientific, synonyms, authorship: k.authors || undefined } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
-    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
-    const c: FetchResult<Photo[]> = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms, key: pageId, held: o.held, authorship: k.authors || undefined });
-    mark('commons', c);
-    if (c.status === 'ok') photos.push(...c.data);
+    // The item's Commons category (P373), else the name; where P373's holds no files, its Commons sitelink's (round ninety-six).
+    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, scientific, 12, { scientific, synonyms, key: pageId, held: o.held, authorship: k.authors || undefined });
+    mark('commons', commons.withCategoryRead(c));
+    if (c.r.status === 'ok') photos.push(...c.r.data);
   }
 
   /* ---- 7. Literature: off ---- */

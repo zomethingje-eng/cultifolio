@@ -1,0 +1,3 @@
+# Round ninety-six (docs/PLAN-96.md): the one page whose Wikidata item's Commons category (P373) holds no files while its Commons sitelink's category holds them. Heberdenia bahamensis (k2840712, no GBIF key, item Q15304926): P373 "Heberdenia excelsa", 0 files; sitelink "Category:Heberdenia bahamensis", 11 files (both read 2026-11-19). Round 95's walk took it from 11 photographs to none.
+# For --keys: --keys scripts/rebuild-r96.txt --grid climate --bulk bulk (online: Commons and Wikidata are asked), then the fills and --index (scripts/corpus-plan-r96-commons.txt).
+k2840712 Heberdenia bahamensis

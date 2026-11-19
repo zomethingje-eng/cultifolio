@@ -897,11 +897,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   if (skip('commons')) skipped('commons');
   else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, ids: { gbif: key }, name: { scientific, synonyms: syn.status === 'ok' ? syn.data : [], authorship } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
-    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : kewAsked ?? scientific;
+    // The item's Commons category (P373), else Kew's name or the page's; where P373's holds no files, the item's Commons
+    // sitelink's category, said in the record (round ninety-six; Heberdenia bahamensis).
     // The species' own and older names, by which a file named as another species is left out (triage-68 K1); Kew's name with them.
-    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship });
-    mark('commons', c);
-    if (c.status === 'ok') photos.push(...c.data);
+    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, kewAsked ?? scientific, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship });
+    mark('commons', commons.withCategoryRead(c));
+    if (c.r.status === 'ok') photos.push(...c.r.data);
   }
 
   const photosOut = dedupePhotos(photos);

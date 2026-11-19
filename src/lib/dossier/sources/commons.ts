@@ -51,13 +51,57 @@ export const COMMONS_READ = 50;
  * `names.held`, the reference's names, lets an uploader's slip be the species' (round seventy; REVIEW-TRIAGE-69 C1).
  */
 export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, names?: KindNames): Promise<FetchResult<Photo[]>> {
+  return (await readCategory(f, category, max, names)).r;
+}
+
+/** The item's Commons sitelink, alone (round ninety-six): asked only when its P373 category holds no files. */
+export const commonsSitelinkUrl = (q: string) => `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${q}&props=sitelinks&sitefilter=commonswiki`;
+/** A category's name as Commons compares names: underscores as spaces, the first letter capital. */
+const catName = (s: string) => { const t = s.replace(/_/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+/**
+ * The species' Commons photographs by its Wikidata item (round ninety-six). The category read is the item's Commons
+ * category (P373), else `fallback` (the name), as before. Where P373's category holds no files at all (Commons answers
+ * no member of type file) and the item's Commons sitelink (commonswiki) is a category of another name, that category is
+ * read instead: Heberdenia bahamensis's item Q15304926 names "Heberdenia excelsa" in P373, a category with no files, and
+ * links "Category:Heberdenia bahamensis", with 11 (read 2026-11-19); round 95's walk lost the 11. Rule 3: the sitelink is
+ * the item's own statement of its Commons category, taken only by this rule, and `detail` says which category was read
+ * and why. A sitelink that is a gallery (no "Category:") is not read. A P373 category whose files the photograph rules
+ * all leave out is not empty, and the sitelink is not asked. Rule 2: a sitelink Wikidata did not answer is said as that
+ * failure, never as no photographs.
+ */
+export async function itemCommonsPhotos(f: JsonFetcher, item: { wikidata?: string; commonsCategory?: string } | undefined, fallback: string, max = 12, names?: KindNames): Promise<{ r: FetchResult<Photo[]>; detail?: string }> {
+  const p373 = item?.commonsCategory;
+  const first = await readCategory(f, p373 || fallback, max, names);
+  if (!p373 || !item?.wikidata || first.r.status !== 'none' || first.files > 0) return { r: first.r };
+  const empty = `the item's (${item.wikidata}) Commons category (P373) "${p373}" holds no files`;
+  const s = await mwGet<{ entities?: Record<string, { sitelinks?: Record<string, { title?: string }> }> }>(f, commonsSitelinkUrl(item.wikidata));
+  const err = s.status === 'ok' ? mwError(s.data) : null;
+  if (s.status !== 'ok' || err) {
+    const why = (err ? `wikidata ${err}` : s.status === 'none' ? 'no answer' : s.detail) || 'not asked';
+    return { r: s.status === 'refused' || s.status === 'skipped' ? { status: s.status, detail: why } : { status: 'error', detail: why }, detail: `${empty}; its Commons sitelink not read: ${why}` };
+  }
+  const title = s.data.entities?.[item.wikidata]?.sitelinks?.commonswiki?.title;
+  if (!title) return { r: first.r, detail: `${empty}, and it has no Commons sitelink` };
+  if (!/^Category:/.test(title)) return { r: first.r, detail: `${empty}; its Commons sitelink "${title}" is a gallery, not a category, and is not read` };
+  const linked = title.replace(/^Category:/, '');
+  if (catName(linked) === catName(p373)) return { r: first.r, detail: `${empty}; its Commons sitelink names the same category` };
+  const second = await readCategory(f, linked, max, names);
+  return { r: second.r, detail: `read Commons category "${linked}", the item's (${item.wikidata}) Commons sitelink, since its P373 category "${p373}" holds no files` };
+}
+
+/** `itemCommonsPhotos`' answer as the page's record of Commons: its status, and its detail with the category read and why. */
+export const withCategoryRead = (c: { r: FetchResult<Photo[]>; detail?: string }) => ({ status: c.r.status, detail: [('detail' in c.r ? c.r.detail : undefined), c.detail].filter(Boolean).join('; ') || undefined });
+
+/** One category's photographs, and how many files Commons answered in it before any rule (round ninety-six: an empty category is known). */
+async function readCategory(f: JsonFetcher, category: string, max: number, names?: KindNames): Promise<{ r: FetchResult<Photo[]>; files: number }> {
   const r = await mwGet<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(f, 
     `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=categorymembers&gcmtitle=${encodeURIComponent('Category:' + category)}&gcmtype=file&gcmlimit=${COMMONS_READ}` +
       `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|LicenseUrl|Categories|ImageDescription|Credit&maxlag=5`
   );
-  if (r.status !== 'ok') return r;
+  if (r.status !== 'ok') return { r, files: -1 };
   const err = mwError(r.data);
-  if (err) return { status: 'error', detail: `commons ${err}` };
+  if (err) return { r: { status: 'error', detail: `commons ${err}` }, files: -1 };
   const who = names ?? { scientific: category };
   const pages = Object.values(r.data.query?.pages ?? {});
   const out: Photo[] = [];
@@ -79,7 +123,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, 
     if (photo) out.push(photo);
   }
   const ordered = commonsFirstByEpithet(out, who).slice(0, max);
-  return ordered.length ? { status: 'ok', data: ordered } : { status: 'none' };
+  return { r: ordered.length ? { status: 'ok', data: ordered } : { status: 'none' }, files: pages.length };
 }
 
 /** One file of Commons' answer as a dossier photograph, or null when the rules above leave it out. */

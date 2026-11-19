@@ -1,0 +1,27 @@
+# Round ninety-six (docs/PLAN-96.md): a page's Commons photographs from its item's Commons sitelink where the item's
+# Commons category (P373) holds no files. The one page known (scripts/rebuild-r96.txt: Heberdenia bahamensis, k2840712)
+# built again online, then the fills a build does not carry, the index, the upload and the live check, as round 95's
+# online build was followed. No app change, so no deploy.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r96-commons.txt
+# Run only once the change and its test are committed (the round's gate first). When: after a day's daily run has
+# stopped, never at midnight UTC.
+#
+# The review after the build always stops: read the page's Commons record before the upload.
+backup
+dossier --keys scripts/rebuild-r96.txt --grid climate --bulk bulk
+stop Read the --keys build's last line ("1 built, 0 kept of 1; index now 48375 species") and drops.txt if one was written (none expected). Then read static/s/v3/k2840712.json: upstream.commons is "ok" and its detail reads 'read Commons category "Heberdenia bahamensis", the item's (Q15304926) Commons sitelink, since its P373 category "Heberdenia excelsa" holds no files', and photos holds Commons files again (11 before round 95's walk; fewer only where the photograph rules leave one out). Stop and paste the end of corpus-step.log back if the detail is other, or the page lost anything else. Then --go-on.
+expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
+expect B = 1
+dossier --fill kew-published --bulk bulk
+dossier --fill sources --bulk bulk
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+review Read the two offline fills ("Kew's file of 2026-06-04: …", the four sources lines, none "NOT the one its publisher gives"), the flowering fill's ("48375 pages read: N counted", 32,284 on 19 November) and the index's ("index: 48375 species", climates 38,007). Stop and paste the end of corpus-step.log back if anything reads "NOT FIXED".
+expect let F /^\s*([\d,]+) pages read: [\d,]+ counted/
+expect let N /pages read: ([\d,]+) counted/
+expect let I /index: ([\d,]+) species/
+expect F = 48375
+expect N >= 32284
+expect I = 48375
+upload
+live-check
