@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 95,
+    date: '2026-11-19',
+    lines: [
+      'A page that leaves out records GBIF files under one of its keys, as names Kew holds for another plant, now says which keys and how many: Weingartia canigueralii names 13 keys and the 12 records they took out.',
+      'Where a page was merged into another, the page kept now reads what GBIF files under the merged name that Kew holds as its plant, older names among them; every page was built again with the newest rules.'
+    ]
+  },
+  {
     n: 93,
     date: '2026-11-16',
     lines: [

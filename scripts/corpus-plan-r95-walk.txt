@@ -1,0 +1,48 @@
+# Round ninety-five (docs/PLAN-95.md, 6): every page derived again by the code of rounds 90 to 95, so each carries round
+# ninety's typical spot, rounds 93 to 95's key rules and round ninety-five's words for the keys a page leaves out; then
+# what the walk could not derive offline built online, the fills that need the walk's pages, the index, the checks, the
+# upload and the live check.
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r95-walk.txt
+# Run only once round ninety-five's code is committed and deployed (an old app shows nothing of a page's `left`).
+# When: after a day's daily run has stopped, never near midnight UTC. A walk not finished by the next midnight is stopped
+# with Ctrl+C after its page and run again with the same command after that day's daily run: the walk resumes where it
+# stopped (walk.json), and its report counts every page of the walk, the parts before the stop too (round eighty-eight).
+#
+# The proof of rounds 88 and 89 passed on 14 November 2026 and again in round 95 (200 of 200 pages the same each way), so the walk derives eight
+# pages at once and reads the bulk cache.
+#
+# The walk's report stops every time (`stop`, round ninety-five): no one has read its figures yet. Its checks hold what is
+# known before it: every page written, few climates lost. Read what it moved: typical spots on the pages built before
+# round ninety (Potentilla atrosanguinea moved 129 km when round 94 built it), records gained on the five pages whose
+# merged keys read more (k505095 Echidnopsis cereiformis, 3948341 Weingartia canigueralii, 7284393 Copiapoa calderana,
+# 3190812 Drosera paleacea, 7281301 Weingartia fidana), and drops.txt if the walk wrote one (each line expected, or stop).
+# The walk of 12 November (walk.json) is done under the same range rule, so --walk alone finds nothing to derive: the line
+# below begins a new walk (--again), once; the --walk line after it resumes that walk when run again after a stop.
+backup
+dossier --list-walk --again
+dossier --walk --offline --grid climate --bulk bulk
+stop Read the walk's report: "The walk, rule … against the dossiers before it", its records admitted and dropped, "climates: G gained, L lost, …; typical spots moved: M", the habitat figures ("48375 pages written: K given a Köppen–Geiger class …", K about the 38,007 climates of the index of 17 November), and walk-ranges.txt for the five merged pages above and the largest moves. Then "… pages built in this run had a source of the range not asked offline", which --list-offline below lists, and drops.txt if one was written. Stop and paste the end of corpus-step.log back if L is over 50, if K is far from 38,007, or if drops.txt lists anything not expected. Then --go-on.
+expect let G /climates: ([\d,]+) gained/
+expect let L /climates: [\d,]+ gained, ([\d,]+) lost/
+expect let K /pages written: ([\d,]+) given a K/
+expect L <= 50
+expect K ~ 38007 ±2%
+expect no /COULD NOT BE READ/
+dossier --list-offline
+dossier --keys rebuild-offline.txt --grid climate --bulk bulk
+dossier --fill kew-published --bulk bulk
+dossier --fill sources --bulk bulk
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+dossier --check-ranges
+review Read the --keys build's last line (and drops.txt if one was written: each line expected, or stop), the two offline fills ("Kew's file of 2026-06-04: …", the four sources lines, none "NOT the one its publisher gives"), the flowering fill's ("48375 pages read: N counted", 32,284 on 17 November), the index's ("index: 48375 species", climates about 38,007) and --check-ranges' ("0 with a typical cell outside every native region, …", "ready to upload"). Stop and paste the end of corpus-step.log back if anything reads "NOT FIXED".
+expect let F /^\s*([\d,]+) pages read: [\d,]+ counted/
+expect let N /pages read: ([\d,]+) counted/
+expect let I /index: ([\d,]+) species/
+expect F = 48375
+expect N >= 32000
+expect I = 48375
+expect no /NOT FIXED/
+expect no /NOT the one its publisher gives/
+upload
+live-check
