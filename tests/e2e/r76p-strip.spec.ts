@@ -124,9 +124,14 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // higher at 1024 (22 for the first row), where they wrap to a line fewer. Measured in Chromium on 19 November 2026 on
 // bb332a5 with round 95's /changes lines (the base before: 1178, 1381, 1395, 1536 at 1280; 1222, 1414, 1428, 1569 at
 // 1024); tiles unchanged. On bb332a5 with round 95's lines: FAILED, stripTop 1199 for 1178 at 1280.
+// Round ninety-eight: "Changed lately" holds round 98's two lines (the Walter–Lieth diagram, the Commons sitelink with no
+// P373), shorter than round 95's at 1280, so everything under it is 21 px higher there (22 for the first row), and 21 px
+// lower at 1024 (22 for the first row), where they wrap to a line more. Measured in Chromium on 19 November 2026 on 8335b5e
+// with round 98's /changes lines (the base before: 1199, 1402, 1416, 1558 at 1280; 1201, 1392, 1406, 1547 at 1024); tiles
+// unchanged. On 8335b5e with round 98's lines: FAILED, stripTop 1178 for 1199 at 1280.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1199, stripBottom: 1402, searchTop: 1416, rowTop: 1558, tile: [172, 193] },
-  '1024': { stripTop: 1201, stripBottom: 1392, searchTop: 1406, rowTop: 1547, tile: [155, 182] }
+  '1280': { stripTop: 1178, stripBottom: 1381, searchTop: 1395, rowTop: 1536, tile: [172, 193] },
+  '1024': { stripTop: 1222, stripBottom: 1414, searchTop: 1428, rowTop: 1569, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

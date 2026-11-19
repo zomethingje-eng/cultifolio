@@ -1,0 +1,33 @@
+# Round ninety-eight (docs/REVIEW-ROUND-98.md, 1): the 14 pages of the Commons count's group C built again online on round
+# 98's code (scripts/rebuild-r98-commons-c.txt), whose item names no Commons category and whose name's category holds no
+# files: the item's Commons sitelink is read where Kew's file holds its name for this plant alone. Then the Commons row
+# every page's build did not write (`--fill commons-record`, offline), the fills a build does not carry, the index, the
+# upload and the live check. The deploy follows the upload (the /changes line and /about/how say what the upload puts up).
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r98-commons.txt
+# When: after a day's daily run has stopped, never at midnight UTC (a few iNaturalist requests of the day's 4,000).
+#
+# The stop after the build always stops: read the pages' Commons rows before the upload.
+backup
+dossier --keys scripts/rebuild-r98-commons-c.txt --grid climate --bulk bulk
+stop Read the --keys build's last line ("14 built, 0 kept of 14") and drops.txt if one was written (each line expected, or stop). Then each page's upstream.commons: where the page asks Commons (fewer than 12 photographs of its own), read Commons category "<the sitelink's>" for Lophocereus marginatus, Agave sileri, Cerasus brachypetala, Lecythis zabucajo and the three names with the hybrid sign, each "every name … in Kew's file is this plant's"; "not read" with Kew's reason for Silene multifida (two plants) and Drosera barbigera (another species); a page with 12 or more "skipped" with "not asked: the page shows N photographs of its own sources". Stop and paste the end of corpus-step.log back if a page reads otherwise or lost anything else. Then --go-on.
+expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
+expect B = 14
+dossier --fill commons-record
+review Read the fill's line ("48375 dossiers read: N given the Commons row their build did not write …; M with no Commons row and fewer than twelve"): N about 1,425 on 19 November, M 0. Stop and paste the end of corpus-step.log back if M is not 0.
+expect let R /^\s*([\d,]+) dossiers read: [\d,]+ given the Commons row/
+expect let U /; ([\d,]+) with no Commons row and fewer than twelve/
+expect R = 48375
+expect U = 0
+dossier --fill kew-published --bulk bulk
+dossier --fill sources --bulk bulk
+dossier --fill flowering-gbif --bulk bulk
+dossier --index
+review Read the two offline fills ("Kew's file of 2026-06-04: …", the four sources lines, none "NOT the one its publisher gives"), the flowering fill's ("48375 pages read: N counted", 32,284 on 19 November) and the index's ("index: 48375 species", climates 38,007). Stop and paste the end of corpus-step.log back if anything reads "NOT FIXED".
+expect let F /^\s*([\d,]+) pages read: [\d,]+ counted/
+expect let N /pages read: ([\d,]+) counted/
+expect let I /index: ([\d,]+) species/
+expect F = 48375
+expect N >= 32284
+expect I = 48375
+upload
+live-check

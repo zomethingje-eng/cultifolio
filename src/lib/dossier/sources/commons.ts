@@ -70,11 +70,14 @@ const catName = (s: string) => { const t = s.replace(/_/g, ' ').trim(); return t
  * all leave out is not empty, and the sitelink is not asked. Rule 2: a sitelink Wikidata did not answer is said as that
  * failure, never as no photographs.
  */
-export async function itemCommonsPhotos(f: JsonFetcher, item: { wikidata?: string; commonsCategory?: string } | undefined, fallback: string, max = 12, names?: KindNames): Promise<{ r: FetchResult<Photo[]>; detail?: string }> {
+export async function itemCommonsPhotos(f: JsonFetcher, item: { wikidata?: string; commonsCategory?: string } | undefined, fallback: string, max = 12, names?: KindNames, nameCheck?: ((category: string) => string | null) | null): Promise<{ r: FetchResult<Photo[]>; detail?: string }> {
   const p373 = item?.commonsCategory;
   const first = await readCategory(f, p373 || fallback, max, names);
-  if (!p373 || !item?.wikidata || first.r.status !== 'none' || first.files > 0) return { r: first.r };
-  const empty = `the item's (${item.wikidata}) Commons category (P373) "${p373}" holds no files`;
+  // Round ninety-eight (group C): with no P373, the name's category read and holding no files, the sitelink is read only
+  // where `nameCheck` (Kew's file) finds every plant of its words to be this one. Without the check, as before.
+  if (!p373 && !nameCheck) return { r: first.r };
+  if (!item?.wikidata || first.r.status !== 'none' || first.files > 0) return { r: first.r };
+  const empty = p373 ? `the item's (${item.wikidata}) Commons category (P373) "${p373}" holds no files` : `the item (${item.wikidata}) has no Commons category (P373), and the name's, "${fallback}", holds no files`;
   const s = await mwGet<{ entities?: Record<string, { sitelinks?: Record<string, { title?: string }> }> }>(f, commonsSitelinkUrl(item.wikidata));
   const err = s.status === 'ok' ? mwError(s.data) : null;
   if (s.status !== 'ok' || err) {
@@ -85,7 +88,13 @@ export async function itemCommonsPhotos(f: JsonFetcher, item: { wikidata?: strin
   if (!title) return { r: first.r, detail: `${empty}, and it has no Commons sitelink` };
   if (!/^Category:/.test(title)) return { r: first.r, detail: `${empty}; its Commons sitelink "${title}" is a gallery, not a category, and is not read` };
   const linked = title.replace(/^Category:/, '');
-  if (catName(linked) === catName(p373)) return { r: first.r, detail: `${empty}; its Commons sitelink names the same category` };
+  if (catName(linked) === catName(p373 || fallback)) return { r: first.r, detail: `${empty}; its Commons sitelink names the same category` };
+  if (!p373) {
+    const not = nameCheck!(catName(linked));
+    if (not) return { r: first.r, detail: `${empty}; its Commons sitelink "${linked}" not read: ${not}` };
+    const second = await readCategory(f, linked, max, names);
+    return { r: second.r, detail: `read Commons category "${linked}", the item's (${item.wikidata}) Commons sitelink, since it has no P373 and the name's category "${fallback}" holds no files, and every name "${catName(linked)}" in Kew's file is this plant's` };
+  }
   const second = await readCategory(f, linked, max, names);
   return { r: second.r, detail: `read Commons category "${linked}", the item's (${item.wikidata}) Commons sitelink, since its P373 category "${p373}" holds no files` };
 }

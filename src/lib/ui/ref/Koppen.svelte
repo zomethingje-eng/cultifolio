@@ -7,6 +7,7 @@
    */
   import { koppenReasons, KOPPEN_CITED, KOPPEN_DOI, type KoppenFigures } from '$dossier/koppen';
   import { walterLieth, monthRuns } from '$climate/walter-lieth';
+  import WalterLiethDiagram from './WalterLieth.svelte';
   // `src`: the months' own source as the climate section names it (round eighty-seven, the integration; rule 1).
   let { koppen, months, cells = 0, src = null }: { koppen: KoppenFigures | null | undefined; months: ReadonlyArray<{ tmean: number; precipMm: number }> | null | undefined; cells?: number; src?: string | null } = $props();
   const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -37,6 +38,7 @@
     {/if}
     {#if wl}
       <p class="wl">Walter–Lieth: {#if runs.length}arid in {runs.map(runWords).join(' and ')}, where the month&rsquo;s rain in mm is under twice its mean temperature in °C ({minus(wl.arid.slice(0, 1).map((i) => `${MONTH[i]} ${wl.months[i].p} mm against 2 × ${(wl.months[i].twoT / 2).toFixed(1)} = ${wl.months[i].twoT.toFixed(1)}`).join(''))}){:else}no arid month: every month&rsquo;s rain in mm is at least twice its mean temperature in °C{/if}. The scale of Walter and Lieth&rsquo;s climate diagrams (1960–1967), 10 °C to 20 mm.</p>
+      <WalterLiethDiagram {months} arid={runs.map(runWords)} />
     {/if}
     {#if src}<p class="note" id="climate-class-src">The months read: {src}.</p>{/if}
   </section>

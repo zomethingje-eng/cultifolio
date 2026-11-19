@@ -273,6 +273,18 @@ export function photosFromMedia(rows: OccMedia[]): Photo[] {
 /** Commons is asked while a page would show fewer than this many photographs of its own sources (round sixty-nine). */
 export const COMMONS_BELOW = 12;
 /**
+ * The record of a build that did not ask Commons because the page shows enough photographs of its own (round ninety-eight).
+ * Before, such a build wrote no Commons row at all, so the record did not say Commons was not asked, nor why (rules 2 and
+ * 6; 1,425 pages on 19 November 2026). Not a failure, so the previous build's Commons photographs are not carried for it.
+ */
+export const COMMONS_ENOUGH = 'not asked: the page shows';
+export const commonsNotAsked = (n: number) => `${COMMONS_ENOUGH} ${n} photographs of its own sources, and Commons is asked only while a page shows fewer than ${COMMONS_BELOW}`;
+/** Whether a Commons row says it was not asked for that reason (`commonsNotAsked`). */
+export const commonsEnough = (u?: { status?: string; detail?: string }) => u?.status === 'skipped' && (u.detail ?? '').startsWith(COMMONS_ENOUGH);
+/** The check a Commons sitelink's name is read by where the item has no P373 (round ninety-eight): Kew's file, bound to the page. */
+export const kewIdOfPageKey = (id: string | undefined): string | undefined => (/^k[1-9]\d*$/.test(id ?? '') ? id!.slice(1) : undefined);
+export const commonsNameCheck =(kew: KewInfra | undefined, own: Parameters<KewInfra['notOnlyThisPlant']>[1]) => (kew ? (n: string) => kew.notOnlyThisPlant(n, own) : null);
+/**
  * How many of the photographs a build holds before Commons the page will show (round eighty-seven; the --keys stop of 8
  * November: Ceropegia elegans [k502679] lost its Commons files, since the build counted its 11 iNaturalist photographs and
  * the same photographs again through GBIF, 12 or more, and asked Commons nothing). Counted as the page reads them: one copy
@@ -895,15 +907,18 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (given.words && (m.status === 'ok' || m.status === 'none')) upstream['gbif.media'] = { ...upstream['gbif.media'], detail: [upstream['gbif.media'].detail, given.words].filter(Boolean).join('; ') };
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
+  const shownOwn = o.quick || skip('commons') ? 0 : ownShown(photos, kindNamesOf({ key: pageId, ids: { gbif: key }, name: { scientific, synonyms: syn.status === 'ok' ? syn.data : [], authorship } }, o.held), o.sharedBefore);
   if (skip('commons')) skipped('commons');
-  else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, ids: { gbif: key }, name: { scientific, synonyms: syn.status === 'ok' ? syn.data : [], authorship } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
+  else if (!o.quick && shownOwn < COMMONS_BELOW) {
     // The item's Commons category (P373), else Kew's name or the page's; where P373's holds no files, the item's Commons
-    // sitelink's category, said in the record (round ninety-six; Heberdenia bahamensis).
+    // sitelink's category, said in the record (round ninety-six; Heberdenia bahamensis); with no P373, the sitelink's only
+    // where Kew's file holds its name for this plant alone (round ninety-eight).
     // The species' own and older names, by which a file named as another species is left out (triage-68 K1); Kew's name with them.
-    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, kewAsked ?? scientific, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship });
+    const check = commonsNameCheck(o.kewInfra, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], ipni: ids.ipni, kewEntry: kewIdOfPageKey(pageId) });
+    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, kewAsked ?? scientific, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship }, check);
     mark('commons', commons.withCategoryRead(c));
     if (c.r.status === 'ok') photos.push(...c.r.data);
-  }
+  } else if (!o.quick) skipped('commons', commonsNotAsked(shownOwn));
 
   const photosOut = dedupePhotos(photos);
 

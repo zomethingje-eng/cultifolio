@@ -108,7 +108,7 @@ describe('M1: China\'s, Russia\'s and Ukraine\'s codes', () => {
     const w = policyWords(ADMISSION_POLICY).border;
     expect(w).toContain('A state is read by its name, by its ISO 3166-2 code (KZN, TX, CN-YN) or by an old province\'s name (Natal, Transvaal).');
     expect(w).toContain(`A code is read where ISO's subdivision is matched to one of Natural Earth's provinces, by its name or by hand: ${STATE_UNREAD.subdivisions} of ISO's subdivisions are not, among them every one of Kiribati's and Morocco's.`);
-    expect(STATE_UNREAD).toEqual({ subdivisions: 238, countries: ['Kiribati', 'Morocco'] });
+    expect(STATE_UNREAD).toEqual({ subdivisions: 235, countries: ['Kiribati', 'Morocco'] }); // 238 until round ninety-eight: Namibia's regions of 2013 matched by hand
     expect(readFileSync('src/routes/about/how/+page.svelte', 'utf8')).toContain(w);
   });
 });

@@ -46,7 +46,7 @@ import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, canonicalOf, type OwnNames } from './own-names';
 import { canonicalOfKew, sameTypeLabel, type SameTypeName } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, admissionRecord, apiDatasetsOf, ownShown, COMMONS_BELOW, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, admissionRecord, apiDatasetsOf, ownShown, COMMONS_BELOW, commonsNotAsked, commonsNameCheck, kewIdOfPageKey, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
@@ -403,14 +403,17 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     }
   }
   skipped('gbif.media', NO_GBIF_WHY);
-  if (skip('commons')) skipped('commons');
   // Counted as the page will show them, as `buildDossier` counts (round eighty-seven; `ownShown`).
-  else if (!o.quick && ownShown(photos, kindNamesOf({ key: pageId, name: { scientific, synonyms, authorship: k.authors || undefined } }, o.held), o.sharedBefore) < COMMONS_BELOW) {
-    // The item's Commons category (P373), else the name; where P373's holds no files, its Commons sitelink's (round ninety-six).
-    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, scientific, 12, { scientific, synonyms, key: pageId, held: o.held, authorship: k.authors || undefined });
+  const shownOwn = o.quick || skip('commons') ? 0 : ownShown(photos, kindNamesOf({ key: pageId, name: { scientific, synonyms, authorship: k.authors || undefined } }, o.held), o.sharedBefore);
+  if (skip('commons')) skipped('commons');
+  else if (!o.quick && shownOwn < COMMONS_BELOW) {
+    // The item's Commons category (P373), else the name; where P373's holds no files, its Commons sitelink's (round
+    // ninety-six); with no P373, the sitelink's only where Kew's file holds its name for this plant alone (round ninety-eight).
+    const check = commonsNameCheck(o.kewInfra, { scientific, synonyms, ipni: ids.ipni, kewEntry: kewIdOfPageKey(pageId) });
+    const c = await commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, scientific, 12, { scientific, synonyms, key: pageId, held: o.held, authorship: k.authors || undefined }, check);
     mark('commons', commons.withCategoryRead(c));
     if (c.r.status === 'ok') photos.push(...c.r.data);
-  }
+  } else if (!o.quick) skipped('commons', commonsNotAsked(shownOwn));
 
   /* ---- 7. Literature: off ---- */
   upstream.openalex = { status: 'skipped', at: now(), detail: LITERATURE_OFF };

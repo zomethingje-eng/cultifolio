@@ -37,6 +37,7 @@ export class KewInfra {
   private byIpni = new Map<string, string>(); // IPNI id → accepted plant_name_id
   private byBin = new Map<string, Set<string>>(); // binKey → the infraKeys under it
   private acceptedSpecies = new Map<string, Set<string>>(); // binKey of a species Kew accepts → its plant_name_ids
+  private speciesTo = new Map<string, Set<string>>(); // binKey of any name of species rank → the plants its rows are (accepted id, else its own)
   add(r: KewInfraRow): void {
     if (/^accepted$/i.test(r.status)) {
       this.accepted.set(r.id, r.name);
@@ -44,6 +45,9 @@ export class KewInfra {
       if (b && !infraKey(r.name)) (this.acceptedSpecies.get(b) ?? this.acceptedSpecies.set(b, new Set()).get(b)!).add(r.id);
     }
     if (r.ipni) this.byIpni.set(r.ipni, r.acceptedId || r.id);
+    // Every row of species rank, misapplied ones too: a name Kew holds as misapplied to another plant is not this plant's alone.
+    const sb = !infraKey(r.name) && r.name.replace(/×\s*/g, '').trim().split(/\s+/).length === 2 ? binKey(r.name) : null;
+    if (sb) (this.speciesTo.get(sb) ?? this.speciesTo.set(sb, new Set()).get(sb)!).add(r.acceptedId || r.id);
     if (/misapplied/i.test(r.status)) return;
     const k = infraKey(r.name);
     if (!k) return;
@@ -112,6 +116,25 @@ export class KewInfra {
     const mine = new Set([binKey(own.scientific), ...older, ...kewSyn].filter((x): x is string => !!x && !apart.has(x)));
     if (entryBin) mine.add(entryBin);
     return mine;
+  }
+  /**
+   * Whether every name of species rank Kew's file holds in these two words is the page's own plant (round ninety-eight,
+   * the Commons count's group C): null when it is, else why not. A Commons category is named without an author, so its
+   * name stands for every plant Kew holds by those words: "Silene multifida" is Silene macrophylla's (Adams) Rohrb., nom.
+   * illeg., and also Edgew.'s, a synonym of another plant (rule 3). A name Kew does not hold at all is not proved this
+   * plant's either; nor is any name when the page's own entry is not known.
+   */
+  notOnlyThisPlant(name: string, own: KewOwn): string | null {
+    const words = name.replace(/×\s*/g, '').trim().split(/\s+/);
+    const b = words.length === 2 ? binKey(name) : null;
+    if (!b) return `"${name}" is not a name of two words`;
+    const entry = own.kewEntry || (own.ipni ? this.byIpni.get(own.ipni) : undefined);
+    if (!entry) return `the page's own entry in Kew's file is not known`;
+    const to = this.speciesTo.get(b);
+    if (!to?.size) return `Kew's file holds no name "${name}"`;
+    const others = [...to].filter((id) => id !== entry);
+    if (!others.length) return null;
+    return `Kew's file holds "${name}" for another plant too (${others.map((id) => this.accepted.get(id) ? `${this.accepted.get(id)}, ${id}` : id).join('; ')})`;
   }
   private elsewhere(k: string, mine: ReadonlySet<string>): string | null {
     const ids = this.infra.get(k);

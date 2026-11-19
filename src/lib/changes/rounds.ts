@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 98,
+    date: '2026-11-19',
+    lines: [
+      'A species page now draws the Walter–Lieth diagram of its habitat\'s median year under its climate class: temperature and rain on one scale, arid months dotted, humid ones shaded.',
+      'Where a plant\'s Wikidata item names no Commons category and its name\'s holds no files, the category the item links is read, only where Kew\'s file holds that name for this plant alone.'
+    ]
+  },
+  {
     n: 95,
     date: '2026-11-19',
     lines: [

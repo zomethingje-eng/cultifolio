@@ -2,8 +2,8 @@
  * The Walter–Lieth reading of a year (round eighty-seven): which months are arid by the climate diagram of Walter and
  * Lieth (Klimadiagramm-Weltatlas, Jena: VEB Gustav Fischer, 1960–1967), whose scale sets 10 °C against 20 mm of rain, so a
  * month whose rain in millimetres is under twice its mean temperature in °C is drawn as an arid one (the rain curve below
- * the temperature curve). Only the reading: the page's climograph keeps its own two panels and scales, and drawing the
- * diagram's one shared scale there would be a second chart, not a line.
+ * the temperature curve). The page's climograph keeps its own two panels and scales; the diagram's one shared scale is
+ * drawn as its own chart beside this reading since round ninety-eight (`walter-lieth-chart.ts`, `WalterLieth.svelte`).
  *
  * Read from the same median year as the climograph (each month's median across the range's cells).
  */

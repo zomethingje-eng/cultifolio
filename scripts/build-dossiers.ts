@@ -210,7 +210,8 @@ import { POLICY_BEFORE, POLICIES } from '../src/lib/dossier/admission-policy';
 import { pageChange, changeLine, tallyInto, DryRunTotals, type DryPage, type RangeTally, type PageChange } from '../src/lib/dossier/range-dry-run';
 import { carriesCore } from '../src/lib/dossier/carry-core';
 import { offlinePages, offlineWhy, type OfflinePage } from '../src/lib/dossier/offline-list';
-import { buildDossier, sharedOf, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, withoutGivenMedia, type SkippableSource } from '../src/lib/dossier/build';
+import { buildDossier, sharedOf, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, withoutGivenMedia, commonsEnough, type SkippableSource } from '../src/lib/dossier/build';
+import { commonsRecordOf } from '../src/lib/dossier/commons-record';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
@@ -1942,6 +1943,30 @@ async function fillFloweringGbifStep(): Promise<void> {
  * page's own Wikidata item holds for the other registers and floras, fifty items a request (CC0). A page read for its item
  * is passed by; `--again` reads every one. No index.
  */
+/**
+ * `--fill commons-record` (round ninety-eight; `src/lib/dossier/commons-record.ts`): the Commons row of every page whose
+ * build did not ask Commons, since it shows twelve photographs or more of its own, and wrote no row. Offline; a second run
+ * writes nothing. No index (the plan's `--index` follows).
+ */
+function fillCommonsRecordStep(): void {
+  const store = diskStore();
+  const held = indexHeld();
+  let read = 0, written = 0;
+  const unknown: string[] = [];
+  for (const file of store.files()) {
+    let d: Parameters<typeof commonsRecordOf>[0] & { key?: string; name?: { scientific: string } };
+    try { d = store.read(file); } catch { continue; }
+    read++;
+    const r = commonsRecordOf(d, held);
+    if (!r) continue;
+    if ('unknown' in r) { unknown.push(`${d.name?.scientific ?? file} [${d.key ?? file}]: ${r.unknown} of its own`); continue; }
+    d.upstream = { ...(d.upstream ?? {}), commons: r.row };
+    store.write(file, d);
+    written++;
+  }
+  console.log(`  ${read} dossiers read: ${written} given the Commons row their build did not write (not asked: twelve photographs or more of their own sources); ${unknown.length} with no Commons row and fewer than twelve, left as they are (their build's reason not known)${unknown.length ? `:\n${unknown.slice(0, 50).map((l) => `    ${l}`).join('\n')}` : ''}`);
+}
+
 async function fillElsewhereStep(): Promise<void> {
   const store = diskStore();
   const day = today();
@@ -2863,7 +2888,8 @@ async function main() {
   if (fill === 'elsewhere') return fillElsewhereStep();
   if (fill === 'kew-published') return fillKewPublishedStep();
   if (fill === 'bhl') return fillBhlStep();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra, gbif-media-day, cultigens, sources, credits, flowering-gbif, elsewhere, kew-published, bhl, summary-leads (summary-revisions) or genus`);
+  if (fill === 'commons-record') return fillCommonsRecordStep();
+  if (fill) throw new Error(`--fill ${fill}: commons-record, openalex, inat, inat-ids, inat-restore, inat-urls, wikidata, wikidata-names, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links, kew-names, kew-why, gbif-infra, gbif-media-day, cultigens, sources, credits, flowering-gbif, elsewhere, kew-published, bhl, summary-leads (summary-revisions) or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--list-extra-keys')) return listExtraKeysStep();
   // Round eighty (A): the default points from the dossiers on disk, and the pages that hold one, for --keys.
@@ -3319,7 +3345,8 @@ async function main() {
       // Kew's names below species, so an iNaturalist observation of a taxon Kew places under another species is not taken (round seventy-two, C1).
       // Read for iNaturalist's observations only; a build that skips iNaturalist (the full build's --skip inat) does not hold
       // it (round eighty, X: 0.5 to 0.9 GB of heap at the list's size).
-      if (!skip.includes('inat')) kewInfra = (await loadKewInfra(bulkDir))?.kew;
+      // Read for Commons too since round ninety-eight: a sitelink with no P373 is read only where Kew's file holds its name for the page alone.
+      if (!skip.includes('inat') || !skip.includes('commons')) kewInfra = (await loadKewInfra(bulkDir))?.kew;
       // The download's photographs are files, not a network extra: a re-derivation reads them and merges them in.
       if (mediaFromFiles) skip.splice(0, skip.length, ...skip.filter((x) => x !== 'gbif.media'));
       bulkStats = bf.stats;
@@ -3567,7 +3594,8 @@ async function main() {
         'gbif.media': (p) => p.src === 'gbif'
       };
       for (const [src, is] of Object.entries(photoSrc))
-        carry(src, () => {
+        // Commons not asked because the page shows enough of its own (round ninety-eight) is no failure: nothing carried.
+        if (!(src === 'commons' && commonsEnough(d.upstream.commons))) carry(src, () => {
           const theirs = (prev.photos ?? []).filter(is);
           if (!theirs.length || d.photos.some(is)) return false;
           // Never another taxon's: a build that took a different iNaturalist taxon from the last (a follow the rule now

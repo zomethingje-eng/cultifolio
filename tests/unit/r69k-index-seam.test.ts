@@ -24,6 +24,7 @@ describe('the corpus builder uses the photograph rules of the read', () => {
     // Round eighty-five (N, D3): a renamed page's Kew name is passed first, as Commons is asked by Kew's category.
     // Round ninety-six (docs/PLAN-96.md): Commons is asked by the item (its P373, else its Commons sitelink where P373's
     // category holds no files), with Kew's name or the page's as before where the item gives no P373; the names unchanged.
-    expect(b).toContain("commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, kewAsked ?? scientific, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship })");
+    // Round ninety-eight (docs/PLAN-98.md, 1): and Kew's check of the sitelink's name where the item gives no P373.
+    expect(b).toContain("commons.itemCommonsPhotos(f, x.status === 'ok' ? x.data : undefined, kewAsked ?? scientific, 12, { scientific, synonyms: [...(kewAsked ? [kewAsked] : []), ...(syn.status === 'ok' ? syn.data : [])], key: pageId, gbif: key, held: o.held, authorship }, check)");
   });
 });

@@ -90,6 +90,12 @@ ISO_AS_NAMED = {
     'MX-COA': ['Coahuila'],
     'MX-MIC': ['Michoacán'],
     'MX-VER': ['Veracruz'],
+    # Round ninety-eight (docs/PLAN-98.md, 2): Namibia's regions of 2013, which Natural Earth draws as they were before: the
+    # Caprivi Region renamed Zambezi, and Kavango split into Kavango East and Kavango West (Namibia's Fourth Delimitation
+    # Commission, 2013). Zambezi and Kavango East meet on the border of TDWG's Caprivi Strip (CPV) and Namibia (NAM).
+    'NA-CA': ['Caprivi'],
+    'NA-KE': ['Kavango'],
+    'NA-KW': ['Kavango'],
     # Round eighty-seven's review (M1): those the kind's removal does not reach, each the place to which Natural Earth gives
     # the same ISO 3166-2 code (its `iso_3166_2`). But Moscow: Natural Earth gives RU-MOW to Moskovskaya (the oblast) and
     # RU-MOS to Moskva (the city), the other way round from ISO, whose names ("Moskva", "Moskovskaja oblast'") are read.
