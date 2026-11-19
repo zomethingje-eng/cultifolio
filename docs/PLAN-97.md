@@ -12,9 +12,10 @@ changed, so no deploy).
    and the backup's copy only where the dossier was written since the backup began. The same words, 73 s to 20 s with the
    files in memory, and a third of the reading after a build.
 3. The Commons count PLAN-96 left open: 16 pages besides Heberdenia bahamensis hold an empty P373 category while their
-   item's Commons sitelink holds files, so round 96's code gives them Commons photographs once they are built again (3
-   of them hold no photograph at all now); and 14 pages with no P373 read their name's empty category while the sitelink's
-   holds files, which round 96's rule does not reach (5 of them hold no photograph). Neither is built in this round.
+   item's Commons sitelink holds files, so round 96's code reads the sitelink's category for them once they are built
+   again, where a page asks Commons at all (built 19 November: five gained Commons photographs, three of them their first
+   photograph; section 5); and 14 pages with no P373 read their name's empty category while the sitelink's holds files,
+   which round 96's rule does not reach (5 of them hold no photograph), a later round.
 
 ## 1. r76p strip 4
 
@@ -97,3 +98,28 @@ app is not changed.
 
 Passed 19 November 2026, first run: 698 files, 6,294 unit tests passed (10 skipped); Chromium 1,027 passed, 7 skipped,
 every test first time, strip 4 among them.
+
+## 5. Group A built (19 November 2026)
+
+The owner: "Yes, rebuild them". `node scripts\corpus-step.mjs --plan scripts\corpus-plan-r97-commons-a.txt`, begun about
+15:50 UTC, every step done at 17:17 UTC: "16 built, 0 kept of 16"; the fills, the index (48,375 species), the review's
+checks (flowering 32,284 counted), the upload (0 differences, 122,053 files) and the live check (23 of 23). The site
+serves corpus afd3bc24bf475457. The stop's facts named the 16 dossiers and no other.
+
+What the pages read (each against the backup of corpus 7795f8106d47dff3):
+
+- Five pages ask Commons and read the sitelink's category, each record saying so ('read Commons category "…", the item's
+  (Q…) Commons sitelink, since its P373 category "…" holds no files'): Dichotomanthes tristaniicarpa 0 to 11 Commons
+  photographs, Acanthocladium dockeri 0 to 1, Nageia fleuryi 0 to 1 (the three had no photograph from any source), Magnolia
+  jardinensis 0 to 2, Eleiodoxa conferta 0 to 2.
+- Eleven ask Commons nothing: each shows 25 to 72 iNaturalist photographs of its own, and Commons is asked only below
+  twelve (`COMMONS_BELOW`, round 69). Section 3's "16 more … give them Commons photographs" counted the category's files,
+  not whether a page asks: corrected above. Their old Commons row ("skipped", carried from a build of October) is gone, as
+  for any page built online with twelve or more.
+- GBIF's photographs fell on nine pages (Gastrochilus formosanus and Erythronium tuolumnense 24 to 0, Persicaria runcinata
+  24 to 6): every one was an iNaturalist photograph GBIF carries, and every one is still shown, once, as iNaturalist's
+  (checked by photograph number on each page). None lost.
+- drops.txt, one line: Scorzonera cana's item Q15552799 to Q15594569. Expected: Q15552799 carries IPNI 243102-1, which
+  Kew's file does not hold; Kew's number for Scorzonera cana (C.A.Mey.) Griseb. is 77362646-1, which no item carries; so
+  the build takes the item that carries Kew's 239017-1 for Podospermum canum C.A.Mey., which Kew holds as its basionym
+  (round 85, H, as /about/how says). The old item was carried from a build of 22 October.
