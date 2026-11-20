@@ -104,6 +104,14 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 99,
+    date: '2026-11-20',
+    lines: [
+      'Your collection can be encrypted on your device under the app lock\'s passcode: its records, photographs, papers and sync key are then kept in the browser only as ciphertext.',
+      'With it on, nothing of the collection is read until the passcode opens it, and a sync key this device synced with opens it if the passcode is forgotten.'
+    ]
+  },
+  {
     n: 98,
     date: '2026-11-19',
     lines: [

@@ -24,6 +24,8 @@
  * Not in the example collection, which is not the visitor's.
  */
 import { PAGE_IN_DEMO } from '$lib/db/demo';
+import { sealState, openSealWithPass, openSealWithKey, rewrapSealPass, sealPassOpens, lockSeal, sealVault, unsealVault, type SealProgress } from '$lib/db/vault';
+import { askOtherTabs, listenForKeyAsks, haveKey, SEAL_PASS_MIN } from '$lib/db/seal';
 /*
  * Kept in the browser's storage directly, not through stored.ts: the lock is never the example collection's (it is not
  * read or written in an example tab at all), so it has no example copy to route to.
@@ -64,7 +66,8 @@ const TRIES = 5;
 const WAIT_MS = 30_000;
 
 /** `key`: the SHA-256 of the sync key this device synced with, kept when it stops syncing while locked (`keepKey`). */
-interface Stored { v: 1; salt: string; hash: string; rounds: number; after: number; key?: string }
+/** `sealed`: the collection is encrypted under this passcode (round ninety-nine), so a page knows at once to wait for its key. */
+interface Stored { v: 1; salt: string; hash: string; rounds: number; after: number; key?: string; sealed?: true }
 
 const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -84,7 +87,7 @@ export function readLock(raw: string | null): Stored | null {
     if (unb64(o.salt).length < 8 || unb64(o.hash).length !== 32) return null;
     const after = (LOCK_AFTER as readonly number[]).includes(o.after as number) ? (o.after as number) : 5;
     const key = typeof o.key === 'string' && /^[0-9a-f]{64}$/.test(o.key) ? o.key : undefined;
-    return { v: 1, salt: o.salt, hash: o.hash, rounds: o.rounds, after, ...(key ? { key } : {}) };
+    return { v: 1, salt: o.salt, hash: o.hash, rounds: o.rounds, after, ...(key ? { key } : {}), ...(o.sealed === true ? { sealed: true as const } : {}) };
   } catch {
     return null;
   }
@@ -94,6 +97,11 @@ export function readLock(raw: string | null): Stored | null {
 export async function syncKeyHash(canonical: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`cultifolio-lock-key:${canonical}`) as BufferSource);
   return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Why a passcode is not taken for an encrypted collection, or null (D8: a short one is found from the wrapped key in minutes). */
+export function sealPassError(p: string): string | null {
+  return Array.from(p).length < SEAL_PASS_MIN ? `To encrypt the collection, the passcode is at least ${SEAL_PASS_MIN} characters: a shorter one is found from what is stored in minutes.` : null;
 }
 
 /** Why a passcode is not taken, or null. */
@@ -118,6 +126,14 @@ class Lock {
   after = $state<number>(5);
   /** When the screen takes a passcode again, after too many wrong ones (ms), or 0. */
   waitUntil = $state(0);
+  /**
+   * The collection on this device is encrypted under the passcode (round ninety-nine; docs/REVIEW-ROUND-99.md): the passcode opens
+   * its key, and nothing of the collection is read in this tab until it does. Read from the vault, not this browser's
+   * lock record, so a cleared lock record does not leave an encrypted collection with no way to ask for its passcode.
+   */
+  sealed = $state(false);
+  /** A tab unlocked before this page loaded is taking the key from another open tab: the screen says so, and asks nothing yet. */
+  handing = $state(false);
   private wrong = 0;
   private stored: Stored | null = null;
   private watching = false;
@@ -140,7 +156,43 @@ class Lock {
     // Unlocked in this tab and not out of sight past the time set (a reload keeps it); else it asks.
     this.locked = !m || (m.hidden != null && Date.now() - m.hidden >= this.after * 60_000);
     if (!this.locked && m?.hidden != null) setTabMark({ at: m.at, hidden: null });
+    // Encrypted (as this browser's lock record says, before the vault is read): nothing shows until the key is here.
+    if (this.stored.sealed && !haveKey()) { this.sealed = true; this.handing = !this.locked; this.locked = true; }
     this.watch();
+  }
+
+  /** Whether the collection is encrypted here, and the key for a tab that was unlocked before a reload (D6). */
+  async loadSeal(): Promise<void> {
+    if (PAGE_IN_DEMO || typeof window === 'undefined') return;
+    listenForKeyAsks();
+    const s = await sealState().catch(() => null);
+    if (!s?.sealed) {
+      // Not encrypted after all (decrypted, or deleted, in another browser session): the lock as it is without it.
+      if (this.sealed) { this.sealed = false; this.handing = false; this.markSealed(false); this.load(); }
+      return;
+    }
+    const handing = this.handing || (!this.locked && !haveKey());
+    this.sealed = true;
+    this.enabled = true;
+    this.markSealed(true);
+    this.watch();
+    if (haveKey()) { this.handing = false; this.locked = false; return; }
+    this.locked = true;
+    if (handing) {
+      this.handing = true;
+      const k = await askOtherTabs();
+      this.handing = false;
+      if (k && (await openSealWithKey(k))) { this.locked = false; return; }
+      setTabMark(null);
+    }
+  }
+  /** Keep in this browser's lock record whether the collection is encrypted under it. */
+  private markSealed(on: boolean): void {
+    if (!this.stored || !!this.stored.sealed === on) return;
+    const { sealed: _s, ...rest } = this.stored;
+    void _s;
+    this.stored = on ? { ...rest, sealed: true } : rest;
+    writeLockKey(JSON.stringify(this.stored));
   }
 
   private watch(): void {
@@ -150,7 +202,7 @@ class Lock {
       if (!this.enabled) return;
       if (document.visibilityState === 'hidden') {
         if (!this.locked) { const m = tabMark(); setTabMark({ at: m?.at ?? Date.now(), hidden: Date.now() }); }
-        if (this.after === 0) this.locked = true;
+        if (this.after === 0) { if (this.sealed) this.lockNow(); else this.locked = true; }
       } else {
         const m = tabMark();
         if (!this.locked && m?.hidden != null) {
@@ -164,8 +216,9 @@ class Lock {
   /** Set or change the passcode (and the time); the tab stays unlocked. */
   async set(pass: string, after: number): Promise<void> {
     if (PAGE_IN_DEMO) throw new Error('The example collection has no lock.');
-    const e = passError(pass);
+    const e = passError(pass) ?? (this.sealed ? sealPassError(pass) : null);
     if (e) throw new Error(e);
+    if (this.sealed) await rewrapSealPass(pass); // the collection's key wrapped under the new passcode first
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const s: Stored = { v: 1, salt: b64(salt), hash: await hashPass(pass, salt), rounds: ROUNDS, after: (LOCK_AFTER as readonly number[]).includes(after) ? after : 5, ...(this.stored?.key ? { key: this.stored.key } : {}) };
     writeLockKey(JSON.stringify(s));
@@ -186,6 +239,7 @@ class Lock {
   }
 
   async check(pass: string): Promise<boolean> {
+    if (this.sealed) return sealPassOpens(pass);
     if (!this.stored) return true;
     const h = await hashPass(pass, unb64(this.stored.salt), this.stored.rounds);
     let d = h.length ^ this.stored.hash.length;
@@ -200,7 +254,7 @@ class Lock {
     this.wrong = t.wrong;
     if (t.until > this.waitUntil) this.waitUntil = t.until;
     if (Date.now() < this.waitUntil) return false;
-    if (await this.check(pass)) {
+    if (this.sealed ? await openSealWithPass(pass) : await this.check(pass)) {
       this.wrong = 0;
       this.waitUntil = 0;
       writeTries(null);
@@ -232,6 +286,25 @@ class Lock {
     if (!this.enabled) return;
     this.locked = true;
     setTabMark(null);
+    // Encrypted: the key is forgotten in this tab, and the page reloads, so nothing it showed stays in its memory (D6).
+    if (this.sealed) { lockSeal(); if (typeof location !== 'undefined') location.reload(); }
+  }
+
+  /** Encrypt the collection on this device under the passcode (set already, and asked again here). */
+  async encrypt(pass: string, onProgress?: (p: SealProgress) => void): Promise<void> {
+    if (!this.stored) throw new Error('Set a passcode first.');
+    if (!(await this.check(pass))) throw new Error('That is not the passcode.');
+    const e = sealPassError(pass);
+    if (e) throw new Error(e);
+    await sealVault(pass, onProgress);
+    this.sealed = true;
+    this.markSealed(true);
+  }
+  /** Decrypt the collection on this device back to plain (the tab holds the key). */
+  async decrypt(onProgress?: (p: SealProgress) => void): Promise<void> {
+    await unsealVault(onProgress);
+    this.sealed = false;
+    this.markSealed(false);
   }
 
   /** Take the passcode off this device. */

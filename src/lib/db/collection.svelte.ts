@@ -330,6 +330,9 @@ class Collection {
         // be missed by the tab that is loading (round fifty-four, 2). A notice that lands before `ready` is acted on after.
         let heard: VaultNotice | null = null;
         onOtherTabWrite((what) => {
+          // Another tab began or ended encrypting the collection: this tab writes in the old form, so it reloads, and takes
+          // the key from that tab (round ninety-nine; docs/REVIEW-ROUND-99.md, D6).
+          if (what === 'sealed') { if (typeof location !== 'undefined') location.reload(); return; }
           if (!this.ready) { if (what === 'replaced' || what === 'refold' || !heard) heard = what; return; }
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.

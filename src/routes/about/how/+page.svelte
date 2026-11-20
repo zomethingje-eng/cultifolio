@@ -938,7 +938,7 @@
     <li>Sync encrypts every sync bundle on the device with a key only you hold. The server stores ciphertext and cannot read a plant name.</li>
     <li>The server holds a token derived from the key, which cannot be turned back into the key. It is sent with every request, so it is visible wherever request headers are, the platform included.</li>
     <li>Whoever holds the token can read the ciphertext, write junk into the vault up to its limit, and take a photograph's name before your upload does. They cannot open anything.</li>
-    <li>The key sits in this browser's storage in the clear, as the collection does, so anyone with this browser profile has both. There is no rotation and no revocation yet.</li>
+    <li>The key sits in this browser's storage in the clear, as the collection does, so anyone with this browser profile has both, unless the collection is <a href="#sealed">encrypted on the device</a>, when the key is sealed with it. There is no rotation and no revocation yet.</li>
     <li>"Stop syncing" forgets the key on this device and revokes nothing on the server. A key you believe exposed means a new vault.</li>
     <li>Sync also trusts the server's listing. A device cannot detect a bundle the server withholds, since bundles carry no chain. It can detect a bundle altered in transit (the seal fails) and a photograph swapped (its hash is in the record).</li>
     <li>A plant number is at most 32 characters, with no more than 15 digits in a row. An import keeps a longer one in the plant's notes and gives the next free number.</li>
@@ -982,7 +982,7 @@
   <details class="full in-full"><summary>The rules in full<span class="sr">: papers kept with a plant</span></summary>
   <ul class="rules">
     <li>A file is taken by its own first bytes, never by its name: a PDF, a JPEG or a PNG, up to 10 MB, and thirty a plant.</li>
-    <li>It is kept in this browser as a photograph is, not encrypted on the device. With sync on it goes into the vault sealed on the device, and the device that receives it checks its hash.</li>
+    <li>It is kept in this browser as a photograph is: encrypted on the device only when the collection is (<a href="#sealed">below</a>). With sync on it goes into the vault sealed on the device, and the device that receives it checks its hash.</li>
     <li>Open shows it in a new tab from the file on this device; Download saves it under its own name. A paper whose file has not yet come from the device that added it says so.</li>
     <li>A backup holds each paper's file and a restore puts it back. A version of the app made before papers keeps one as a record waiting for fields, syncs and backs up its file, and never shows it as a photograph.</li>
     <li>A collection's papers hold at most 300 MB in all, so the sync vault keeps room for photographs and the log, and a backup with every paper still opens on a phone. The Backup page shows how much the papers hold, warns from 240 MB, and a paper that would pass 300 MB is refused with a sentence saying so.</li>
@@ -1019,20 +1019,33 @@
   </details>
 
   <h3 id="lock">The app lock</h3>
-  <p class="sum">Settings can set a passcode this device asks for before it shows the app. It is a screen over the app, not encryption: it keeps out a casual look, not someone who can read the browser's storage.</p>
+  <p class="sum">Settings can set a passcode this device asks for before it shows the app. Alone it is a screen, not encryption, keeping out a casual look; Settings can also <a href="#sealed">encrypt the collection</a> under it.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: the app lock</span></summary>
   <ul class="rules">
-    <li>The collection, its photographs and papers, and the sync key are kept in this browser's storage as they are. Sync encrypts what it sends; nothing is encrypted on the device.</li>
-    <li>So anyone who can read the browser's storage, through its developer tools, the device's files or a copy of them, can read the collection with or without the passcode.</li>
+    <li>Unless the collection is encrypted on the device, the collection, its photographs and papers, and the sync key are kept in this browser's storage as they are. Sync encrypts what it sends.</li>
+    <li>So, unless it is encrypted, anyone who can read the browser's storage, through its developer tools, the device's files or a copy of them, can read the collection with or without the passcode.</li>
     <li>The passcode is kept on this device only, as a salted PBKDF2-SHA-256 hash of 600,000 rounds. It is never synced and never in a backup, so each device has its own or none.</li>
     <li>Someone who can read the browser's storage can try passcodes against that hash as fast as their computer allows, and finds a short passcode that way. The hash keeps only a long passcode from being read off the device.</li>
-    <li>It asks when the app opens in a new tab or window, and again once the app has been out of sight for the time set: at once, or after 1, 5 or 15 minutes. A reload of an unlocked tab stays unlocked.</li>
+    <li>It asks when the app opens in a new tab or window, and again once the app has been out of sight for the time set: at once, or after 1, 5 or 15 minutes. A reload of an unlocked tab stays unlocked; with the collection encrypted, only while another tab of the app is open to hand it the key.</li>
     <li>After five wrong passcodes it waits 30 seconds. The count and the wait are kept in this browser's storage, so a reload, another tab or a new window does not start them again. The about pages are never behind it.</li>
     <li>While it is locked, the tab is titled "Locked · Cultifolio", not by the page under it.</li>
-    <li>If you forget the passcode, this device's sync key opens the app, and so does a backup file of this collection, read on the device and not restored. Either takes the passcode off, to be set again in Settings. The lock screen says which of the two this device has.</li>
+    <li>If you forget the passcode, this device's sync key opens the app, and so does a backup file of this collection, read on the device and not restored. Either takes the passcode off, to be set again in Settings. The lock screen says which of the two this device has. With the collection encrypted, a backup file cannot open it (<a href="#sealed">below</a>).</li>
     <li>Stopping sync on a locked device says first that the key is a way back, and offers to take the lock off or make a backup. The device keeps a SHA-256 hash of the key it synced with beside the lock, so that key still opens it.</li>
     <li>So it can be set only while sync is on or after a backup made in the last day. With neither the key nor a file, clearing the site's data in the browser takes the lock off, and the collection on this device with it.</li>
     <li>The example collection has no lock.</li>
+    <li id="sealed">With the collection encrypted on the device (Settings, under the lock), a random 256-bit key encrypts, with AES-256-GCM. It is kept in the collection's own database only wrapped: under a key derived from the passcode (PBKDF2-SHA-256, 600,000 rounds, a random salt), and under a key derived from each sync key this device has synced with (HKDF-SHA-256).</li>
+    <li>Encrypted: each change's value, bound to its stamp, kind, record and field, so it cannot be moved to another record unseen; each photograph's and paper's file and thumbnail, bound to its id; the sync record, which holds the sync key; and the snapshot's reading of the collection.</li>
+    <li>Not encrypted, so the database works as before: each change's stamp, kind, record id, field name and time written; the order changes arrived in and the stamps waiting to be sent; and the plant and batch numbers given out.</li>
+    <li>Nor the stamps set aside as parked, the device's id, the day of the last backup, or the snapshot's rules, counter and time saved.</li>
+    <li>So someone with a copy of the browser's storage and without the passcode or a sync key sees how many records there are, which fields changed and when, and the plant numbers, but not what any record says, nor the photographs, papers or sync key.</li>
+    <li>The passcode is the protection: it needs 8 characters or more. The rounds slow each guess and do not make a short passcode safe, since what is stored can be tried against offline.</li>
+    <li>Nothing of the collection is read until the passcode opens the key. A new tab asks; a reload of an unlocked tab takes the key from another open tab of the app, or asks. Locking a tab, or its time out of sight passing, forgets the key there and reloads the page.</li>
+    <li>Turning it on or off rewrites the collection record by record. A record reads whether it is encrypted or not, so one cut off part-way loses nothing, and the next unlock finishes it.</li>
+    <li>Records kept before it was turned on may stay in the browser's own files until the browser tidies them, which the app cannot force.</li>
+    <li>A forgotten passcode: a sync key this device synced with opens it, decrypts the collection and takes the passcode off. A backup file holds no key and cannot open it. Without a sync key, the lock screen can delete the collection on this device so it can be restored from a backup file, losing what was added since the file was made unless another device syncs it.</li>
+    <li>So it can be turned on only while sync is on or after a backup made in the last day. Taking the lock off decrypts it first.</li>
+    <li>A backup file is not encrypted: it is the collection as it is, wherever it is saved. Sync encrypts what it sends, as always.</li>
+    <li>While the app is unlocked, the page holds what it shows in memory, as any page does. The example collection is never encrypted.</li>
   </ul>
   </details>
   </section>
@@ -1253,7 +1266,7 @@
     <li><code>cultifolio.demo.</code> and a setting's name: that setting, for the example's tab only, such as <code>cultifolio.demo.units</code> or <code>cultifolio.demo.compare</code>.</li>
     <li><code>cultifolio.demo.own</code>: whether this device had a collection of its own when the example was opened, so the example's bar says the right thing. <code>cultifolio.demo.gen</code>: the example's generation when this tab opened it. Both go with the example's other copies.</li>
     <li><code>cultifolio.keepDraft</code>: what an add form inside the example held when Keep it as my own was pressed, read once by the same form in your own collection and taken off.</li>
-    <li><code>cultifolio.unlocked</code>: that the app lock was opened in this tab, and when the app went out of sight, so a reload stays unlocked and the time set is counted.</li>
+    <li><code>cultifolio.unlocked</code>: that the app lock was opened in this tab, and when the app went out of sight, so a reload stays unlocked and the time set is counted. With the collection encrypted it holds no key: a reload asks another open tab for it.</li>
     <li><code>cultifolio.labelsPicked</code>: the plants picked on the labels page, written when the page is hidden or left, forgotten when you move to another page of the app, and read back only when that page is reloaded or brought back through the browser's history.</li>
     <li><code>cultifolio.sampleLeft</code>: this tab has just left the example by Leave, so its next page deletes the example's database. An address alone never does.</li>
     <li><code>cultifolio.sampleLeaving</code>: a one-use token Leave writes and its address carries (<code>?left=</code>). Only when the two match does the first page after Leave mark the example for deletion; the token is taken off as it is read.</li>
@@ -1267,7 +1280,7 @@
   </ul>
   <p class="store">in IndexedDB, the collection itself:</p>
   <ul class="rules">
-    <li><code>cultifolio</code>, your collection, and <code>cultifolio-staging</code>, a copy while a backup is being restored.</li>
+    <li><code>cultifolio</code>, your collection, and <code>cultifolio-staging</code>, a copy while a backup is being restored. With the collection <a href="#sealed">encrypted</a>, its key is kept in <code>cultifolio</code> only wrapped (the record <code>seal</code>), and <code>sealing</code> while it is being encrypted or decrypted.</li>
     <li><code>cultifolio-demo</code>, the example collection, is deleted by the first page after you leave it or, when another tab still has it open, as that tab lets it go, which the page says.</li>
     <li>One left by a tab closed without leaving is deleted by a later page when nothing in it is yours. Otherwise it is offered back on each page until you answer (open it, delete it, or not now), and deleted, answered or not, once nothing in it has changed for 30 days.</li>
     <li>A browser without Web Locks cannot tell an open example from a left one, so there one left by a tab closed without leaving is kept.</li>
@@ -1289,7 +1302,8 @@
   </ul>
   <p class="store">and, while a page is open, names the browser holds for coordination and nothing else:</p>
   <ul class="rules">
-    <li>The channel <code>cultifolio-vault</code> (<code>cultifolio-demo-vault</code> in the example), on which a tab tells this browser's other tabs that it wrote to the collection, so they read it again.</li>
+    <li>The channel <code>cultifolio-vault</code> (<code>cultifolio-demo-vault</code> in the example), on which a tab tells this browser's other tabs that it wrote to the collection, so they read it again, or that it began or ended encrypting it, so they reload.</li>
+    <li>The channel <code>cultifolio-key</code>, on which a reloaded tab asks the other open tabs of the app for the collection's key, when it is encrypted, and an unlocked tab answers with it. Never stored.</li>
     <li>The lock <code>cultifolio-sync:</code> and the vault id, so two tabs never sync at once. The lock <code>cultifolio-import</code>, so two tabs never write an import at once. The lock <code>cultifolio-replace</code>, so one tab at a time replaces the collection from a backup.</li>
     <li>In the example collection, the locks <code>cultifolio-sample-open</code> and <code>cultifolio-sample-seed</code> and the channel <code>cultifolio-sample</code>; <a href="/about/formats#sample">the formats page</a> says what they do.</li>
   </ul>

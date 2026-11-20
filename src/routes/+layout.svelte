@@ -84,7 +84,7 @@
   }
   // A page the back-forward cache brings back into a tab whose mode changed loads afresh (the fix pass; R1, 3).
   onMount(() => freshOnRestore());
-  onMount(() => lock.load());
+  onMount(() => { lock.load(); void lock.loadSeal(); }); // the collection encrypted here: its key, or the lock screen (round ninety-nine)
   /** Behind the lock screen: every page but the about pages, which say what the lock is and how to come back without the passcode (round eighty-seven, t3). */
   const locked = $derived(lock.locked && !lockExempt(page.url.pathname));
   // The footer is made inert by its element, not by an attribute in its tag, which the about pages' tests read as written.

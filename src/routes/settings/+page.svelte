@@ -136,9 +136,51 @@
   async function removeLock() {
     lockMsg = '';
     if (!(await lock.check(lockOld))) { lockMsg = 'The current passcode is not right.'; return; }
+    // Encrypted under the passcode: decrypted back to plain first, or no passcode would be left to open it (round ninety-nine).
+    if (lock.sealed) {
+      try { await lock.decrypt((p) => (lockMsg = `Decrypting: ${p.what} ${p.done} of ${p.of}…`)); } catch (err) { lockMsg = err instanceof Error ? err.message : String(err); return; }
+    }
     lock.remove();
     lockOld = '';
     lockMsg = 'The lock is off on this device.';
+  }
+
+  /* ---- the collection encrypted on this device (round ninety-nine; docs/REVIEW-ROUND-99.md) ---- */
+  let sealPass = $state('');
+  let sealMsg = $state('');
+  let sealBusy = $state(false);
+  let sealSure = $state(false);
+  async function encryptHere() {
+    if (sealBusy) return;
+    sealMsg = '';
+    if (!wayBack) { sealMsg = 'Turn on sync, or make a backup, first: with the passcode forgotten, the sync key opens it, and a backup file is the only other way back.'; return; }
+    if (!sealSure) { sealMsg = 'Tick the box first.'; return; }
+    sealBusy = true;
+    try {
+      await lock.encrypt(sealPass, (p) => (sealMsg = `Encrypting: ${p.what} ${p.done} of ${p.of}…`));
+      sealPass = '';
+      sealSure = false;
+      sealMsg = 'The collection on this device is encrypted. Its key is in this tab while it is unlocked.';
+    } catch (err) {
+      sealMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      sealBusy = false;
+    }
+  }
+  async function decryptHere() {
+    if (sealBusy) return;
+    sealMsg = '';
+    if (!(await lock.check(sealPass))) { sealMsg = 'That is not the passcode.'; return; }
+    sealBusy = true;
+    try {
+      await lock.decrypt((p) => (sealMsg = `Decrypting: ${p.what} ${p.done} of ${p.of}…`));
+      sealPass = '';
+      sealMsg = 'The collection on this device is no longer encrypted; the lock stays on.';
+    } catch (err) {
+      sealMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      sealBusy = false;
+    }
   }
   $effect(() => { if (lock.enabled) lockAfter = lock.after; });
 
@@ -279,7 +321,7 @@
     {#if PAGE_IN_DEMO}
       <p class="small" style="margin: 0">The example collection has no lock; a passcode is set on your own collection.</p>
     {:else}
-      <p class="small" style="margin: 0 0 10px" id="lock-what">A passcode this device asks for before it shows the app, for a device others use too. It is a screen over the app: your collection is kept in this browser as it is, not encrypted (sync encrypts it for the server, not on the device). So it keeps out a casual look, not someone who can read the browser's storage. The passcode stays on this device and is never synced. If it is forgotten, the sync key or a backup file of this collection opens the app and takes it off. <a href="/about/how#lock">What it protects</a>.</p>
+      <p class="small" style="margin: 0 0 10px" id="lock-what">A passcode this device asks for before it shows the app, for a device others use too. On its own it is a screen over the app: your collection is kept in this browser as it is, not encrypted (sync encrypts it for the server), unless you encrypt it under the passcode below. So on its own it keeps out a casual look, not someone who can read the browser's storage. The passcode stays on this device and is never synced. If it is forgotten, the sync key or a backup file of this collection opens the app and takes it off. <a href="/about/how#lock">What it protects</a>.</p>
       {#if lock.enabled && !lockChanging}
         <p class="small" style="margin: 0 0 8px" id="lock-on"><b>A passcode is set on this device.</b></p>
         <label class="inline"><span>Asks again</span><select id="lock-after" value={lock.after} onchange={(e) => lock.setAfter(Number(e.currentTarget.value))}>{#each LOCK_AFTER as n (n)}<option value={n}>{afterWords(n)}{n ? ' out of sight' : ' the app goes out of sight'}</option>{/each}</select></label>
@@ -288,13 +330,26 @@
           <button class="btn" type="button" id="lock-change" onclick={() => { lockChanging = true; lockMsg = ''; }}>Change the passcode</button>
         </div>
         <div class="fields" style="margin-top: 12px"><label><span>Current passcode, to take the lock off</span><input id="lock-old-off" type="password" autocomplete="current-password" bind:value={lockOld} /></label></div>
-        <div class="row"><button class="btn" type="button" id="lock-off" onclick={removeLock}>Take the lock off</button></div>
+        <div class="row"><button class="btn" type="button" id="lock-off" onclick={removeLock}>Take the lock off{lock.sealed ? ' and decrypt' : ''}</button></div>
+        <h3 class="sub" id="sealed">Encrypt the collection on this device</h3>
+        {#if lock.sealed}
+          <p class="small" style="margin: 0 0 8px" id="seal-on"><b>The collection on this device is encrypted under the passcode.</b> Its records, photographs and papers are kept in this browser only as ciphertext, and the key to them is in a tab's memory only while it is unlocked. A backup file is not encrypted. <a href="/about/how#sealed">What it protects</a>.</p>
+          <div class="fields"><label><span>Passcode, to decrypt it</span><input id="seal-pass" type="password" autocomplete="current-password" bind:value={sealPass} /></label></div>
+          <div class="row"><button class="btn" type="button" id="seal-off" aria-disabled={sealBusy} onclick={decryptHere}>Decrypt it</button></div>
+        {:else}
+          <p class="small" style="margin: 0 0 8px" id="seal-what">With this on, the collection's records, photographs, papers and the sync key are kept in this browser only as ciphertext under a key the passcode opens, so someone with a copy of the browser's storage and without the passcode cannot read them. It needs a passcode of 8 characters or more; a shorter one is found from what is stored in minutes. If the passcode is forgotten, a sync key this device synced with opens it; without one, only a backup file brings the collection back, and what was added since it was made is lost. A backup file is not encrypted. Records kept before it was turned on may stay in the browser's own files until the browser tidies them. <a href="/about/how#sealed">What it protects</a>.</p>
+          {#if !wayBack}<p class="small" id="seal-wayback" style="margin: 0 0 8px">First turn on <a href="/sync">sync</a> or <a href="/backup">make a backup</a>.</p>{/if}
+          <div class="fields"><label><span>Passcode</span><input id="seal-pass" type="password" autocomplete="current-password" bind:value={sealPass} /></label></div>
+          <label class="check" style="margin-top: 8px; font-weight: 400"><input type="checkbox" id="seal-sure" bind:checked={sealSure} /> <span>I know a forgotten passcode, with no sync key, leaves only a backup file to come back with</span></label>
+          <div class="row"><button class="btn" type="button" id="seal-on-btn" aria-disabled={sealBusy || !wayBack} onclick={encryptHere}>Encrypt it</button></div>
+        {/if}
+        <p class="small muted" role="status" id="seal-msg" style="margin: 8px 0 0">{sealMsg}</p>
       {:else}
         {#if !wayBack}<p class="small" id="lock-wayback" style="margin: 0 0 8px">First turn on <a href="/sync">sync</a> or <a href="/backup">make a backup</a>: one of the two is the way back if the passcode is forgotten.</p>{/if}
         <form onsubmit={(e) => { e.preventDefault(); void setLock(); }}>
           <div class="fields">
             {#if lock.enabled}<label><span>Current passcode</span><input id="lock-old" type="password" autocomplete="current-password" bind:value={lockOld} /></label>{/if}
-            <label><span>{lock.enabled ? 'New passcode' : 'Passcode'} (4 characters or more)</span><input id="lock-pass1" type="password" autocomplete="new-password" bind:value={lockPass} /></label>
+            <label><span>{lock.enabled ? 'New passcode' : 'Passcode'} ({lock.sealed ? 8 : 4} characters or more)</span><input id="lock-pass1" type="password" autocomplete="new-password" bind:value={lockPass} /></label>
             <label><span>The same again</span><input id="lock-pass2" type="password" autocomplete="new-password" bind:value={lockPass2} /></label>
           </div>
           <label class="inline" style="margin-top: 10px"><span>Asks again</span><select id="lock-after-new" bind:value={lockAfter}>{#each LOCK_AFTER as n (n)}<option value={n}>{afterWords(n)}{n ? ' out of sight' : ' the app goes out of sight'}</option>{/each}</select></label>
@@ -324,6 +379,7 @@
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
   .fields label, .inline { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--ink2); }
   .inline { flex-direction: row; align-items: center; gap: 6px; }
+  .sub { margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: var(--fs-md); color: var(--ink); }
   .fields input, .inline select { font: inherit; font-size: var(--fs-md); padding: 8px 10px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   .body :global(.seg > button) { min-height: 44px; }

@@ -122,11 +122,13 @@ describe('round seventy-four: a grower\'s greenhouse, bench or windowsill is a "
     expect(readFileSync('src/hooks.server.ts', 'utf8')).toMatch(/benches/);
     expect(readdirSync('src/routes/places')).toContain('[id]');
   });
-  it('the stored names and the fold are unchanged: locationId, the kind `location`, FOLD_RULES 8, the database at 4', async () => {
+  // Round ninety-nine: the database at 5 (the collection encrypted on the device; docs/REVIEW-ROUND-99.md, D10), its stores and
+  // names as before.
+  it('the stored names and the fold are unchanged: locationId, the kind `location`, FOLD_RULES 8, the database at 5', async () => {
     const types = readFileSync('src/lib/db/types.ts', 'utf8');
     expect(types).toMatch(/locationId\??: string/);
     const { FOLD_RULES } = await import('../../src/lib/core/log');
     expect(FOLD_RULES).toBe(8);
-    expect(readFileSync('src/lib/db/vault.ts', 'utf8')).toMatch(/^const DB_V = 4;$/m);
+    expect(readFileSync('src/lib/db/vault.ts', 'utf8')).toMatch(/^const DB_V = 5;$/m);
   });
 });

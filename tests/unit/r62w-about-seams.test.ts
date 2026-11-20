@@ -211,6 +211,9 @@ describe('IndexedDB, cache, lock and channel names, both ways', () => {
     named.delete('cultifolio-lock-key:'); // the prefix of a kept sync key's hash beside the app lock (round eighty-seven, the stage 3 fixes), a hash's input, not a store
     named.delete('cultifolio-plants-'); // a downloaded file's name (round eighty-four: /about/formats names the exports' files)
     named.delete('cultifolio-watering-');
+    // The collection encrypted on the device (round ninety-nine): the data key's wrap's additional data, and the HKDF input's
+    // prefix and info, a derivation's inputs, not stores.
+    for (const n of ['cultifolio-dek', 'cultifolio-dek:', 'cultifolio-sync-key:', 'cultifolio-device-data-key']) named.delete(n);
     expect([...named].filter((n) => !names.has(n)).sort()).toEqual([]);
   });
 });

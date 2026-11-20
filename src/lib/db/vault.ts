@@ -7,6 +7,12 @@ import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransactio
 import { changeError, type Change } from '$core/log';
 import { sampleClosedHere, PAGE_IN_DEMO, DEMO_DB, exampleClosed, markExampleClosed, CLOSED_WORDS } from './demo';
 import { storageErrorText as quotaText } from './storage-error';
+import { parseVaultKey } from '$lib/sync/crypto';
+import {
+  SEAL_META, SEALING_META, SEALED_META, haveKey, whenKey, setKey, forgetKey, newDataKey, keyBytes, readSeal, wrapPass, wrapSyncKey, unwrapPass, unwrapSyncKey,
+  isSealedChange, sealChangeSync, openChangeSync, openChanges, sealMetaSync, openMetaSync, sealJson, openJson, sealBytes, openBytes,
+  type StoredChange, type SealRecord, type Sealing
+} from './seal';
 
 /** The pixels for one photo record; metadata is in the change log. */
 export interface PhotoBlobs {
@@ -27,11 +33,20 @@ interface PhotoBytes {
   fullType: string;
   smallType: string;
 }
+/** A photograph kept sealed (round ninety-nine): its two parts' bytes sealed, each bound to its id and part. */
+interface PhotoSealed {
+  id: string;
+  sealed: 1;
+  full: Uint8Array;
+  small: Uint8Array;
+  fullType: string;
+  smallType: string;
+}
 
 interface VaultDB extends DBSchema {
-  changes: { key: string; value: Change; indexes: { byRecord: [string, string] } };
+  changes: { key: string; value: StoredChange; indexes: { byRecord: [string, string] } };
   meta: { key: string; value: unknown };
-  photos: { key: string; value: PhotoBlobs | PhotoBytes };
+  photos: { key: string; value: PhotoBlobs | PhotoBytes | PhotoSealed };
   /** HLCs of changes the server has not acknowledged: every local edit, import and restore lands here; a pull does not. */
   outbox: { key: string; value: { t: string } };
   /**
@@ -57,7 +72,12 @@ const STAGING_NAME = DB_NAME === 'cultifolio' ? 'cultifolio-staging' : `${DB_NAM
  * open beside this build stored parks of its clock alone into the shared set, which this build reads as verdicts kept for
  * good, and folded the log again at each turn (the second pass; the data review's suspected items).
  */
-const DB_V = 4;
+/**
+ * 5 since round ninety-nine, with nothing new in its shape: a change may be kept sealed (its value encrypted, `x`), and a
+ * tab of an older build, which would read one as a change with no value, lets go and reloads into this one; an older
+ * build opened after cannot open the vault at all (docs/REVIEW-ROUND-99.md, D10).
+ */
+const DB_V = 5;
 /** The meta key the fold snapshot is kept under, and the counter that says it is stale. */
 const FOLD = 'fold';
 const FOLD_GEN = 'foldGen';
@@ -82,6 +102,8 @@ const ORDER_FROM = 'orderFrom';
 const UNSENT = 'unsentUnreadable';
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
+/** The vault opened, past the seal's gate and a replacement's resume: what every read and write awaits. */
+let readyp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
 /* ---- in-flight writes ----
  * When another tab upgrades the vault this tab must let go and reload, but
@@ -146,7 +168,7 @@ function upgrade(db: IDBPDatabase<VaultDB>, oldV: number) {
   }
   if (oldV < 2) db.createObjectStore('outbox', { keyPath: 't' });
   if (oldV < 3) db.createObjectStore('order', { autoIncrement: true });
-  // 4: no change of shape (`DB_V`).
+  // 4, 5: no change of shape (`DB_V`).
 }
 
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
@@ -154,6 +176,18 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
   // re-created the database Leave had just deleted, and saved a plant into it that the next load deleted (round
   // sixty-seven; triage-66 V3; IND-1, S-A3). The page says why with these words, and keeps what was typed on screen.
   if (DB_NAME === DEMO_DB && exampleClosed()) return Promise.reject(new Error(CLOSED_WORDS));
+  if (!readyp) readyp = openRaw().then(async (db) => {
+    // The collection encrypted on this device: nothing reads or writes it until this tab holds the key (round ninety-nine;
+    // docs/REVIEW-ROUND-99.md, D5). Every caller waits here, behind the lock screen.
+    await sealGate(db);
+    await resumeReplace(db);
+    return db;
+  });
+  return readyp;
+}
+
+/** The database itself, with no gate: for the lock's own reads of the seal record, and for the gate. */
+function openRaw(): Promise<IDBPDatabase<VaultDB>> {
   if (!dbp)
     dbp = openDB<VaultDB>(DB_NAME, DB_V, {
       upgrade,
@@ -167,6 +201,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
         if (DB_NAME === DEMO_DB) markExampleClosed(); // first: nothing reopens it from here on (round sixty-seven; triage-66 V3)
         (ev.target as IDBDatabase | null)?.close();
         dbp = null;
+        readyp = null;
         // The sample's database is deleted whole when another tab leaves the sample: say that, not "updated" (round sixty-one; the records review, 13).
         if (DB_NAME !== 'cultifolio') { sampleClosedHere(); return; } // one path with the channel's: the flag and the tab's copies go, and the next page says why (round sixty-two; the triage's 4)
         notify('Cultifolio has been updated in another tab. Reloading…');
@@ -177,34 +212,63 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       },
       terminated() {
         dbp = null;
+        readyp = null;
         notify("The browser closed this page's storage; reload the page.");
       }
-    }).then(async (db) => {
-      // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault. One that
-      // cannot finish now (the device is still full) leaves the collection openable, the reason said and writes refused
-      // until it does (`storeIn`); it rejected every open, and the collection never opened (round sixty-seven; triage-66
-      // R1, the self-review's C1).
-      // One tab copies, under the replace lock; a tab that finds the lock held waits, says why, and reads the flag again
-      // once it has the lock, since the tab that held it has most likely finished (round eighty-two; the independent
-      // review's 1: two tabs copying at once wiped each other's photographs). Every other tab still shows the old
-      // collection, and its writes went into the new log as half records, its new plant numbered from the old state
-      // (round sixty-nine; triage-68 R4, R46-21): told, they reload onto this one.
-      if (await db.get('meta', STAGING_PENDING)) {
-        let waited = false;
-        try {
-          await underReplaceLock(async () => {
-            if (!(await db.get('meta', STAGING_PENDING))) return; // finished by the tab that held the lock
-            await writing(() => replaceFromStaging(db));
-            announce('replaced'); // once finished: a resume that cannot finish says nothing, or two tabs reloaded each other for good
-          }, () => { waited = true; notify(REPLACE_ELSEWHERE); });
-          if (waited) notify(null);
-          replaceWaitingSeen = false;
-        } catch (e) { replaceWaitingSeen = true; notify(await pendingText(e)); }
-      }
-      return db;
     });
   return dbp;
 }
+
+async function resumeReplace(db: IDBPDatabase<VaultDB>): Promise<void> {
+  // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault. One that
+  // cannot finish now (the device is still full) leaves the collection openable, the reason said and writes refused
+  // until it does (`storeIn`); it rejected every open, and the collection never opened (round sixty-seven; triage-66
+  // R1, the self-review's C1).
+  // One tab copies, under the replace lock; a tab that finds the lock held waits, says why, and reads the flag again
+  // once it has the lock, since the tab that held it has most likely finished (round eighty-two; the independent
+  // review's 1: two tabs copying at once wiped each other's photographs). Every other tab still shows the old
+  // collection, and its writes went into the new log as half records, its new plant numbered from the old state
+  // (round sixty-nine; triage-68 R4, R46-21): told, they reload onto this one.
+  if (await db.get('meta', STAGING_PENDING)) {
+    let waited = false;
+    try {
+      await underReplaceLock(async () => {
+        if (!(await db.get('meta', STAGING_PENDING))) return; // finished by the tab that held the lock
+        await writing(() => replaceFromStaging(db));
+        announce('replaced'); // once finished: a resume that cannot finish says nothing, or two tabs reloaded each other for good
+      }, () => { waited = true; notify(REPLACE_ELSEWHERE); });
+      if (waited) notify(null);
+      replaceWaitingSeen = false;
+    } catch (e) { replaceWaitingSeen = true; notify(await pendingText(e)); }
+  }
+}
+
+
+/* ---- the collection encrypted on this device (round ninety-nine; docs/REVIEW-ROUND-99.md) ----
+ * Whether this vault is sealed is read once, at the first open; this tab's own sealing and unsealing change it, and
+ * another tab's tell this one to reload (`announce('sealed')`). `writeSealed`: new records are written sealed, which is
+ * so from the moment sealing begins until unsealing begins (D4: a record of either form reads).
+ */
+let sealedVault = false;
+let writeSealed = false;
+async function sealGate(db: IDBPDatabase<VaultDB>): Promise<void> {
+  if (DB_NAME !== 'cultifolio') return; // the example is never sealed
+  const [rec, sealing] = await Promise.all([db.get('meta', SEAL_META), db.get('meta', SEALING_META)]);
+  sealedVault = !!readSeal(rec);
+  writeSealed = sealedVault && (sealing as Sealing | undefined)?.to !== 'off';
+  if (sealedVault && !haveKey()) await whenKey();
+}
+/** Whether the collection on this device is encrypted, and a sealing or unsealing left part-way; read without the gate. */
+export async function sealState(): Promise<{ sealed: boolean; sealing: Sealing | null }> {
+  if (DB_NAME !== 'cultifolio') return { sealed: false, sealing: null };
+  const db = await openRaw();
+  const [rec, sealing] = await Promise.all([db.get('meta', SEAL_META), db.get('meta', SEALING_META)]);
+  return { sealed: !!readSeal(rec), sealing: (sealing as Sealing | undefined) ?? null };
+}
+/** A change as stored: sealed when the vault writes sealed. */
+const storedOf = (c: Change): StoredChange => (writeSealed ? sealChangeSync(c) : c);
+/** A meta record as stored. */
+const metaStored = (k: string, v: unknown): unknown => (writeSealed && SEALED_META.has(k) && v !== undefined && v !== null ? sealMetaSync(k, v) : v);
 
 /* ---- staged replacement ----
  * "Replace this device with the file" must never leave the device with
@@ -289,7 +353,7 @@ export async function openStaging(): Promise<StagedReplacement> {
       if (!changes.length) return;
       await writing(async () => {
         const tx = need().transaction('changes', 'readwrite');
-        await Promise.all([...changes.map((c) => tx.store.put(c)), tx.done]);
+        await Promise.all([...changes.map((c) => tx.store.put(storedOf(c))), tx.done]);
       });
     },
     async setParked(stamps) {
@@ -356,7 +420,8 @@ async function replaceFromStaging(live: IDBPDatabase<VaultDB>, sayAtWipe = false
 /** The copy itself, from a staging database that holds the file (`replaceFromStaging`). */
 async function copyStagingIn(live: IDBPDatabase<VaultDB>, stage: IDBPDatabase<VaultDB>, sayAtWipe: boolean): Promise<void> {
   {
-    const [changes, parked] = await Promise.all([stage.getAll('changes'), stage.get('meta', 'parked')]);
+    const [staged, parked] = await Promise.all([stage.getAll('changes'), stage.get('meta', 'parked')]);
+    const changes = await openChanges(staged); // the file's changes, staged sealed when the vault is (round ninety-nine)
     // One transaction for the wipe, the drop of the snapshot and the copy of the file's log: a load between a wipe and a
     // copy could lay the new log over the old fold (round fifty-four, 2), and a second tab's wipe between this tab's copy
     // and its end emptied the log the first had copied (round eighty-two). Through storeIn, so the numbers a restored
@@ -403,7 +468,7 @@ export { storageErrorText } from './storage-error'; // its own module since roun
 
 export async function allChanges(): Promise<Change[]> {
   const db = await openVault();
-  return db.getAll('changes');
+  return openChanges(await db.getAll('changes'));
 }
 
 /* ---- numbers, issued once ----
@@ -541,7 +606,7 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   // very transaction: another tab's "Stop syncing" or new vault between a check and a write can no longer let a batch of
   // the old vault into the new log (round seventeen, A1).
   if (requireKey !== undefined) {
-    const s = (await meta.get('sync')) as { key?: string } | null | undefined;
+    const s = openMetaSync('sync', await meta.get('sync')) as { key?: string } | null | undefined;
     if (!s || s.key !== requireKey) {
       tx.abort();
       await tx.done.catch(() => {}); // the abort is the point; its rejection is not an error to surface
@@ -585,10 +650,11 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     existing = new Set((await ch.getAllKeys(range)) as string[]);
     let collisions = 0;
     for (const t of byStamp.keys()) if (existing.has(t)) collisions++;
-    if (collisions > 200) stored = new Map(((await ch.getAll(range)) as Change[]).map((c) => [c.t, c]));
+    if (collisions > 200) stored = new Map((await ch.getAll(range)).map((r) => [r.t, openChangeSync(r)]));
   }
   for (let c of byStamp.values()) {
-    const had = strict || (existing && !existing.has(c.t)) ? undefined : stored ? stored.get(c.t) : await ch.get(c.t);
+    const raw = strict || (existing && !existing.has(c.t)) ? undefined : stored ? stored.get(c.t) : await ch.get(c.t);
+    const had = raw ? openChangeSync(raw) : undefined; // opened inside the transaction: the codec is synchronous (round ninety-nine; REVIEW-ROUND-99, D3)
     if (had && !sameChange(had, c)) {
       if (rank(c) > rank(had)) {
         console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);
@@ -619,7 +685,7 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   // seventy-one, the self-review's D3).
   const toSend = fromServer || NO_OUTBOX ? [] : kept.filter((c) => !changeError(c, true));
   const unsent = fromServer || NO_OUTBOX ? [] : kept.filter((c) => !!changeError(c, true)).map((c) => c.t);
-  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...toSend.map((c) => ob.put({ t: c.t })), ...rows];
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(storedOf(c)) : ch.put(storedOf(c)))), ...toSend.map((c) => ob.put({ t: c.t })), ...rows];
   if (unsent.length) puts.push(noteUnsent(meta, unsent));
   // Contract C1 (round sixty-seven): the caller's meta records, and the arrival number of this write's last change, in
   // this same transaction, so the example's seed and its marks land together or not at all (triage-66 V5).
@@ -700,7 +766,7 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
 /** Named by the database, so a sample collection's tab and the grower's own tabs never hear each other (round sixty; agent F). */
 const CHANNEL = `${DB_NAME}-vault`;
 const chan = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
-export type VaultNotice = 'written' | 'replaced' | 'refold' | 'sync-forgotten';
+export type VaultNotice = 'written' | 'replaced' | 'refold' | 'sync-forgotten' | 'sealed';
 function announce(what: VaultNotice = 'written'): void {
   try { chan?.postMessage(what); } catch { /* a closed channel is nothing to report */ }
 }
@@ -732,7 +798,7 @@ export async function outboxAck(ts: string[], key?: string): Promise<void> {
     const db = await openVault();
     const tx = db.transaction(['outbox', 'meta'], 'readwrite');
     if (key !== undefined) {
-      const s = (await tx.objectStore('meta').get('sync')) as { key?: string } | null | undefined;
+      const s = openMetaSync('sync', await tx.objectStore('meta').get('sync')) as { key?: string } | null | undefined;
       if (!s || s.key !== key) {
         tx.abort();
         await tx.done.catch(() => { /* aborted on purpose: the abort's rejection is the expected end */ });
@@ -759,7 +825,7 @@ export async function outboxFill(): Promise<number> {
     // in the log and out of the outbox: pushed, it set aside the batch it rode in, with up to 2,000 good changes, on every
     // peer, for good (round sixty-nine; triage-68 R3, the self-review's D3, R46-18). A backup carries it (`unreadable.json`).
     // It waits apart, and goes in the outbox once a version reads it (`UNSENT`; round seventy-one, the self-review's D3).
-    const all = await tx.objectStore('changes').getAll();
+    const all = (await tx.objectStore('changes').getAll()).map(openChangeSync);
     const ts = all.filter((c) => !changeError(c, true)).map((c) => c.t);
     const later = all.filter((c) => !!changeError(c, true) && typeof c.t === 'string').map((c) => c.t);
     const ob = tx.objectStore('outbox');
@@ -795,7 +861,8 @@ export async function queueReadable(): Promise<Change[]> {
     const wait: string[] = [];
     for (const t of had) {
       if (typeof t !== 'string') continue;
-      const c = (await ch.get(t)) as Change | undefined;
+      const r = await ch.get(t);
+      const c = r ? openChangeSync(r) : undefined;
       if (!c) continue;
       if (changeError(c, true)) { wait.push(t); continue; }
       queued.push(c);
@@ -814,21 +881,22 @@ export async function changesByKeys(ts: string[]): Promise<Change[]> {
   const db = await openVault();
   const tx = db.transaction('changes');
   const out = await Promise.all(ts.map((t) => tx.store.get(t)));
-  return out.filter((c): c is Change => !!c);
+  return openChanges(out.filter((c): c is StoredChange => !!c));
 }
 
 /** Every stored change of one record, by the record index: for a reading of its history, such as notes replaced unseen (round fifty-eight). */
 export async function changesOf(kind: string, id: string): Promise<Change[]> {
-  return (await openVault()).getAllFromIndex('changes', 'byRecord', [kind, id] as never) as Promise<Change[]>;
+  return openChanges(await (await openVault()).getAllFromIndex('changes', 'byRecord', [kind, id] as never));
 }
 
 export async function getMeta<T>(k: string): Promise<T | undefined> {
   const db = await openVault();
-  return (await db.get('meta', k)) as T | undefined;
+  return openMetaSync(k, await db.get('meta', k)) as T | undefined;
 }
 
 export async function setMeta(k: string, v: unknown): Promise<void> {
-  await writing(async () => (await openVault()).put('meta', v, k));
+  await writing(async () => (await openVault()).put('meta', metaStored(k, v), k));
+  if (k === 'sync') await keepSyncWrap(v);
 }
 
 /**
@@ -839,10 +907,10 @@ export async function setMeta(k: string, v: unknown): Promise<void> {
 export async function updateMeta<T>(k: string, fn: (had: T | undefined) => T): Promise<T> {
   return writing(async () => {
     const tx = (await openVault()).transaction('meta', 'readwrite');
-    const next = fn((await tx.store.get(k)) as T | undefined);
-    await Promise.all([tx.store.put(next, k), tx.done]);
+    const next = fn(openMetaSync(k, await tx.store.get(k)) as T | undefined);
+    await Promise.all([tx.store.put(metaStored(k, next), k), tx.done]);
     return next;
-  });
+  }).then(async (next) => { if (k === 'sync') await keepSyncWrap(next); return next; });
 }
 
 /**
@@ -853,14 +921,14 @@ export async function updateMeta<T>(k: string, fn: (had: T | undefined) => T): P
 export async function setMetaIfKey(k: string, v: unknown, key: string): Promise<boolean> {
   return writing(async () => {
     const tx = (await openVault()).transaction('meta', 'readwrite');
-    const had = (await tx.store.get(k)) as { key?: string } | undefined;
+    const had = openMetaSync(k, await tx.store.get(k)) as { key?: string } | undefined;
     if (!had || had.key !== key) {
       await tx.done;
       return false;
     }
-    await Promise.all([tx.store.put(v, k), tx.done]);
+    await Promise.all([tx.store.put(metaStored(k, v), k), tx.done]);
     return true;
-  });
+  }).then(async (ok) => { if (ok && k === 'sync') await keepSyncWrap(v); return ok; });
 }
 
 /** A stable per-device id, minted once. */
@@ -904,6 +972,8 @@ const asBlobs = (p: PhotoBlobs | PhotoBytes): PhotoBlobs =>
  * bytes are read before the write's transaction opens, which would otherwise close while they are read.
  */
 async function putPhotoIn(db: IDBPDatabase<VaultDB>, p: PhotoBlobs): Promise<void> {
+  // Sealed as bytes, each part bound to the photograph's id, before the write's transaction opens (round ninety-nine).
+  if (writeSealed) { await db.put('photos', await sealPhoto(await asBytes(p))); return; }
   if (blobsRefused) { await db.put('photos', await asBytes(p)); return; }
   try {
     await db.put('photos', p);
@@ -921,7 +991,16 @@ export async function putPhotoBlobs(p: PhotoBlobs): Promise<void> {
 export async function getPhotoBlobs(id: string): Promise<PhotoBlobs | undefined> {
   const db = await openVault();
   const p = await db.get('photos', id);
+  if (p && 'sealed' in p) return asBlobs(await openPhoto(p));
   return p && asBlobs(p);
+}
+async function sealPhoto(b: PhotoBytes): Promise<PhotoSealed> {
+  const [full, small] = await Promise.all([sealBytes(b.id, 'full', new Uint8Array(b.full)), sealBytes(b.id, 'small', new Uint8Array(b.small))]);
+  return { id: b.id, sealed: 1, full, small, fullType: b.fullType, smallType: b.smallType };
+}
+async function openPhoto(p: PhotoSealed): Promise<PhotoBytes> {
+  const [full, small] = await Promise.all([openBytes(p.id, 'full', p.full), openBytes(p.id, 'small', p.small)]);
+  return { id: p.id, full: full.buffer.slice(full.byteOffset, full.byteOffset + full.byteLength) as ArrayBuffer, small: small.buffer.slice(small.byteOffset, small.byteOffset + small.byteLength) as ArrayBuffer, fullType: p.fullType, smallType: p.smallType };
 }
 
 export async function deletePhotoBlobs(id: string): Promise<void> {
@@ -988,7 +1067,20 @@ export async function readFold(): Promise<{ fold: FoldSnapshot; gen: number } | 
   const tx = db.transaction('meta');
   const [fold, gen] = await Promise.all([tx.store.get(FOLD), tx.store.get(FOLD_GEN)]);
   if (!fold || typeof fold !== 'object') return undefined;
+  const x = (fold as { x?: unknown }).x;
+  if (x instanceof Uint8Array) {
+    const { x: _x, ...plain } = fold as FoldSnapshot & { x: Uint8Array };
+    void _x;
+    return { fold: { ...plain, ...(await openJson<FoldSealedPart>('fold', x)) } as FoldSnapshot, gen: Number(gen ?? 0) };
+  }
   return { fold: fold as FoldSnapshot, gen: Number(gen ?? 0) };
+}
+/** The snapshot's parts that say what the collection holds, sealed together; its rules, counter and times stay plain, read inside transactions. */
+type FoldSealedPart = Pick<FoldSnapshot, 'records' | 'seen' | 'born' | 'parents' | 'held' | 'last'>;
+async function foldStored(fold: FoldSnapshot): Promise<unknown> {
+  if (!writeSealed) return fold;
+  const { records, seen, born, parents, held, last, ...plain } = fold;
+  return { ...plain, x: await sealJson('fold', { records, seen, born, parents, held, last } satisfies FoldSealedPart) };
 }
 /** The counter that moves whenever the log is replaced or a stored change displaced; a snapshot is written only against the value it was read at. */
 export async function foldGen(): Promise<number> {
@@ -997,6 +1089,7 @@ export async function foldGen(): Promise<number> {
 /** Write the snapshot, unless the log changed under it since `gen` was read, or the snapshot stored was folded under newer rules; false then, and nothing is written. */
 export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolean> {
   return writing(async () => {
+    const stored = (await foldStored(fold)) as FoldSnapshot; // sealed before the transaction opens (round ninety-nine)
     const tx = (await openVault()).transaction('meta', 'readwrite');
     const now = Number((await tx.store.get(FOLD_GEN)) ?? 0);
     const had = (await tx.store.get(FOLD)) as FoldSnapshot | undefined;
@@ -1014,7 +1107,7 @@ export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolea
       await tx.done;
       return false;
     }
-    await Promise.all([tx.store.put({ ...fold, savedAt: Date.now() }, FOLD), tx.done]);
+    await Promise.all([tx.store.put({ ...stored, savedAt: Date.now() }, FOLD), tx.done]);
     return true;
   });
 }
@@ -1106,6 +1199,7 @@ async function tailAfter(seq: number): Promise<{ rows: Array<{ n: number; c: Cha
   const last = keys.length ? Number(keys[keys.length - 1]) : seq;
   const out: Array<{ n: number; c: Change }> = [];
   if (!rows.length) return { rows: out, gen: Number(gen ?? 0), last };
+  const found: Array<{ n: number; c: StoredChange }> = out as Array<{ n: number; c: StoredChange }>;
   const ch = tx.objectStore('changes');
   // A row whose stamp is not a string (a change written by hand or by a bug, with a number for its stamp) is left out:
   // sorted with the strings, it made a range whose bounds IndexedDB refuses, and every catch-up of every tab failed for
@@ -1115,15 +1209,18 @@ async function tailAfter(seq: number): Promise<{ rows: Array<{ n: number; c: Cha
   const sorted = [...new Set(ts)].sort();
   const range = IDBKeyRange.bound(sorted[0], sorted[sorted.length - 1]);
   const spread = sorted.length > 1 ? await ch.count(range) : 1;
-  let byT: Map<string, Change>;
+  let byT: Map<string, StoredChange>;
   if (sorted.length < TAIL_BY_KEY && spread > sorted.length * 4 + 64) {
     const got = await Promise.all(sorted.map((t) => ch.get(t)));
-    byT = new Map(got.filter((c): c is Change => !!c).map((c) => [c.t, c]));
+    byT = new Map(got.filter((c): c is StoredChange => !!c).map((c) => [c.t, c]));
   } else {
     const want = new Set(sorted);
-    byT = new Map(((await ch.getAll(range)) as Change[]).filter((c) => want.has(c.t)).map((c) => [c.t, c]));
+    byT = new Map((await ch.getAll(range)).filter((c) => want.has(c.t)).map((c) => [c.t, c]));
   }
-  for (let i = 0; i < rows.length; i++) { const c = byT.get(rows[i].t); if (c) out.push({ n: Number(keys[i]), c }); }
+  for (let i = 0; i < rows.length; i++) { const c = byT.get(rows[i].t); if (c) found.push({ n: Number(keys[i]), c }); }
+  // Opened once the reads are made: the transaction has nothing left to do (round ninety-nine).
+  const opened = await openChanges(found.map((r) => r.c));
+  for (let i = 0; i < out.length; i++) out[i].c = opened[i];
   return { rows: out, gen: Number(gen ?? 0), last };
 }
 /**
@@ -1148,4 +1245,193 @@ export async function arrivalsOf(stamps: string[]): Promise<Map<string, number>>
 export async function changeKeys(): Promise<string[]> {
   const db = await openVault();
   return db.getAllKeys('changes');
+}
+
+/* ---- turning the encryption on and off, and opening it (round ninety-nine; docs/REVIEW-ROUND-99.md) ---- */
+
+/** The other tabs reload when this tab begins or ends sealing: their way of writing changes with it (`writeSealed`). */
+function announceSealed(): void { announce('sealed'); }
+
+/** A sync key this device syncs with is added to the seal's wraps, so it opens the collection without the passcode (D1, D7). */
+async function keepSyncWrap(v: unknown): Promise<void> {
+  const key = (v as { key?: unknown } | null | undefined)?.key;
+  if (!sealedVault || !haveKey() || typeof key !== 'string') return;
+  const canonical = parseVaultKey(key);
+  if (!canonical) return;
+  const db = await openRaw();
+  const rec = readSeal(await db.get('meta', SEAL_META));
+  if (!rec || (await unwrapSyncKey(rec, canonical))) return; // kept already
+  const wrap = await wrapSyncKey(keyBytes()!, canonical);
+  await writing(() => updateSealRecord((r) => ({ ...r, keys: [...r.keys, wrap] })));
+}
+async function updateSealRecord(fn: (r: SealRecord) => SealRecord): Promise<void> {
+  const tx = (await openRaw()).transaction('meta', 'readwrite');
+  const rec = readSeal(await tx.store.get(SEAL_META));
+  if (rec) await tx.store.put(fn(rec), SEAL_META);
+  await tx.done;
+}
+
+/** The passcode opens the collection: true, and this tab holds the key; false when it is not the passcode. */
+export async function openSealWithPass(pass: string): Promise<boolean> {
+  const rec = readSeal(await (await openRaw()).get('meta', SEAL_META));
+  if (!rec) return true;
+  const k = await unwrapPass(rec, pass);
+  if (!k) return false;
+  await setKey(k);
+  void resumeSealing();
+  return true;
+}
+/** A sync key this device synced with opens the collection: true, and this tab holds the key. */
+export async function openSealWithSyncKey(canonical: string): Promise<boolean> {
+  const rec = readSeal(await (await openRaw()).get('meta', SEAL_META));
+  if (!rec) return false;
+  const k = await unwrapSyncKey(rec, canonical);
+  if (!k) return false;
+  await setKey(k);
+  return true;
+}
+/** The key from another open tab of this app (a reload of an unlocked tab; D6): true when this vault is sealed and it is a key. */
+export async function openSealWithKey(k: Uint8Array): Promise<boolean> {
+  const rec = readSeal(await (await openRaw()).get('meta', SEAL_META));
+  if (!rec || k.length !== 32) return false;
+  await setKey(k);
+  void resumeSealing();
+  return true;
+}
+/** Whether the passcode opens the seal, without taking the key (the passcode asked again in Settings). */
+export async function sealPassOpens(pass: string): Promise<boolean> {
+  const rec = readSeal(await (await openRaw()).get('meta', SEAL_META));
+  return !!rec && !!(await unwrapPass(rec, pass));
+}
+/**
+ * Delete the collection on this device whole, encryption and all (the lock screen's way back with a backup file, which
+ * cannot open an encrypted vault: D7). Every tab lets go of the database (`blocking`) and reloads.
+ */
+export async function eraseVault(): Promise<void> {
+  if (DB_NAME !== 'cultifolio') throw new Error('not the collection');
+  const db = await openRaw();
+  db.close();
+  dbp = null;
+  readyp = null;
+  forgetKey();
+  await deleteDB(DB_NAME);
+  await deleteDB(STAGING_NAME);
+}
+/** The passcode changed: the key wrapped again under the new one (the tab holds the key). */
+export async function rewrapSealPass(pass: string): Promise<void> {
+  if (!haveKey()) throw new Error('the collection is locked in this tab');
+  const wrap = await wrapPass(keyBytes()!, pass);
+  await writing(() => updateSealRecord((r) => ({ ...r, pass: wrap })));
+}
+/** Forget the key in this tab (locked). */
+export const lockSeal = (): void => forgetKey();
+
+export interface SealProgress { done: number; of: number; what: 'changes' | 'photographs' }
+
+/**
+ * Encrypt the collection on this device under a new data key wrapped under `pass` (and the sync key, where it syncs).
+ * Every record is sealed in place, in batches; a cut-off midway leaves a whole vault, and the next unlock carries on.
+ */
+export async function sealVault(pass: string, onProgress?: (p: SealProgress) => void): Promise<void> {
+  if (DB_NAME !== 'cultifolio') throw new Error('The example collection is not encrypted.');
+  const db = await openVault();
+  if (readSeal(await db.get('meta', SEAL_META))) throw new Error('The collection on this device is encrypted already.');
+  const dek = newDataKey();
+  const sync = openMetaSync('sync', await db.get('meta', 'sync')) as { key?: string } | undefined;
+  const canonical = typeof sync?.key === 'string' ? parseVaultKey(sync.key) : null;
+  const rec: SealRecord = { v: 1, pass: await wrapPass(dek, pass), keys: canonical ? [await wrapSyncKey(dek, canonical)] : [] };
+  await setKey(dek);
+  await writing(async () => {
+    const tx = db.transaction('meta', 'readwrite');
+    await Promise.all([tx.store.put(rec, SEAL_META), tx.store.put({ to: 'on' } satisfies Sealing, SEALING_META), tx.done]);
+  });
+  sealedVault = true;
+  writeSealed = true;
+  announceSealed();
+  await runSealing('on', onProgress);
+}
+
+/** Decrypt the collection on this device back to plain (the tab holds the key): record by record, as sealing. */
+export async function unsealVault(onProgress?: (p: SealProgress) => void): Promise<void> {
+  if (!sealedVault) return;
+  if (!haveKey()) throw new Error('the collection is locked in this tab');
+  await writing(async () => { await (await openVault()).put('meta', { to: 'off' } satisfies Sealing, SEALING_META); });
+  writeSealed = false;
+  announceSealed();
+  await runSealing('off', onProgress);
+}
+
+let sealingRun: Promise<void> | null = null;
+/** A sealing or unsealing left part-way carries on (at an unlock). */
+async function resumeSealing(): Promise<void> {
+  const s = (await (await openRaw()).get('meta', SEALING_META)) as Sealing | undefined;
+  if (s?.to === 'on' || s?.to === 'off') await runSealing(s.to).catch((e) => console.warn('the encryption could not carry on now:', e));
+}
+
+/**
+ * Every change, photograph and sealed meta record to the form `to` asks, in place. Passes until one changes nothing: a
+ * record another tab wrote in the old form while a pass was under way is taken by the next (the other tabs are told to
+ * reload as it begins). The fold snapshot is dropped, and the next load writes it in the new form.
+ */
+function runSealing(to: 'on' | 'off', onProgress?: (p: SealProgress) => void): Promise<void> {
+  if (sealingRun) return sealingRun;
+  sealingRun = (async () => {
+    const db = await openVault();
+    const want = to === 'on';
+    for (let round = 0; round < 4; round++) {
+      let moved = 0;
+      const keys = await db.getAllKeys('changes');
+      for (let i = 0; i < keys.length; i += 200) {
+        const part = keys.slice(i, i + 200);
+        moved += await writing(async () => {
+          const tx = db.transaction('changes', 'readwrite');
+          const rows = await tx.store.getAll(IDBKeyRange.bound(part[0], part[part.length - 1]));
+          const puts: Promise<unknown>[] = [];
+          for (const r of rows) {
+            if (isSealedChange(r) === want) continue;
+            puts.push(tx.store.put(want ? sealChangeSync(r as Change) : openChangeSync(r)));
+          }
+          await Promise.all([...puts, tx.done]);
+          return puts.length;
+        });
+        onProgress?.({ done: Math.min(i + 200, keys.length), of: keys.length, what: 'changes' });
+      }
+      const ids = await db.getAllKeys('photos');
+      for (let i = 0; i < ids.length; i++) {
+        const p = await db.get('photos', ids[i]);
+        if (!p || 'sealed' in p === want) continue;
+        const next = want ? await sealPhoto('full' in p ? (p as PhotoBytes) : await asBytes(p as PhotoBlobs)) : await openPhoto(p as PhotoSealed);
+        // Put back only while the photograph is still there, read in the write's own transaction: one deleted meanwhile stays deleted.
+        await writing(async () => {
+          const tx = db.transaction('photos', 'readwrite');
+          if (await tx.store.get(ids[i])) await tx.store.put(next);
+          await tx.done;
+        });
+        moved++;
+        onProgress?.({ done: i + 1, of: ids.length, what: 'photographs' });
+      }
+      moved += await writing(async () => {
+        const tx = db.transaction('meta', 'readwrite');
+        let n = 0;
+        for (const k of SEALED_META) {
+          const v = await tx.store.get(k);
+          if (v === undefined || v === null) continue;
+          const sealed = typeof v === 'object' && '#sealed' in (v as object);
+          if (sealed === want) continue;
+          await tx.store.put(want ? sealMetaSync(k, v) : openMetaSync(k, v), k);
+          n++;
+        }
+        await tx.done;
+        return n;
+      });
+      if (!moved) break;
+    }
+    await writing(async () => {
+      const tx = db.transaction('meta', 'readwrite');
+      await Promise.all([tx.store.delete(SEALING_META), ...(want ? [] : [tx.store.delete(SEAL_META)]), dropFoldIn(tx), tx.done]);
+    });
+    if (!want) { sealedVault = false; writeSealed = false; forgetKey(); }
+    announceRefold();
+  })().finally(() => { sealingRun = null; });
+  return sealingRun;
 }

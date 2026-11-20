@@ -44,6 +44,20 @@
     keyMsg = '';
     const [{ parseVaultKey }, { syncKeyHash }] = await Promise.all([import('$lib/sync/crypto'), import('./lock.svelte')]);
     const want = parseVaultKey(keyText);
+    if (lock.sealed) {
+      // Encrypted: a sync key this device synced with opens the collection's key; the collection is then decrypted back
+      // to plain and the passcode taken off, as the sync key always has (round ninety-nine; docs/REVIEW-ROUND-99.md, D7).
+      const { openSealWithSyncKey } = await import('$lib/db/vault');
+      if (!want || !(await openSealWithSyncKey(want))) { keyMsg = 'That is not a sync key this device synced with.'; return; }
+      keyMsg = 'Opened. Decrypting the collection on this device…';
+      try {
+        await lock.decrypt((p) => (keyMsg = `Decrypting the collection on this device: ${p.what} ${p.done} of ${p.of}…`));
+        lock.recovered();
+      } catch (err) {
+        keyMsg = err instanceof Error ? err.message : String(err);
+      }
+      return;
+    }
     const meta = await getMeta<{ key?: string }>('sync');
     const have = meta?.key ? parseVaultKey(meta.key) : null;
     if (!have && !lock.keptKey) { keyMsg = 'This device does not sync and kept no sync key, so there is no key to check against: open it with a backup file.'; return; }
@@ -52,7 +66,22 @@
   }
   /** Which ways back this device has, said before they are tried: whether it syncs, or kept the key it synced with. */
   let syncs = $state<boolean | null>(null);
-  $effect(() => { if (forgot && syncs === null) void getMeta<{ key?: string }>('sync').then((m) => (syncs = !!m?.key), () => (syncs = false)); });
+  $effect(() => { if (forgot && syncs === null && !lock.sealed) void getMeta<{ key?: string }>('sync').then((m) => (syncs = !!m?.key), () => (syncs = false)); });
+  /* ---- encrypted, and no key: start again from a backup file (D7) ---- */
+  let eraseSure = $state(false);
+  let eraseMsg = $state('');
+  async function eraseForFile() {
+    if (!eraseSure) { eraseMsg = 'Tick the box first: this deletes the collection on this device.'; return; }
+    eraseMsg = 'Deleting the collection on this device…';
+    try {
+      const { eraseVault } = await import('$lib/db/vault');
+      await eraseVault();
+      lock.remove();
+      location.href = '/backup';
+    } catch (err) {
+      eraseMsg = err instanceof Error ? err.message : String(err);
+    }
+  }
   let fileMsg = $state('');
   let reading = $state(false);
   /**
@@ -83,6 +112,9 @@
 <div class="lockscreen" id="lockscreen" role="dialog" aria-modal="true" aria-labelledby="lock-h">
   <div class="box">
     <h1 id="lock-h">Locked on this device</h1>
+    {#if lock.handing}
+    <p id="lock-handing" role="status">Opening: taking the collection's key from another open tab of the app…</p>
+    {:else}
     <form onsubmit={(e) => { e.preventDefault(); void submit(); }}>
       <label for="lock-pass">Passcode</label>
       <div class="line"><input id="lock-pass" type="password" autocomplete="current-password" bind:this={input} bind:value={pass} aria-describedby="lock-msg" /><button class="btn pri" type="submit" id="lock-open" aria-disabled={busy || waitLeft > 0}>{waitLeft ? `Wait ${waitLeft} s` : 'Open'}</button></div>
@@ -90,7 +122,20 @@
     </form>
     <!-- A button and the part it shows, not a disclosure element: the lock screen is drawn only on a locked device. -->
     <button class="linkish forgotbtn" type="button" id="lock-forgot" aria-expanded={forgot} aria-controls="lock-ways" onclick={() => (forgot = !forgot)}>Forgot the passcode?</button>
-    {#if forgot}
+    {#if forgot && lock.sealed}
+    <div class="forgot" id="lock-ways">
+      <p id="lock-ways-here">The collection on this device is encrypted under the passcode. A sync key this device synced with opens it, decrypts it and takes the passcode off; set a new one in Settings.</p>
+      <form onsubmit={(e) => { e.preventDefault(); void byKey(); }}>
+        <label for="lock-key">A sync key this device synced with</label>
+        <div class="line"><input id="lock-key" type="text" autocomplete="off" spellcheck="false" bind:value={keyText} placeholder="XXXXX-XXXXX-…" /><button class="btn" type="submit" id="lock-bykey">Open with the key</button></div>
+        <p class="msg" role="status">{keyMsg}</p>
+      </form>
+      <p>A backup file cannot open it: the file holds no key. With no sync key, the collection on this device can be deleted and restored from a backup file; what was added since the file was made is lost, unless another device syncs it.</p>
+      <label class="check"><input type="checkbox" id="lock-erase-sure" bind:checked={eraseSure} /> Delete the collection, its photographs and papers on this device</label>
+      <div class="line"><button class="btn" type="button" id="lock-erase" onclick={eraseForFile}>Delete it and restore from a backup file</button></div>
+      <p class="msg" role="status">{eraseMsg}</p>
+    </div>
+    {:else if forgot}
     <div class="forgot" id="lock-ways">
       <p id="lock-ways-here">{syncs === null ? 'Either of these opens the app and takes the passcode off; set a new one in Settings.' : syncs ? 'This device syncs: its sync key opens the app, and so does a backup file of this collection. Either takes the passcode off; set a new one in Settings.' : lock.keptKey ? 'This device stopped syncing while locked and kept the sync key it synced with: that key opens the app, and so does a backup file of this collection. Either takes the passcode off; set a new one in Settings.' : 'This device does not sync and kept no sync key: a backup file of this collection opens the app and takes the passcode off; set a new one in Settings.'}</p>
       <form onsubmit={(e) => { e.preventDefault(); void byKey(); }}>
@@ -104,7 +149,12 @@
       <p class="small">With neither, clearing this site's data in the browser's settings takes the lock off, and the collection on this device with it.</p>
     </div>
     {/if}
+    {/if}
+    {#if lock.sealed}
+    <p class="small what" id="lock-sealed-what">The collection on this device is encrypted under the passcode: without it, or a sync key this device synced with, its records, photographs and papers cannot be read from the browser's storage. <a href="/about/how#sealed">What it protects</a>.</p>
+    {:else}
     <p class="small what">The lock is a screen over the app: the collection on this device is not encrypted, so it keeps out a casual look, not someone who can read the browser's storage. <a href="/about/how#lock">What it protects</a>.</p>
+    {/if}
   </div>
 </div>
 
@@ -123,4 +173,5 @@
   .small { font-size: var(--fs-sm); color: var(--ink3); }
   .what { margin-top: 18px; }
   input[type='file'] { max-width: 100%; font-size: var(--fs-md); min-height: var(--tap); }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 400; color: var(--ink); font-size: var(--fs-md); min-height: var(--tap); }
 </style>
