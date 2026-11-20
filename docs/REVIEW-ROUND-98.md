@@ -97,6 +97,54 @@ no change of this round reaches; alone it passed three of three in Firefox.
    read their Commons rows, `--fill commons-record`, the fills, the index, the upload, the live check.
 3. `node scripts\deploy.mjs`, after the upload, so /about/how's and /changes' new sentences are true of the site as served.
 
+## 6. A hybrid taxon is a taxon (found at the plan's stop)
+
+The group-C build's drops.txt held one page: Diplacus × australis (k3001034) lost its Wikidata item Q17746323 and with it
+its WFO identifier, "no taxon item carries its GBIF key or Kew's IPNI identifier". The item carries both Kew's IPNI
+identifier for the page (77121452-1) and the alias "Diplacus australis"; on 8 November 2026 Wikidata changed its P31 from
+taxon (Q16521) to hybrid taxon (Q136343650, a subclass of taxon and of hybrid, made in October 2026), and the build takes
+an item only when its P31 is one of four taxon classes (`isTaxonItem`, wikimedia.ts). The page's item before was carried
+from its build of 22 October. Asked of Wikidata's query service on 20 November: 1,343 items are hybrid taxa, and 136 of the
+corpus's pages hold one (Mentha × piperita, Magnolia × soulangeana, Ophrys × arachnitiformis among them), each to lose its
+item, and the Wikipedia, Commons and WFO it leads to, at its next online build. Koenigia × fennica's item has the same
+class and its build of 20 November kept it; its record does not say by which path, and every path that asks the class
+now takes it. Hybrid taxon is now a
+taxon class (`TAXON`); test r98d; Diplacus × australis built again on it alone (scripts/rebuild-r98-diplacus.txt) before
+the plan goes on. No about page names the classes.
+
 ## The record
 
 (Written as each step is done.)
+
+**20 November 2026, the plan's first two steps.** Backup 23:31 UTC (19 November), the 14 pages built online 23:35 to
+00:30: "14 built, 0 kept of 14", drops.txt one page (section 6). The Commons rows, read against the backup:
+- Read, the sitelink's category taken by Kew's rule: Koenigia × fennica (5 photographs to 15), Polypodium × mantoniae (11 to
+  12), Pachylecythis zabucajo by "Lecythis zabucajo" (0 to 3), Prunus brachypetala by "Cerasus brachypetala" (read, none
+  taken by the photograph rules: "none", 0 before and after).
+- Not read, the sitelink a spelling Kew does not hold: Eriosyce caliginiphila ("Eriosyce caligophila"), Solanum ajanhuiri
+  ("Solanum ahanhuiri"), Drynaria pleuridioides ("Drynaria pleurodioides"); each "none" with the reason, 0 before and after.
+- Not asked, twelve or more of their own (the new row): Quercus eduardi 83, Marginatocereus marginatus 103, Silene
+  macrophylla 61, Manfreda sileri 32, Diplacus × australis 24, Tecoma castanifolia 33, Drosera silvicola 18. Silene
+  multifida and Drosera barbigera, which the plan expected not read, are the categories of Silene macrophylla's and Drosera
+  silvicola's items, pages that show enough of their own and ask Commons nothing.
+- Photographs fewer: Manfreda sileri 56 to 32, Tecoma castanifolia 57 to 33, Silene macrophylla 73 to 61, Quercus eduardi
+  105 to 83; each one GBIF's copy of an iNaturalist photograph the page shows (as round 97 found), 81 of 85, and Quercus
+  eduardi's other four the photographs of one iNaturalist observation its taxon no longer returns among its 24 newest,
+  three others in their place. None counted as lost by drops.txt, which counts each photograph once.
+
+**20 November, Diplacus × australis built again** on the hybrid-taxon rule (scripts/rebuild-r98-diplacus.txt, the builder
+by hand, 00:44 to 01:38 UTC): "1 built, 0 kept of 1", no drops.txt; Wikidata "ok", "found by its alias", Q17746323 and
+wfo-0000650081 back, and with them iNaturalist's taxon 771946, which the item names and the page had not read before: 24
+photographs to 89, Commons "not asked" (89 of its own).
+
+**20 November, the rest of the plan** (passed at its stop at 01:49 UTC, every expect line held): `--fill commons-record`
+"48375 dossiers read: 1425 given the Commons row their build did not write …; 0 with no Commons row and fewer than
+twelve"; the kew-published, sources and flowering fills (48,375 pages read, 32,284 counted), none "NOT FIXED"; the index
+48,375 species, climates for 38,007; corpus 706f0d6c6b97ccf5 (1,274 files written); the upload, 0 differences; the live
+check 23 of 23, the site serving corpus 706f0d6c6b97ccf5. Then the launch gate on the hybrid-taxon change, its commit and
+push, and the deploy (the owner: "go ahead and commit the fix and deploy").
+
+**20 November, the launch gate on the hybrid-taxon change.** The first run: 2,748 passed, 2 flaky in WebKit, each passing
+on its retry (r75g range 2, a click on a genus list's species that had not yet led to its page at the wait's end; smoke-1's
+backup restore, whose confirm button had not come in 60 s), in a run of 1.4 hours where 1.2 is usual; neither page is
+one the change reaches (the builder's Wikidata class test); alone each passed three of three in WebKit. Run again.

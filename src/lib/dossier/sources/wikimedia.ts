@@ -105,8 +105,13 @@ export type Entity = { claims?: Claims; sitelinks?: Record<string, { title: stri
 const strings = (ent: Entity, p: string) => (ent.claims?.[p] ?? []).map((c) => c.mainsnak?.datavalue?.value).filter((v): v is string => typeof v === 'string');
 /** An item-valued property's items: P31's and P566's values are `{ id }`, which `strings` would drop (R47-5: the taxon test never ran). */
 const items = (ent: Entity, p: string) => (ent.claims?.[p] ?? []).map((c) => (c.mainsnak?.datavalue?.value as { id?: unknown } | undefined)?.id).filter((v): v is string => typeof v === 'string');
-/** What an item is an instance of (P31) when it is a taxon: a taxon, a monotypic, fossil or extinct taxon. */
-const TAXON = new Set(['Q16521', 'Q310890', 'Q23038290', 'Q98961713']);
+/**
+ * What an item is an instance of (P31) when it is a taxon: a taxon, a monotypic, fossil or extinct taxon, or a hybrid
+ * taxon (Q136343650, a subclass of taxon Wikidata made in October 2026 and gave from November to hybrids' items, among them
+ * 136 pages' on 20 November: Diplacus × australis's Q17746323 went from Q16521 to it on 8 November and its online build of
+ * round 98 found no item; round 98).
+ */
+export const TAXON = new Set(['Q16521', 'Q310890', 'Q23038290', 'Q98961713', 'Q136343650']);
 /**
  * Whether an item is a taxon (round seventy, second pass; triage-69 B6, R47-5, R47-19): by its P31 when it states one
  * (a print, a painting or a "Wikimedia duplicated page" with the plant's taxon name is not), else by carrying a taxon
