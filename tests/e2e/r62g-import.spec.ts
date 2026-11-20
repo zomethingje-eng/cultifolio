@@ -95,6 +95,10 @@ test('r62g 4: with only the lines that need me shown, "Use it" moves focus to th
   await sheet(page, 'species\nCopiapoa cinera\nCopiapoa humilis\nCopiapoa cinera\n');
   await page.locator('#imp-check').click();
   await page.locator('#imp-review-h').waitFor();
+  // The names answered first: the review is drawn while they are asked, and their answers lengthen the summary above the
+  // box, so a tick pressed before them could land where the box no longer was (round one hundred: Firefox on the launch
+  // gate, "Clicking the checkbox did not change its state", passed on its retry).
+  await expect(page.getByRole('button', { name: 'Use Copiapoa cinerea on line 2' })).toBeVisible();
   await page.locator('#imp-only-needs').check();
   await page.getByRole('button', { name: 'Use Copiapoa cinerea on line 2' }).click();
   await expect(page.getByRole('button', { name: 'Use Copiapoa cinerea on line 4' })).toBeFocused();

@@ -31,7 +31,8 @@ describe('r100b: the dry-run count', () => {
     expect(nameWords('Mentha × piperita L.')).toBe('mentha piperita');
   });
   it('counts pages: none, own name, another name, shared, one to one', () => {
-    const r = count(map, pages, []);
+    // The lib is JavaScript; its result is read here without types (svelte-check reads its empty starting values as never).
+    const r = count(map, pages, []) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(r.noKey).toBe(1);
     expect(r.none.map((x: { page: string; note: string }) => [x.page, x.note])).toEqual([['k105', 'No name given']]);
     expect(r.same).toBe(2); // Aus bus, × Eus fus
@@ -48,7 +49,7 @@ describe('r100b: the dry-run count', () => {
       { file: 'extra-keys-infra.txt', text: 'k106\t22\tn\ts\tr\tk\th\t-\t20\t1\t11\n' }
     ], pages);
     expect(others.map((o: { key: string; page: string; kind: string }) => `${o.key}:${o.page}:${o.kind}`)).toEqual(['10:k101:extra', '11:k101:extra', '12:k101:except', '13:k101:except', '21:k102:extra', '22:k106:extra', '20:k106:except', '11:k106:except']);
-    const r = count(map, pages, others);
+    const r = count(map, pages, others) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(r.others['extra-keys.txt extra']).toMatchObject({ n: 2, ownPage: 1, otherPage: 1 });
     expect(r.others['extra-keys.txt extra'].conflicts[0]).toContain('k103 × Eus fus, k104 Eus gus');
     expect(r.others['extra-keys.txt except']).toMatchObject({ n: 2, none: 1, ownTaxon: 1 });

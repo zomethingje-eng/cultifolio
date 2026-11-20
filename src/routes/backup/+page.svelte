@@ -86,6 +86,10 @@
     fileName = f.name;
     busy = 'Reading…';
     try {
+      // The collection open first (round one hundred): what sits above the preview (the keep-your-plants card, a failed or
+      // malformed notice) waits for it, and a preview shown before it was pushed down by them under a press (r69p P5 in
+      // WebKit on round 99's gate, the summary 113 px lower at the release than at the press).
+      await collection.load();
       opened = await openBackup(f);
     } catch (err) {
       openErr = err instanceof Error ? err.message : String(err);

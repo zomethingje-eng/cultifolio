@@ -25,7 +25,9 @@ export function readPages(text) {
   for (const line of text.split(/\r?\n/)) {
     if (!line || line.startsWith('#')) continue;
     const c = line.split('\t');
-    pages.push({ id: `k${c[0]}`, name: c[1], key: /^[1-9]\d*$/.test(c[5] ?? '') ? c[5] : '' });
+    const key = /^[1-9]\d*$/.test(c[5] ?? '') ? c[5] : '';
+    // A page of GBIF's alone (no Kew row, "-") is g<key>, as the site names it; every other is k<plant_name_id>.
+    pages.push({ id: /^\d+$/.test(c[0]) ? `k${c[0]}` : `g${key}`, name: c[1], key });
   }
   return pages;
 }
@@ -114,4 +116,87 @@ export function recordsMoved(text, share = 0.2) {
     else res.within++;
   }
   return res;
+}
+
+/** The key map's rows with every column, by key (for the reading: both routes). */
+export function readMapFull(text) {
+  const rows = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    if (!line || line.startsWith('#')) continue;
+    const c = line.split('\t');
+    rows.set(c[0], { byidType: c[5], byid: c[6], byidName: c[7], bynameType: c[11], byname: c[12], bynameName: c[13], bynameStatus: c[14], bynameAccepted: c[15] });
+  }
+  return rows;
+}
+
+/**
+ * The COL XR taxon the name route reaches: the matched taxon where COL XR accepts it, its accepted taxon where it is a
+ * synonym, and nothing where the match is of a higher rank (a genus says nothing of the species) or there is none.
+ */
+export function nameTaxon(r) {
+  if (!r || !['EXACT', 'VARIANT'].includes(r.bynameType)) return '';
+  if (/ACCEPTED$/.test(r.bynameStatus)) return r.byname; // ACCEPTED, PROVISIONALLY_ACCEPTED
+  if (/SYNONYM$/.test(r.bynameStatus)) return r.bynameAccepted.split(' ')[0] ?? '';
+  return '';
+}
+
+/** Whether the two routes agree for a key: 'agree', 'differ', or 'name says nothing'. */
+export function routes(r) {
+  const n = nameTaxon(r);
+  if (!n) return 'name says nothing';
+  return n === r.byid ? 'agree' : 'differ';
+}
+
+/**
+ * Where Kew's file places a name (its genus and epithet, compared by `key`): 'this plant' where every row of species rank
+ * of those words is the page's plant or a synonym of it, 'another plant' where none is, 'both', or 'not in Kew'.
+ * @param {Map<string, string[]>} kew genus|key -> the accepted plant ids of the rows (a row's own id where it is accepted)
+ */
+export function kewPlaces(kew, words, plant, key) {
+  const [g, e] = words.split(' ');
+  if (!g || !e) return 'not in Kew';
+  const ids = kew.get(`${g}|${key(e)}`);
+  if (!ids?.length) return 'not in Kew';
+  const mine = ids.filter((i) => i === plant).length;
+  return mine === ids.length ? 'this plant' : mine === 0 ? 'another plant' : 'both';
+}
+
+/** A name's author: the words after the genus and epithet (and an infraspecific rank and name), as written; compared by
+ * `sameAuthors`, which reads the author's names out of it. */
+export function authorOf(name) {
+  const w = String(name).replace(/×/g, ' ').trim().split(/\s+/).filter((x) => x && x !== 'x');
+  let i = 2;
+  if (/^(subsp|var|f|subvar|nothosubsp|nothovar)\.$/.test(w[i] ?? '')) i += 2;
+  return w.slice(i).join(' ');
+}
+
+/**
+ * The reading's verdict for a page whose COL XR taxon has another name, or that shares one: Kew's file places COL XR's
+ * name (this plant, another, both, not held), and whether GBIF's match was of the backbone name's own author.
+ */
+export function verdict(kewSays, sameAuthor, otherFamily = false) {
+  if (kewSays === 'another plant' && otherFamily) return 'COL XR\'s taxon is of another family than the page\'s plant (Kew\'s families): an error, of COL XR or of GBIF\'s match';
+  if (kewSays === 'this plant') return "the same plant under another name (Kew holds the name as this plant's)";
+  if (kewSays === 'another plant' && !sameAuthor) return 'GBIF matched a homonym (the name by another author): the map is wrong';
+  if (kewSays === 'another plant') return 'COL XR files this name under a plant Kew keeps apart: a lump, or an error in COL XR; read by hand';
+  if (kewSays === 'both') return 'Kew holds the name for this plant and another: read by hand';
+  return "COL XR's name is not in Kew's file: read by hand";
+}
+
+/** An author string's names: words of letters, initials left out unless nothing else is left ("L."), lower case. */
+export function authorNames(author) {
+  const all = String(author).normalize('NFC').toLowerCase().split(/[^\p{L}]+/u).filter((w) => w && !['ex', 'et', 'in', 'emend', 'nom', 'illeg', 'nud', 'auct', 'non'].includes(w));
+  const long = all.filter((w) => w.length >= 2);
+  return long.length ? long : all;
+}
+/**
+ * Two names of one author: they share an author's name, one an abbreviation of the other ("Fisch." and "Fischer", "Rchb."
+ * and "Rchb. ex Spreng.", "W.Bull" and "Bull."). "L." and "Bourg. ex Lange" do not: a homonym.
+ */
+export function sameAuthors(a, b) {
+  const x = authorNames(a), y = authorNames(b);
+  if (!x.length || !y.length) return true; // no author to tell by: not said to differ
+  // An abbreviation is three letters or more ("Fisch."); a shorter name ("L.", "DC.") must be the same name.
+  const one = (p, q) => p === q || (Math.min(p.length, q.length) >= 3 && (p.startsWith(q) || q.startsWith(p)));
+  return x.some((p) => y.some((q) => one(p, q)));
 }
