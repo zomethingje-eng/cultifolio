@@ -114,3 +114,8 @@ tests, "every test passed first time in every engine; the deploy may go ahead".
 3. Stopped in the unit tests (32 failed, every one a zip read): the gate was started from Git Bash, whose `tar` is GNU
    tar 1.35 and does not read zips. The builder reads them with Windows' own tar (bsdtar). Run from PowerShell, as the
    gate's instructions say, it passed.
+
+**The deploy (20 November 2026).** Committed as 4e7d326 and pushed; `node scripts/deploy.mjs` from PowerShell ran
+svelte-check and the unit tests again (the commit changed the stamp: 6,341 passed in 704 files), built, and deployed
+version ef86cde7; the live check passed 23 of 23. On cultifolio.com, /changes shows round 99's entry and /about/how holds
+li#sealed.
