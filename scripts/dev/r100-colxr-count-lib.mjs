@@ -183,6 +183,22 @@ export function verdict(kewSays, sameAuthor, otherFamily = false) {
   return "COL XR's name is not in Kew's file: read by hand";
 }
 
+/**
+ * The trial's pages a record of the COL XR download belongs to (PLAN-100 4, step 2), as GBIF's search for a taxon under COL
+ * XR answers it: a page whose COL XR taxon is the record's accepted taxon or the record's species, so a subspecies' records
+ * are its species' page's too, and a taxon two pages share files its records under both. Returns the pages' backbone keys
+ * and which column decided ('accepted', 'species', 'both'), or none.
+ * @param {Map<string, string[]>} pagesAt COL XR id -> the backbone keys of the trial pages reaching it
+ */
+export function fileUnder(row, pagesAt, parentOf = new Map()) {
+  const a = pagesAt.get(row.acceptedTaxonKey) ?? [], s = row.speciesKey !== row.acceptedTaxonKey ? pagesAt.get(row.speciesKey) ?? [] : [];
+  // A taxon below an infraspecific trial taxon (a variety under a subspecies): neither its accepted taxon nor its species is
+  // the page's, but COL XR's tree places it under the page's taxon (its parent, read from ChecklistBank).
+  const p = !a.length ? pagesAt.get(parentOf.get(row.acceptedTaxonKey)) ?? [] : [];
+  const keys = [...new Set([...a, ...p, ...s])];
+  return { keys, via: (a.length || p.length) && s.length ? 'both' : a.length ? 'accepted' : p.length ? 'parent' : s.length ? 'species' : '' };
+}
+
 /** An author string's names: words of letters, initials left out unless nothing else is left ("L."), lower case. */
 export function authorNames(author) {
   const all = String(author).normalize('NFC').toLowerCase().split(/[^\p{L}]+/u).filter((w) => w && !['ex', 'et', 'in', 'emend', 'nom', 'illeg', 'nud', 'auct', 'non'].includes(w));

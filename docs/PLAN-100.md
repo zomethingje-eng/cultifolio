@@ -171,6 +171,74 @@ implemented"); the request's form is the one our backbone downloads use, with CO
 
 Steps 2 and 3 are written once the download is in hand and its columns read, not before.
 
+**Step 1, done (20 November 2026).** Download 0004834-261118162104854 (DOI 10.15468/dl.hztxsk), asked 19:35 UTC, running
+from 19:39, done 20:40: 7,688,705 records, 2.66 GB zipped (occurrence.txt 10.2 GB, verbatim.txt 5.9 GB, multimedia.txt
+0.5 GB), fetched in two minutes to `bulk/colxr/occurrence-colxr-trial.zip`. Its taxonKey, speciesKey and acceptedTaxonKey
+are COL XR's ("3DSK5" for Fagus sylvatica), which the builder refuses as backbone keys, as it should.
+
+**Step 2, done (20 November 2026).** `scripts/dev/r100-colxr-file.ts` (its rule `fileUnder` in the count's lib, test
+r100e) streams occurrence.txt out of the zip, never extracted, and files each record under the trial pages whose COL XR
+taxon is its accepted taxon or its species, as GBIF's search for a taxon under COL XR answers (a subspecies' records are
+its species' page's too; a taxon two pages share files under both). Three taxa sit lower, a variety or subspecies under an
+infraspecific trial taxon (Syncarpia glomulifera subsp. glomulifera, 11,462 records, under the trial's subsp.
+glomerulifera); `--parents` read each one's parent in COL XR's tree from ChecklistBank (dataset 3LXR) into
+`bulk/colxr/trial-parents.txt`, and the filing reads it. Every record filed: 7,081,971 by the accepted taxon, 594,940 by
+the species, 11,794 by the parent, none under no trial taxon. Written: `bulk/colxr/trial-bulk/occurrence.csv`, the 17
+columns the builder reads (parseOccRow), 11,027,942 rows (a shared taxon's records once under each page), 1.6 GB, each
+row's three key columns the page's backbone key; `filed.txt` each page's rows. The photographs are not carried: the trial
+compares records, regions and climate.
+
+- 798 of the 812 pages have records. The 14 with none: section 2's count was of every record GBIF holds, with no filter,
+  where every download keeps only records with a coordinate, no geospatial issue, and present. Under those filters 13 of
+  the 14 have no records under the backbone either (asked 20 November), so nothing changes for them. **Orbea maculata** is
+  the one a move loses: 16 usable records under the backbone, none under COL XR, which files it under Orbea rangeana (6T3CX,
+  0 usable records).
+
+**Step 3, done (20 November 2026): the trial read by the builder's dry run, not a worktree.** `--dry-run --offline` derives
+each page as the walk does and writes no dossier, index, cache or walk.json; it reads the live dossier on disk and says
+what changes (records in range, climate cells, the typical spot). So the live corpus is only read and no second checkout
+is needed. The bulk folder is `bulk/colxr/trial-bulk/`: step 2's occurrence.csv, hardlinks of Kew's and the stage-2 files,
+and a keys.json of every key the October download was asked for. An offline build still asks GBIF's occurrence search for
+a key the download holds nothing of: 75 keys here (the 14 empty pages and 61 other keys pages read beside their own, a
+subspecies or synonym the backbone keeps apart), which would have read the backbone's records into a COL XR trial (Orbea
+maculata got its 16 back). Under COL XR a page reads its taxon and the taxa below it, nothing more, so
+`scripts/dev/r100-colxr-no-search.mjs`, loaded before the builder, answers each such search with GBIF's empty answer and
+sends nothing (the 75 in `bulk/colxr/trial-no-search.txt`); the builder is not changed. The command:
+`node --max-old-space-size=11264 --import ./scripts/dev/r100-colxr-no-search.mjs --import tsx scripts/build-dossiers.ts
+--dry-run --offline --bulk bulk/colxr/trial-bulk --grid climate --keys bulk/colxr/trial-build-keys.txt` (about ten
+minutes). Its log is `bulk/colxr/trial-dry-run.log`, its page lines `bulk/colxr/trial-dry-run-ranges.txt` (the dry run's
+own `dry-run-ranges.txt` was put back as it was), and `scripts/dev/r100-colxr-trial-read.ts` reads them by group into
+`bulk/colxr/trial-read.txt`. Photographs are not compared (the trial carries none, and the dry run carries the page's).
+
+The live pages' records are of the backbone download of 21 October, the trial's of 20 November, so a month of GBIF's new
+records moves every page a little; the 200 random pages are the control for it.
+
+| pages (by section 3's verdict) | no change or under 5% | 5 to 50% | by half or more | typical spot moved 100 km or more |
+|---|---|---|---|---|
+| random 200 (the control) | 175 | 14 | 7 | 15 |
+| the same plant under another name (301) | 238 | 42 | 21 | 38 |
+| COL XR's name not in Kew's file (126) | 85 | 19 | 22 | 16 |
+| sharing a taxon, the taxon's own page (about 50) | 23 | 21 | 9 | 15 |
+| a lump or an error in COL XR (127) | 42 | 26 | 59 | 26 |
+
+Over all 812: 555 change in some figure; climates 27 gained and 8 lost; the typical spot moved 10 km or more on 157 pages.
+
+- **Section 3's rules hold.** The same-plant pages move about as the control does (79% little or none, against 89%); the
+  lumps move most (46% by half or more), as a page reading another plant's records would.
+- **The errors show as errors.** Ixora coccinea read under Embothrium coccineum (another family): 676 records in range to
+  none. Alopecurus pratensis under A. arundinaceus (a homonym): 1,164 to 1,969, its typical spot 2,829 km away. Rubus
+  fruticosus under Dasiphora fruticosa: 1,411 to 961, moved 982 km.
+- **Lumps fill pages with another plant's records:** Populus tristis 0 to 1,008 (as P. trichocarpa), Drosera rubrifolia 7 to
+  1,488 (as D. aliciae), Echeveria tolucensis 3 to 608 (as Balbinaea secunda), Viola domestica 3 to 382 (as V. sororia).
+- **The control's large moves** (7 of 200) are pages whose COL XR taxon is wider than the backbone's under the same name
+  (Veronica scutellata 832 to 1,987, the spot 2,017 km away; Berberis vulgaris 741 to 1,368): the same name, more records
+  filed under it, a question for the move's reading too.
+
+**What it means for a move.** A move by rule (PLAN-100 4) is sound for the pages whose COL XR taxon is their own name or
+the same plant under another name; the lumps, the errors and the wider taxa would change what a page says about where the
+plant grows, so they keep the backbone's key, with the reason said, until read one by one. Nothing is moved: the backbone
+stays pinned, and the decision is the owner's.
+
 ## The record
 
 - 20 November 2026: the key map (62,241 keys, every one answered); the offline count; each page's records under both
@@ -185,6 +253,11 @@ Steps 2 and 3 are written once the download is in hand and its columns read, not
   passed on its retry: it ticked "Show only lines that need me" while the names were still being asked, and their answers
   lengthened the summary above the box, so the tick landed where the box no longer was. The test now waits for the
   answers (8 of 8 in Firefox); the page was right.
+- Committed as e9f6d64, pushed and deployed 20 November 2026 (`node scripts/deploy.mjs`: the commit changed the tree, so
+  svelte-check and the 6,353 unit tests ran again first, then the build): version 68c4ea30, live check 23 of 23.
+- 20 November 2026 (evening): the trial, steps 1 to 3 (section 4); test r100e. The gate of the third commit:
+  `--tier=corpus` (scripts/dev, a unit test and this record; nothing in the app): 6,359 unit tests in 707 files, 1,036
+  browser tests, every test first time in Chromium desktop and phone.
 
 **/backup's preview after the collection.** Round 99's second gate lost a press in WebKit on /backup's "What's in the
 file" (r69p P5): the keep-your-plants card, which appears once the collection holds plants, arrived after the file's
