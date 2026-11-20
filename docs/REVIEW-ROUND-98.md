@@ -148,3 +148,10 @@ push, and the deploy (the owner: "go ahead and commit the fix and deploy").
 on its retry (r75g range 2, a click on a genus list's species that had not yet led to its page at the wait's end; smoke-1's
 backup restore, whose confirm button had not come in 60 s), in a run of 1.4 hours where 1.2 is usual; neither page is
 one the change reaches (the builder's Wikidata class test); alone each passed three of three in WebKit. Run again.
+
+**20 November, the deploy.** Committed and pushed as 2cc913b (the change and the record) and e89438b (the about counts the
+index wrote). `node scripts\deploy.mjs` ran svelte-check and the unit tests again, since the stamp names the commit it
+passed on (HEAD) and the commits came after: the first run stopped on r85u-products' "a product cut off …", over its 20 s
+limit (21.8 s) and passing in the gate; the second, 6,323 passed, then the build, wrangler (version a67b8c23) and the live
+check, 23 of 23. Read on cultifolio.com: /changes says Round 98, /about/how li#commons-asked, li#walter-lieth-diagram and
+"235 of ISO", and /species/copiapoa-cinerea draws figure#walter-lieth.
