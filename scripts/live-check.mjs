@@ -401,4 +401,12 @@ if (!skip.has('weight') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   ok(`species pages: ${sample.length} spread across the sitemap's ${slugs.length}, each a 200 or a redirect to its species`);
 }
 
+// GBIF's backbone, the one our pages are pinned to (round one hundred and one; docs/PLAN-100.md, 4): said as a note, never
+// failed, since a change at GBIF is no fault of the site; a WARNING when GBIF answers otherwise, so the move by rule is not
+// found out late. `LIVE_CHECK_SKIP=backbone` leaves it out.
+if (!skip.has('backbone')) {
+  const { checkBackbone } = await import('./gbif-backbone-check.mjs');
+  console.log(`  note  ${(await checkBackbone(ua)).sentence}`);
+}
+
 console.log(`live check passed (${n} checks)`);
