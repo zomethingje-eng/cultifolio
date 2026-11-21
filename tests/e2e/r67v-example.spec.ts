@@ -290,7 +290,7 @@ test('r67v V9: on a phone the welcome\'s lead says what the site is, and the lea
   for (const viewport of [{ width: 375, height: 548 }, { width: 390, height: 664 }, { width: 360, height: 640 }]) {
     const ctx = await browser.newContext({ baseURL, viewport, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
-    await page.goto('/'); await ready(page);
+    await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
     await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // round seventy-four's words, for every grower
     // Round seventy-six (the owner's decision): the photograph strip sits above the search on a phone as on a desktop, so the
     // first screen is the welcome, the strip and the search, and the catalogue's first row follows them. Before, a whole row
@@ -313,9 +313,9 @@ test('r67v V10: a returning visitor\'s own line is drawn from the server, so the
     new PerformanceObserver((l) => { for (const e of l.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) (window as unknown as { __cls: number }).__cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
   });
   const page = await ctx.newPage();
-  const html = await (await page.request.get('/')).text();
+  const html = await (await page.request.get('/?by=genus')).text(); // round 102: the catalogue's address; the bare `/` is the front page
   expect(html).toContain('id="welcome-after"'); // base: drawn only once the collection had opened
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   await expect(page.locator('#welcome-after')).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
   await goneQuiet(page, 1_500); // a negative, read once the page has gone quiet (helpers/settled.ts): every shift is made

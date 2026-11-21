@@ -498,10 +498,10 @@
   </ul>
   </details>
   <h3 id="grown">"Popular genera"</h3>
-  <p class="sum">"Popular genera" narrows the front page's catalogue to the genera growers record most often in cultivation on iNaturalist. It is a count of observations, made once and dated.</p>
+  <p class="sum">"Popular genera" narrows the catalogue to the genera growers record most often in cultivation on iNaturalist. It is a count of observations, made once and dated.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: "Popular genera"</span></summary>
   <ul class="rules">
-    <li>The front page's catalogue is the same on every device: every genus and every species.</li>
+    <li>The catalogue is the same on every device: every genus and every species. It is no longer on the front page; its addresses (a grouping, a genus or family opened, a chip) still open it, and the browse pages list every region, family and genus.</li>
     <li>Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist's observations of plants marked captive or cultivated, across the reference's genera that were counted.</li>
     <li>It is a measure of genera, not of species or of growers. Each genus is counted with every taxon under it.</li>
     <li>The count was made on 22 October 2026, over the 6,539 genera the reference and its species list then held; 6,449 of them were counted. <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/most-grown-genera.txt">The list of counts</a> holds every count, the query and iNaturalist's terms.</li>
@@ -513,9 +513,9 @@
   <details class="full in-full"><summary>The rules in full<span class="sr">: the photographs on the front page</span></summary>
   <ul class="rules">
     <li>The front page's photographs are chosen by rule, not by hand, from the "Popular genera", most grown first.</li>
-    <li>Of each such genus, one species with eight photographs or more and a habitat climate: the one most observed in cultivation on iNaturalist, then the most photographed. The first 48 genera that have one make the strip, and twelve of them are shown a day, in turn.</li>
-    <li>The strip sits above the search, on a phone as on a desktop.</li>
-    <li>The figure at the top of the front page is the coldest night on record where the first of the day's photographed species whose page holds one grows wild. It is NASA POWER's lowest daily minimum over its years at the grid cell of a typical record. Beside it are the records and grid cells it rests on, where the records came from and on what day, and the rule they were counted by, each read from that species' page.</li>
+    <li>Of each such genus, one species with eight photographs or more and a habitat climate: the one most observed in cultivation on iNaturalist, then the most photographed. The first 48 genera that have one make the strip, and twelve of them are shown a day, in turn: the first six on the front page, all twelve on the catalogue's addresses.</li>
+    <li>A tile's photograph is its species page's lead photograph, chosen by that page's rule. Nothing reads what a photograph shows, so a tile can show what the observer photographed with the plant, such as a bird at its fruit.</li>
+    <li>The figure on the front page, under its search, is the coldest night on record where the first of the day's photographed species whose page holds one grows wild. It is NASA POWER's lowest daily minimum over its years at the grid cell of a typical record. Beside it are the records and grid cells it rests on, where the records came from and on what day, and the rule they were counted by, each read from that species' page.</li>
     <li>Its photograph is shown with its author, its licence and the day its credit was read. A species whose lead photograph's credit has no such day is passed over for the next, as one without the figure is.</li>
     <li>Only the first three of the day are read. Where none of them holds one, and on a device that holds plants of its own, the front page shows no such figure.</li>
     <li>The not-found page of an address that is neither a species address nor a page of your own collection shows the first species of the day's strip, with its lead photograph, its author and licence, and the day its credit was read.</li>

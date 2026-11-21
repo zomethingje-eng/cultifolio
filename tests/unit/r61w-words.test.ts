@@ -145,6 +145,6 @@ describe('the front page (decision 9)', () => {
     const at = (t: string) => p.indexOf(t, p.indexOf('{:else}\n  <!-- While a search is typed'));
     // One strip at every width since round seventy-six (the owner's decision); round sixty-three (V4) drew a phone's copy after the first rows.
     expect(at('{@render featured(false)}')).toBeGreaterThan(-1);
-    expect(at('{@render featured(false)}')).toBeLessThan(at('class="searchbar" type="search" placeholder="Search species'));
+    expect(at('{@render featured(false)}')).toBeLessThan(at('class="searchbar" type="search" placeholder={front')); // round 102: the box's placeholder is the front page's or the catalogue's
   });
 });

@@ -11,7 +11,7 @@ smokeSetup();
 test('front page renders server-side with the fixture corpus: closed genus rows, one open by URL, no JavaScript needed', async ({ browser }) => {
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const page = await ctx.newPage();
-  const res = await page.goto('/');
+  const res = await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   expect(res?.status()).toBe(200);
   // A visitor's page names the site (round fifty-eight) in the top bar's name, and leads with one figure of the reference
   // and where it came from (round eighty-seven; plan D1), drawn by the server, no script needed.
@@ -611,9 +611,9 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
 
 test('first run: the front page explains itself once, and stops once there is a plant or it is dismissed', async ({ page }) => {
   // in the server's HTML, so a stranger's first screen has it before the scripts arrive and nothing moves when they do (round forty-five, 1)
-  const html = await (await page.request.get('/')).text();
+  const html = await (await page.request.get('/?by=genus')).text(); // round 102: the catalogue's address; the bare `/` is the front page
   expect(html).toContain('id="welcome"');
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('#welcome')).toContainText('Keep your plants\' record on this device:'); // the welcome's lead says what the site is on a phone (round sixty-seven; triage-66 V9), for every grower since round seventy-four
   await page.getByRole('button', { name: 'Not now' }).click();
@@ -633,7 +633,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.locator('#species-name').blur();
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
-  await page.goto('/');
+  await page.goto('/'); // a grower's own page is the bare `/` (round 102 leaves it so)
   await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
   // and on a phone every button is a finger's size
@@ -972,7 +972,7 @@ test('the app shell is installed for offline use: collection pages, a species pa
 });
 
 test('the front page carries closed rows, never fetches the whole index, and a search or a chip is answered by the server (round thirty-nine)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   const index: string[] = [];
   const searches: string[] = [];

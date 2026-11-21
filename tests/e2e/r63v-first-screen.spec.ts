@@ -27,8 +27,9 @@ async function liveHome(browser: Browser, baseURL: string | undefined, width: nu
   await liveShapedHome(page);
   await page.goto('/about/how');
   await ready(page);
-  await page.locator('#tabbar a[href="/"]').first().click();
-  await page.waitForURL(/\/$/);
+  // Round 102: the catalogue's address, reached by a link as the tab bar's was (the bare `/` is the front page now).
+  await page.evaluate(() => { const a = document.createElement('a'); a.href = '/?by=genus'; document.body.appendChild(a); a.click(); });
+  await page.waitForURL(/\/\?by=genus$/);
   await expect(page.locator('.letters a')).toHaveCount(25);
   await expect(page.locator('.rows .grow').first()).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
@@ -85,6 +86,7 @@ for (const [width, height] of [[390, 664], [375, 548], [360, 640]] as const) {
       await expect(page.locator('.toolrow .searchbar')).toBeFocused();
       // Its photographs come in: the same twelve tiles, at the top.
       await expect(page.locator('section.featured:visible .ftile')).toHaveCount(12);
+      await page.unrouteAll({ behavior: 'ignoreErrors' }); // round 102: a data request still on its way when the page closes is let go
       await ctx.close();
     });
   }
@@ -107,7 +109,7 @@ test('r63v V4: on a phone a chip click moves no row', { tag: '@phone-only' }, as
 test('r63v V4: on a desktop the strip stays above the search, and the search above the first rows', async ({ browser, baseURL }) => {
   const ctx = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 }, locale: 'en-GB', serviceWorkers: 'block' });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page);
   const g = await page.evaluate(() => {
     const strips = [...document.querySelectorAll<HTMLElement>('section.featured')].filter((e) => e.offsetParent !== null).map((e) => e.getBoundingClientRect().top + scrollY);

@@ -20,8 +20,9 @@ async function liveHome(page: Page) {
   await liveShapedHome(page);
   await page.goto('/about/how');
   await ready(page);
-  await page.locator('a[href="/"]').first().click();
-  await page.waitForURL(/\/$/);
+  // Round 102: the catalogue's address, by a link as before (the bare `/` is the front page, with no catalogue).
+  await page.evaluate(() => { const a = document.createElement('a'); a.href = '/?by=genus'; document.body.appendChild(a); a.click(); });
+  await page.waitForURL(/\/\?by=genus$/);
   await expect(page.locator('.strip .ftile').first()).toBeVisible();
   await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('.strip img')].slice(0, 6).every((i) => i.complete && i.naturalWidth > 0));
 }
@@ -56,7 +57,7 @@ test.describe('desktop, 1280 × 800, the fixture', () => {
 
   // Round seventy-four: the feature this test kept in place is gone (the owner's decision 3); no row moves still.
   test('opening a row moves no row under the pointer', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
     await ready(page);
     const top = (s: string) => page.evaluate((s) => document.querySelector(s)!.getBoundingClientRect().top + scrollY, s);
     const before = await top('#g-copiapoa');

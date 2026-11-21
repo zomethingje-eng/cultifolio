@@ -22,7 +22,7 @@ import { chromiumOnly } from './helpers/engines';
 test.use({ serviceWorkers: 'block' });
 
 test('r86w 1: the No climate chip says its pending page too (S15) @phone', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address
   const chip = page.locator('.chiprow a[href*="chip=noclimate"]');
   await expect(chip).toHaveText(/^No climate,?\s*0,\s*1 not asked, 1 not checked, 1 pending$/); // base: "… 1 not checked"
   await expect(chip).toHaveAttribute('aria-label', 'No climate: 0 species; besides them, 1 not asked, 1 not checked, 1 pending');

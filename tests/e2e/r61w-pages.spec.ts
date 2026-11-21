@@ -53,7 +53,7 @@ test.describe('phone', () => {
   test('the front page on a phone: the lead and the search on the first screen, the rows after the strip, and no chart shipped (decision 9, changed at the merge; round seventy-four; round eighty-seven)', async ({ page }) => {
     const html = await (await page.request.get('/')).text();
     expect(html).not.toMatch(/class="climo[ "]/); // the chart is not in the HTML a phone is sent
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
     await ready(page);
     const top = async (sel: string) => (await page.locator(sel).first().boundingBox())!.y;
     // The front page's species shown whole went in round seventy-four (the owner's decision 3); the strip's photographs lead to their pages.
@@ -111,7 +111,7 @@ test.describe('desktop', () => {
   // owner's decision 3): the species shown whole after the first rows, with its figures and chart, is gone; the photographs,
   // the search and the first rows stay in that order on a desktop's first screen. On r74base the section was drawn.
   test('the front page: the photographs come first, then the search and the first rows, and no species is shown whole (round seventy-four)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
     await ready(page);
     const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
     const search = await box('.toolrow .searchbar'), strip = await box('.featured'), row = await box('.rows .grow');

@@ -16,7 +16,7 @@ test.use({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
  * words in a narrower and a wider face and in the fallback faces, so what follows it does not move a line.
  */
 async function leadLines(p: Page) {
-  return p.locator('section.lead h1').evaluate((h) => Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)));
+  return p.locator('section.lead .leadh').evaluate((h) => Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)));
 }
 
 test('r69p P4: at 390 px the front page\'s lead is as many lines in a narrow face, a wide one and the fallback faces alike (IND-13)', async ({ browser, baseURL }) => {
@@ -27,7 +27,7 @@ test('r69p P4: at 390 px the front page\'s lead is as many lines in a narrow fac
     const page = await ctx.newPage();
     await page.goto('/'); await ready(page);
     await page.evaluate(() => document.fonts.ready);
-    if (face === 'narrow' || face === 'wide') await page.addStyleTag({ content: `section.lead h1 { letter-spacing: ${face === 'narrow' ? '-0.01em' : '0.01em'}; }` });
+    if (face === 'narrow' || face === 'wide') await page.addStyleTag({ content: `section.lead .leadh { letter-spacing: ${face === 'narrow' ? '-0.01em' : '0.01em'}; }` });
     lines[face] = await leadLines(page);
     await ctx.close();
   }

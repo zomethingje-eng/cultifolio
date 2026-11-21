@@ -76,8 +76,9 @@ test.describe('phone, 390 × 844', () => {
     await page.goto('/about/how');
     await ready(page);
     // A client-side visit, so the page is drawn from the live-shaped data: twelve photographs that load, 25 letters, long names.
-    await page.locator('#tabbar a[href="/"]').first().click();
-    await page.waitForURL(/\/$/);
+    // Round 102: the catalogue's address, by a link as the tab bar's was (the bare `/` is the front page, with no catalogue).
+    await page.evaluate(() => { const a = document.createElement('a'); a.href = '/?by=genus'; document.body.appendChild(a); a.click(); });
+    await page.waitForURL(/\/\?by=genus$/);
     await expect(page.locator('section.featured:visible .strip .ftile')).toHaveCount(12); // the one strip, above the search at every width (round seventy-six)
     await expect(page.locator('.letters a')).toHaveCount(25);
     await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('section.featured .strip img')].slice(0, 3).every((i) => i.complete && i.naturalWidth > 0));
@@ -129,7 +130,7 @@ test.describe('desktop, 1280 × 800', () => {
 
   // Round seventy-four: the feature this test also followed is gone (the owner's decision 3); the chip's half stays.
   test('a chip click moves no row (A10, B1; second pass, the outside triage\'s 2)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
     await ready(page);
     const at = () => page.evaluate(() => {
       const top = (s: string) => document.querySelector(s)!.getBoundingClientRect().top + scrollY;

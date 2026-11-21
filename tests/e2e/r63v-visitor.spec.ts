@@ -246,7 +246,7 @@ test('r63v V2: My plants keeps its own empty page and offers the example first',
 });
 
 test('r63v V3: the front page\'s welcome says what a grower gets and opens the example on Today', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   const w = page.locator('#welcome');
   await expect(w).toContainText('Keep your plants\' record on this device: watering read against each species\' habitat season, spaces, seed batches, frost warnings, labels.');
   await expect(page.locator('#try-sample-home')).toHaveText('See the example collection');

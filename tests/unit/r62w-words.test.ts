@@ -228,7 +228,7 @@ describe('the front page and the README (A2, A10, A35, visitor-words 10, 16, 17)
     expect(how).not.toMatch(/shown whole/);
   });
   it('the phone search placeholder fits', () => {
-    expect(home).toContain('placeholder="Search species, genus, family or origin…"');
+    expect(home).toContain("'Search species, genus, family or origin…'"); // round 102: the catalogue's placeholder, the front page's large box having its own
   });
   it('the offline page says only opened pages are kept', () => {
     expect(code('src/routes/offline/+page.svelte')).toContain('A species page you have opened on this device is kept here; when the app updates itself, the last fifty you opened are read again, so they stay; one you have not opened needs the network once.'); // round eighty-five (U, C6)

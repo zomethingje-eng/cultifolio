@@ -27,7 +27,7 @@ for (const [device, opts] of Object.entries(DEVICES)) {
     expect(expected).toEqual(['Hesperocyparis']); // the file's counts, as of its day (Welwitschia until round eighty's count)
     const ctx = await browser.newContext({ ...opts, baseURL, locale: 'en-GB', serviceWorkers: 'block' });
     const page = await ctx.newPage();
-    await page.goto('/'); await ready(page);
+    await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
     expect(await rows(page)).toEqual(FIXTURE); // off by default: every genus
     const grown = page.locator('.chiprow a', { hasText: 'Popular genera' });
     await expect(grown).toHaveText('Popular genera, 1');
@@ -49,7 +49,7 @@ for (const [device, opts] of Object.entries(DEVICES)) {
 test('r75g grown 2: without JavaScript the chip is a link and its address draws the filtered catalogue, by family too', async ({ browser, baseURL }) => {
   const ctx = await browser.newContext({ ...DEVICES.phone, baseURL, locale: 'en-GB', javaScriptEnabled: false, serviceWorkers: 'block' });
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await page.locator('.chiprow a', { hasText: 'Popular genera' }).click();
   await expect(page).toHaveURL(/\?by=genus&chip=grown$/);
   expect(await rows(page)).toEqual(expected);
@@ -66,7 +66,7 @@ test('r75g grown 3: /about/how names the source, the day and the rule, and that 
   await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
   const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
   // Round eighty-four: the rule in short sentences (the reviews' S5).
-  expect(text).toContain("The front page's catalogue is the same on every device: every genus and every species.");
+  expect(text).toContain('The catalogue is the same on every device: every genus and every species.'); // round 102: no longer the front page's
   expect(text).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist\'s observations of plants marked captive or cultivated, across the reference\'s genera that were counted.');
   expect(text).toContain(`The count was made on ${day}, over the`);
   expect(text).toContain('The list of counts holds every count, the query and iNaturalist\'s terms.'); // round eighty-five (A22): a link, not a path

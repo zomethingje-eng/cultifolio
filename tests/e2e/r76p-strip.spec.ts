@@ -33,8 +33,9 @@ async function liveHome(page: Page) {
   await liveShapedHome(page);
   await page.goto('/about/how');
   await ready(page);
-  await page.locator('a[href="/"]:visible').first().click();
-  await page.waitForURL(/\/$/);
+  // Round 102: the catalogue's address, by a link as before (the bare `/` is the front page, with no catalogue).
+  await page.evaluate(() => { const a = document.createElement('a'); a.href = '/?by=genus'; document.body.appendChild(a); a.click(); });
+  await page.waitForURL(/\/\?by=genus$/);
   await expect(page.locator('.letters a')).toHaveCount(25);
   await expect(page.locator('section.featured .ftile').first()).toBeAttached();
   await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('section.featured img')].filter((i) => i.offsetParent !== null).slice(0, 3).every((i) => i.complete && i.naturalWidth > 0));
@@ -72,7 +73,7 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
     const ctx = await context(browser, baseURL, 390, 664);
     const page = await ctx.newPage();
     if (live) await liveHome(page);
-    else { await servePhotos(page); await page.goto('/'); await ready(page); }
+    else { await servePhotos(page); await page.goto('/?by=genus'); await ready(page); } // round 102: the catalogue's address; the bare `/` is the front page
     const m = await placement(page);
     // On r76base: two strips in the page, and the one drawn followed the first rows, inside the list.
     expect(m.inPage, live ? 'live-shaped' : 'fixture').toBe(1);
@@ -133,9 +134,14 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // round 95's gone, so everything under it is 44 px higher at 1280 and 43 px higher at 1024. Measured in Chromium on
 // 20 November 2026 on e89438b with round 99's /changes lines (the base before: 1178, 1381, 1395, 1536 at 1280; 1222,
 // 1414, 1428, 1569 at 1024); tiles unchanged. On e89438b with round 99's lines: FAILED, stripTop 1134 for 1178 at 1280.
+// Round 102: this page is the catalogue's address now (`/?by=genus`; the bare `/` is the front page), drawn as `/` was.
+// Its "Changed lately" holds rounds 102's and 100's lines, round 99's and 98's gone, so everything under it is 43 px
+// higher at 1280 and 44 at 1024 (43 for the first row). Measured in Chromium on 20 November 2026 with round 102's code
+// (the base before: 1134, 1337, 1351, 1493 at 1280; 1179, 1370, 1384, 1526 at 1024); tiles unchanged. With round 102's
+// lines on the base before: FAILED, stripTop 1091 for 1134 at 1280.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1134, stripBottom: 1337, searchTop: 1351, rowTop: 1493, tile: [172, 193] },
-  '1024': { stripTop: 1179, stripBottom: 1370, searchTop: 1384, rowTop: 1526, tile: [155, 182] }
+  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
+  '1024': { stripTop: 1135, stripBottom: 1327, searchTop: 1341, rowTop: 1482, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put
@@ -145,7 +151,7 @@ test('r76p strip 2: the desktop\'s strip, search and first row where round eight
     const ctx = await context(browser, baseURL, w, h);
     const page = await ctx.newPage();
     await servePhotos(page);
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
     await ready(page);
     await page.evaluate(() => document.fonts.ready);
     const m = await placement(page);

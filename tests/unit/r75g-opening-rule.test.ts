@@ -85,7 +85,7 @@ describe('round seventy-five: the most-grown genera, the rule on the real file',
   it('/about/how says the source, the day and the rule, true of the code and the file', () => {
     expect(SHARE).toBe(0.5);
     // Round eighty-four: the rule in a list of short sentences, each read here.
-    expect(about).toContain("The front page's catalogue is the same on every device: every genus and every species.");
+    expect(about).toContain('The catalogue is the same on every device: every genus and every species.'); // round 102: no longer the front page's
     expect(about).toContain('Its chip "Popular genera", off until chosen, narrows it to the popular genera. These are the fewest genera that, taken from the most observed down, hold half of iNaturalist\'s observations of plants marked captive or cultivated, across the reference\'s genera that were counted.');
     expect(about).toContain('It is a measure of genera, not of species or of growers. Each genus is counted with every taxon under it.');
     // Round eighty (review-w 1): the count is the full list's, and the page says over which genera it was made.

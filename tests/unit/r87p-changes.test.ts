@@ -97,7 +97,7 @@ describe('r87p changes 3: changedLately', () => {
   });
   it('the default is three, and a given list is read', () => {
     expect(changedLately()).toHaveLength(3);
-    expect(changedLately(2, [{ n: 9, date: '2026-01-02', lines: ['A.', 'B.', 'C.'] }]).map((x) => `${x.round} ${x.text} ${x.href}`)).toEqual(['9 A. /changes#round-9', '9 B. /changes#round-9']);
+    expect(changedLately(2, [{ n: 9, date: '2026-01-02', reader: 'A.', lines: ['A.', 'B.', 'C.'] }]).map((x) => `${x.round} ${x.text} ${x.href}`)).toEqual(['9 A. /changes#round-9', '9 B. /changes#round-9']);
   });
   it('a date as the pages write one', () => {
     expect(dayText('2026-11-08')).toBe('8 November 2026');

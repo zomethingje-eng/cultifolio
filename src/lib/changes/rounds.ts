@@ -25,6 +25,11 @@ export interface Round {
   date: string;
   /** What changed for a reader, a few plain lines. */
   lines: readonly string[];
+  /**
+   * The round in one plain sentence, for someone who has never seen the site (round 102; the launch review): what a reader
+   * now sees differently. The front page's "Changed lately" shows the newest three; /changes keeps every line.
+   */
+  reader: string;
 }
 
 /** The public repository, as the footer and the about pages link it. */
@@ -104,8 +109,27 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 102,
+    date: '2026-11-20',
+    reader: 'The front page says what Cultifolio is first, with one large search box.',
+    lines: [
+      'The front page now opens on what the site is, with one large search box, a figure of the day with where it came from, and the ways to browse.',
+      'The catalogue\'s A to Z has left the front page; every address of it still opens it, and Browse lists every region, family and genus.'
+    ]
+  },
+  {
+    n: 100,
+    date: '2026-11-20',
+    reader: 'Opening a backup file no longer shifts under your finger while your collection opens.',
+    lines: [
+      'On the backup page, the file\'s preview waits for your collection to open, so nothing moves under your finger as you press it.',
+      'No species page changed: a trial of the Catalogue of Life, the taxonomy GBIF is moving to, was run and recorded, and the pages keep GBIF\'s backbone.'
+    ]
+  },
+  {
     n: 99,
     date: '2026-11-20',
+    reader: 'Your collection can be locked with its passcode and kept encrypted on your device.',
     lines: [
       'Your collection can be encrypted on your device under the app lock\'s passcode: its records, photographs, papers and sync key are then kept in the browser only as ciphertext.',
       'With it on, nothing of the collection is read until the passcode opens it, and a sync key this device synced with opens it if the passcode is forgotten.'
@@ -114,6 +138,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 98,
     date: '2026-11-19',
+    reader: 'Species pages draw a Walter–Lieth climate diagram: rain and warmth on one chart, dry months marked.',
     lines: [
       'A species page now draws the Walter–Lieth diagram of its habitat\'s median year under its climate class: temperature and rain on one scale, arid months dotted, humid ones shaded.',
       'Where a plant\'s Wikidata item names no Commons category and its name\'s holds no files, the category the item links is read, only where Kew\'s file holds that name for this plant alone.'
@@ -122,6 +147,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 95,
     date: '2026-11-19',
+    reader: 'A page now says which of GBIF\'s names it leaves out, and how many records they held.',
     lines: [
       'A page that leaves out records GBIF files under one of its keys, as names Kew holds for another plant, now says which keys and how many: Weingartia canigueralii names 13 keys and the 12 records they took out.',
       'Where a page was merged into another, the page kept now reads what GBIF files under the merged name that Kew holds as its plant, older names among them; every page was built again with the newest rules.'
@@ -130,6 +156,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 93,
     date: '2026-11-16',
+    reader: 'Some species GBIF files under another name now read their own wild records.',
     lines: [
       'A species Kew accepts that GBIF holds as a synonym of another page\'s species now reads its own records, where Kew\'s file holds the name as this plant, of the same type: Oxalis smalliana reads GBIF\'s Oxalis smalliana R.Knuth.',
       'GBIF\'s name for a plant spelt with its epithet in another gender, by the same author, is read as Kew\'s: Rhus copallinum reads GBIF\'s Rhus copallina L. and its records.'
@@ -138,6 +165,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 92,
     date: '2026-11-15',
+    reader: 'Flowering months in the wild are counted for every species at once, from one GBIF download.',
     lines: [
       'Flowering months in the wild are counted for every species page at once, from one GBIF download of iNaturalist\'s research-grade observations, where before iNaturalist was asked a page at a time; each page cites the download by its DOI.',
       'A page with none says it found none under its own GBIF keys: GBIF files some names under another plant, a genus or a family, and those observations are counted there, not here.'
@@ -146,6 +174,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 91,
     date: '2026-11-14',
+    reader: 'A new icon: a plant growing from an open book.',
     lines: [
       'A new icon, a plant growing from an open book, and the site\'s mark beside its name.',
       'Selected text, the front page\'s figure of the day and the link preview take the icon\'s sunflower; the site\'s own colours are as they were.'
@@ -154,11 +183,13 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 87,
     date: '2026-11-09',
+    reader: 'A new look, browsing by region, family and genus, and new figures on species pages: hardiness, climate class and extinction risk among them.',
     lines: liveLines(R87_LINES, R87_LIVE_STAGE)
   },
   {
     n: 86,
     date: '2026-11-08',
+    reader: 'The quoted Wikipedia text is the article\'s opening paragraph, and each photograph\'s credit gives the day it was read.',
     lines: [
       'A plant filed under GBIF\'s name for a page now says "GBIF\'s name for" that page, on the search, the add form, an import and the plant\'s page, never "an older name of".',
       'An old address no longer leads through GBIF to a plant Kew does not give the name to; the not-found page says what Kew holds.',
@@ -172,6 +203,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 85,
     date: '2026-11-05',
+    reader: 'A wild record on another region\'s land no longer counts for a plant\'s native region.',
     lines: [
       'Records on another region\'s land no longer count for a native region: the border rule takes a record inside a region\'s shape as that region\'s.',
       'A plant filed under GBIF\'s name for a page, or kept as typed after the add form named its page, finds that page.',
@@ -185,6 +217,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 84,
     date: '2026-10-30',
+    reader: 'Kew\'s accepted name heads every page, and records are tested against the native regions\' real shapes.',
     lines: [
       'Kew\'s accepted name heads every page that has a Kew entry; GBIF\'s name is kept among its names.',
       '366 of the 369 native regions are tested by their shapes, not by boxes.',
@@ -197,6 +230,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 82,
     date: '2026-10-24',
+    reader: 'Searching an English name finds its plant first, and a thin climate is marked as from few records.',
     lines: [
       'A species whose English name is the query comes first ("peppermint" is Mentha × piperita); a genus typed alone lists first the species with the most English names ("echeveria" is Echeveria elegans).',
       'A name spelt the same by another author is no longer shown as an older name.',
@@ -209,6 +243,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 81,
     date: '2026-10-23',
+    reader: 'A search kept in the address works again, and every touch target is at least 44 pixels on a phone.',
     lines: [
       'A search kept in the address, reloaded or shared, works again, and Back returns to it.',
       'The 485 hybrid pages carry their ×, with Kew\'s links.',
@@ -221,6 +256,7 @@ export const ROUNDS: readonly Round[] = [
   {
     n: 80,
     date: '2026-10-22',
+    reader: 'A search says its true count, and a page without a GBIF key says why its records were not asked.',
     lines: [
       '"Popular genera" was counted again over the full list: 118 genera, dated 22 October 2026.',
       'A search says its true count ("30 of 259 matches"), and "Show more" lists the rest.',
@@ -255,6 +291,11 @@ export function changedLately(count = 3, rounds: readonly Round[] = ROUNDS): Cha
     }
   }
   return out;
+}
+
+/** The newest rounds' reader lines, for the front page's "Changed lately" (round 102): one a round, newest first. */
+export function latestReaders(count = 3, rounds: readonly Round[] = ROUNDS): ChangeLine[] {
+  return rounds.slice(0, Math.max(0, count)).map((r) => ({ round: r.n, date: r.date, text: r.reader, href: roundHref(r.n), record: recordHref(r.n) }));
 }
 
 /** A date as the pages write one: 8 November 2026. Read as a calendar day, never through a time zone. */

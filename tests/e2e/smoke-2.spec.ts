@@ -141,6 +141,9 @@ test('every control has a name, headings do not jump, images have alt text, mute
   for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/today', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
     await page.goto(r);
     await expect(page.locator('h1')).toBeVisible();
+    // This reader grows a plant: `/` draws the visitor's front page until the collection opens, then the grower's. Scan
+    // the grower's, not the moment between (round 102: WebKit once read it then, with no H1 drawn).
+    if (r === '/') await expect(page.locator('h1')).toHaveText('Species');
     if (r === '/places') await page.getByRole('button', { name: 'New space' }).click();
     if (r === `/plants/${acc}`) { await page.locator('.quickbar .more').click(); await page.getByRole('button', { name: 'Measure', exact: true }).click(); await more(page, 'Edit'); await page.getByRole('button', { name: 'Move', exact: true }).click(); }
     if (r === '/sync') await page.getByRole('button', { name: 'I have a key' }).click();
@@ -699,13 +702,13 @@ test('a label whose species could not be reached says so, and the sheet is not p
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {
   // first visit: no hint, the server-rendered catalogue stands
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await expect(page.locator('.chiprow')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
-  await page.goto('/');
+  await page.goto('/'); // a grower's own page is the bare `/` (round 102 leaves it so)
   await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBe('1');
   // next load: the collection is slow to open; the page holds a skeleton, not the catalogue
@@ -719,7 +722,7 @@ test('a returning grower never sees the catalogue or "You grow 0" while the coll
       return req;
     } as typeof open;
   });
-  await page.goto('/');
+  await page.goto('/'); // a grower's own page is the bare `/` (round 102 leaves it so)
   await expect(page.locator('.skeleton')).toBeVisible();
   await expect(page.locator('.chiprow')).toHaveCount(0);
   await expect(page.getByText('You grow 0')).toHaveCount(0);

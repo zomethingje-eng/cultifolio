@@ -30,7 +30,8 @@
   import { temp } from '$core/units';
   import { dayWords } from '$lib/ui/ref/lead-figure';
   import { kindToSay, olderWords, type OlderKind } from '$lib/ui/ref/older-kind';
-  import { changedLately } from '$lib/changes/rounds';
+  import { changedLately, latestReaders } from '$lib/changes/rounds';
+  import { regionOf } from '$lib/browse/tdwg';
   import PinnedViews from '$lib/browse/PinnedViews.svelte';
   let { data } = $props();
   /**
@@ -751,6 +752,43 @@
   const showWelcome = $derived(visitor && !welcomeHidden && !searchMode);
   /** The lead leads a visitor's page, with nothing typed (round eighty-seven): the head and the pitch are its, then. */
   const leading = $derived(visitor && !!lead && !searchMode);
+  /**
+   * The front page (round 102; the launch review's round 1): a visitor's `/` with no catalogue address says what the site
+   * is first, in one paragraph read from /about's own sentences, with one large search box (the page's own, `#search`),
+   * then the day's figure as the proof, three short principles, Browse and "Changed lately", six tiles of the strip and the
+   * tracker's invitation. No catalogue: an address that asks for it (`?by=`, `?open=`, `?chip=`, `?from=`, `?at=`,
+   * `data.browse`) draws it as before, and so does a grower's "All" switch (`browsing`). A search typed here draws its
+   * results in place, as it always has, and the front page's sections step aside while it does.
+   */
+  const front = $derived(visitor && !data.browse && !browsing);
+  const frontIdle = $derived(front && !searchMode);
+  /** "Changed lately" on the front page: one plain sentence a round, the newest three (round 102). */
+  const readers = latestReaders(3);
+  /**
+   * The "Try" line (round 102): a species, an English name, a genus and a place, each read from the day's own species so
+   * each lands on a page that holds it, and none is typed here. The species is the lead's (else the strip's first); the
+   * English name the first of the strip's others that has one of its own; the genus the next one's; the place the lead's
+   * first native region, as its region page. A search's link sets the box, as typing it does; the address is its fallback.
+   */
+  const tries = $derived.by(() => {
+    const out: Array<{ label: string; href: string; sci?: boolean; search?: string }> = [];
+    const first = lead ? { name: lead.name, slug: lead.slug } : data.featured[0];
+    if (first) out.push({ label: first.name, href: `/species/${first.slug}`, sci: true });
+    const rest = data.featured.filter((f) => f.slug !== first?.slug);
+    const named = rest.find((f) => f.common && f.common.toLowerCase() !== genusOf(f.name).toLowerCase());
+    if (named?.common) out.push({ label: named.common.toLowerCase(), href: `/?q=${encodeURIComponent(named.common.toLowerCase())}`, search: named.common.toLowerCase() });
+    const g = rest.find((f) => f !== named && genusOf(f.name) !== genusOf(first?.name ?? ''));
+    if (g) out.push({ label: genusOf(g.name), href: `/?by=genus&open=${slugify(genusOf(g.name))}`, sci: true });
+    const r = lead?.regionCodes?.map((c) => regionOf(c)).find((x) => !!x?.slug);
+    if (r && has('/region')) out.push({ label: `plants native to ${r.label}`, href: `/region/${r.slug}` });
+    return out;
+  });
+  /** A "Try" search: put in the box, as if typed (the address `/?q=` is the link's fallback with no script). */
+  function trySearch(e: MouseEvent, text: string) {
+    e.preventDefault();
+    q = text;
+    document.getElementById('search')?.focus();
+  }
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
   const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with a habitat climate; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
@@ -877,15 +915,50 @@
   {/if}
 {/snippet}
 
-{#snippet featured(titled = false)}
+{#snippet leadBlock(proof: boolean)}
+  {#if lead}
+    <!-- The lead (round eighty-seven; plan D1, the owner's look): one figure from the reference and its trail, each part
+         read from the species' record (`leadOf`), the day's species chosen by the strip's rule. On a catalogue's address it
+         heads the page; on the front page it is the proof under the pitch (round 102), an H2. -->
+    <section class="lead" class:proof aria-labelledby="lead-h">
+      <div class="leadtext">
+        <p class="sechead leadkick">{proof ? "Today's figure, and where it came from" : 'A figure from the reference, and where it came from'}</p>
+        <svelte:element this={proof ? 'h2' : 'h1'} id="lead-h" class="leadh">The coldest night on record where <SpeciesName name={lead.name} /> grows wild: <span class="leadfig">{temp(lead.coldC, units.current, 1).replace(/^-/, '−')}</span>.</svelte:element>
+        {#if !proof}
+          <!-- A phone's first screen held the figure and its photograph alone, and nothing on it said what the site is (the
+               review of stage 1, S7; the owner's decision): on a phone, one sentence of what this is, from the facts line's own
+               live counts, under the figure and over the photograph. A desktop's first screen has the facts line itself. -->
+          <p class="leadwhat">{fmtN(data.total)} plant species, named as Kew names them, with their wild records and, for {fmtN(data.withClimate)}, the climate where they grow. Free, with no account and no tracking.</p>
+        {/if}
+          <table class="trail">
+            <tbody>
+              <tr><th scope="row">Records</th><td><span class="num">{fmtN(lead.records)}</span> wild record{lead.records === 1 ? '' : 's'} in <span class="num">{fmtN(lead.cells)}</span> grid cell{lead.cells === 1 ? '' : 's'}, inside Kew's native range{#if lead.regions.length}{' '}({lead.regions.join(', ')}){/if}</td></tr>
+              <tr><th scope="row">From</th><td>{#if lead.from.download}{#if lead.from.href}<a href={lead.from.href} rel="noopener">GBIF occurrence download</a>{:else}GBIF occurrence download{/if}{#if lead.from.day}{' '}of {dayWords(lead.from.day)}{/if}{:else}GBIF's occurrence search{#if lead.from.day}, asked {dayWords(lead.from.day)}{/if}{/if}</td></tr>
+              <tr><th scope="row">Temperatures</th><td>NASA POWER, daily, over {lead.years} years, at the grid cell of a typical record{#if lead.place}{' '}({lead.place}){/if}{#if lead.lapseM}, corrected for {fmtN(Math.abs(lead.lapseM))} m of elevation{/if}</td></tr>
+              <tr><th scope="row">Counted only</th><td>records inside Kew's native range and placed to within 10 km; <a href="/about/how#records">the rules</a></td></tr>
+            </tbody>
+          </table>
+          <p class="leadmore"><a href="/species/{lead.slug}">The whole page for <SpeciesName name={lead.name} /></a> <span class="muted2">(a different species each day, from pages with a habitat climate and an open photograph)</span></p>
+        </div>
+        {#if lead.photo}
+          <figure class="leadph">
+            <a href={lead.photo.href} rel="noopener" tabindex="-1" aria-hidden="true"><img src={lead.photo.src} alt="" width="300" height="300" fetchpriority="high" /></a>
+            <figcaption>{lead.photo.who}{lead.photo.lic ? `, ${lead.photo.lic}` : ''}, via {lead.photo.via}{#if lead.photo.read}, credit read {dayWords(lead.photo.read)}{/if}</figcaption>
+          </figure>
+        {/if}
+      </section>
+  {/if}
+{/snippet}
+
+{#snippet featured(titled: boolean | string = false, n = 0)}
   <!-- One strip, drawn once, at every width: between the welcome and the search, where a desktop has always had it (round
        seventy-six, the owner's decision). Round sixty-three (V4) drew a second copy after the first three catalogue rows on
        a phone, so the search and a row were on Safari's first screen; on the owner's iPhone it read as three random plants
        dropped into the A section of the list. -->
   <section class="featured" aria-label="From the reference">
-    {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
-    <div class="strip">
-      {#each data.featured as c, i (c.slug)}
+    {#if titled}<h2 class="q grouptitle">{typeof titled === 'string' ? titled : 'From the reference'}</h2>{/if}
+    <div class="strip" class:six={n === 6}>
+      {#each n ? data.featured.slice(0, n) : data.featured as c, i (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
           <!-- One size by surface, not by pixel density: a 150 px tile at `small` (240 px), never `medium`, which a phone's density promoted every tile to and made the phone's home page seven megabytes (round thirty-five, R2-7). -->
           <!-- The first screen shows two or three tiles at every width now, and the first is preloaded from the head: the first
@@ -1025,34 +1098,17 @@
   {/if}
 {:else}
   <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
-  {#if leading && lead}
-    <!-- The lead (round eighty-seven; plan D1, the owner's look): one figure from the reference and its trail, each part
-         read from the species' record (`leadOf`), the day's species chosen by the strip's rule. -->
-    <section class="lead" aria-labelledby="lead-h">
-      <div class="leadtext">
-        <p class="sechead leadkick">A figure from the reference, and where it came from</p>
-        <h1 id="lead-h">The coldest night on record where <SpeciesName name={lead.name} /> grows wild: <span class="leadfig">{temp(lead.coldC, units.current, 1).replace(/^-/, '−')}</span>.</h1>
-        <!-- A phone's first screen held the figure and its photograph alone, and nothing on it said what the site is (the
-             review of stage 1, S7; the owner's decision): on a phone, one sentence of what this is, from the facts line's own
-             live counts, under the figure and over the photograph. A desktop's first screen has the facts line itself. -->
-        <p class="leadwhat">{fmtN(data.total)} plant species, named as Kew names them, with their wild records and, for {fmtN(data.withClimate)}, the climate where they grow. Free, with no account and no tracking.</p>
-        <table class="trail">
-          <tbody>
-            <tr><th scope="row">Records</th><td><span class="num">{fmtN(lead.records)}</span> wild record{lead.records === 1 ? '' : 's'} in <span class="num">{fmtN(lead.cells)}</span> grid cell{lead.cells === 1 ? '' : 's'}, inside Kew's native range{#if lead.regions.length}{' '}({lead.regions.join(', ')}){/if}</td></tr>
-            <tr><th scope="row">From</th><td>{#if lead.from.download}{#if lead.from.href}<a href={lead.from.href} rel="noopener">GBIF occurrence download</a>{:else}GBIF occurrence download{/if}{#if lead.from.day}{' '}of {dayWords(lead.from.day)}{/if}{:else}GBIF's occurrence search{#if lead.from.day}, asked {dayWords(lead.from.day)}{/if}{/if}</td></tr>
-            <tr><th scope="row">Temperatures</th><td>NASA POWER, daily, over {lead.years} years, at the grid cell of a typical record{#if lead.place}{' '}({lead.place}){/if}{#if lead.lapseM}, corrected for {fmtN(Math.abs(lead.lapseM))} m of elevation{/if}</td></tr>
-            <tr><th scope="row">Counted only</th><td>records inside Kew's native range and placed to within 10 km; <a href="/about/how#records">the rules</a></td></tr>
-          </tbody>
-        </table>
-        <p class="leadmore"><a href="/species/{lead.slug}">The whole page for <SpeciesName name={lead.name} /></a> <span class="muted2">(a different species each day, from pages with a habitat climate and an open photograph)</span></p>
-      </div>
-      {#if lead.photo}
-        <figure class="leadph">
-          <a href={lead.photo.href} rel="noopener" tabindex="-1" aria-hidden="true"><img src={lead.photo.src} alt="" width="300" height="300" fetchpriority="high" /></a>
-          <figcaption>{lead.photo.who}{lead.photo.lic ? `, ${lead.photo.lic}` : ''}, via {lead.photo.via}{#if lead.photo.read}, credit read {dayWords(lead.photo.read)}{/if}</figcaption>
-        </figure>
-      {/if}
-    </section>
+  {#if front}
+    <!-- The front page (round 102): what the site is, first. Every count is the index's; every claim is /about's own. -->
+    {#if frontIdle}
+      <section class="frontpitch" aria-labelledby="front-h">
+        <p class="sechead frontkick">A plant reference</p>
+        <h1 id="front-h">{fmtN(data.total)} species, and every figure says where it came from.</h1>
+        <p class="frontwhat">Named as Kew's World Checklist names them, with wild records from GBIF and, for {fmtN(data.withClimate)} of them, the habitat's climate month by month. Every figure comes from a named source, and the day it was read. <span class="frontmore">There is no account, no tracking, no analytics and no advertising; your plants stay on your device unless you turn on sync, which encrypts them.</span></p>
+      </section>
+    {/if}
+  {:else if leading && lead}
+    {@render leadBlock(false)}
     <section class="factsline" aria-label="What this is">
       <p>{fmtN(data.total)} plant species, named as Kew's World Checklist names them, with wild records from GBIF and iNaturalist, and for {fmtN(data.withClimate)} of them the climate where they grow. Free, with no account, no adverts and no tracking. Your own plants stay on your device unless you turn on sync, which is encrypted before it leaves.</p>
     </section>
@@ -1074,7 +1130,7 @@
       {/if}
     </section>
   {/if}
-  {#if !leading}
+  {#if !leading && !front}
   <div class="headwrap" class:searching={searchMode} class:withwelcome={showWelcome}>
   <!-- To a visitor the head says what this is in three short lines, not a 62-word sentence that read as a disclaimer, and then
        shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
@@ -1098,7 +1154,7 @@
   {/if}
 
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
-  {#if showWelcome}
+  {#if showWelcome && !front}
     <!-- The example first: the quickest way to see the record half without typing a plant (round sixty-one; decision 9).
          It opens on Today, the page that shows most of what the record does at once (round sixty-three, V2). What a grower
          gets is said in a few words, each a page the app has (round sixty-three, V3: a visitor "isn't given the knowledge
@@ -1109,7 +1165,7 @@
     <p class="welcome" id="welcome"><span><span class="wlead"><b>A reference to {fmtN(data.total)} species, every figure sourced, and a record of your own plants, kept on this device.</b></span><span class="wfeat"><b>Keep your plants' record on this device:</b> watering read against each species' habitat season, spaces, seed batches, frost warnings, labels.</span><span class="wacts"><button class="btn small trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button><span><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>add your first plant</a> or <a href="/backup">restore a backup</a></span></span></span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
     {#if exampleRefused}<p class="small" role="status" id="try-sample-home-refused">{notEnteredWords(exampleRefused)}</p>{/if}
   {/if}
-  {#if visitor && !searchMode}
+  {#if visitor && !searchMode && !front}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <!-- No "nothing leaves it": the about page lists what does (round sixty; words 17). -->
     <!-- Drawn from the server for every visitor and shown by the dismissal's flag before the first paint, as the welcome is
@@ -1118,7 +1174,7 @@
     <p class="welcome quiet" class:shown={welcomeHidden} id="welcome-after"><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Keep a record of your plants</a>; it stays on this device unless you turn on sync.</p>
   {/if}
 
-  {#if visitor && data.featured.length && !searchMode}
+  {#if visitor && data.featured.length && !searchMode && !front}
     <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule,
          rotated daily; above the one toolbar now, so the search, the grouping and the chips sit together (round sixty; visitor 16).
          At every width since round seventy-six (the owner's decision): the list below is unbroken on a phone too. -->
@@ -1128,17 +1184,17 @@
 
   <!-- One toolbar: the search, then Group by, then the chips, then A–Z, the same shape in every grouping and chip
        (round sixty; visitor 16). The letters scroll away under it; A–Z brings them back. -->
-  <div class="stickyhead">
-  <div class="toolrow" bind:this={toolrowEl}>
-    {#if hasMine && !searchMode}
+  <div class="stickyhead" class:frontidle={frontIdle}>
+  <div class="toolrow" class:frontbox={front} bind:this={toolrowEl}>
+    {#if hasMine && !searchMode && !front}
       <!-- round fifty-eight; the accessibility review: the same toggle group as on the grower's view -->
       <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="all" onchange={(v) => { if (v === 'mine') stopBrowsing(); }} />
     {/if}
-    <input class="searchbar" type="search" placeholder="Search species, genus, family or origin…" id="search" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
+    <input class="searchbar" type="search" placeholder={front ? 'Search a plant, a genus, a family or a region' : 'Search species, genus, family or origin…'} id="search" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
     {#if searchMode}
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
-    {:else}
+    {:else if !front}
       <div class="tools">
         <!-- Links between addresses: the current one is the page (round fifty-eight; the accessibility review). -->
         <nav class="seg" aria-label="Group by">
@@ -1165,7 +1221,50 @@
 
   {#if searchedLine && searchMode}<p class="seccount relaxed" role="status">{searchedLine}</p>{/if}
 
-  {#if !searchMode && data.letters.length > 1}
+  {#if frontIdle}
+    <!-- The front page under its box (round 102): where to start, then the day's figure as the proof, the principles, the
+         ways to browse beside what changed, six plants and the record's invitation. -->
+    {#if tries.length}<p class="tries"><span class="trylabel">Try</span>{#each tries as t (t.href)}<a href={t.href} onclick={t.search ? (e) => trySearch(e, t.search!) : undefined}>{#if t.sci}<SpeciesName name={t.label} />{:else}{t.label}{/if}</a>{/each}</p>{/if}
+    {@render leadBlock(true)}
+    <section class="three" aria-label="What the reference holds to">
+      <div><h2 class="colh">Sourced, not written</h2><p>No text about a species is generated. Every sentence on a species page is a quotation, a figure with its source, or a template filled in by a fixed rule (<a href="/about/how#written">how</a>).</p></div>
+      <div><h2 class="colh">The habitat, then your home</h2><p>Wild records from GBIF, kept only where they lie inside the native range, give the habitat's climate month by month; your own plant's space is set beside its species' habitat figures.</p></div>
+      <div><h2 class="colh">Open, private, free</h2><p>There is no account, no tracking, no analytics and no advertising. The app is open source, under the GNU AGPL 3.0 (<a href="/about#source">the source</a>).</p></div>
+    </section>
+    <section class="browselate front">
+      <div>
+        <h2 class="sechead">Browse</h2>
+        <table class="browse plain">
+          <tbody>
+            {#each browseRows as b (b.label)}<tr><td><a href={b.href}>{b.label}</a></td><td class="note">{b.note}</td><td class="n">{b.n != null ? fmtN(b.n) : ''}</td></tr>{/each}
+          </tbody>
+        </table>
+        <p class="latemore"><a href={has('/browse') ? '/browse' : '/?by=genus'}>All {fmtN(data.total)} species</a></p>
+      </div>
+      {#if readers.length}
+        <div>
+          <h2 class="sechead">Changed lately</h2>
+          {#each readers as c (c.round)}<div class="lateline"><span class="d">{dayWords(c.date)}</span><span>{c.text}</span></div>{/each}
+          <p class="latemore">{#if has('/changes')}<a href="/changes">Every change, round by round</a>{:else}<a href="https://github.com/zomethingje-eng/cultifolio/tree/main/docs">Every change, round by round</a>{/if}</p>
+        </div>
+      {/if}
+    </section>
+    {#if data.featured.length}{@render featured('A few to start with', 6)}{/if}
+    <section class="tracker" aria-labelledby="tracker-h">
+      <div>
+        <h2 id="tracker-h">Keep your plants' record beside the reference</h2>
+        <p>Each plant's space set beside its species' habitat figures, watering read against the habitat's season, frost warnings for your nights, labels and seed batches. On this device, with no account.</p>
+      </div>
+      <div class="acts">
+        <a class="btn pri" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add your first plant</a>
+        <button class="btn trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button>
+        <a href="/backup">or restore a backup</a>
+      </div>
+      {#if exampleRefused}<p class="small" role="status" id="try-sample-home-refused">{notEnteredWords(exampleRefused)}</p>{/if}
+    </section>
+  {/if}
+
+  {#if !searchMode && !front && data.letters.length > 1}
   <div class="filters" bind:this={filtersEl}>
     <nav class="letters" aria-label="Jump to a letter" aria-busy={jumping ? 'true' : undefined} bind:this={lettersEl}>
       {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" class:busy={jumping === l} onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
@@ -1200,7 +1299,7 @@
       {#if genusRow}<p class="seccount moresearch">Every species of <i>{genusRow}</i> is in <a href="/?by=genus&open={slugify(genusRow)}#g-{slugify(genusRow)}">its row of the catalogue</a>.</p>{/if}
       {#if more.more}<p class="seccount moresearch"><button class="btn small" type="button" onclick={showMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : `Show ${fmtN(more.more)} more`}</button></p>{:else if more.narrow}<p class="seccount moresearch">{more.narrow}</p>{/if}
     {/if}
-  {:else}
+  {:else if !front}
     <div class="rows" class:withletters={data.letters.length > 1} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
       {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - 60)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
       {#each visibleRows as r, i (r.id)}
@@ -1407,7 +1506,7 @@
 
   /* The lead (round eighty-seven; plan D1): the figure in a sentence, its trail as a table, the photograph beside it. */
   .lead { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; padding: 40px 0 28px; border-bottom: 1px solid var(--rule); }
-  .lead h1 { margin: 10px 0 0; font-weight: 400; font-size: 2.375rem; line-height: 1.2; text-wrap: pretty; }
+  .lead .leadh { margin: 10px 0 0; font-weight: 400; font-size: 2.375rem; line-height: 1.2; text-wrap: pretty; }
   /* Round ninety-one: the figure marked in the icon's sunflower, a stroke behind it on white and a line under it on the dark
      ground (theme.css's --lead-mark and --lead-line); on this page alone. */
   .leadfig { font-variant-numeric: var(--figs); font-weight: 500; white-space: nowrap; background-image: var(--lead-mark); text-decoration: underline var(--lead-line) 5px; text-underline-offset: 8px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
@@ -1424,6 +1523,44 @@
   .leadph img { width: 300px; height: 300px; object-fit: cover; border-radius: 2px; background: var(--sunk); }
   .leadph figcaption { margin-top: 6px; font-size: 0.75rem; color: var(--mut); overflow-wrap: anywhere; }
   .factsline { padding: 24px 0; border-bottom: 1px solid var(--rule); }
+  /* The front page (round 102): the pitch, the large box, "Try", then the proof and the rest, each under a rule. */
+  .frontpitch { padding: 40px 0 20px; max-width: 54rem; }
+  .frontkick { margin: 0; letter-spacing: 0.12em; }
+  .frontpitch h1 { margin: 18px 0 0; font-weight: 400; font-size: 3rem; line-height: 1.15; text-wrap: balance; }
+  .frontwhat { margin: 18px 0 0; font-size: 1.1875rem; line-height: 1.6; color: var(--ink2); max-width: 46rem; }
+  /* The large box sits in the page, not pinned under the bar, until a search is typed (then it is pinned as ever). */
+  .stickyhead.frontidle .toolrow { position: static; border-bottom: 0; margin-top: 4px; }
+  /* One search box in view (round 102; the launch review): the bar's stand-in box, which only takes the cursor to the
+     page's own, steps aside while the front page's large box is on the page; its place in the bar is kept. */
+  :global(html:has(.frontpitch) #topbar .tobox) { visibility: hidden; }
+  .toolrow.frontbox { max-width: 54rem; }
+  .toolrow.frontbox .searchbar { font-size: 1.1875rem; min-height: 56px; padding-left: 18px; border-width: 1.5px; }
+  .tries { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 12px 0 28px; font-size: 0.9375rem; }
+  .tries .trylabel { color: var(--mut); }
+  .tries a { min-height: var(--tap); display: inline-flex; align-items: center; }
+  .lead.proof { border-top: 1px solid var(--rule); padding-top: 28px; }
+  .lead.proof .leadh { font-size: 2rem; }
+  .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; padding: 28px 0; border-bottom: 1px solid var(--rule); }
+  .three .colh { margin: 0 0 6px; font-size: 1.0625rem; font-weight: 600; }
+  .three p { margin: 0; color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+  .tracker { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; margin: 28px 0 8px; padding: 22px 26px; background: var(--sunk); border-radius: 2px; }
+  .tracker h2 { margin: 0 0 6px; font-size: 1.125rem; font-weight: 600; }
+  .tracker p { margin: 0; color: var(--ink2); max-width: 48rem; }
+  .tracker .acts { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .tracker .small { flex-basis: 100%; }
+  @media (max-width: 860px) { .three { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
+  @media (max-width: 640px) {
+    .frontpitch { padding: 22px 0 14px; }
+    /* Sized to wrap alike in the web face and in Segoe UI unadjusted, which Firefox sets until its tuned fallback face has
+       loaded: at 2rem and 1rem the title took three lines there and two here, the sentence five and four, and the page
+       moved 60 px as the fonts came (r67h engines 4, Firefox). */
+    .frontpitch h1 { font-size: 1.8125rem; margin-top: 10px; }
+    .frontwhat { font-size: 0.9375rem; margin-top: 12px; line-height: 1.5; }
+    .frontmore { display: none; }
+    /* The lead's own phone size (round eighty-seven), not smaller: at 1.5rem its sentence took three lines in the fallback face and two in the web one, and the page moved 30 px as the fonts came (r62ba N10, 0.115). */
+    .lead.proof .leadh { font-size: 1.6875rem; }
+    .tracker { padding: 18px; }
+  }
   .factsline p { margin: 0; font-size: 1.0625rem; max-width: 70ch; }
   .browselate { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: 24px 0; border-bottom: 1px solid var(--rule); }
   .browselate h2 { margin: 0 0 8px; }
@@ -1439,7 +1576,7 @@
     .lead { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding-top: 22px; }
     .leadtext { display: contents; }
     .leadkick { order: 1; font-size: 0.75rem; }
-    .lead h1 { order: 2; font-size: 1.6875rem; line-height: 1.25; margin-top: 8px; }
+    .lead .leadh { order: 2; font-size: 1.6875rem; line-height: 1.25; margin-top: 8px; }
     .leadph { order: 3; margin-top: 16px; }
     .trail { order: 4; margin-top: 14px; }
     .leadmore { order: 5; }

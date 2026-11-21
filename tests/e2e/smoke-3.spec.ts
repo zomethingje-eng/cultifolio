@@ -514,7 +514,7 @@ test('a link that pairs a species with another species\' key is corrected at the
 
 test('a species page opened from the catalogue starts at its top, on a short screen too (round eleven)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 560 }); // the section tabs sit below the fold, where a scrollIntoView on them pulled the page down on arrival
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await page.waitForLoadState('networkidle');
   await page.locator('.grow', { hasText: 'Copiapoa' }).click();
   await page.locator('a.tile').first().click();
@@ -526,7 +526,7 @@ test('a species page opened from the catalogue starts at its top, on a short scr
 });
 
 test('the catalogue renders a window of rows and the letter index lands on its heading, by tap and by link (round seven, 23)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   const letters = await page.locator('nav.letters a').allInnerTexts();
   expect(letters.length).toBeGreaterThan(1);
   const last = letters[letters.length - 1];
@@ -537,7 +537,7 @@ test('the catalogue renders a window of rows and the letter index lands on its h
   expect(pos.top).toBeGreaterThanOrEqual(pos.bar);
   expect(pos.top).toBeLessThan(pos.h);
   await page.goto('/about/how');
-  await page.goto(`/#l-${letters[0]}`);
+  await page.goto(`/?by=genus#l-${letters[0]}`); // round 102: the catalogue's address
   await expect(page.locator(`#l-${letters[0]}`)).toBeVisible();
   await expect(page.locator('a.grow').first()).toBeVisible();
   // the "more" control only exists past the first window; the fixtures fit in one
@@ -1189,7 +1189,7 @@ test('round forty-six: a client-side navigation to a species page whose HTML the
 
 test('round forty-eight: on a phone the search row stays pinned through the list, and A–Z brings the index back (1)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('.letters')).toBeVisible();
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -1232,7 +1232,7 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
 
 test('round forty-eight: a letter tapped on a phone lands with its heading just under the pinned search row (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   // Hydrated first: a tap before then is the browser's own jump to the anchor, which lands the heading under the row
   // (round sixty-two; the harness review's 4: this test's one flake, "expected < 167.8, received 207.3").
   await ready(page);
@@ -1313,7 +1313,7 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
 
 test('round forty-nine: a letter near the end of the catalogue still lands with its heading under the bar; the list is padded, and the padding goes once rows fill in above (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   // The fixture's catalogue is a few rows: the strip above them makes the page tall enough to place W without padding;
   // taken away here, the list is as short as the padding is for (round sixty-three, V4, when a phone's strip followed the
   // rows; the one strip is above the search since round seventy-six).
@@ -1339,7 +1339,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   await page.setViewportSize({ width: 390, height: 844 });
   // a visitor: the lead's figure and the top bar's search on one screen (round eighty-seven, plan D1); the sampler of
   // photographs, the catalogue's box and its first row follow, in that order
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   let fs = await firstScreen(page);
   const leadH = await page.locator('section.lead h1').boundingBox();
   expect(leadH!.y + leadH!.height).toBeLessThan(fs.bottom);
@@ -1401,7 +1401,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   const last = await placeRows.nth(1).boundingBox();
   expect(last!.y + last!.height).toBeLessThanOrEqual(fs.bottom + 1);
   // the grower's front page: Today under the toolrow, the own tiles three to a row, the second tile on the first screen
-  await page.goto('/');
+  await page.goto('/'); // a grower's own page is the bare `/` (round 102 leaves it so)
   fs = await firstScreen(page);
   const own = page.locator('.hgrid.mine a.tile');
   await expect(own).toHaveCount(2);
@@ -1419,7 +1419,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
 
 test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
   await expect(page.locator('section.featured .strip')).toBeVisible(); // the one strip, above the search (round seventy-six)
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();

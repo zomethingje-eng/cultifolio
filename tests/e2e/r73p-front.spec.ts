@@ -25,7 +25,7 @@ async function shown(page: Page) {
 test('r73p front 1 (round seventy-five): a phone draws the same catalogue as a desktop, every genus, "All" on, nothing hidden', async ({ browser, baseURL }) => {
   const [p, d] = [await phone(browser, baseURL), await desktop(browser, baseURL)];
   const [pp, dp] = [await p.newPage(), await d.newPage()];
-  for (const page of [pp, dp]) { await page.goto('/'); await ready(page); }
+  for (const page of [pp, dp]) { await page.goto('/?by=genus'); await ready(page); } // round 102: the catalogue's address; the bare `/` is the front page
   const [a, b] = [await shown(pp), await shown(dp)];
   // Round seventy-nine's page without a GBIF key, Hesperocyparis lusitanica, is a genus of its own in the fixture.
   expect(a.rows).toEqual(['Copiapoa', 'Hesperocyparis', 'Refusia', 'Welwitschia']);
@@ -42,7 +42,7 @@ test('r73p front 1 (round seventy-five): a phone draws the same catalogue as a d
 test('r73p front 2: without JavaScript a phone draws the same catalogue from the server\'s page', async ({ browser, baseURL }) => {
   const ctx = await phone(browser, baseURL, false);
   const page = await ctx.newPage();
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   expect(await page.locator('.rows a.grow:visible .gname').allTextContents()).toEqual(['Copiapoa', 'Hesperocyparis', 'Refusia', 'Welwitschia']);
   await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText('All, 5');
   await ctx.close();
@@ -51,7 +51,7 @@ test('r73p front 2: without JavaScript a phone draws the same catalogue from the
 test('r73p front 3: a desktop is drawn as before: every genus, its own "All", and its rows\' addresses', async ({ browser, baseURL }) => {
   const ctx = await desktop(browser, baseURL);
   const page = await ctx.newPage();
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   for (const g of ['copiapoa', 'refusia', 'welwitschia']) await expect(page.locator(`#g-${g}`)).toBeVisible();
   await expect(page.locator('.chiprow a:visible[aria-current="page"]')).toHaveText(/^All/);
   await expect(page.locator('.seccount:visible').last()).toContainText('4 genera · 5 species');

@@ -135,7 +135,7 @@ test('r87 look 7: the footer says who made the site in his words, then About, So
 
 test('r87 look 8: the front page leads with one figure from the reference and where it came from @phone', async ({ page }) => {
   await noThirdParty(page);
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   const lead = page.locator('section.lead');
   // The fixture's strip leads with Copiapoa cinerea, whose record's lowest night over 40 years is 4.0 °C.
   await expect(lead.locator('h1')).toHaveText('The coldest night on record where Copiapoa cinerea grows wild: 4.0 °C.');

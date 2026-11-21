@@ -28,12 +28,12 @@ async function phonePage(browser: Browser, baseURL: string | undefined, width: n
 test('r87u 1: on a grower\'s device the lead, the facts line and Browse are never painted before the app is ready (S2)', async ({ page }) => {
   // The scripts never arrive, so the page stays as the server drew it, before hydration: what the first paint shows.
   await page.route(/\/_app\/immutable\/.*\.js$/, (r) => r.abort());
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   const seen = () => page.evaluate(() => ['section.lead', 'section.factsline', 'section.browselate', '.featured'].map((s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).visibility : 'absent'; }));
   // A visitor's device paints them (the lead is the visitor's page).
   expect(await seen()).toEqual(['visible', 'visible', 'visible', 'visible']);
   await page.addInitScript(() => { try { localStorage.setItem('cultifolio.hasMine', '1'); } catch { /* the test fails below */ } });
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   expect(await page.evaluate(() => document.documentElement.dataset.grower)).toBe('1');
   // On the base: ['visible', 'visible', 'visible', 'hidden'].
   expect(await seen()).toEqual(['hidden', 'hidden', 'hidden', 'hidden']);
@@ -46,7 +46,7 @@ test('r87u 2: a phone\'s first screen says what the site is, under the figure an
   for (const [w, h] of [[390, 664], [375, 548], [360, 640]] as const) {
     const page = await phonePage(browser, baseURL, w, h);
     await servePhotos(page);
-    await page.goto('/'); await ready(page);
+    await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
     await page.evaluate(() => document.fonts.ready);
     const m = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
@@ -66,7 +66,7 @@ test('r87u 2: a phone\'s first screen says what the site is, under the figure an
 
 test('r87u 3: a desktop has the facts line for it, and the sentence is not drawn twice (S7)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   await expect(page.locator('section.lead .leadwhat')).toBeHidden();
   await expect(page.locator('.factsline p')).toBeVisible();
 });

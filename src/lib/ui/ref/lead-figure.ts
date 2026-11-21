@@ -39,6 +39,8 @@ export interface Lead {
   cells: number;
   /** Kew's native regions, in the reference's names. */
   regions: string[];
+  /** The same regions' TDWG level-3 codes, in the same order (round 102: the front page's "Try" line links the first region's page). */
+  regionCodes?: string[];
   /** The typical cell's place, where the build named it ("Atacama, Chile"). */
   place: string | null;
   /** Where the records came from: GBIF's download (with its address and the file's day) or the search API and the day asked. */
@@ -78,6 +80,7 @@ export function leadOf(d: Pick<Dossier, 'slug' | 'name' | 'climate' | 'distribut
     records: c.records,
     cells: c.cells,
     regions: d.distribution.native.map((r) => unitName(r.name)),
+    regionCodes: d.distribution.native.flatMap((r) => (r.code ? [r.code] : [])),
     place: c.place ?? null,
     from: { download, href: doi, day },
     power: c.src.extremes ?? null,

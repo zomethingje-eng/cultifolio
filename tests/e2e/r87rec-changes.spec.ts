@@ -35,11 +35,11 @@ test('r87rec 1: /changes lists round 87, dated, with its live stages\' lines and
 // Round ninety-eight: round 98's two, then round 95's two (rounds 96 and 97 have no entry).
 // Round ninety-nine: round 99's two, then round 98's two.
 test('r87rec 2: the front page\'s "Changed lately" holds the newest lines in order and says no later stage\'s of round 87', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 102: the catalogue's address; the bare `/` is the front page
   await ready(page);
   const lines = page.locator('.lateline');
   const newest = changedLately(4);
-  expect(newest.map((l) => l.round)).toEqual([99, 99, 98, 98]);
+  expect(newest.map((l) => l.round)).toEqual([102, 102, 100, 100]); // round 102: rounds 102 and 100 are the newest entries
   await expect(lines).toHaveCount(4);
   for (const [i, l] of newest.entries()) await expect(lines.nth(i)).toContainText(l.text);
   const all = (await lines.allInnerTexts()).join('\n');

@@ -103,7 +103,7 @@ test('r82u 2: no Papers section or tab while papers are not asked, and the recor
 // The merge, round eighty-five (review-s S9, A's need): the page without a GBIF key is "not asked", the refused one "not checked".
 test('r82u 3: the climate chip says none apart from not asked and not checked, under every chip @phone', async ({ page }) => {
   await noThirdParty(page);
-  for (const q of ['/', '/?chip=climate', '/?chip=noclimate']) {
+  for (const q of ['/?by=genus', '/?chip=climate', '/?chip=noclimate']) { // round 102: the catalogue's address for "all"; the bare `/` is the front page
     await page.goto(q); await ready(page);
     const chip = page.locator('.chiprow a[href*="chip=noclimate"]');
     await expect(chip).toHaveText(/^No climate,?\s*0,\s*1 not asked, 1 not checked, 1 pending$/); // base: "Without climate, 3"; round 84: "2 not checked"; round 86 (S15): the pending on the chip
@@ -191,7 +191,7 @@ test('r82u 9: running text on a desktop is 15 px; a phone keeps its own', async 
 
 test('r82u 10: the first screen leads with a figure, the next sentence says what the app is, and the example\'s button is 44 px tall @phone', async ({ page }) => {
   await noThirdParty(page);
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   const vh = page.viewportSize()!.height;
   // On a phone the welcome's first sentence says both halves; on a desktop the pitch above it says the reference, as before.
   // Round eighty-seven (plan D1, DESIGN-87): the first screen is the lead, one figure from the reference and where it came
@@ -230,7 +230,7 @@ test('r82u 10: the first screen leads with a figure, the next sentence says what
 
 test('r82u 11: the chip is "Popular genera" @phone', async ({ page }) => {
   await noThirdParty(page);
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address; the bare `/` is the front page
   await expect(page.locator('.chiprow a[href*="chip=grown"]')).toHaveText('Popular genera, 1');
   await expect(page.locator('main')).not.toContainText('Most grown');
 });

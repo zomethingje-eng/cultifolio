@@ -48,7 +48,7 @@ test('r85m 3: compare says a photograph that did not load, in its box (W11) @pho
 });
 
 test('r85m 4: the climate chip says not asked apart from not checked (S9) @phone', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 102: the catalogue's address
   await expect(page.locator('.chiprow a[href*="chip=noclimate"]')).toContainText('1 not asked'); // r85base: "2 not checked"
 });
 
