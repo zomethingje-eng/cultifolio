@@ -4,6 +4,7 @@
   import { aLabel } from '$core/arch';
   import Glance from '$lib/ui/ref/Glance.svelte';
   import HabitatLine from '$lib/ui/ref/HabitatLine.svelte';
+  import Term from '$lib/ui/ref/Term.svelte';
   import Placeholder from '$lib/ui/Placeholder.svelte';
   import { replaceState, beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
@@ -428,6 +429,19 @@
   const sentence = (t: string | undefined, fallback: string) => detailSentence(t, fallback);
   /** The climate's reason as its source did: a dossier built before round sixty-two said a refusal as "did not answer". */
   const climDetail = $derived(climateDetail('detail' in d.climate ? d.climate.detail : undefined, d.upstream));
+  /** Why the page has no habitat climate, as a sentence: the Climate section's own reason, said in the strip at the top too
+   *  (round 103). Pending is not a refusal, and a refusal is not none (rule 2). */
+  const climWhy = $derived(
+    d.climate.status === 'pending' ? 'It has not been derived yet; this is not a refusal.'
+    : d.climate.status === 'refused' ? sentence(climDetail, 'A source did not answer when this page was built')
+    : d.climate.status !== 'ok' ? `None can be derived: ${noneWhy('detail' in d.climate ? d.climate.detail : undefined)}`
+    : ''
+  );
+  /** The builder's reason as the end of a sentence: its full stop added, its first letter its own (a name stays a name). */
+  function noneWhy(detail: string | undefined): string {
+    const r = climateReason(detail)?.trim();
+    return r ? sentence(r, '').replace(/^./, r[0]) : 'no in-range records to read one at.';
+  }
   /** The grower's hemisphere, from the first place with coordinates, else north. Only the months in the note depend on it. */
   // Your site's latitude decides the hemisphere of the months; a place with coordinates stands in when no site is set.
   /** The season card's sentence: the sheet's own reading of this year, in plain words (the row the In short list used to repeat). */
@@ -647,9 +661,9 @@
       {#if cited}<p class="small muted" id="kew-cited">{cited}</p>{/if}
       {#if hybrid?.parents}<p class="small muted" id="hybrid-parents">A hybrid: <SpeciesName name={hybrid.parents} />, the parents Kew's World Checklist states for it (WCVP, RBG Kew).</p>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
-      {#if (d.climate.status !== 'ok' && !unchecked) || (!photos.length && photoGaps)}
+      {#if (d.climate.status === 'refused' && !unchecked) || (!photos.length && photoGaps)}
         <div class="pills">
-          {#if unchecked}{:else if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(climDetail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
+          <!-- A refusal keeps its one mark here, its reason on a tap; no climate and pending are said in the strip below, with why (round 103). -->{#if !unchecked && d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(climDetail, 'A source did not answer when this page was built')} />{/if}
           {#if !photos.length && photoGaps}<NotChecked what={photoGaps.what} word={photoWord} why="{photoGaps.allUncredited ? `${photoGaps.names.join(' and ')} answered, but with no photograph credited under its licence` : photoGaps.clause} when this page was built." />{/if}
         </div>
       {/if}
@@ -665,9 +679,14 @@
       {/if}
     </div>
     {#if glance}
-      <!-- The habitat in four figures on a phone's first screen (round eighty-four; the owner's decision 3), in the card
-           after the one primary action and before the secondary ones (round eighty-five; outside review B's 3, P3). -->
-      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" />
+      <!-- The habitat in four figures on the first screen (round eighty-four on a phone, the owner's decision 3; at every width
+           since round 103), in the card after the one primary action and before the secondary ones (round eighty-five;
+           outside review B's 3, P3). -->
+      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" records={d.climate.status === 'ok' ? d.climate.records : null} cells={d.climate.status === 'ok' ? d.climate.cells : null} />
+    {:else if !unchecked && d.climate.status !== 'refused'}
+      <!-- No habitat climate: the strip says the state and why, in the Climate section's words (round 103; rule 2), where
+           the top of the page had only a pill. A page whose records were not asked says so once, under the name. -->
+      <HabitatLine months={[]} units={u} state={d.climate.status === 'pending' ? 'pending' : 'none'} why={climWhy} />
     {/if}
     <div class="acts acts2">
       <a class="btn" href="/propagation/new?{addQuery}" onclick={(e) => addLeavesExample(e, `/propagation/new?${addQuery}`)}>Sow seed</a><!-- leads out of the example first (round sixty-nine; triage-68 X7; S-C4) -->
@@ -886,7 +905,7 @@
     <details class="why">
       <summary>How this section is made</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at a typical spot in the range, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid <Term k="cell">cells</Term> {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the <Term k="range">10th–90th percentile span</Term> across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at a typical spot in the range, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Across the range: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>

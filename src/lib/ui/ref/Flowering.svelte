@@ -10,6 +10,7 @@
    */
   import type { Dossier } from '$dossier/schema';
   import { floweringView, floweringCaption, floweringWhat, floweringZero, floweringMonthsWords, floweringFew } from './links-words';
+  import Term from './Term.svelte';
   let { dossier }: { dossier: Pick<Dossier, 'ids' | 'flowering' | 'climate'> & { occurrences?: { keys?: unknown[] } } } = $props();
   const v = $derived(floweringView(dossier));
 </script>
@@ -29,9 +30,9 @@
       <p class="small" id="flowering-zero">{floweringZero(v.source)}</p>
     {/if}
     {#if v.source === 'gbif'}
-      <p class="small muted cap" id="flowering-source" data-source="gbif">{floweringCaption(v)} <a href={v.href} rel="noopener">https://doi.org/{v.doi}</a>: {v.total} observation{v.total === 1 ? '' : 's'}, {floweringWhat(v.source)} {floweringMonthsWords(v.south)}</p>
+      <p class="small muted cap" id="flowering-source" data-source="gbif">{floweringCaption(v)} <a href={v.href} rel="noopener">https://doi.org/{v.doi}</a>: {v.total} observation{v.total === 1 ? '' : 's'}, <Term k="researchGrade">research grade</Term>{floweringWhat(v.source).slice('research grade'.length)} {floweringMonthsWords(v.south)}</p>
     {:else}
-      <p class="small muted cap" id="flowering-source" data-source="api">{floweringCaption(v)}: <a href={v.href} rel="noopener">{v.total} observation{v.total === 1 ? '' : 's'}</a>, {floweringWhat(v.source)} {floweringMonthsWords(v.south)}</p>
+      <p class="small muted cap" id="flowering-source" data-source="api">{floweringCaption(v)}: <a href={v.href} rel="noopener">{v.total} observation{v.total === 1 ? '' : 's'}</a>, <Term k="researchGrade">research grade</Term>{floweringWhat(v.source).slice('research grade'.length)} {floweringMonthsWords(v.south)}</p>
     {/if}
     {#if v.few && v.total}<p class="small muted">{floweringFew(v.total)}</p>{/if}
   {/if}

@@ -109,6 +109,16 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 103,
+    date: '2026-11-21',
+    reader: 'A species page shows its habitat in four figures at the top on every screen, and explains its terms.',
+    lines: [
+      'The habitat in short, four figures each with its source, now sits at the top of a species page on a desktop too; a page with no habitat climate says so there, and why.',
+      'A dotted word on a species page, such as cold floor, DLI or USDA zone, opens a one-line meaning from the glossary, with a link to it.',
+      'Every species page has a title that says what it holds, within what a search result shows.'
+    ]
+  },
+  {
     n: 102,
     date: '2026-11-20',
     reader: 'The front page says what Cultifolio is first, with one large search box.',

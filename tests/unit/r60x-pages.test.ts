@@ -87,7 +87,7 @@ describe('the species page head (round sixty; the self-review 14, product 6)', (
     }
   });
   it('without a climate: a true list of what the page holds, the state of the climate said as it is', () => {
-    expect(speciesTitle({ ...cinerea, climate: { status: 'pending' } })).toBe('Copiapoa cinerea');
+    expect(speciesTitle({ ...cinerea, climate: { status: 'pending' } })).toBe('Copiapoa cinerea: native range and photographs'); // round 103: never the name alone
     expect(speciesDescription({ ...cinerea, climate: { status: 'pending' }, summary: false })).toBe('Copiapoa cinerea, Cactaceae: native range and photographs, each with its source; habitat climate pending.');
     expect(speciesDescription({ name: { scientific: 'Refusia testii', family: 'Testaceae' }, climate: { status: 'refused' }, native: 1, photos: 0, summary: false })).toBe('Refusia testii, Testaceae: native range, with its source; habitat climate not checked.');
     expect(speciesDescription({ name: { scientific: 'Nullia nihil' }, climate: { status: 'none' }, native: 0, photos: 0, summary: false })).toBe('Nullia nihil: names and registers, each with its source.');
@@ -95,7 +95,7 @@ describe('the species page head (round sixty; the self-review 14, product 6)', (
   });
   it('a common name joins the title only when it is not the genus again', () => {
     expect(speciesTitle({ ...cinerea, common: 'Copiapoa' })).toBe('Copiapoa cinerea: habitat rain, cold nights and light');
-    expect(speciesTitle({ ...cinerea, common: 'Grey copiapoa', climate: { status: 'refused' } })).toBe('Copiapoa cinerea (Grey copiapoa)');
+    expect(speciesTitle({ ...cinerea, common: 'Grey copiapoa', climate: { status: 'refused' } })).toBe('Copiapoa cinerea (Grey copiapoa): native range'); // round 103: the part that fits in 60
   });
 });
 

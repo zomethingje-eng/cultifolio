@@ -216,7 +216,7 @@ describe("r92a 6: the page's words, the record, the carry", () => {
     const h = html({ dossier: { ids: { gbif: 10, inat: 7 }, flowering: gbif } });
     expect(h).toContain('Flowering observations of wild plants on iNaturalist, as iNaturalist shares them with GBIF: GBIF.org (2026-11-15) GBIF Occurrence Download');
     expect(h).toContain('href="https://doi.org/10.15468/dl.test92"');
-    expect(h).toContain("33 observations, research grade, openly licensed (CC0, CC BY or CC BY-NC), counted under the page's GBIF keys.");
+    expect(h.replace(/<span class="term[^"]*"[^>]*><button[^>]*>([^<]*)<\/button><span class="tip[^"]*"[^>]*><\/span><\/span>/g, '$1')).toContain("33 observations, research grade, openly licensed (CC0, CC BY or CC BY-NC), counted under the page's GBIF keys."); // round 103: 'research grade' is a word with a tip
     expect(h).not.toContain('inaturalist.org/observations');
   });
   it("twelve zeros said as the download's answer, never as a plant that does not flower", () => {

@@ -38,7 +38,7 @@
     <h2 id="who">Who made it, and why</h2>
     <!-- The owner's words (round eighty-seven, plan D5): the line he approved for the footer, said here whole, with one
          sentence that says only what it says. His to edit. -->
-    <p class="owner">Made by Jonathan, who grows cacti, succulents and rare bulbs and got tired of care advice that never said where it came from. So every figure here says where it came from. Built with Claude; no text about a species is written by it.</p>
+    <p class="owner">Made by Jonathan, who grows cacti, succulents and rare bulbs and got tired of care advice that never said where it came from. So every figure here says where it came from. Built with Claude; no text about a species is written by it. The <a href="/about/how#glossary">glossary</a> of the words the pages use, which a species page opens in tips, was written for this site with Claude; where a scale or a source defines its own word, its own words are quoted and linked.</p>
   </section>
 
   <section aria-labelledby="what">

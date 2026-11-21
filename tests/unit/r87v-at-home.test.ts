@@ -13,7 +13,8 @@ const months = Array.from({ length: 12 }, (_, i) => ({ tmax: 30 - Math.abs(6 - i
 const lo = months.map((m) => ({ ...m, tmax: m.tmax - 1, tmin: m.tmin - 1 }));
 const hi = months.map((m) => ({ ...m, tmax: m.tmax + 1, tmin: m.tmin + 1 }));
 const climate = { status: 'ok', cells: 11, months, p10: lo, p90: hi, extremes: { minAbs: -0.7, years: 44 } };
-const text = (html: string) => html.replace(/<!--[^]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&rsquo;/g, '’').replace(/\s+/g, ' ');
+// Round 103: a word with a tip (Term) is read as its word, its button and empty tip taking no space.
+const text = (html: string) => html.replace(/<!--[^]*?-->/g, '').replace(/<span class="term[^"]*"[^>]*><button[^>]*>([^<]*)<\/button><span class="tip[^"]*"[^>]*><\/span><\/span>/g, '$1').replace(/<[^>]+>/g, ' ').replace(/&rsquo;/g, '’').replace(/\s+/g, ' ');
 
 describe('atHomeRows', () => {
   it('winter nights, summer days, grow light for 14 h, humidity: each with its arithmetic', async () => {

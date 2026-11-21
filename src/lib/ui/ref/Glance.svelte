@@ -7,6 +7,7 @@
    * "Warmest days" over a month's mean day 7 °C under the 99th-percentile day, said more than their figures (round
    * sixty-one; visitor 1). The record low is printed beside the floor. The front page shows the same row for one species.
    */
+  import Term from './Term.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { tempN, tempUnit, rainN, rainUnit, ruleRain } from '$core/units';
   import type { Year } from '$core/sheet';
@@ -110,9 +111,9 @@
 <div class="cards gcards">
   <div class="card cold">
     {#if extremes}
-      <div class="lab" role="heading" aria-level="3">Cold floor (1 night in 100)</div>
+      <div class="lab" role="heading" aria-level="3"><Term k="coldFloor">Cold floor</Term> (1 night in 100)</div>
       <div class="val">{tempN(extremes.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
-      <div class="sub">Record low {tempN(extremes.minAbs, u, 1)} {tempUnit(u)} in {extremes.years} years, at a typical spot in the range <span class="src">NASA POWER</span></div>
+      <div class="sub">Record low {tempN(extremes.minAbs, u, 1)} {tempUnit(u)} in {extremes.years} years, at <Term k="typicalSpot">a typical spot in the range</Term> <span class="src">NASA POWER</span></div>
     {:else}
       <div class="lab" role="heading" aria-level="3">Coldest month, mean nightly low</div>
       <div class="val">{tempN(months[cold].tmin, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
@@ -121,7 +122,7 @@
   </div>
   <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean daily high</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
   <div class="card"><div class="lab" role="heading" aria-level="3">{yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainFullN} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainFullN} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} in the median year <span class="src">CHELSA</span></div></div>
-  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a class="help" href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
+  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> <Term k="dli" /></span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a class="help" href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
 </div>
 <!-- The season card under the four, outside their grid: spanning the grid's every track, it kept six 153 px tracks at a
      desktop's width, two of them empty, and the four cards filled two thirds of the row (round eighty-four; W3). -->

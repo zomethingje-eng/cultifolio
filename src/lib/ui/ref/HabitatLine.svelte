@@ -1,15 +1,18 @@
 <script lang="ts">
   /**
-   * The habitat in four figures on a phone's first screen (round eighty-four; the owner's decision 3, outside review B's 3):
-   * the cold figure, the year's rain, the open-sky light and the season, each with its qualification and source, above the
-   * photograph strip. The same figures as the glance cards further down, by the same rules (`Glance.svelte`, `$core/sheet`),
-   * which stay where they are with their explanations; on a wider screen the cards are on the first screen and this is not shown.
+   * The habitat in four figures at the top of a species page (round eighty-four on a phone; at every width since round 103,
+   * the launch review's round 2, a: on a desktop the glance cards begin at y 753, under the first screen at 1024 × 768):
+   * the cold figure, the year's rain, the open-sky light and the season, each with its qualification and source. The same
+   * figures as the glance cards further down, by the same rules (`Glance.svelte`, `$core/sheet`), which stay where they are
+   * with their explanations. A page with no habitat climate says so here, and why, in the Climate section's own words
+   * (rule 2: pending and not checked are said as that, never as none).
    */
   import { temp, rain } from '$core/units';
   import type { Units } from '$core/units';
   import type { Year } from '$core/sheet';
   import { yearRain } from '$climate/year-rain';
   import { seasonWords } from './season';
+  import Term from './Term.svelte';
   type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
   let {
     months,
@@ -20,7 +23,11 @@
     units,
     few = null,
     fewHref = null,
-    href = '#s-glance'
+    href = '#s-glance',
+    state = 'ok',
+    why = '',
+    records = null,
+    cells = null
   }: {
     months: M[];
     extremes?: { minP01: number } | null;
@@ -33,34 +40,45 @@
     fewHref?: string | null;
     /** Where the full cards are. */
     href?: string;
+    /** The habitat climate's state: its figures, or the state said as it is. */
+    state?: 'ok' | 'none' | 'pending' | 'refused';
+    /** For a state other than ok: the reason, a sentence of the page's own. */
+    why?: string;
+    /** The records and grid cells the figures are read from, said under them on a wider screen. */
+    records?: number | null;
+    cells?: number | null;
   } = $props();
-  const cold = $derived(months.reduce((b, x, i) => (x.tmin < months[b].tmin ? i : b), 0));
+  const cold = $derived(months.length ? months.reduce((b, x, i) => (x.tmin < months[b].tmin ? i : b), 0) : 0);
   const yr = $derived(yearRain(months, annualRain));
   const dlis = $derived(months.map((x) => x.dli).filter((x): x is number => x != null));
   const season = $derived(year ? seasonWords(year, readerLat) : null);
+  const ok = $derived(state === 'ok' && months.length > 0);
+  const n = (x: number, one: string, many: string) => `${x.toLocaleString('en-GB')} ${x === 1 ? one : many}`;
 </script>
 
-<section class="hline" aria-labelledby="hline-t">
-  <p class="hhead" class:withfew={!!few}><span id="hline-t">Habitat<span class="ins">{' '}in short</span></span>{#if few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={href}>Figures ›</a></p>
-  <dl>
-    {#if extremes}
-      <div><dt>Cold floor</dt><dd><b>{temp(extremes.minP01, units, 1)}</b> <span>1 night in 100 colder <i>NASA POWER</i></span></dd></div>
-    {:else if months.length}
-      <div><dt>Coldest month</dt><dd><b>{temp(months[cold].tmin, units, 1)}</b> <span>mean nightly low, not a floor <i>CHELSA</i></span></dd></div>
-    {/if}
-    <div><dt>Rain</dt><dd><b>{rain(yr.mm, units)}</b> <span>a year, {yr.cells ? 'median across the range' : 'monthly medians added'} <i>CHELSA</i></span></dd></div>
-    {#if dlis.length}<div><dt>Open-sky light</dt><dd><b>{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)} DLI</b> <span>lowest to highest month <i>CHELSA</i></span></dd></div>{/if}
-    {#if season}<div><dt>Season</dt><dd><b class="w">{season.head}</b> <span>{season.months} <i>{season.rule}</i></span></dd></div>{/if}
-  </dl>
+<section class="hline" class:hstate={!ok} aria-labelledby="hline-t">
+  <p class="hhead" class:withfew={!!few}><span id="hline-t">Habitat<span class="ins">{' '}in short</span></span>{#if ok && few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={ok ? href : '#s-climate'}>{ok ? 'Figures' : 'Climate'} ›</a></p>
+  {#if ok}
+    <dl>
+      {#if extremes}
+        <div><dt><Term k="coldFloor" /></dt><dd><b>{temp(extremes.minP01, units, 1)}</b> <span>1 night in 100 colder <i>NASA POWER</i></span></dd></div>
+      {:else}
+        <div><dt>Coldest month</dt><dd><b>{temp(months[cold].tmin, units, 1)}</b> <span>mean nightly low, not a floor <i>CHELSA</i></span></dd></div>
+      {/if}
+      <div><dt>Rain</dt><dd><b>{rain(yr.mm, units)}</b> <span>a year, {yr.cells ? 'median across the range' : 'monthly medians added'} <i>CHELSA</i></span></dd></div>
+      {#if dlis.length}<div><dt>Open-sky light</dt><dd><b>{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)} <Term k="dli" /></b> <span>lowest to highest month <i>CHELSA</i></span></dd></div>{/if}
+      {#if season}<div><dt>Season</dt><dd><b class="w">{season.head}</b> <span>{season.months} <i>{season.rule}</i></span></dd></div>{/if}
+    </dl>
+    {#if records && cells}<p class="hfrom">The wild habitat&rsquo;s figures, from {n(records, 'record', 'records')} in {n(cells, 'grid cell', 'grid cells')} <span class="hsep">·</span> <a href="/about/how#climate">How</a></p>{/if}
+  {:else}
+    <p class="hnone" id="hline-state"><b>{state === 'pending' ? 'Habitat climate pending.' : state === 'refused' ? 'Habitat climate not checked.' : 'No habitat climate.'}</b>{why ? ` ${why}` : ''}</p>
+  {/if}
 </section>
 
 <style>
-  /* A phone's alone: from 641 px the glance cards are on the first screen. In the name card, after the one primary action
-     and before the secondary ones, set apart by a rule (round eighty-five; outside review B's 3, P3). */
-  .hline { display: none; }
-  @media (max-width: 640px) {
-    .hline { display: block; flex: 1 1 100%; margin: 0; padding: 7px 0 0; border-top: 1px solid var(--rule); }
-  }
+  /* In the name card, after the one primary action and before the secondary ones, set apart by a rule (round eighty-five;
+     outside review B's 3, P3); at every width since round 103. */
+  .hline { display: block; flex: 1 1 100%; margin: 0; padding: 7px 0 0; border-top: 1px solid var(--rule); }
   .hhead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0 0 2px; font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .hhead > * { white-space: nowrap; }
   /* The head on one line at 320 px with the few-records mark too (round eighty-six; review P's P2, P3): "Habitat in short",
@@ -93,4 +111,16 @@
   /* The source in plain muted words after the figure (round eighty-seven; the review of stage 2's pages, 8: a bordered tag
      was the older look's), set a space apart so it reads as the figure's source and not as a word of the line. */
   dd i { font-style: normal; letter-spacing: 0; color: var(--mut); margin-left: 4px; }
+  .hfrom { display: none; margin: 4px 0 0; font-size: var(--fs-xs); color: var(--ink3); }
+  .hsep { color: var(--mut); }
+  .hnone { margin: 2px 0 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink2); }
+  .hnone b { color: var(--ink); font-weight: 600; }
+  /* A wider screen (round 103): the four in a row, each figure large over its line, and the records under them. */
+  @media (min-width: 641px) {
+    .hline { padding-top: 10px; }
+    dl { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 16px; }
+    dd b { font-size: var(--fs-2xl); line-height: 1.15; margin: 1px 0 2px; }
+    dd b.w { font-size: var(--fs-xl); line-height: 1.35; }
+    .hfrom { display: block; }
+  }
 </style>

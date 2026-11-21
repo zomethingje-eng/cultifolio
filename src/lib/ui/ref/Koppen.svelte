@@ -5,6 +5,7 @@
    * of the same year (`$climate/walter-lieth`): the months whose rain in millimetres is under twice the mean temperature.
    * Figures in °C and mm, the units the thresholds are written in. Shown only on a page with a habitat climate.
    */
+  import Term from './Term.svelte';
   import { koppenReasons, KOPPEN_CITED, KOPPEN_DOI, type KoppenFigures } from '$dossier/koppen';
   import { walterLieth, monthRuns } from '$climate/walter-lieth';
   import WalterLiethDiagram from './WalterLieth.svelte';
@@ -22,7 +23,7 @@
   <section class="kop" aria-labelledby="kop-t" id="climate-class">
     <h2 id="kop-t">Climate class</h2>
     {#if koppen?.cls}
-      <p class="cls"><b>{koppen.cls}</b> <span>Köppen–Geiger, worked out from the median year of the range&rsquo;s {cells > 1 ? `${cells} cells` : 'one cell'}</span></p>
+      <p class="cls"><b>{koppen.cls}</b> <span><Term k="koppen">Köppen–Geiger</Term>, worked out from the median year of the range&rsquo;s {cells > 1 ? `${cells} cells` : 'one cell'}</span></p>
       <table>
         <tbody>
           {#each reasons as [l, m, test] (l)}
@@ -37,7 +38,7 @@
       <p class="note">No Köppen–Geiger class is worked out for this page yet: its record was written before the class was.</p>
     {/if}
     {#if wl}
-      <p class="wl">Walter–Lieth: {#if runs.length}arid in {runs.map(runWords).join(' and ')}, where the month&rsquo;s rain in mm is under twice its mean temperature in °C ({minus(wl.arid.slice(0, 1).map((i) => `${MONTH[i]} ${wl.months[i].p} mm against 2 × ${(wl.months[i].twoT / 2).toFixed(1)} = ${wl.months[i].twoT.toFixed(1)}`).join(''))}){:else}no arid month: every month&rsquo;s rain in mm is at least twice its mean temperature in °C{/if}. The scale of Walter and Lieth&rsquo;s climate diagrams (1960–1967), 10 °C to 20 mm.</p>
+      <p class="wl"><Term k="walterLieth">Walter–Lieth</Term>: {#if runs.length}arid in {runs.map(runWords).join(' and ')}, where the month&rsquo;s rain in mm is under twice its mean temperature in °C ({minus(wl.arid.slice(0, 1).map((i) => `${MONTH[i]} ${wl.months[i].p} mm against 2 × ${(wl.months[i].twoT / 2).toFixed(1)} = ${wl.months[i].twoT.toFixed(1)}`).join(''))}){:else}no arid month: every month&rsquo;s rain in mm is at least twice its mean temperature in °C{/if}. The scale of Walter and Lieth&rsquo;s climate diagrams (1960–1967), 10 °C to 20 mm.</p>
       <WalterLiethDiagram {months} arid={runs.map(runWords)} />
     {/if}
     {#if src}<p class="note" id="climate-class-src">The months read: {src}.</p>{/if}

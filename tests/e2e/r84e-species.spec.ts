@@ -67,9 +67,10 @@ test('r84e 3: on a phone the habitat in four figures is on the first screen, abo
   expect(top).toBeLessThan(page.viewportSize()!.height - 120); // its first figures are on the first screen
   const strip = await page.locator('a.thumbstrip').boundingBox();
   if (strip) expect(top).toBeLessThan(strip.y);
-  // On a desktop it is not shown: the cards are on the first screen there.
+  // On a desktop it is shown too since round 103: the cards begin under the first screen there (y 753 at 1024 × 768 on
+  // cultifolio.com); r103d holds it on a desktop's first screen.
   await page.setViewportSize({ width: 1024, height: 768 });
-  await expect(line).toBeHidden();
+  await expect(line).toBeVisible();
 });
 
 test('r84e 4: paper opens the cultivation sheets, by the script and by the sheet alone, and the screen is as it was after', async ({ page }) => {

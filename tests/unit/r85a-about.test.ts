@@ -142,7 +142,9 @@ describe('2. summaries first, the rules one tap away (S11, A22)', () => {
     expect(heads.length).toBeGreaterThan(35);
     expect(heads.filter((m) => !m[3].startsWith('<p class="sum">')).map((m) => `#${m[2]}: ${m[3]}`)).toEqual([]);
     expect(unfolded(src)).not.toContain('<ul class="rules"'); // base: 30 lists of rules shown whole
-    expect(visibleWords(src)).toBeLessThan(6000); // base: 14,880
+    // base: 14,880. Round 103: 6,500 (6,320 then), the glossary's six new words: the species page's tips link to their
+    // entries, and an entry folded away would leave a link to nothing the reader can see.
+    expect(visibleWords(src)).toBeLessThan(6500);
   });
   it('/about/formats: each section is its summary, the format in full one tap away', () => {
     const src = raw(FILE.formats);

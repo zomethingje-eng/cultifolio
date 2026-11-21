@@ -53,3 +53,12 @@ hand-off of 20 November 2026, planned against the code); this is its record.
 - The gate (`--tier=launch`, from PowerShell): svelte-check 0 errors and 0 warnings in 1,842 files, 6,374 unit tests in 709
   files, 2,779 browser tests, every test first time in every engine, on the second run (the first stopped on the tests
   above and the Firefox shift).
+
+## The deploy
+
+- Pushed (f7f2867) and deployed on 21 November 2026 with `node scripts/deploy.mjs` (the full suite first, no stamp): version
+  181d6b46. Its live check stopped on one check: the share card's count is compared with the front page's, read from
+  "48,375 plant species", which the new front page no longer says. The site was right; the check now reads the H1's count
+  ("48,375 species, and every figure…") and the old sentence where an older page is served (`scripts/live-check.mjs`), and
+  passed against cultifolio.com: 23 of 23, the share card's count the reference's, 48,375; GBIF still serves the backbone.
+  The check's change is committed with the next round, after its gate.

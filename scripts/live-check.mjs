@@ -247,7 +247,9 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   // corpus, whose count is a handful.
   if (!process.env.LIVE_CHECK_FIXTURE_OK) {
     const card = /<meta property="og:image:alt" content="[^"]*?([\d,]+) species/.exec(r.text)?.[1];
-    const live = /([\d,]+) plant species/.exec(r.text)?.[1];
+    // Round 102: the front page's H1 says the count ("48,375 species, and every figure…"); the catalogue's facts line
+    // ("48,375 plant species") is read where an older page is served.
+    const live = (/<h1[^>]*>([\d,]+) species, and every figure/.exec(r.text) ?? /([\d,]+) plant species/.exec(r.text))?.[1];
     if (!card || !live) fail(`/: the share card's count (${card ?? 'not found in og:image:alt'}) or the page's (${live ?? 'not found'}) could not be read`, r);
     if (card !== live) fail(`/: the share card says ${card} species and the reference holds ${live}: set OG_ALT's count (src/lib/ui/ref/head.ts) to ${live}, draw the card again (node scripts/dev/og.mjs), and deploy`, r);
     ok(`/: the share card's count is the reference's, ${live} species`);

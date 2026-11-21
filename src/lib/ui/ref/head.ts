@@ -37,14 +37,36 @@ export interface HeadInput {
 /** A common name worth adding: not the genus again (Welwitschia's English name is "Welwitschia"). */
 const commonOf = (h: HeadInput) => (h.common && h.common.toLowerCase() !== h.name.scientific.split(' ')[0].toLowerCase() ? h.common : null);
 
+/** How long a title may be before " · Cultifolio" and still be shown whole in a search result (round 103). */
+export const TITLE_ROOM = 60;
+
+/**
+ * The page's title: its names, then the first description of what the page holds that is true of it and fits in
+ * TITLE_ROOM characters. Where none fits, the shortest true one is added all the same: a search result cuts a title's end,
+ * and what it cuts is then the description, never a name (round 103; the launch review's round 2: 10,368 pages without a
+ * habitat climate were titled by their name alone, and about 23,900 titles ran past 60 characters). The names are those
+ * the page holds, never cut.
+ */
 export function speciesTitle(h: HeadInput): string {
   const c = commonOf(h);
   const nm = `${h.name.scientific}${c ? ` (${c})` : ''}`;
-  if (h.climate.status !== 'ok' || !h.climate.months?.length) return nm;
-  const light = h.climate.months.some((x) => x.dli != null);
-  // Cold nights only with the daily extremes, whose 1st-percentile night the page leads with; a month's mean night is not
-  // one. The parts joined with "and", so a title without light is not a list missing its last word (round sixty-one; visitor 13).
-  return `${nm}: ${and(['habitat rain', h.climate.extremes ? 'cold nights' : '', light ? 'light' : ''].filter(Boolean))}`;
+  const parts: string[] = [];
+  if (h.climate.status === 'ok' && h.climate.months?.length) {
+    const light = h.climate.months.some((x) => x.dli != null);
+    // Cold nights only with the daily extremes, whose 1st-percentile night the page leads with; a month's mean night is not
+    // one. The parts joined with "and", so a title without light is not a list missing its last word (round sixty-one; visitor 13).
+    const full = and(['habitat rain', h.climate.extremes ? 'cold nights' : '', light ? 'light' : ''].filter(Boolean));
+    parts.push(full);
+    if (h.photos) parts.push('habitat climate and photographs');
+    parts.push('habitat climate');
+  } else {
+    if (h.native && h.photos) parts.push('native range and photographs');
+    if (h.native) parts.push('native range');
+    if (h.photos) parts.push('photographs');
+    parts.push('names and registers'); // every page holds its names, as the description says of a page with nothing else
+  }
+  const fits = parts.find((p) => `${nm}: ${p}`.length <= TITLE_ROOM);
+  return `${nm}: ${fits ?? parts.reduce((a, b) => (b.length < a.length ? b : a))}`;
 }
 
 function and(xs: string[]): string {

@@ -56,7 +56,7 @@ describe('every month that ties is named (V5)', () => {
 
 describe("the labels are the figures' own names, with the record low beside the floor (V1)", () => {
   it('the glance row, compare and the share card', () => {
-    const glance = code('src/lib/ui/ref/Glance.svelte');
+    const glance = code('src/lib/ui/ref/Glance.svelte').replace(/<Term k="\w+">([^<]*)<\/Term>/g, '$1'); // round 103: a word with a tip reads as its word
     const compare = code('src/routes/compare/+page.svelte');
     const svg = card();
     for (const lab of ['Cold floor (1 night in 100)', 'Warmest month, mean daily high', 'Rain a year (sum of monthly medians)', 'Open-sky light']) { // round sixty-two (visitor-words 3, A3)
