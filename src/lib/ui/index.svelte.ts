@@ -204,7 +204,9 @@ export type SearchRegion = { name: string; row: { id: string; label: string } };
  * which the page asks for another letter (absent when all can); `from`: where these hits start (round eighty; review-w 2,
  * review-p 3: the page said "60 matches" where 60 was the cap).
  */
-export type SearchFound = Found[] & { relaxed?: { query: string; left?: string }; near?: boolean; narrow?: boolean; total?: number; kept?: number; from?: number; regions?: SearchRegion[] };
+/** A genus of the reference that a query nothing answered begins with (round 104; the third hand-off's 15a). */
+export type SearchHeld = { genus: string; n: number; slug: string; family?: string };
+export type SearchFound = Found[] & { relaxed?: { query: string; left?: string }; near?: boolean; narrow?: boolean; total?: number; kept?: number; from?: number; regions?: SearchRegion[]; held?: SearchHeld };
 export async function searchCatalogue(q: string, n = 60, at = 0): Promise<SearchFound | SearchStop | null> {
   // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
   // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
@@ -240,7 +242,9 @@ export async function searchCatalogue(q: string, n = 60, at = 0): Promise<Search
     const total = int(r.headers.get('x-search-total')), kept = int(r.headers.get('x-search-kept'));
     let regions: SearchRegion[] = [];
     try { const x = JSON.parse(decodeURIComponent(r.headers.get('x-search-regions') ?? '') || '[]'); if (Array.isArray(x)) regions = x.filter((y) => y && typeof y.name === 'string' && typeof y.row?.id === 'string' && typeof y.row?.label === 'string'); } catch { regions = []; }
-    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {}, narrow ? { narrow } : {}, total !== undefined ? { total } : {}, kept !== undefined ? { kept } : {}, at > 0 ? { from: at } : {}, regions.length ? { regions } : {});
+    let held: SearchHeld | undefined;
+    try { const x = JSON.parse(decodeURIComponent(r.headers.get('x-search-held') ?? '') || 'null'); if (x && typeof x.genus === 'string' && Number.isInteger(x.n) && typeof x.slug === 'string') held = { genus: x.genus, n: x.n, slug: x.slug, ...(typeof x.family === 'string' ? { family: x.family } : {}) }; } catch { held = undefined; }
+    return Object.assign(hits, held ? { held } : {}, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {}, narrow ? { narrow } : {}, total !== undefined ? { total } : {}, kept !== undefined ? { kept } : {}, at > 0 ? { from: at } : {}, regions.length ? { regions } : {});
   } catch {
     return null;
   }

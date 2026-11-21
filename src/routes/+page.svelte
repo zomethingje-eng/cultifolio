@@ -5,9 +5,10 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
+  import SiteSearch from '$lib/browse/SiteSearch.svelte';
   import type { PageId } from '$core/page-id';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOr, isUnreached, type Found, type SearchRegion } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOr, isUnreached, type Found, type SearchRegion, type SearchHeld } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
@@ -560,6 +561,8 @@
   let foundTotal = $state<number | undefined>(undefined);
   let foundKept = $state<number | undefined>(undefined);
   let foundRegions = $state<SearchRegion[]>([]);
+  /** The genus a query nothing answered begins with (round 104; the third hand-off's 15a): named, never listed as hits. */
+  let foundHeld = $state<SearchHeld | undefined>(undefined);
   let loadingMore = $state(false);
   let searching = $state(false);
   /** Why the last search gave nothing usable: not reached, rate-limited (with the wait in seconds), or offline. */
@@ -583,7 +586,7 @@
     const gen = ++searchGen;
     clearTimeout(searchTimer);
     // The catalogue is searched only on the catalogue view (round forty, R2-1), and never with text that is the collection's (`keepLocal`).
-    if (!text || keepLocal) { found = []; foundTotal = foundKept = undefined; foundRegions = []; searching = false; searchFailed = null; relaxedFor = null; answered = null; return; }
+    if (!text || keepLocal) { found = []; foundTotal = foundKept = undefined; foundRegions = []; foundHeld = undefined; searching = false; searchFailed = null; relaxedFor = null; answered = null; return; }
     searching = true;
     searchTimer = setTimeout(() => {
       pendingSearch = searchCatalogue(text, SEARCH_PAGE).then((r) => {
@@ -597,6 +600,7 @@
         foundTotal = r.total;
         foundKept = r.kept;
         foundRegions = r.regions ?? [];
+        foundHeld = r.held;
         relaxedFor = relaxedOf(r);
         if (backTo && backTo.q === text) void putBack(backTo, gen);
       });
@@ -786,9 +790,12 @@
   /** A "Try" search: put in the box, as if typed (the address `/?q=` is the link's fallback with no script). */
   function trySearch(e: MouseEvent, text: string) {
     e.preventDefault();
+    // The front page's large box (round 104) takes the words and opens its panel; elsewhere the catalogue's box, as before.
+    if (frontSearch) { frontSearch.fill(text); return; }
     q = text;
     document.getElementById('search')?.focus();
   }
+  let frontSearch = $state<ReturnType<typeof SiteSearch> | undefined>(undefined);
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
   const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with a habitat climate; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
@@ -1185,12 +1192,19 @@
   <!-- One toolbar: the search, then Group by, then the chips, then A–Z, the same shape in every grouping and chip
        (round sixty; visitor 16). The letters scroll away under it; A–Z brings them back. -->
   <div class="stickyhead" class:frontidle={frontIdle}>
-  <div class="toolrow" class:frontbox={front} bind:this={toolrowEl}>
+  <div class="toolrow" class:frontbox={front} class:searching={searchMode} bind:this={toolrowEl}>
     {#if hasMine && !searchMode && !front}
       <!-- round fifty-eight; the accessibility review: the same toggle group as on the grower's view -->
       <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="all" onchange={(v) => { if (v === 'mine') stopBrowsing(); }} />
     {/if}
+    {#if frontIdle}
+      <!-- One search, the header's, everywhere (round 104; the second hand-off's round 9): the front page's large box is the
+           header's engine and rows (Your plants, Browse, Species), its panel under it; the catalogue's list of every species
+           matching is its last row (/?q=), which draws the box below as before. -->
+      <div class="frontsearch"><SiteSearch bind:this={frontSearch} size="large" id="search" placeholder="Search a plant, a genus, a family or a region" label="Search the reference and your own plants" /></div>
+    {:else}
     <input class="searchbar" type="search" placeholder={front ? 'Search a plant, a genus, a family or a region' : 'Search species, genus, family or origin…'} id="search" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
+    {/if}
     {#if searchMode}
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
@@ -1288,7 +1302,13 @@
       {@render regionLinks()}
     {:else if !shownFound.length}
       <!-- A way forward, not a dead end: what the reference is, and the record that works without it (round fifty-eight). -->
+      {#if foundHeld && chip === 'all'}
+      <!-- The genus that is held (round 104; the third hand-off's 15a): the first word is a genus here, the rest no name of it.
+           The sentence says nothing of what the other words are, and lists none of the genus's species as hits (rule 3). -->
+      <div class="emptybox" id="held"><p class="muted">No name in the reference is spelt “{q.trim()}”. It holds {fmtN(foundHeld.n)} species of <i>{foundHeld.genus}</i>: <a href="/genus/{foundHeld.slug}">{foundHeld.n === 1 ? 'that one' : 'all of them'}</a>. The reference lists species (<a href="/about/how#list">which ones</a>), so a cultivar or a trade name has no page of its own: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(q.trim())}`)}>add it as a plant</a>; its record works without a species page.</p></div>
+      {:else}
       <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(q.trim())}`)}>add it as a plant</a>; its record works without a species page.</p></div>
+      {/if}
     {:else}
       <p class="seccount" style="margin: 8px 0" role="status">{countSentence({ loaded: found.length, shown: shownFound.length, total: foundTotal, kept: foundKept, of: data.total, chip: chip !== 'all' })} · Enter opens the first</p>
       {@render regionLinks()}
@@ -1532,8 +1552,11 @@
   .stickyhead.frontidle .toolrow { position: static; border-bottom: 0; margin-top: 4px; }
   /* One search box in view (round 102; the launch review): the bar's stand-in box, which only takes the cursor to the
      page's own, steps aside while the front page's large box is on the page; its place in the bar is kept. */
-  :global(html:has(.frontpitch) #topbar .tobox) { visibility: hidden; }
+  :global(html:has(.frontpitch) #topbar .tobox), :global(html:has(main .toolrow.searching) #topbar .tobox) { visibility: hidden; }
   .toolrow.frontbox { max-width: 54rem; }
+  .toolrow.frontbox .frontsearch { flex: 1; min-width: 0; }
+  .frontsearch :global(.sitesearch) { max-width: none; }
+  .frontsearch :global(.site-search-box) { height: 56px; font-size: 1.1875rem; padding-left: 18px; border-width: 1.5px; }
   .toolrow.frontbox .searchbar { font-size: 1.1875rem; min-height: 56px; padding-left: 18px; border-width: 1.5px; }
   .tries { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin: 12px 0 28px; font-size: 0.9375rem; }
   .tries .trylabel { color: var(--mut); }

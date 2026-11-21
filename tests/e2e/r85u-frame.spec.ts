@@ -181,7 +181,7 @@ test('A17, C7: a photograph the server fails to hand over is said on the status 
 });
 
 test('A16h: Down from the search box reaches the matches, Up and Escape come back', async ({ page }) => {
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 104: the catalogue's box; the bare / has the header's engine
   const box = page.getByRole('searchbox', { name: 'Search the whole species catalogue' });
   await box.fill('Copiapoa');
   const hits = page.locator('.rows.hits a.hitrow');

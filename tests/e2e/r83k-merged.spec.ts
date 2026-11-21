@@ -29,7 +29,7 @@ const answer = (r: Route) => r.fulfill({ status: 200, contentType: 'application/
 
 test('r83k 1: the kept page\'s row says the old name is merged into it, and opens it as itself @phone', async ({ page }) => {
   await page.route(/\/api\/search\?/, answer);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('Echeveria peacockii');
   const rows = page.locator('.hits a.hitrow');

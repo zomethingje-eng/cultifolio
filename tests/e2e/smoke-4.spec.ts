@@ -336,6 +336,7 @@ test('round sixty: a visitor is offered the example from the front page, and a s
   await expect(page.locator('#try-sample-home')).toBeVisible();
   // a variety the reference files under its species: nothing as written, the species on the retry, and the page says so
   await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/?by=genus'); await ready(page); // round 104: the catalogue's box; the bare / has the header's engine
   await page.fill('.toolrow .searchbar', 'Copiapoa cinerea var. nonexista');
   await expect(page.locator('.relaxed')).toContainText('Showing results for “Copiapoa cinerea”');
   await expect(page.locator('.hitrow').first()).toContainText('Copiapoa cinerea');

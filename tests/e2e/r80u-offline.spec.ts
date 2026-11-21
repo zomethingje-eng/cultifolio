@@ -83,7 +83,13 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   // round's faces make it 180, the install's whole list: WebKit asks the server for every file of it, and Chromium only
   // for those its page has not loaded already (its HTTP cache answers the rest), 144 here before the browse pages were
   // left out. So the ceiling is WebKit's count, with the margin of two it had.
-  expect(files.length, report).toBeLessThan(182);
+  // Round 104: the front page draws the header's search itself (SiteSearch, size large), so its styles are a file of their
+  // own that the install fetches (SiteSearch.*.css), with the species rows' words: Chromium 123 to 124, and WebKit, whose
+  // count wanders by up to ten between runs, from 179 or 180 at most on rounds 98 to 103 to 181 and 183 on round 104's
+  // two gates (FAILED once in phone-webkit at the old ceiling, 183, passing on its retry at 175). The install list is 168
+  // build files (offlineBuild on round 104's manifest), against a build of about 230: the ceiling is WebKit's 183, with the
+  // margin of two.
+  expect(files.length, report).toBeLessThan(186);
   await ctx.close();
 });
 

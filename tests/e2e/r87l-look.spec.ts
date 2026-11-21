@@ -74,7 +74,8 @@ test('r87 look 3: "/" puts the cursor in the search, never while a field is bein
   await page.goto('/'); await ready(page);
   await expect(page.locator('#topbar .site-search input')).toHaveCount(0); // the bar's search there is the way to the page's box
   await page.locator('body').press('/');
-  await expect(page.locator('main .toolrow .searchbar')).toBeFocused();
+  // Round 104: the front page's large box is the header's engine (SiteSearch), in the page's toolbar.
+  await expect(page.locator('main .frontsearch input')).toBeFocused();
 });
 
 // Round eighty-seven, the integration: the bar's search is the browse box (r87c), whose Enter opens the row it marks, the

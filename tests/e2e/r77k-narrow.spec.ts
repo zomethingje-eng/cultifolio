@@ -24,7 +24,7 @@ async function narrow(p: Page) {
 
 test('the front page asks for another letter or word, never "nothing matches" @phone', async ({ page }) => {
   await narrow(page);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('cape provinces');
   const said = page.getByText('Too many species match “cape provinces” to list them all. Type another letter or another word to narrow it.');

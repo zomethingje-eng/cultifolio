@@ -217,7 +217,7 @@ import { heroOf } from '../src/lib/dossier/dedupe';
 import { shownPhotos, heldNamesOf, kindNamesOf, sharedPhotos, markShared, judgePhotos, type HeldNames } from '../src/lib/dossier/photo-kind';
 import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
-import { keptNames, englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, searchedAsEnglish, recordLowOf, firstSeen, firstsOf, type VernacularName, type HomonymRecord } from '../src/lib/dossier/index-entry';
+import { keptNames, englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, searchedAsEnglish, recordLowOf, habitatYearOf, firstSeen, firstsOf, type VernacularName, type HomonymRecord } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -708,13 +708,16 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
   const changed = dayNumber(d.changed?.on);
   // The record low as the page shows it, and the day the page was first seen (round eighty-seven, C5; `index-entry.ts`).
   const low = recordLowOf(setAsideExtremes(d.climate as Climate));
+  // The rain a year and the season, as the page's cards read them (round 104; `habitatYearOf`): the search's rows.
+  const hy = habitatYearOf(d.climate as Parameters<typeof habitatYearOf>[0]);
+  if (hy.rain !== undefined) c5.rain++;
   const was = firstsBefore().get(d.key);
   const first = firstSeen(was, d as Parameters<typeof firstSeen>[1]);
   c5.entries++;
   if (low !== undefined) c5.low++;
   if (first) { if (was !== undefined && first === was) c5.carried++; else c5.fromDossier++; }
   // The names with the other spellings the search alone reads (`indexNames`; round sixty-nine; triage-68 N2, S-F2).
-  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus, older: olderOf.get(d.key) }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(kew.length ? { kew } : {}), ...(merged.length ? { merged } : {}), ...(gname ? { gname } : {}), ...(changed ? { changed } : {}), ...(low !== undefined ? { low } : {}), ...(first ? { first } : {}) };
+  return { status: d.name.status, key: d.key, ...(d.ids?.gbif != null ? { gbif: d.ids.gbif } : {}), slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus, older: olderOf.get(d.key) }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(kew.length ? { kew } : {}), ...(merged.length ? { merged } : {}), ...(gname ? { gname } : {}), ...(changed ? { changed } : {}), ...(low !== undefined ? { low } : {}), ...hy, ...(first ? { first } : {}) };
 }
 
 /**
@@ -724,8 +727,8 @@ function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { stat
  */
 let firstsHeld: Map<string, number> | null = null;
 /** What the index's `low` and `first` were written from, for --index's line (round eighty-seven, C5). */
-const c5 = { entries: 0, low: 0, carried: 0, fromDossier: 0 };
-const c5Line = () => `  ${c5.low} of the ${c5.entries} entries with a record low (low); first seen (first): ${c5.carried} as the index before gave it, ${c5.fromDossier} the earliest day the dossier records${firstsHeld?.size ? '' : ' (no index before held one)'}`;
+const c5 = { entries: 0, low: 0, rain: 0, carried: 0, fromDossier: 0 };
+const c5Line = () => `  ${c5.low} of the ${c5.entries} entries with a record low (low), ${c5.rain} with the rain a year and the season (rain, yr); first seen (first): ${c5.carried} as the index before gave it, ${c5.fromDossier} the earliest day the dossier records${firstsHeld?.size ? '' : ' (no index before held one)'}`;
 function firstsBefore(): Map<string, number> {
   if (firstsHeld) return firstsHeld;
   const at = fixtures ? `${outDir}/index.json` : `${outDir}/s/v${DOSSIER_V}/index.json`;
@@ -757,7 +760,7 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
   notAccepted = [];
   unreadable = [];
   aliases = [];
-  c5.entries = c5.low = c5.carried = c5.fromDossier = 0;
+  c5.entries = c5.low = c5.rain = c5.carried = c5.fromDossier = 0;
   for (const f of readdirSync(dir)) {
     if (!DOSSIER_FILE.test(f)) continue;
     try {

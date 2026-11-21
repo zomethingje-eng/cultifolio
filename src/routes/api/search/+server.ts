@@ -79,10 +79,19 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // letter (round eighty; review-w 2, review-p 3: "60 matches" was the cap). `regions`: the regions of origin the query
   // names, each with the Origin grouping's row it falls under (review-w 6).
   type Region = { name: string; row: { id: string; label: string } };
-  type Counted = { total?: number; kept?: number; regions?: Region[] };
+  // `held`: a query of two words or more that nothing answers, whose first word is a genus of the reference (round 104;
+  // the third hand-off's 15a: "monstera albo" ended at "Nothing in the reference matches" beside 14 Monstera). The genus,
+  // its count and its family, never its species as hits: the page names the genus and says what the reference lists.
+  type Held = { genus: string; n: number; slug: string; family?: string };
+  type Counted = { total?: number; kept?: number; regions?: Region[]; held?: Held };
   const answer = (corpus: string, hits: unknown[], relaxed: Relaxed | undefined, near: boolean, narrow = false, k: Counted = {}) =>
-    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...(k.total !== undefined ? { total: k.total } : {}), ...(k.kept !== undefined ? { kept: k.kept } : {}), ...(at ? { at } : {}), ...(k.regions?.length ? { regions: k.regions } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}), ...(narrow ? { 'x-search-narrow': '1' } : {}), ...(k.total !== undefined ? { 'x-search-total': String(k.total) } : {}), ...(k.kept !== undefined ? { 'x-search-kept': String(k.kept) } : {}), ...(k.regions?.length ? { 'x-search-regions': encodeURIComponent(JSON.stringify(k.regions)) } : {}) } });
-  const counted = (x: { total?: unknown; kept?: unknown; regions?: unknown }): Counted => ({
+    new Response(JSON.stringify(shaped ? { hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...(k.total !== undefined ? { total: k.total } : {}), ...(k.kept !== undefined ? { kept: k.kept } : {}), ...(at ? { at } : {}), ...(k.regions?.length ? { regions: k.regions } : {}), ...(k.held ? { held: k.held } : {}) } : hits), { headers: { 'content-type': 'application/json', ...headers(corpus), ...(relaxed ? { 'x-search-relaxed': encodeURIComponent(relaxed.query) } : {}), ...(relaxed?.left ? { 'x-search-left': encodeURIComponent(relaxed.left) } : {}), ...(near ? { 'x-search-near': '1' } : {}), ...(narrow ? { 'x-search-narrow': '1' } : {}), ...(k.total !== undefined ? { 'x-search-total': String(k.total) } : {}), ...(k.kept !== undefined ? { 'x-search-kept': String(k.kept) } : {}), ...(k.regions?.length ? { 'x-search-regions': encodeURIComponent(JSON.stringify(k.regions)) } : {}), ...(k.held ? { 'x-search-held': encodeURIComponent(JSON.stringify(k.held)) } : {}) } });
+  const heldOf = (h: unknown): Held | undefined => {
+    const x = h as Held | null;
+    return x && typeof x.genus === 'string' && Number.isInteger(x.n) && typeof x.slug === 'string' ? { genus: x.genus, n: x.n, slug: x.slug, ...(typeof x.family === 'string' ? { family: x.family } : {}) } : undefined;
+  };
+  const counted = (x: { total?: unknown; kept?: unknown; regions?: unknown; held?: unknown }): Counted => ({
+    ...(heldOf(x.held) ? { held: heldOf(x.held) } : {}),
     ...(Number.isInteger(x.total) ? { total: x.total as number } : {}),
     ...(Number.isInteger(x.kept) ? { kept: x.kept as number } : {}),
     ...(Array.isArray(x.regions) ? { regions: (x.regions as Region[]).filter((r) => r && typeof r.name === 'string' && r.row && typeof r.row.id === 'string' && typeof r.row.label === 'string') } : {})
@@ -91,7 +100,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const hit = edge ? await edge.match(key).catch(() => undefined) : undefined;
   if (hit) {
     // Kept as `{ hits, relaxed? }` whichever shape was asked, and answered in the shape this request asks for.
-    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown; narrow?: unknown; total?: unknown; kept?: unknown; regions?: unknown } | null;
+    const kept = (await hit.json().catch(() => null)) as { hits?: unknown; relaxed?: { query?: unknown; left?: unknown }; near?: unknown; narrow?: unknown; total?: unknown; kept?: unknown; regions?: unknown; held?: unknown } | null;
     if (kept && Array.isArray(kept.hits)) return answer(c.corpus, kept.hits, typeof kept.relaxed?.query === 'string' ? { query: kept.relaxed.query, ...(typeof kept.relaxed.left === 'string' ? { left: kept.relaxed.left } : {}) } : undefined, kept.near === true, kept.narrow === true, counted(kept));
   }
   // The reads every search makes first (the directories of its words, the tables and blocks), started before the address's
@@ -164,7 +173,23 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const names = await regionNames;
   // A region by a typing error only where no species answered the query as typed (round eighty-four; review-s S12).
   const regions = names ? regionsTyped(q, names, !hits.length || near).map((name) => { const label = broadRegion(name); return { name, row: { id: slugify(label), label } }; }) : [];
-  const k: Counted = { ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}), ...(regions.length ? { regions } : {}) };
+  // The genus that is held (round 104; the third hand-off's 15a): after every reading above, nothing answers, and the
+  // query's first word, as typed, is a genus of the reference (`genera.json`, read by the readings above already). One
+  // more search, of the genus alone, for its family; its species are not given as hits (rule 3).
+  let held: Held | undefined;
+  const words = q.trim().split(/\s+/);
+  if (!hits.length && !narrow && !at && words.length >= 2) {
+    const first = words[0].replace(/[^\p{L}-]/gu, '').toLowerCase();
+    const genera = await lookupOf(c, platform, fetch).genera();
+    const g = first.length >= 2 ? [...genera.keys()].find((x) => x.toLowerCase() === first) : undefined;
+    const n = g ? genera.get(g) ?? 0 : 0;
+    if (g && n > 0) {
+      const s = await searchAnswer(platform, fetch, g, 6, miss, c, 0);
+      const family = 'stop' in s ? undefined : s.hits.find((h) => genusOf(h.name) === g)?.family;
+      held = { genus: g, n, slug: slugify(g), ...(family ? { family } : {}) };
+    }
+  }
+  const k: Counted = { ...(a.total !== undefined ? { total: a.total } : {}), ...(a.kept !== undefined ? { kept: a.kept } : {}), ...(regions.length ? { regions } : {}), ...(held ? { held } : {}) };
   // Kept only under the corpus the answer is from (the key names the corpus loaded above, which is the one searched).
   if (edge && corpus === c.corpus) {
     const put = edge.put(key, new Response(JSON.stringify({ hits, ...(relaxed ? { relaxed } : {}), ...(near ? { near } : {}), ...(narrow ? { narrow } : {}), ...k }), { headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${CACHE_S}` } })).catch(() => { /* the answer is given; a copy not kept at the edge is searched again next time */ });

@@ -1,0 +1,15 @@
+# Round 104 (docs/PLAN-104.md): the index written again on round 104's code, so each entry carries the rain a year and
+# the season (`rain`, `yr`) the search's species rows read; no page is built, no dossier changes. Then the upload and the
+# live check. Run it after round 104 is deployed (the app reads the new fields and says nothing where they are absent):
+#   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r104-index.txt
+# Minutes, not hours; it asks no outside service. Not while the daily plan runs (the lock says so).
+dossier --index
+review Read the index's lines: "index: 48375 species", and the entries line, "N of the 48375 entries with a record low (low), M with the rain a year and the season (rain, yr)". M is every page with twelve habitat months, the same count as "nearest habitat climates for M species". Stop and paste the end of corpus-step.log back if it is not. Then --go-on.
+expect let I /index: ([\d,]+) species/
+expect let W /nearest habitat climates for ([\d,]+) species/
+expect let R /([\d,]+) with the rain a year and the season/
+expect I = 48375
+expect W >= 38000
+expect R >= 38000
+upload
+live-check

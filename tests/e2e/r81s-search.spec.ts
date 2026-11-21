@@ -59,7 +59,7 @@ test('r81s 2: a search reloaded is answered again, not "nothing matches" @phone'
   const errors = errorsOf(page);
   const asked = new Set<string>();
   await answers(page, 'Lithops', 43, asked);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('lithops');
   await expect(page.getByRole('status').filter({ hasText: '30 of 43 matches' })).toBeVisible();
@@ -75,7 +75,7 @@ test('r81s 2: a search reloaded is answered again, not "nothing matches" @phone'
 test('r81s 3: Back from a species page brings the list back as long as it was, the hit where it was @phone', async ({ page }) => {
   const asked = new Set<string>();
   await answers(page, 'Echeveria', 259, asked);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('echeveria');
   await expect(page.getByRole('status').filter({ hasText: '30 of 259 matches' })).toBeVisible();
@@ -117,7 +117,7 @@ test('r81s 4: a grower\'s whole-catalogue search, a hit opened, Back: the catalo
 test('r81s 5: a hit found by an older name says so, and opens its page with the name @phone', async ({ page }) => {
   const asked = new Set<string>();
   await answers(page, 'Newgenus', 5, asked);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('Oldgenus quux');
   const row = page.locator('.hits a.hitrow').nth(2);

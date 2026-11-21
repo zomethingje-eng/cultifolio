@@ -74,7 +74,7 @@ test('the search finds it by its name and by Kew\'s older name, as a page with n
   await expect(page).toHaveURL(/\/species\/hesperocyparis-lusitanica\?was=Cupressus%20lusitanica$/);
   await expect(page.locator('#was-synonym')).toHaveText("Cupressus lusitanica is an older name of this species: Kew's World Checklist files it under Hesperocyparis lusitanica, and the reference files it under that name.");
   // On the front page, its tile says the climate was not checked, never pending.
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's list in place is at its address; the bare `/`'s box is the header's search
   await ready(page);
   await page.getByRole('searchbox').first().fill('Hesperocyparis');
   const tile = page.locator('a[href="/species/hesperocyparis-lusitanica"]').first();

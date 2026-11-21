@@ -14,7 +14,7 @@ test.use({ locale: 'en-GB' });
 
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 /** The boxes a reader sees: text fields and the bar's stand-in, each drawn and on the screen's width. */
-const boxesInView = (p: Page) => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('input[type=search], #topbar .site-search input, #topbar .tobox')].filter((e) => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0 && r.top < innerHeight; }).length);
+const boxesInView = (p: Page) => p.evaluate(() => [...document.querySelectorAll<HTMLElement>('input[type=search], main .frontsearch input, #topbar .site-search input, #topbar .tobox')].filter((e) => { const s = getComputedStyle(e); const r = e.getBoundingClientRect(); return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 0 && r.height > 0 && r.top < innerHeight; }).length);
 
 test('r102a 1: the pitch and the one search box are on the first screen, with no catalogue under them @phone', async ({ page }) => {
   await page.goto('/');
@@ -90,17 +90,17 @@ test('r102a 4: every catalogue address and a search still draw what they drew @p
   await ready(page);
   await expect(page.locator('.hgrid.opened .tile').first()).toBeVisible();
   expect(genus).toBeTruthy();
-  // A search's address draws its results; typing on the front page does too, and clearing it brings the page back.
+  // A search's address draws its results. Since round 104 typing on the front page opens the header's panel under the
+  // box (r104b) and the page stays as it is; the panel's last row is this address.
   await page.goto('/?q=copiapoa');
   await ready(page);
   await expect(page.locator('.rows.hits .hitrow').first()).toBeVisible();
   await page.goto('/');
   await ready(page);
   await page.locator('#search').fill('copiapoa');
-  await expect(page.locator('.rows.hits .hitrow').first()).toBeVisible();
-  await expect(page.locator('.frontpitch')).toHaveCount(0);
-  await page.locator('#search').fill('');
+  await expect(page.locator('.frontsearch [role=option]').first()).toBeVisible();
   await expect(page.locator('.frontpitch')).toBeVisible();
+  await expect(page.locator('.frontsearch [role=option]').last()).toHaveAttribute('href', '/?q=copiapoa');
 });
 
 test('r102a 5: the bar\'s stand-in box stays on a catalogue address, where the page\'s box is lower', async ({ page }) => {
@@ -116,7 +116,7 @@ test('r102a 6: the page holds the checks a reviewer runs by hand: one H1, headin
     const main = document.querySelector('main')!;
     const levels = [...main.querySelectorAll('h1, h2, h3')].map((h) => Number(h.tagName[1]));
     const skips = levels.filter((l, i) => i > 0 && l > levels[i - 1] + 1).length;
-    const unnamed = [...main.querySelectorAll<HTMLElement>('a[href], button, input')].filter((e) => !(e.getAttribute('aria-label') || e.textContent?.trim() || e.getAttribute('aria-hidden') === 'true' || e.getAttribute('tabindex') === '-1')).map((e) => e.outerHTML.slice(0, 80));
+    const unnamed = [...main.querySelectorAll<HTMLElement>('a[href], button, input')].filter((e) => !(e.getAttribute('aria-label') || e.textContent?.trim() || (e as HTMLInputElement).labels?.[0]?.textContent?.trim() || e.getAttribute('aria-hidden') === 'true' || e.getAttribute('tabindex') === '-1')).map((e) => e.outerHTML.slice(0, 80));
     const imgs = [...main.querySelectorAll('img')].filter((i) => !i.hasAttribute('alt')).length;
     return { first: levels[0], h1s: levels.filter((l) => l === 1).length, skips, unnamed, imgs };
   });

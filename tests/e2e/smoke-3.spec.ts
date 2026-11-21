@@ -15,7 +15,7 @@ smokeSetup();
 /* ---------------------------------------------------------------- the round after deploy: search, first screen, related, compare, card, today */
 
 test('search forgives a typing error, ranks the genus first, and the picker does the same', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
   await page.fill('.searchbar', 'copiapao');
   await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
@@ -400,6 +400,7 @@ test('keyboard: the menu keeps Tab inside and Escape returns focus; Enter in the
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-controls'))).toBe('menu'); // the menu's button ("More" since round eighty-seven)
   // the search: Enter opens the first match
+  await page.goto('/?by=genus'); await ready(page); // round 104: the catalogue's box (the bare / has the header's engine, r104b)
   await page.fill('.searchbar', 'copiapoa hum');
   await expect(page.locator('.hitrow').first()).toBeVisible();
   await page.locator('.searchbar').press('Enter');
@@ -1177,7 +1178,7 @@ test('round forty-two: the home page preloads its first screen\'s photograph (th
 
 test('round forty-six: a client-side navigation to a species page whose HTML the Worker holds gets its data, not the held HTML (3)', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea'); // the HTML is held for a minute now
-  await page.goto('/'); await ready(page); // hydrated: a word typed into the server's HTML is dropped (round sixty-four)
+  await page.goto('/?by=genus'); await ready(page); // hydrated: a word typed into the server's HTML is dropped (round sixty-four); the catalogue's box since round 104
   await page.fill('.searchbar', 'copiapoa cin');
   await page.locator('.hitrow', { hasText: 'Copiapoa cinerea' }).first().click(); // a client-side navigation: the data request goes under the page's URL
   await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);

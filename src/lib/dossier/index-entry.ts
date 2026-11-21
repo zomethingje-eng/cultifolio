@@ -1,4 +1,7 @@
 import type { PageId } from '../core/page-id';
+import { growingYear } from '../core/sheet';
+import { seasonKey, type SeasonKey } from '../core/season-key';
+import { yearRain } from '../climate/year-rain';
 
 /** One species as the index lists it: what the catalogue, the search and the bucket files are built from, on the PC and in the Worker alike. */
 export interface IndexEntry {
@@ -93,6 +96,15 @@ export interface IndexEntry {
    * built before.
    */
   first?: number;
+  /**
+   * The rain a year in mm, rounded to the whole mm, as the species page's rain card shows it (`yearRain`: the median of
+   * the cells' yearly totals, or the twelve monthly medians added in a dossier built before round 63), written at index
+   * time (round 104; the second hand-off's round 9) for the search's rows and, from round 10, browse's filters. Absent
+   * where the page has no habitat climate, and in an index built before.
+   */
+  rain?: number;
+  /** The habitat year's season (`seasonKey` of `growingYear`; `$core/season-key`), written with `rain`. Absent with it. */
+  yr?: import('../core/season-key').SeasonKey;
 }
 
 /** One vernacular name as a dossier holds it (src/lib/dossier/schema.ts `Vernacular`); `preferred`, `sources` and `alsoFrom` are absent in a dossier whose names were fetched before, and read as "not preferred" and "one source". */
@@ -809,6 +821,19 @@ export function kewAuthorsOf(rec: HomonymRecord | undefined, n: string): string[
 export function recordLowOf(climate: { status?: string; extremes?: { minAbs?: unknown } | null } | null | undefined): number | undefined {
   const m = climate?.status === 'ok' ? climate.extremes?.minAbs : undefined;
   return typeof m === 'number' && Number.isFinite(m) ? Math.round(m * 10) / 10 : undefined;
+}
+
+/**
+ * The rain a year and the season the index carries (`rain`, `yr`; round 104): read from the habitat's twelve months as
+ * the species page reads them (`yearRain` for the rain card, `growingYear` for the season card). Nothing for a page with
+ * no habitat climate, or without twelve months.
+ */
+export function habitatYearOf(climate: { status?: string; months?: ReadonlyArray<{ precipMm: number; tmean: number; tmin: number; tmax: number }> | null; annualRain?: { p50?: number | null } | null } | null | undefined): { rain?: number; yr?: SeasonKey } {
+  const months = climate?.status === 'ok' ? climate.months : null;
+  if (!months || months.length !== 12 || months.some((m) => !Number.isFinite(m.precipMm) || !Number.isFinite(m.tmean))) return {};
+  const year = growingYear(months as Parameters<typeof growingYear>[0], null);
+  const rain = Math.round(yearRain(months, climate!.annualRain).mm);
+  return { rain, ...(year ? { yr: seasonKey(year) } : {}) };
 }
 
 const ISO_DAY = /^(\d{4}-\d{2}-\d{2})/;

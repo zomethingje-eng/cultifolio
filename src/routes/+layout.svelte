@@ -434,7 +434,7 @@
     if (menuOpen || document.querySelector('[aria-modal="true"], dialog[open]')) return;
     const t = e.target as Element | null;
     if (typing(t) || (t instanceof HTMLElement && !!t.closest('[contenteditable]'))) return;
-    const box = [...document.querySelectorAll<HTMLInputElement>('main .toolrow .searchbar, #topbar .site-search input')].find((x) => x.offsetParent !== null);
+    const box = [...document.querySelectorAll<HTMLInputElement>('main .toolrow .searchbar, main .frontsearch input, #topbar .site-search input')].find((x) => x.offsetParent !== null);
     // The one handler of the key (the box itself has none): where the bar's box is behind its button, it opens there.
     if (!box) { if (!ownSearch && barBox()) { e.preventDefault(); void openBarSearch(); } return; }
     e.preventDefault();
@@ -512,9 +512,9 @@
   {:else}
     <!-- On the front page the bar's search is the way to the page's own box, which searches the catalogue and the grower's
          plants: it takes the cursor there, so the search is on the first screen under the lead (round eighty-seven). -->
-    <a class="site-search site-search-box tobox" href="#search" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus({ preventScroll: true }); } }}><span class="ph">Search a plant, a genus, a region</span><kbd aria-hidden="true">/</kbd></a>
+    <a class="site-search site-search-box tobox" href="#search" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar, main .frontsearch input'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus({ preventScroll: true }); } }}><span class="ph">Search a plant, a genus, a region</span><kbd aria-hidden="true">/</kbd></a>
   {/if}
-  <a class="iconbtn searchicon" href="/#search" aria-label="Search the reference" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus(); } else if (!ownSearch && barBox()) { e.preventDefault(); void openBarSearch(); } }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></a>
+  <a class="iconbtn searchicon" href="/#search" aria-label="Search the reference" onclick={(e) => { const box = document.querySelector<HTMLInputElement>('main .toolrow .searchbar, main .frontsearch input'); if (box) { e.preventDefault(); box.scrollIntoView({ block: 'center' }); box.focus(); } else if (!ownSearch && barBox()) { e.preventDefault(); void openBarSearch(); } }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg></a>
   <!-- The places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
        current one says so to a screen reader, not only in colour (round fifty-eight; the accessibility review). -->
   <nav class="topseg plain" aria-label="Main">

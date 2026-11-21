@@ -23,10 +23,18 @@
   import { recentSearches, rememberSearch, forgetSearches, pinnedViews, type Recent } from './recent';
   import { openPin } from './pinned.svelte';
   import type { Suggestion } from './suggest';
+  import { rowFigures } from './row-words';
+  import { units } from '$lib/ui/units.svelte';
+  import { accNo, type Accession } from '$lib/db/types';
+  import { plantHref } from '$lib/db/links';
 
-  let { placeholder = 'Search a plant, a genus, a region', id = 'site-search' }: { placeholder?: string; id?: string } = $props();
+  /**
+   * `size`: "bar" in the header; "large" for the home page's own box (round 104; the second hand-off's round 9: one search,
+   * the header's, everywhere), the same engine and rows, its panel in the page's flow under the box.
+   */
+  let { placeholder = 'Search a plant, a genus, a region', id = 'site-search', size = 'bar', label = 'Search the reference' }: { placeholder?: string; id?: string; size?: 'bar' | 'large'; label?: string } = $props();
 
-  type Group = 'pinned' | 'recent' | 'browse' | 'species' | 'all' | 'clear';
+  type Group = 'mine' | 'pinned' | 'recent' | 'browse' | 'species' | 'all' | 'clear';
   type Option = { id: string; group: Group; label: string; /** The whole label is a scientific name, or this part of it is. */ sci?: boolean | string; sub?: string; href: string; exact?: boolean; /** A pin's browse query. */ view?: string };
 
   let q = $state('');
@@ -35,6 +43,8 @@
   let active = $state(-1);
   let browse = $state<Suggestion[]>([]);
   let species = $state<SearchFound | null>(null);
+  /** What the panel says when no name of the reference matches at all (the third hand-off's 15a): one line, not silence. */
+  const NONE = (t: string) => `No name in the reference matches “${t}”.`;
   let note = $state<string | null>(null);
   let busy = $state(false);
   let recent = $state<Recent[]>([]);
@@ -71,8 +81,35 @@
     const why = merged ? mergedSentence(merged) : older && isGbifName(older, h) ? gbifNameWords(older) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '';
     const t = fold(typed);
     const exact = !!t && (fold(h.name) === t || (!!older && fold(older) === t) || (!!merged && fold(merged) === t));
-    return { id: `${id}-s${i}`, group: 'species', label: h.name, sci: true, sub: [why, h.common, h.family].filter(Boolean).join(' · '), href: `/species/${h.slug}${was ? `?was=${encodeURIComponent(was)}` : ''}`, exact };
+    // Figures, never "climate known" (round 104): the record low, the rain a year and the season in words, or, with no
+    // habitat climate, the first native region and the photographs (`rowFigures`); the family where an older index gives
+    // neither, so no row stands bare.
+    return { id: `${id}-s${i}`, group: 'species', label: h.name, sci: true, sub: [why, h.common, rowFigures(h, units.current) || h.family].filter(Boolean).join(' · '), href: `/species/${h.slug}${was ? `?was=${encodeURIComponent(was)}` : ''}`, exact };
   }
+
+  /**
+   * Your plants (round 104; the second hand-off's round 9): matched here, in the browser, from the open collection, as the
+   * lens is; nothing of it is sent. By the plant's number, field number, name as received, cultivar or species, grouped by
+   * species: how many plants, their numbers, their spaces. Only plants growing; none before the collection has opened.
+   */
+  const mine = $derived.by((): Option[] => {
+    const needle = q.trim().toLowerCase();
+    if (needle.length < 2 || !collection.ready) return [];
+    const by = new Map<string, Accession[]>();
+    for (const a of collection.accessions) {
+      if (a.status !== 'growing') continue;
+      const hit = [accNo(a), a.fieldNumber, a.nameAsReceived, a.cultivar, a.taxonName].some((x) => (x ?? '').toLowerCase().includes(needle));
+      if (!hit) continue;
+      const k = a.taxonName.trim() || accNo(a);
+      (by.get(k) ?? by.set(k, []).get(k)!).push(a);
+    }
+    return [...by.entries()].slice(0, 4).map(([name, as], i) => {
+      const nos = as.slice(0, 3).map(accNo).join(', ') + (as.length > 3 ? ` and ${as.length - 3} more` : '');
+      const places = [...new Set(as.map((a) => (a.locationId ? collection.locationName(a.locationId) : '')).filter(Boolean))];
+      const sub = [`${as.length} plant${as.length === 1 ? '' : 's'}`, nos, places.slice(0, 2).join(', ') + (places.length > 2 ? ` and ${places.length - 2} more` : '')].filter(Boolean).join(' · ');
+      return { id: `${id}-m${i}`, group: 'mine' as const, label: name, sci: true, sub, href: as.length === 1 ? plantHref(as[0]) : `/plants?q=${encodeURIComponent(name)}` };
+    });
+  });
 
   const options = $derived.by((): Option[] => {
     const typed = q.trim();
@@ -85,8 +122,12 @@
       return out;
     }
     const b: Option[] = browse.map((s, i) => ({ id: `${id}-b${i}`, group: 'browse' as const, label: s.label, ...(s.sci ? { sci: s.sci } : {}), sub: s.sub, href: s.href }));
+    // The genus that is held (the third hand-off's 15a): a query nothing answered whose first word is a genus here gets
+    // the genus's row first, where the panel had none ("monstera albo").
+    const held = Array.isArray(species) && !species.length ? species.held : undefined;
+    if (held && !browse.some((x) => x.href === `/genus/${held.slug}`)) b.unshift({ id: `${id}-bh`, group: 'browse', label: held.genus, sci: true, sub: `genus${held.family ? ` · ${held.family}` : ''} · ${held.n.toLocaleString('en-GB')} species`, href: `/genus/${held.slug}` });
     const sp: Option[] = Array.isArray(species) ? species.slice(0, 6).map((h, i) => speciesOption(h, i, typed)) : [];
-    return [...b, ...sp, { id: `${id}-all`, group: 'all', label: `Every species matching “${typed}”`, href: `/?q=${encodeURIComponent(typed)}` }];
+    return [...mine, ...b, ...sp, { id: `${id}-all`, group: 'all', label: `Every species matching “${typed}”`, href: `/?q=${encodeURIComponent(typed)}` }];
   });
   /** The row Enter opens with nothing picked: a full species name typed, else the first row. */
   const firstPick = $derived.by(() => { const e = options.findIndex((o) => o.exact); return e >= 0 ? e : options.length ? 0 : -1; });
@@ -109,7 +150,7 @@
       if (n !== asked) return; // a later query is on its way
       browse = b;
       species = Array.isArray(s) ? s : null;
-      note = s === null ? 'The reference could not be reached, so no species are listed.' : !Array.isArray(s) ? `The search is resting for this address; try again in ${Math.max(1, Math.round(s.limited / 60))} minute${Math.round(s.limited / 60) > 1 ? 's' : ''}.` : s.narrow ? narrowSentence(text) : searchedSentence(text, s, s);
+      note = s === null ? 'The reference could not be reached, so no species are listed.' : Array.isArray(s) && !s.length && !b.length && !s.held && !s.narrow ? NONE(text) : !Array.isArray(s) ? `The search is resting for this address; try again in ${Math.max(1, Math.round(s.limited / 60))} minute${Math.round(s.limited / 60) > 1 ? 's' : ''}.` : s.narrow ? narrowSentence(text) : searchedSentence(text, s, s);
       busy = false;
       active = -1;
     }, 120);
@@ -142,11 +183,13 @@
       else if (q) { e.preventDefault(); q = ''; ask(''); }
     } else if (e.key === 'Tab') { open = false; }
   }
+  /** The words put in the box from outside (the front page's "Try" line; round 104), and its panel opened for them. */
+  export function fill(text: string) { q = text; input?.focus(); open = true; active = -1; ask(text); }
   function oninput() { open = true; active = -1; ask(q); }
   function onfocus() { focused = true; recent = recentSearches(); pinned = pinnedViews(); pinsRead = collection.ready; open = true; }
   function onblur() { focused = false; setTimeout(() => { if (!focused) open = false; }, 120); }
 
-  const groupLabel: Record<Group, string> = { pinned: 'Pinned', recent: 'Recent searches', browse: 'Browse', species: 'Species', all: '', clear: '' };
+  const groupLabel: Record<Group, string> = { mine: 'Your plants', pinned: 'Pinned', recent: 'Recent searches', browse: 'Browse', species: 'Species', all: '', clear: '' };
   const groups = $derived.by(() => {
     const out: Array<{ g: Group; items: Array<{ o: Option; i: number }> }> = [];
     options.forEach((o, i) => { const last = out[out.length - 1]; const g = o.group === 'clear' ? 'recent' : o.group; if (last && last.g === g) last.items.push({ o, i }); else out.push({ g, items: [{ o, i }] }); });
@@ -159,14 +202,14 @@
   const status = $derived.by(() => {
     if (!q.trim()) return '';
     if (busy) return 'Searching';
-    const n = browse.length + (Array.isArray(species) ? Math.min(6, species.length) : 0);
+    const n = mine.length + browse.length + (Array.isArray(species) ? Math.min(6, species.length) : 0);
     return n ? `${n} suggestion${n === 1 ? '' : 's'}${note ? `. ${note}` : ''}` : (note ?? 'No suggestions');
   });
 </script>
 
-<form class="sitesearch" class:focused role="search" action="/" method="get" onsubmit={(e) => e.preventDefault()}>
+<form class="sitesearch" class:focused class:large={size === 'large'} role="search" action="/" method="get" onsubmit={(e) => e.preventDefault()}>
   <label class="box site-search-box">
-    <span class="sr">Search the reference</span>
+    <span class="sr">{label}</span>
     <input
       bind:this={input}
       bind:value={q}
@@ -241,10 +284,14 @@
   .enter { grid-column: 2; grid-row: 1; font-size: var(--fs-xs); color: var(--mut, var(--ink3)); border: 1px solid var(--kbd, var(--rule2)); border-radius: 3px; padding: 0 4px; align-self: center; }
   .opt.all .lab, .opt.clear .lab { color: var(--link, var(--accent)); }
   .foot { margin: 6px 12px 2px; font-size: var(--fs-sm); color: var(--mut, var(--ink3)); }
+  /* The home page's large box (round 104): the box the page sets; its panel under it in every width, never over the bar. */
+  .large { max-width: none; }
+  .large .list { min-width: 0; }
   @media (max-width: 899px) {
+    .foot { display: none; }
     .sitesearch.focused .cancel { display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; border: 0; background: none; color: var(--link, var(--accent)); font: inherit; }
     .box { height: 40px; }
-    .list { position: fixed; top: var(--bar-h, 56px); left: 0; right: 0; bottom: 0; max-height: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; min-width: 0; }
+    .sitesearch:not(.large) .list { position: fixed; top: var(--bar-h, 56px); left: 0; right: 0; bottom: 0; max-height: none; border: 0; border-top: 1px solid var(--rule); border-radius: 0; min-width: 0; }
     .opt { min-height: 44px; align-content: center; padding: 8px 16px; }
   }
 </style>

@@ -107,7 +107,7 @@ test('a genus followed by a capitalised word that is no species is read as the g
 });
 
 test('a correct name with its author is not said to have matched nothing (search 3; needs W\'s sentence)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   const box = page.getByLabel('Search the whole species catalogue');
   await box.fill('Copiapoa cinerea Phil.');
@@ -118,7 +118,7 @@ test('a correct name with its author is not said to have matched nothing (search
 });
 
 test('a similar spelling is said on the front page (search 18; needs W\'s sentence)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('Copiapoa cinereaa');
   await expect(page.locator('.seccount.relaxed')).toContainText('No name in the reference is spelt “Copiapoa cinereaa”; these are similar spellings.'); // base: nothing said

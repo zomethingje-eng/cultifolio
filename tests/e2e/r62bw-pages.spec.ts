@@ -68,7 +68,7 @@ test.describe('desktop, 1280 × 800, the fixture', () => {
   });
 
   test('a name pasted with its author is not said to have matched nothing (the search review\'s 3)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
     await ready(page);
     const box = page.getByLabel('Search the whole species catalogue');
     await box.fill('Copiapoa cinerea Phil.');
@@ -79,14 +79,14 @@ test.describe('desktop, 1280 × 800, the fixture', () => {
   });
 
   test('a variety the reference files under its species: nothing matched as written, and the retry says so', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
     await ready(page);
     await page.getByLabel('Search the whole species catalogue').fill('Copiapoa cinerea var. nonexista');
     await expect(page.locator('.seccount.relaxed')).toHaveText('Nothing matched “Copiapoa cinerea var. nonexista” as written. Showing results for “Copiapoa cinerea”.');
   });
 
   test('a similar spelling is said as one (the search review\'s 18)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
     await ready(page);
     await page.getByLabel('Search the whole species catalogue').fill('Copiapoa cinereaa');
     await expect(page.locator('.hitrow').first()).toContainText('Copiapoa cinerea');

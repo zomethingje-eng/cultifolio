@@ -37,7 +37,7 @@ const box = (p: Page) => p.getByLabel('Search the whole species catalogue');
 test('the count is how many match, and "Show more" brings the rest @phone', async ({ page }) => {
   const asked: string[] = [];
   await answers(page, { genus: 'Testgenus', total: 75 }, asked);
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's list in place is at its address; the bare `/`'s box is the header's search
   await ready(page);
   await box(page).fill('test');
   await expect(page.getByRole('status').filter({ hasText: '30 of 75 matches' })).toBeVisible();
@@ -53,7 +53,7 @@ test('the count is how many match, and "Show more" brings the rest @phone', asyn
 
 test('a word too common to list all of says that only the first hundred are listed @phone', async ({ page }) => {
   await answers(page, { genus: 'Commonia', total: 3402, kept: 100 });
-  await page.goto('/');
+  await page.goto('/?by=genus');
   await ready(page);
   await box(page).fill('cape');
   await expect(page.getByRole('status').filter({ hasText: '30 of 3,402 matches' })).toBeVisible();
@@ -66,7 +66,7 @@ test('a word too common to list all of says that only the first hundred are list
 
 test('a genus typed alone links to its row of the catalogue @phone', async ({ page }) => {
   await answers(page, { genus: 'Echeveria', total: 220 });
-  await page.goto('/');
+  await page.goto('/?by=genus');
   await ready(page);
   await box(page).fill('echeveria');
   const link = page.getByRole('link', { name: 'its row of the catalogue' });
@@ -76,7 +76,7 @@ test('a genus typed alone links to its row of the catalogue @phone', async ({ pa
 
 test('a region of origin is said with its row in the Origin grouping, beside "too many" @phone', async ({ page }) => {
   await answers(page, { genus: 'X', total: 0, narrow: true, regions: [{ name: 'Cape Provinces', row: { id: 'southern-africa', label: 'Southern Africa' } }, { name: 'Northern Provinces', row: { id: 'southern-africa', label: 'Southern Africa' } }] });
-  await page.goto('/');
+  await page.goto('/?by=genus');
   await ready(page);
   await box(page).fill('provinses');
   await expect(page.getByText('Too many species match “provinses” to list them all.', { exact: false })).toBeVisible();
@@ -90,7 +90,7 @@ test('a region of origin is said with its row in the Origin grouping, beside "to
 for (const width of [1440, 1280]) {
   test(`the letter index is one line at ${width} px, every letter in it`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/');
+    await page.goto('/?by=genus');
     await ready(page);
     const nav = page.locator('nav.letters');
     if (!(await nav.count())) test.skip(true, 'the fixture has one letter: no index drawn');

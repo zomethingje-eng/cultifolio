@@ -68,3 +68,9 @@ review's hand-off, planned against the code); this is its record.
     did not change, and `node scripts/deploy.mjs` runs everything again.
 - **The live-check fix of round 102's deploy** (`scripts/live-check.mjs` reads the count from the H1) and round 102's
   deploy record ship in this commit.
+
+## The deploy
+
+- bc0883b, pushed 21 November 2026, deployed by `node scripts/deploy.mjs` as version 6959610c.
+- With no stamp from the gate, it ran svelte-check and the 6,401 unit tests again (all passed) before the build.
+- The live check passed, 23 of 23, with the note that GBIF still serves the backbone.

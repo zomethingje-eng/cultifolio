@@ -30,7 +30,7 @@ const HITS = [
 
 test('r82s 1: a hit found by a name by another author says so, with the record\'s author @phone', async ({ page }) => {
   await page.route(/\/api\/search\?/, (r: Route) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'x-search-total': '3' }, body: JSON.stringify({ hits: HITS, total: 3 }) }));
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's box; the bare / has the header's engine
   await ready(page);
   await page.getByLabel('Search the whole species catalogue').fill('Sempervivum montanum');
   const rows = page.locator('.hits a.hitrow');

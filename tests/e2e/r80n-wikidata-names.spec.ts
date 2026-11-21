@@ -38,7 +38,7 @@ test('the search and the API find it by its new names, as they find a page by GB
   expect(d.name.vernacular.map((v: { name: string; source: string }) => `${v.name} (${v.source})`)).toEqual(['Cedar of Goa (Wikidata)', 'Mexican cypress (Wikidata)']);
   expect(d.upstream['wikidata.names'].status).toBe('ok');
   // The front page's search: its tile carries the name.
-  await page.goto('/');
+  await page.goto('/?by=genus'); // round 104: the catalogue's list in place is at its address; the bare `/`'s box is the header's search
   await ready(page);
   await page.getByRole('searchbox').first().fill('Mexican cypress');
   const tile = page.locator('a[href="/species/hesperocyparis-lusitanica"]').first();

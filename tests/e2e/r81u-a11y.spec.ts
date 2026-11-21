@@ -43,7 +43,7 @@ test("r81u a11y 1: each × in a plant's log is named by its line @phone", async 
 
 test('r81u a11y 2: a search result is named by its species, not by the thumbnail\'s letter and the arrow @phone', async ({ page }) => {
   await noThirdParty(page);
-  await page.goto('/'); await ready(page);
+  await page.goto('/?by=genus'); await ready(page); // round 104: the catalogue's list in place is at its address; the bare `/`'s box is the header's search
   await page.locator('input[type=search]').first().fill('copiapoa');
   const hit = page.locator('a.hitrow[href="/species/copiapoa-cinerea"]');
   await expect(hit).toBeVisible({ timeout: 15_000 });

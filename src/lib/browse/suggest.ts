@@ -70,13 +70,14 @@ function placesOf(phrase: string): Place[] {
 }
 
 /** Per table: the genera's and families' names folded, and their counts, made once. */
-const taxaHeld = new WeakMap<Prepared, { genera: string[]; families: string[]; genus: Int32Array; family: Int32Array }>();
+const taxaHeld = new WeakMap<Prepared, { genera: string[]; families: string[]; genus: Int32Array; family: Int32Array; climate: Int32Array }>();
 function taxa(p: Prepared) {
   let x = taxaHeld.get(p);
   if (!x) {
-    const genus = new Int32Array(p.genera.length), family = new Int32Array(p.t.families.length);
-    for (let i = 0; i < p.t.n; i++) { genus[p.genus[i]]++; if (p.t.family[i] >= 0) family[p.t.family[i]]++; }
-    taxaHeld.set(p, (x = { genera: p.genera.map((g) => fold(withoutSign(g))), families: p.t.families.map(fold), genus, family }));
+    // `climate`: each genus's species with a habitat climate (round 104): a genus with none says so once, on its row.
+    const genus = new Int32Array(p.genera.length), family = new Int32Array(p.t.families.length), climate = new Int32Array(p.genera.length);
+    for (let i = 0; i < p.t.n; i++) { genus[p.genus[i]]++; if (p.t.climate[i] === 'o') climate[p.genus[i]]++; if (p.t.family[i] >= 0) family[p.t.family[i]]++; }
+    taxaHeld.set(p, (x = { genera: p.genera.map((g) => fold(withoutSign(g))), families: p.t.families.map(fold), genus, family, climate }));
   }
   return x;
 }
@@ -106,7 +107,7 @@ export function suggest(p: Prepared, q: string): Suggestion[] {
   const words = text.split(' ').filter(Boolean);
   if (!words.length || fold(text).length < 2) return [];
   const w = wholeCounts(p);
-  const { genus: counts, family: famCount } = taxa(p);
+  const { genus: counts, family: famCount, climate: climCount } = taxa(p);
   const out: Suggestion[] = [];
 
   // A taxon and a place, in either order ("hoodia namib", "namibia hoodia").
@@ -131,7 +132,9 @@ export function suggest(p: Prepared, q: string): Suggestion[] {
   for (const tx of one) {
     if (tx.kind === 'genus') {
       if (tx.n < GENUS_PAGE_MIN) continue; // a genus of one species is its species' row
-      out.push({ kind: 'genus', label: tx.name, sci: tx.name, sub: `genus${tx.family ? ` · ${tx.family}` : ''} · ${fmt(tx.n)} species`, href: `/genus/${tx.slug}`, n: tx.n });
+      // Said once here, where the whole genus has no habitat climate, so its species' rows need not each say it (round 104).
+      const none = climCount[p.genera.indexOf(tx.name)] === 0;
+      out.push({ kind: 'genus', label: tx.name, sci: tx.name, sub: `genus${tx.family ? ` · ${tx.family}` : ''} · ${fmt(tx.n)} species${none ? ', 0 with a habitat climate' : ''}`, href: `/genus/${tx.slug}`, n: tx.n });
     } else {
       const i = p.familyBySlug.get(tx.slug)!;
       out.push({ kind: 'family', label: tx.name, sub: `family · ${fmt(famCount[i])} species`, href: `/family/${tx.slug}`, n: famCount[i] });
