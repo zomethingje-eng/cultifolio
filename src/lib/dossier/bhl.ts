@@ -85,6 +85,13 @@ export function titleAgrees(kew: string, bhl: { Title?: string; PublisherPlace?:
   return null;
 }
 
+/** BHL's resolver answering with its own error: its message's first line, or null (round 108's follow-up). */
+export function bhlError(data: unknown): string | null {
+  const r = data as BhlAnswer | null;
+  if (!r || typeof r !== 'object' || String(r.Status) === '1' || typeof r.Message !== 'string') return null;
+  return r.Message.split(/\r?\n/)[0].trim() || null;
+}
+
 /**
  * What an answer gives for the citation: one page, or why none is taken; null when it is not an answer (not answered).
  * `a.title` is Kew's abbreviation as asked; `places`, Kew's other citations' places (`titleAgrees`).
@@ -135,6 +142,8 @@ export function bhlTitleUrl(a: { volume?: string; page: string; year: string }, 
 export type BhlPage = { key: string; name: { scientific: string }; ids?: { ipni?: string }; elsewhere?: Elsewhere };
 export interface BhlCounts {
   pages: number; asked: number; linked: number; none: number; unanswered: number; notAskable: number; before: number; held?: string;
+  /** Of the not answered, those BHL's resolver answered with its own error (round 108's follow-up; `bhlError`). */
+  erred?: number;
   /** Round ninety: the second asks, by IPNI's title (each asks IPNI, then BHL where IPNI names a title). */
   byIpni?: { asked: number; linked: number; none: number; unanswered: number };
 }
@@ -175,7 +184,16 @@ export async function fillBhl(store: DossierStore, f: JsonFetcher, day: string, 
       if (r.status === 'refused' && /allowance|not asked/.test(r.detail ?? '')) { c.held = r.detail; break; }
       c.asked++;
       const got = r.status === 'ok' ? bhlPage(a, r.data, places) : null;
-      if (!got) { c.unanswered++; if (++failedRun >= 5) { c.held = '5 requests in a row not answered'; break; } continue; }
+      if (!got) {
+        c.unanswered++;
+        // An answer that is BHL's own error is BHL up, not BHL gone: asked again by the next run as before (r87l), but not
+        // counted toward the five in a row that end the day. On 22 November 2026 every citation of "Pap. & Proc. Roy. Soc.
+        // Tasmania" drew "String or binary data would be truncated", asked first on every run, and five of them ended each
+        // day's fill before any other citation was asked.
+        if (r.status === 'ok' && bhlError(r.data)) { c.erred = (c.erred ?? 0) + 1; failedRun = 0; continue; }
+        if (++failedRun >= 5) { c.held = '5 requests in a row not answered'; break; }
+        continue;
+      }
       failedRun = 0;
       if ('page' in got) c.linked++; else c.none++;
       pub = { ...p, bhl: { ...got, read: day } };
@@ -222,5 +240,5 @@ export async function fillBhl(store: DossierStore, f: JsonFetcher, day: string, 
 export function bhlLine(c: BhlCounts, day: string): string {
   const s = c.byIpni;
   const second = s?.asked ? `; ${s.asked} that Kew's title gave several citations for asked again by the BHL title IPNI links their publication to: ${s.linked} linked, ${s.none} with no page taken (said why), ${s.unanswered} not answered` : '';
-  return `  ${c.asked} citations asked of BHL on ${day}: ${c.linked} linked to the one page BHL gives for them, ${c.none} with no page taken (said why), ${c.unanswered} not answered${second}; ${c.before} answered before and passed by; ${c.notAskable} not in a form BHL can be asked exactly, shown as text${c.held ? `; stopped: ${c.held}: run --fill bhl again (tomorrow, if the day's allowance is spent); it asks only what is left` : ''}.`;
+  return `  ${c.asked} citations asked of BHL on ${day}: ${c.linked} linked to the one page BHL gives for them, ${c.none} with no page taken (said why), ${c.unanswered} not answered${c.erred ? ` (${c.erred} of them BHL's resolver answering with an error, asked again by the next run)` : ''}${second}; ${c.before} answered before and passed by; ${c.notAskable} not in a form BHL can be asked exactly, shown as text${c.held ? `; stopped: ${c.held}: run --fill bhl again (tomorrow, if the day's allowance is spent); it asks only what is left` : ''}.`;
 }

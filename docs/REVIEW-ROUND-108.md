@@ -71,3 +71,19 @@ at step 1.
 
 The launch gate: svelte-check 0 errors in 1,867 files, 6,451 unit tests, 2,877 browser tests, every test first time in
 every engine, on the first run.
+
+## BHL's error answers (the daily fill)
+
+On 22 November 2026 the daily fill stopped twice within minutes: "5 requests in a row not answered". BHL was up. Its
+resolver answered Status 2, "String or binary data would be truncated", for every citation of "Pap. & Proc. Roy. Soc.
+Tasmania" (cache/upstream/2026-11-22). The fill read such an answer as not answered, which is right (r87l: asked again,
+never recorded as "no page"). But it also counted each toward the five in a row that end the day. Those citations are asked
+first on every run, so no other citation was reached.
+
+Now:
+- an answer that is BHL's own error (`bhlError`) is still not answered and is asked again, but it resets the run of
+  failures instead of adding to it;
+- the day's line says how many of the not answered were such errors, in words the daily plan's `expect` still reads.
+
+Test r108c, FAILED on 16bd0c7. The corpus gate: 6,454 unit tests, 1,079 browser tests in Chromium desktop and phone, every
+test first time.
