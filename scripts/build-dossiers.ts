@@ -274,7 +274,7 @@ import { cultigenOf } from '../src/lib/core/cultigen';
 import { wcvpRow } from '../src/lib/dossier/bulk';
 import { downloadDay } from '../src/lib/dossier/bulk';
 import { outsideLog } from '../src/lib/dossier/range-via';
-import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange } from './select-species-lib';
+import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange, growList, type ListEntry } from './select-species-lib';
 import { buildKewDossier, kewInatTaxon, fillKewWhy, type KewSpecies } from '../src/lib/dossier/build-kew';
 import { canonicalOfKew } from '../src/lib/dossier/kew-rows';
 import { loadKewSpecies } from './kew-species-load';
@@ -2843,6 +2843,34 @@ function writeIndexFromDisk(): void {
   if (!fixtures) writeStamp('.', corpusDir, index.length, CODE_ROOT);
 }
 
+/**
+ * `--grow N` (round 110, docs/PLAN-110.md): the day's growth of the species list, asking nothing. The next species of
+ * scripts/species-queue.txt (written by scripts/select-species.ts) not yet listed are appended to scripts/species-list.txt,
+ * so many that with the species listed and not yet built they come to N; grow-keys.txt is the --keys file of all of them,
+ * for the build after it (`dossier --keys grow-keys.txt --grid climate --bulk bulk --skip inat`). A species is built when a
+ * page on disk has its page id, or its GBIF key. With nothing to build, grow-keys.txt is removed, so the plan's
+ * `if-exists grow-keys.txt` build is passed by.
+ */
+function growStep(): void {
+  const n = Number(args[args.indexOf('--grow') + 1]);
+  if (!Number.isInteger(n) || n < 0) { console.error('--grow takes the number of species to build: --grow 1000'); process.exitCode = 2; return; }
+  const listFile = 'scripts/species-list.txt', queueFile = 'scripts/species-queue.txt', out = 'grow-keys.txt';
+  if (!existsSync(queueFile)) { console.error(`--grow reads ${queueFile}, which scripts/select-species.ts writes beside the list: run it first`); process.exitCode = 2; return; }
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  const ids = new Set(existsSync(dir) ? readdirSync(dir).filter((f) => DOSSIER_FILE.test(f)).map((f) => f.slice(0, -5)) : []);
+  let idx: Array<{ gbif?: number }> = [];
+  try { idx = JSON.parse(readFileSync(`${dir}/index.json`, 'utf8')); } catch { /* no index yet: the files alone */ }
+  const gbifs = new Set(idx.flatMap((e) => (e.gbif != null ? [e.gbif] : [])));
+  const built = (e: ListEntry) => ids.has(e.pageId) || (e.gbifKey != null && (gbifs.has(e.gbifKey) || ids.has(`g${e.gbifKey}`)));
+  const g = growList(readFileSync(listFile, 'utf8'), readFileSync(queueFile, 'utf8'), built, n, today());
+  if (g.added.length) writeAtomic(listFile, g.listText);
+  const total = g.toBuild;
+  if (total) writeAtomic(out, g.growText);
+  else if (existsSync(out)) unlinkSync(out);
+  const ends = g.added.length ? ` (the queue's ranks ${g.added[0].rank} to ${g.added[g.added.length - 1].rank}, ${g.added[0].reason} to ${g.added[g.added.length - 1].reason})` : '';
+  console.log(`grow: ${g.added.length} species added to ${listFile} from ${queueFile}${ends}; ${g.carried} listed before with no page yet, ${g.added.length - (total - g.carried)} of the added with a page already; ${total} to build${total ? ` → ${out}` : ', nothing to build'}; ${g.left} left in the queue.`);
+}
+
 async function main() {
   // One run at a time in the project folder (round eighty-one, review B6; `scripts/run-lock.mjs`): a step typed by hand
   // while the corpus step or another builder step runs refuses, saying which; the corpus step's own steps are its
@@ -2857,6 +2885,7 @@ async function main() {
   if (args.includes('--prune-followed')) return pruneFollowed();
   if (args.includes('--prune-uncredited')) return pruneUncredited();
   if (args.includes('--index')) return writeIndexFromDisk();
+  if (args.includes('--grow')) return growStep();
   if (args.includes('--rekey')) return rekeyFromV2();
   if (args.includes('--keep-list')) return keepList();
   if (fill === 'openalex') return fillLiterature();

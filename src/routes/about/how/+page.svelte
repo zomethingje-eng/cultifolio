@@ -477,13 +477,15 @@
   <!-- ─────────────────────────── The species list ─────────────────────────── -->
   <section aria-labelledby="list">
   <h2 id="list">Which species are here</h2>
-  <p class="sum">The list of species was derived by rule, not chosen by hand. It holds every species with at least three records of cultivated plants, and every species of 173 collector genera. A species that is not here says nothing about the plant, only about the list.</p>
+  <p class="sum">The list of species was derived by rule, not chosen by hand. It holds every species with at least three records of cultivated plants and every species of 173 collector genera, and grows each day by the next with fewer, most records first. A species that is not here says nothing about the plant, only about the list.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: which species are here</span></summary>
   <ul class="rules">
     <li>The list is <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/species-list.txt">the species list</a> in the source code, made by rule on 19 October 2026 and added to since only by the rules below.</li>
     <li>It holds every species Kew's World Checklist accepts with at least three records of cultivated plants.</li>
     <li>It holds every species Kew accepts of 173 collector genera taken whole: the cacti, the mesembs, the stapeliads and caudiciforms, the winter-growing bulbs and their like, less their hybrids, in <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/specialist-genera.txt">the list of collector genera</a>.</li>
     <li>It keeps every species that was already in the reference, so that no page falls out; 26 species are here for that reason alone.</li>
+    <li id="queue">It grows each day from <a href="https://github.com/zomethingje-eng/cultifolio/blob/main/scripts/species-queue.txt">the queue</a>: every other species Kew accepts with a record of cultivated plants, counted the same way. The queue is ranked by those records, then by iNaturalist's observations among them, then by name. Its head is the species whose records reached three after the list was made. Each day's run adds the next species to the list and builds their pages. Each one's line in the list says its counts and the day it was added.</li>
+    <li>A new page is built without asking iNaturalist, which allows 4,000 requests a day. Its row for iNaturalist says it was not asked until that day's fill reads it.</li>
     <li>A species Kew accepts that GBIF folds into a variety or a synonym of another page's species gets a page of its own when growers name it. Echinopsis pachanoi, San Pedro, is one.</li>
     <li>Each page is the species of the Kew entry it cites, or of its name where Kew holds that name for one species alone. Pages whose names Kew's checklist does not place keep GBIF's key.</li>
     <li>The records counted are iNaturalist's observations marked captive or cultivated, and GBIF's living-specimen records from living collections.</li>

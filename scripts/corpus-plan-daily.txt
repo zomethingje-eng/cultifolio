@@ -1,0 +1,25 @@
+# The daily plan (round 110, docs/PLAN-110.md): the species list grows by the next species of its queue, the new pages are
+# built online without iNaturalist, and the day's fills follow; then the index, the review and the upload. It replaces
+# scripts/corpus-plan-r87-daily.txt. Run once a UTC day, after midnight UTC:
+#   node scripts/corpus-step.mjs --plan scripts/corpus-plan-daily.txt
+# `each-day`: a new UTC day's run starts at step 1 (unless the last stopped at a review, a block or a failure), and a fill
+# that spends its day's allowance does not hold the upload: it carries on in the next day's run.
+# The number after --grow is how many species a day's run builds (the list's unbuilt first, then the queue's next): set
+# from the trial's time a page (PLAN-110, the measures).
+each-day
+dossier --grow 1000
+if-exists grow-keys.txt dossier --keys grow-keys.txt --grid climate --bulk bulk --skip inat
+dossier --fill elsewhere
+daily dossier --fill inat
+daily dossier --fill bhl
+dossier --index
+review Read the grow line ("grow: G species added … T to build"), the build's last line ("B built, K kept of T; index now N species") and drops.txt if one was written, the fills' lines (iNaturalist's, BHL's: "U not answered"), and the index's ("index: I species"). Stop, and paste the end of corpus-step.log back, if the build built fewer than it was given, if BHL says more than a few hundred "not answered", or if the index holds fewer species than the day before.
+expect let T /; ([\d,]+) to build/
+expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
+expect let BU /BHL on .*?, (\d+) not answered/
+expect let I /index: ([\d,]+) species/
+expect B = T
+expect BU <= 300
+expect I >= 48375
+upload
+live-check

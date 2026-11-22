@@ -146,7 +146,9 @@ describe('2. summaries first, the rules one tap away (S11, A22)', () => {
     // entries, and an entry folded away would leave a link to nothing the reader can see.
     // Round 108: 6,550 (6,495 then): the coarse climate's rule is a section of its own, a heading, a summary and a fold
     // (44 words seen), since a species page's mark links to it and a rule folded inside another would hide it.
-    expect(visibleWords(src)).toBeLessThan(6550);
+    // Round 110: 6,565: the list's summary says it grows each day by the next species with one or two records (ten words
+    // seen), since a page added from the queue is otherwise not explained where the list is.
+    expect(visibleWords(src)).toBeLessThan(6565);
   });
   it('/about/formats: each section is its summary, the format in full one tap away', () => {
     const src = raw(FILE.formats);

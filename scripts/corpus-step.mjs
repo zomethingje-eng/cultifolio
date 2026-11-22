@@ -89,7 +89,7 @@ export function parsePlan(text) {
   const steps = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
     const line = raw.replace(/#.*$/, '').trim();
-    if (!line) continue;
+    if (!line || line === 'each-day') continue; // round 110: a mark of the plan (`eachDay`), not a step
     let rest = line, when;
     const m = /^if-exists\s+(\S+)\s+(.*)$/.exec(line);
     if (m) { when = m[1]; rest = m[2]; }
@@ -123,6 +123,19 @@ export function parsePlan(text) {
     steps.push({ line, kind, args: kind === 'review' ? [rest.slice('review'.length).trim()] : args, ...(when ? { when } : {}) });
   }
   return steps;
+}
+
+/**
+ * Round 110 (docs/PLAN-110.md): a plan that says `each-day` is the run of a UTC day. A run begun on an earlier UTC day that
+ * finished, or stopped only at day's fills not finished, starts again at step 1; one stopped at a review, a block, a
+ * failure or a Ctrl-C does not, and stops where it stopped. And its fills that stopped at their day's allowance do not
+ * hold the steps after them: the index and the upload run, and each fill carries on in the next day's run.
+ */
+export const eachDay = (text) => text.split(/\r?\n/).some((l) => l.replace(/#.*$/, '').trim() === 'each-day');
+/** Whether the kept run of an `each-day` plan begins again at step 1 on `day` (YYYY-MM-DD, UTC). */
+export function newDay(state, plan, day) {
+  if (!Array.isArray(state?.steps) || typeof state.started !== 'string' || state.started.slice(0, 10) >= day) return false;
+  return state.steps.every((x, i) => x.status === 'done' || x.status === 'skipped' || (x.status === 'unfinished' && plan[i]?.daily));
 }
 
 /** Two spellings of one plan file: either slash, with or without a leading `./` (round eighty). */
@@ -333,6 +346,12 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
     if (state) renameSync(stateFile, at(`corpus-step.${stamp().slice(0, 10)}.${Date.now()}.json`));
     state = { plan: sha1(planText), started: now().toISOString(), steps: plan.map((s) => ({ line: s.line, status: 'to do' })) };
   }
+  const daily = eachDay(planText);
+  if (daily && newDay(state, plan, now().toISOString().slice(0, 10))) {
+    renameSync(stateFile, at(`corpus-step.${state.started.slice(0, 10)}.${Date.now()}.json`));
+    say(`  ${planRel} is run each day: the run of ${state.started.slice(0, 10)} ended, so today's starts at step 1.\n`);
+    state = { plan: sha1(planText), started: now().toISOString(), steps: plan.map((s) => ({ line: s.line, status: 'to do' })) };
+  }
   state.planFile = planRel;
   const save = () => writeAtomic(stateFile, JSON.stringify(state, null, 1));
   const goOn = argv.includes('--go-on');
@@ -364,7 +383,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       const rec = state.steps[i];
       if (rec.status === 'done' || rec.status === 'skipped') continue;
       // Round ninety: not past the day's fills until every one has finished.
-      const left = step.daily ? [] : dailyGate(plan, state.steps, i);
+      const left = step.daily ? [] : dailyGate(plan, state.steps, i).filter((x) => !(daily && ALLOWANCE_SPENT.test(x.why)));
       if (left.length) { say(`\n${dailySentence(left, step.line, cmd)}\n`); return EXIT.unfinished; }
       if (rec.status === 'review') {
         // A stop for review is passed only by --go-on, and only this one: a later stop stops again.
@@ -496,8 +515,10 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       return EXIT[result.status];
     }
     if (!interrupted) {
-      const left = dailyGate(plan, state.steps, plan.length);
+      const left = dailyGate(plan, state.steps, plan.length).filter((x) => !(daily && ALLOWANCE_SPENT.test(x.why)));
       if (left.length) { say(`\n${dailySentence(left, null, cmd)}\n`); return EXIT.unfinished; }
+      const carried = daily ? plan.flatMap((p, j) => (p.daily && state.steps[j].status === 'unfinished' ? [`"${p.line}" (${state.steps[j].why ?? ''})`] : [])) : [];
+      if (carried.length) { say(`\n=== ${stamp()}  the day's run is done. The fills that spent their day's allowance carry on in tomorrow's run: ${carried.join('; ')}. Run the same command again after midnight UTC: ${cmd}\n`); return EXIT.done; }
     }
     if (interrupted) {
       const i = state.steps.findIndex((s) => s.status === 'running');

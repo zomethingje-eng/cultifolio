@@ -100,7 +100,9 @@ describe('S4: /about/how and /about/formats say what the code does', () => {
     const src = readFileSync('src/routes/about/formats/+page.svelte', 'utf8');
     expect(src).toContain('const files = fileCounts(COUNTS_ON.species);');
     expect(src).not.toMatch(/at 48,357 species|At 48,357 species/); // base: four sentences at round eighty-four's count
-    expect(COUNTS_ON.species).toBe(48_375);
+    // Round 110: the list grows each day (the daily plan's --grow), and --index writes the count it holds: at least the
+    // 48,375 of round 108, never a figure typed here.
+    expect(COUNTS_ON.species).toBeGreaterThanOrEqual(48_375);
   });
 
   it('"26 species are here for that reason alone" stands under the rule that keeps the species already in the reference', () => {

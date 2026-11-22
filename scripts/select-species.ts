@@ -37,7 +37,7 @@ import { writeAtomic } from './write-atomic';
 import { gbifLiving, inatCaptive, cacheDays, datasetFacetUrl, inatPageUrl, speciesFacetUrl, type Cache, type LivingDataset } from './select-species-sources';
 import {
   DATASET_RULE, MIN_RECORDS, REFUSALS, backboneLine, backboneHigher, backboneTaxa, classifyDataset, collectorSpecies, deviationsOf, formatSpeciesList, gbifKeyFor, kewLoader,
-  matchInat, matchStrict, referenceSpecies, select, heldThroughRange, REASON_REFERENCE, type ReferencePage, words, type BackboneName, type DatasetFacts, type DatasetVerdict, type FrameworkRelationship, type Kew
+  matchInat, matchStrict, referenceSpecies, select, heldThroughRange, REASON_REFERENCE, queueOf, formatQueue, keepQueued, QUEUED, type ReferencePage, words, type BackboneName, type DatasetFacts, type DatasetVerdict, type FrameworkRelationship, type Kew
 } from './select-species-lib';
 
 const args = process.argv.slice(2);
@@ -53,6 +53,8 @@ const deviationsPath = arg('--deviations', '');
 const referenceDir = arg('--reference', existsSync('static/s/v3/index.json') ? 'static/s/v3' : 'static/s/v2');
 const mergedPath = arg('--merged', 'scripts/merged-pages.txt');
 const offline = args.includes('--offline');
+// Round 110: the queue alone, against the list as it stands; the list and the dataset files are left as they are.
+const queueOnly = args.includes('--queue-only');
 const log = (s: string) => console.log(s);
 
 /** A large file's lines, streamed: never the whole file in memory. */
@@ -106,9 +108,9 @@ async function main() {
     '# key\ttitle\tpublisher\trecords\tlicence\treason'
   ];
   const dsLines = (s: (typeof sides)[number]) => sideOf(s).map((v) => tsv(v.d.key, v.facts.title, v.facts.publisher || '-', v.d.records, v.licence || '-', v.reason));
-  writeAtomic(`${outDir}/excluded-datasets.txt`, [...dsHeader('excluded, a genebank by the rule; their records are not counted', 'excluded'), ...dsLines('excluded')].join('\n') + '\n');
-  writeAtomic(`${outDir}/counted-datasets.txt`, [...dsHeader('counted, a living collection by the rule', 'counted'), ...dsLines('counted')].join('\n') + '\n');
-  writeAtomic(`${outDir}/undecided-datasets.txt`, [...dsHeader('not decided by the rule; their records are not counted', 'not decided'), ...dsLines('not decided')].join('\n') + '\n');
+  if (!queueOnly) writeAtomic(`${outDir}/excluded-datasets.txt`, [...dsHeader('excluded, a genebank by the rule; their records are not counted', 'excluded'), ...dsLines('excluded')].join('\n') + '\n');
+  if (!queueOnly) writeAtomic(`${outDir}/counted-datasets.txt`, [...dsHeader('counted, a living collection by the rule', 'counted'), ...dsLines('counted')].join('\n') + '\n');
+  if (!queueOnly) writeAtomic(`${outDir}/undecided-datasets.txt`, [...dsHeader('not decided by the rule; their records are not counted', 'not decided'), ...dsLines('not decided')].join('\n') + '\n');
   for (const s of sides) log(`  ${s}: ${sideOf(s).length} datasets, ${n(recordsOf(s))} records`);
 
   // ---- Kew ----
@@ -252,8 +254,26 @@ async function main() {
     ...(held.size ? [`Left out (round eighty): ${held.size} species without a GBIF key that a page of the reference holds through its range (its range read through that species' Kew entry, the page matching no species Kew accepts by its own name): ${[...held].map(([id, h]) => `${id} ${h.entry}, by page g${h.key}`).join('; ')}.`] : []),
     `reason: "inat <observations> + gbif <records>" when the two reach ${MIN_RECORDS}, "collector genus" for a species of a collector genus, "${REASON_REFERENCE}" for a species of a page of the reference; every one that applies, separated by "; ".`
   ];
-  writeAtomic(out, formatSpeciesList(header, list));
-  writeAtomic(`${outDir}/species-refused.txt`, [
+  // Round 110: the species the days' growth added keep their lines (`keepQueued`); then the queue, the next tier.
+  const before = existsSync(out) ? readFileSync(out, 'utf8') : null;
+  const written = keepQueued(formatSpeciesList(header, list), before);
+  if (!queueOnly) writeAtomic(out, written.text);
+  const listedIds = new Set((queueOnly ? (before ?? '') : written.text).split(/\r?\n/).filter((l) => l && !l.startsWith('#')).map((l) => l.split('\t')[0]));
+  const queued = queueOf(kew, inatBy, gbifBy.counted, listedIds, (r) => gbifKeyFor(r, byWords, kew, taxa));
+  const queueHeld = heldThroughRange(queued.map((x) => ({ kewId: x.id, name: x.name, author: x.author, gbifKey: x.gbifKey == null ? null : Number(x.gbifKey) })), pages);
+  const queue = queued.filter((x) => !queueHeld.has(x.id));
+  const queueFile = `${outDir}/species-queue.txt`;
+  const two = queue.filter((x) => x.inat + x.gbif === 2).length;
+  const three = queue.filter((x) => x.inat + x.gbif >= MIN_RECORDS).length;
+  writeAtomic(queueFile, formatQueue([
+    `Written by scripts/select-species.ts on ${day} beside ${out}, from the same counts (round 110, docs/PLAN-110.md).`,
+    `The rule: every species Kew accepts with a cultivated record, counted as the list counts them (iNaturalist observations marked captive or cultivated, and GBIF living-specimen records of the datasets the dataset rule counts, added together), that ${out} does not hold. Ranked by its records (more first), then its iNaturalist observations (more first), then Kew's name. A species with ${MIN_RECORDS} or more is one whose records reached the list's bar after the list was made. build-dossiers.ts --grow N appends the next N to the list, each with its counts and "${QUEUED} <day>".`,
+    `Queued: ${n(queue.length)} species: ${n(three)} with ${MIN_RECORDS} records or more, ${n(two)} with two, ${n(queue.length - two - three)} with one; ${n(queue.filter((x) => x.gbifKey !== null).length)} with a GBIF key${queueHeld.size ? `; ${queueHeld.size} without one left out, a page of the reference holding each through its range` : ''}.`,
+    ...header.filter((h) => h.startsWith('Source:') || h.startsWith('Names:') || h.startsWith('The dataset rule:'))
+  ], queue));
+  if (written.kept) log(`  ${written.kept} species the days' growth added kept in ${out}`);
+  log(`${queueFile}: ${n(queue.length)} species queued (${n(three)} with ${MIN_RECORDS} or more, ${n(two)} with two, ${n(queue.length - two - three)} with one)${queueOnly ? `, against ${out} as it stands (left unchanged)` : ''}.`);
+  if (!queueOnly) writeAtomic(`${outDir}/species-refused.txt`, [
     `# Every name or key the species list (scripts/species-list.txt) refused to match to a species Kew accepts, and why. Written by scripts/select-species.ts on ${day}.`,
     `# iNaturalist: ${n(inatRefused)} taxa (${fmt(refusals.inat)}). GBIF: ${n(gbifRefused)} species keys (${fmt(refusals.gbif)}).`,
     '# source\tid\tname\trecords (iNaturalist observations; GBIF counted)\tGBIF excluded\tGBIF not decided\treason',
@@ -266,7 +286,7 @@ async function main() {
   for (const id of reference.byKew.keys()) all.add(id);
   writeAtomic(`${cacheDir}/scores.tsv`, ['plant_name_id\tname\tfamily\tinat\tgbif_counted\tgbif_excluded\tgbif_undecided\tcollector\tselected',
     ...[...all].map((id) => { const r = kew.rows.get(id)!; return tsv(id, r.name, r.family, inatBy.get(id) ?? 0, gbifBy.counted.get(id) ?? 0, gbifBy.excluded.get(id) ?? 0, gbifBy['not decided'].get(id) ?? 0, inGenus.has(id) ? 1 : 0, chosen.has(id) ? 1 : 0); })].join('\n') + '\n');
-  log(`${out}: ${n(list.length)} species (${n(byCounts)} by records, ${n(byGenus)} by genus, ${n(byReference)} in the reference, ${n(byReferenceOnly)} by the reference alone, ${noKew} with no Kew id; ${n(withKey)} with a GBIF key). Requests this run: ${JSON.stringify(cache.asked)}.`);
+  if (!queueOnly) log(`${out}: ${n(list.length)} species (${n(byCounts)} by records, ${n(byGenus)} by genus, ${n(byReference)} in the reference, ${n(byReferenceOnly)} by the reference alone, ${noKew} with no Kew id; ${n(withKey)} with a GBIF key). Requests this run: ${JSON.stringify(cache.asked)}.`);
 }
 
 main().catch((e) => {
