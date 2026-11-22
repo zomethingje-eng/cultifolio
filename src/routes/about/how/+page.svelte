@@ -740,6 +740,18 @@
   </details>
   </section>
 
+  <!-- ─────────────────────────── Coarse (round 108) ─────────────────────────── -->
+  <section aria-labelledby="coarse">
+  <h2 id="coarse">From records placed only to within 30 km</h2>
+  <p class="sum">Where 10 km records give no climate, records placed only to within 30 km are read, each as the land around it, with no cold floor.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: from records placed only to within 30 km</span></summary>
+  <ul class="rules">
+    <li>Only in southern Africa (17° to 35° S, 11° to 33° E) and South-East Asia (6.5° S to 7.5° N, 95° to 119.5° E), never mixed with 10 km records; three areas needed, each the land within 15 km.</li>
+    <li>Tested on 422 species, their exact records blurred: months within 1 °C, rain 15%, light 10%. The cold floor, read at one point, failed.</li>
+  </ul>
+  </details>
+  </section>
+
   <!-- ─────────────────────────── Extremes ─────────────────────────── -->
   <section aria-labelledby="extremes">
   <h2 id="extremes">The extremes at a typical spot</h2>

@@ -138,7 +138,7 @@
     <span class="key"><i class="sw night"></i>night</span>
     <span class="key"><i class="sw bar"></i>rain</span>
     <!-- The lines, the bars and the strip name their source where a reader sees them, not only in the <desc> (round sixty-one; visitor 3). -->
-    {#if g.hasBand}<span class="key"><i class="sw band"></i>medians and 10th–90th percentile across {climate.cells} habitat cells, CHELSA</span>{:else if climate.cells > 1}<span class="key muted">medians across {climate.cells} habitat cells, CHELSA; no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, CHELSA, so no spread is drawn</span>{/if}
+    {#if g.hasBand}<span class="key"><i class="sw band"></i>medians and 10th–90th percentile across {climate.cells} {climate.areas ? 'areas around records placed to 30 km' : 'habitat cells'}, CHELSA</span>{:else if climate.cells > 1}<span class="key muted">medians across {climate.cells} {climate.areas ? 'areas around records placed to 30 km' : 'habitat cells'}, CHELSA; no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, CHELSA, so no spread is drawn</span>{/if}
     <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest month's mean nightly low</span>
     {#if climate.extremes}<span class="key"><i class="sw ext"></i>lowest night and 1-in-100 hot day over {climate.extremes.years} years at a typical spot in the range, NASA POWER; drawn at the right edge, as they belong to no one month</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}

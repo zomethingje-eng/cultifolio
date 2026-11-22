@@ -54,6 +54,7 @@
   import { worldSvg, regionSvg, type LabelAt } from '$lib/map/still';
   import { drawNear, drawAll, keepForOffline } from '$lib/map/near';
   import { fewRecords, fewRecordsSentence } from '$core/few-records';
+  import { coarseSentence } from '$core/coarse';
   import { rangeCaption, UNITS_NOTE } from '$lib/ui/ref/range-words';
   import { readerWords, describedBy } from '$lib/ui/ref/words';
   // Round eighty-seven, stage 2: each agent's section, mounted where the owner's look puts it (the integration).
@@ -173,6 +174,8 @@
   const wdValue = (p: string) => { const w = d.elsewhere?.wikidata; return w && !w.unanswered && w.item === d.ids.wikidata ? (w.ids.find((x) => x.p === p)?.v ?? null) : null; };
   /** A climate read from few records (round eighty-two; `$core/few-records`): marked on the figures and in the climate section, nothing removed. */
   const few = $derived(fewRecords(d.climate as { status: string; records?: number; cells?: number }));
+  /** A climate from records placed only to within 30 km (round 108; `$core/coarse`): marked on the strip, said in the Climate section. */
+  const coarse = $derived(d.climate.status === 'ok' ? (d.climate.coarse ?? null) : null);
   // Round eighty-six (the plan's B16): a range Kew gives only as a level-2 region or a continent ("Mexico"), said as Kew's.
   const wide = $derived(wideRange(d.distribution as Parameters<typeof wideRange>[0]));
   // Kew's own words for where the plant grows (WCVP's geographic_area; round eighty-six, review D2), where a build gave them.
@@ -695,7 +698,7 @@
       <!-- The habitat in four figures on the first screen (round eighty-four on a phone, the owner's decision 3; at every width
            since round 103), in the card after the one primary action and before the secondary ones (round eighty-five;
            outside review B's 3, P3). -->
-      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" records={d.climate.status === 'ok' ? d.climate.records : null} cells={d.climate.status === 'ok' ? d.climate.cells : null} />
+      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" {coarse} records={d.climate.status === 'ok' ? d.climate.records : null} cells={d.climate.status === 'ok' ? d.climate.cells : null} />
     {:else if !unchecked && d.climate.status !== 'refused'}
       <!-- No habitat climate: the strip says the state and why, in the Climate section's words (round 103; rule 2), where
            the top of the page had only a pill. A page whose records were not asked says so once, under the name. -->
@@ -705,7 +708,7 @@
       <a class="btn" href="/propagation/new?{addQuery}" onclick={(e) => addLeavesExample(e, `/propagation/new?${addQuery}`)}>Sow seed</a><!-- leads out of the example first (round sixty-nine; triage-68 X7; S-C4) -->
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.ids.gbif} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
-      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null, extremesLapse: d.climate.extremesLapse ?? null, annualRain: d.climate.annualRain ?? null }} />{/if}
+      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, areas: !!coarse, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null, extremesLapse: d.climate.extremesLapse ?? null, annualRain: d.climate.annualRain ?? null }} />{/if}
     </div>
   </div>
   </div>
@@ -874,8 +877,9 @@
   {#if d.climate.status === 'ok'}
     <!-- The °C | °F switch, in the glance row's head until round 106. -->
     <div class="climhead"><UnitSwitch /></div>
+    {#if coarse}<p class="notice small" id="coarse-records">{coarseSentence(coarse, d.climate.records)} <a class="help" href="/about/how#coarse">The rule</a>.</p>{/if}<!-- round 108 -->
     {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few, kewArea)} <a class="help" href="/about/how#few">The rule</a>.</p>{/if}<!-- linked to its rule, as the other notices are (round eighty-six; review P's P11) -->
-    <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
+    <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ areas: !!coarse, months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
     {#if glance}
       <!-- The year's reading in words, and the months of rain, under the chart (the year strip's lines until round 106). -->
       <div class="yearlines" id="year-lines">
@@ -887,7 +891,7 @@
     {#if koppenShown}
       <details class="figures" id="climate-class-fold">
         <summary>Climate class and the Walter–Lieth diagram</summary>
-        <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} src={d.climate.src.normals} />
+        <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} areas={!!coarse} src={d.climate.src.normals} />
       </details>
     {/if}
     <details class="figures">
@@ -929,7 +933,8 @@
     <details class="why">
       <summary>How this section is made</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid <Term k="cell">cells</Term> {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the <Term k="range">10th–90th percentile span</Term> across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at <Term k="typicalSpot">a typical spot in the range</Term>, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      {#if coarse}Each figure is the median across the {d.climate.cells} areas of the {d.climate.records} in-range records placed only to within {coarse.km} km, each area the mean of the land <Term k="cell">cells</Term> around it, with the <Term k="range">10th–90th percentile span</Term> across those areas after the slash where it differs. No cold floor or other daily extreme is derived from such records. The typical area, near {d.climate.at.lat}, {d.climate.at.lon}, is the one whose coldest month is nearest the median.
+      {:else}Each figure is the median across the {d.climate.cells} grid <Term k="cell">cells</Term> {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the <Term k="range">10th–90th percentile span</Term> across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at <Term k="typicalSpot">a typical spot in the range</Term>, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).{/if}
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Across the range: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>

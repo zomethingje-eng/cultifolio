@@ -55,17 +55,14 @@ describe('every month that ties is named (V5)', () => {
 });
 
 describe("the labels are the figures' own names, with the record low beside the floor (V1)", () => {
-  it('the glance row, compare and the share card', () => {
-    const glance = code('src/lib/ui/ref/Glance.svelte').replace(/<Term k="\w+">([^<]*)<\/Term>/g, '$1'); // round 103: a word with a tip reads as its word
+  it('compare and the share card', () => { // round 107's tidy: the glance row (Glance.svelte), drawn by no page since round 106, is gone
     const compare = code('src/routes/compare/+page.svelte');
     const svg = card();
     for (const lab of ['Cold floor (1 night in 100)', 'Warmest month, mean daily high', 'Rain a year (sum of monthly medians)', 'Open-sky light']) { // round sixty-two (visitor-words 3, A3)
-      expect(glance).toContain(lab);
       expect(compare).toContain(lab);
       expect(svg).toContain(lab.toUpperCase());
     }
-    for (const src of [glance, compare, svg]) expect(src).not.toMatch(/Coldest nights|Warmest days|Rain in the wild|Light in the wild|COLDEST NIGHTS|WARMEST DAYS/);
-    expect(glance).toMatch(/Record low \{tempN\(extremes\.minAbs/);
+    for (const src of [compare, svg]) expect(src).not.toMatch(/Coldest nights|Warmest days|Rain in the wild|Light in the wild|COLDEST NIGHTS|WARMEST DAYS/);
     expect(svg).toContain('record low 4.0 °C in 40 years at a typical spot · NASA POWER'); // round sixty-two (A3)
   });
   it('the card says "cell" for one, and draws no band legend without a band (V22)', () => {

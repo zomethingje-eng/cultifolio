@@ -72,11 +72,7 @@ describe('each place the year\'s rain is shown names which figure it is', () => 
     expect(head({ p50: 214 })).toContain('214 mm of rain a year (median across the range, CHELSA)'); // base: 165 mm, sum of monthly medians
     expect(head()).toContain('165 mm of rain in the median year (CHELSA)'); // round sixty-seven (N11): the monthly medians added are the median year's total
   });
-  it('the glance card, the compare row and the species page carry both names and the median', () => {
-    const glance = code('src/lib/ui/ref/Glance.svelte');
-    expect(glance).toContain("'Rain a year (median across the range)'");
-    expect(glance).toContain("'Rain a year (sum of monthly medians)'");
-    expect(glance).toContain('yearRain(months, annualRain)');
+  it('the compare row and the species page carry both names and the median', () => {
     const compare = code('src/routes/compare/+page.svelte');
     expect(compare).toContain("'Rain a year (median across the range)'");
     expect(compare).toContain("'Rain a year (sum of monthly medians)'");

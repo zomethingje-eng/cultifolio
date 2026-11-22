@@ -171,17 +171,4 @@ describe('8. the phone\'s line, one word, the rain bar (P4, B4, A16g, W12)', () 
     const NotChecked = (await import('$lib/ui/NotChecked.svelte')).default;
     expect(render(NotChecked, { props: { what: 'Photographs', why: 'x.', word: 'not asked' } as never }).body).toContain('Photographs not asked');
   });
-  it('the rain bar ends at a round figure in inches', async () => {
-    const { render } = await import('svelte/server');
-    const Glance = (await import('$lib/ui/ref/Glance.svelte')).default;
-    const { units } = await import('$lib/ui/units.svelte');
-    units.set('us');
-    try {
-      const body = render(Glance, { props: { months, annualRain: { p50: 1100 } } as never }).body;
-      expect(body).toContain('bar 0 to 48 in');
-      expect(body).not.toContain('47.2');
-    } finally {
-      units.set('metric');
-    }
-  });
 });

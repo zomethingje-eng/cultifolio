@@ -21,6 +21,8 @@ export interface CardInput {
   slug: string;
   climate: ClimoInput & { extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null };
   cells: number;
+  /** Round 108 (`$core/coarse`): the cells are areas around records placed only to within 30 km. */
+  areas?: boolean;
   /** The habitat's hemisphere, so the chart can say whose months it draws (round sixty; visitor 3). */
   south?: boolean;
   /** Why there is no floor, said as the glance row says it (round sixty-two; visitor-words 11, rule 2). */
@@ -119,12 +121,12 @@ export function climateCardSvg(c: CardInput): string {
     <line x1="0" x2="16" y1="-4" y2="-4" stroke="${warm}" stroke-width="2.5"/><text x="22" y="0">day</text>
     <line x1="60" x2="76" y1="-4" y2="-4" stroke="${cool}" stroke-width="2.5"/><text x="82" y="0">night</text>
     <rect x="128" y="-11" width="10" height="10" fill="${cool}" opacity="0.55"/><text x="144" y="0">rain</text>
-    ${g.hasBand ? `<rect x="186" y="-11" width="16" height="10" fill="${warm}" opacity="0.25"/><text x="208" y="0">10th–90th percentile across cells</text>` : `<text x="186" y="0">${c.cells > 1 ? 'the cells agree within rounding' : 'one cell, so no spread'}</text>`}
+    ${g.hasBand ? `<rect x="186" y="-11" width="16" height="10" fill="${warm}" opacity="0.25"/><text x="208" y="0">10th–90th percentile across ${c.areas ? 'areas' : 'cells'}</text>` : `<text x="186" y="0">${c.cells > 1 ? `the ${c.areas ? 'areas' : 'cells'} agree within rounding` : 'one cell, so no spread'}</text>`}
     <rect x="0" y="9" width="16" height="10" fill="${ink}" opacity="0.06"/><text x="22" y="18">cold quarter</text>
     ${g.strip ? `<line x1="110" x2="126" y1="14" y2="14" stroke="${accent}" stroke-width="2"/><text x="132" y="18">DLI</text><line x1="170" x2="186" y1="14" y2="14" stroke="${ink3}" stroke-width="2" stroke-dasharray="3 3"/><text x="192" y="18">RH, each on its own scale</text>` : ''}
     <text x="${g.strip ? 360 : 110}" y="18">habitat months${c.south == null ? '' : `, ${c.south ? 'southern' : 'northern'} hemisphere`}</text>
   </g>
-  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} habitat cell${c.cells === 1 ? '' : 's'}${g.hasBand ? ' (band: 10th–90th percentile)' : ''}. CHELSA V2.1 1981–2010 (CC0)${ex ? ` · NASA POWER, ${ex.years} years` : ''} · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
+  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} ${c.areas ? `area${c.cells === 1 ? '' : 's'} around records placed to 30 km` : `habitat cell${c.cells === 1 ? '' : 's'}`}${g.hasBand ? ' (band: 10th–90th percentile)' : ''}. CHELSA V2.1 1981–2010 (CC0)${ex ? ` · NASA POWER, ${ex.years} years` : ''} · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
   <text x="40" y="${H - 20}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Figures derived by rule. Every figure and its source: <tspan fill="${accent}" font-weight="700">cultifolio.com/species/${esc(c.slug)}</tspan></text>
 </svg>`;
 }

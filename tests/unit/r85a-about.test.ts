@@ -144,7 +144,9 @@ describe('2. summaries first, the rules one tap away (S11, A22)', () => {
     expect(unfolded(src)).not.toContain('<ul class="rules"'); // base: 30 lists of rules shown whole
     // base: 14,880. Round 103: 6,500 (6,320 then), the glossary's six new words: the species page's tips link to their
     // entries, and an entry folded away would leave a link to nothing the reader can see.
-    expect(visibleWords(src)).toBeLessThan(6500);
+    // Round 108: 6,550 (6,495 then): the coarse climate's rule is a section of its own, a heading, a summary and a fold
+    // (44 words seen), since a species page's mark links to it and a rule folded inside another would hide it.
+    expect(visibleWords(src)).toBeLessThan(6550);
   });
   it('/about/formats: each section is its summary, the format in full one tap away', () => {
     const src = raw(FILE.formats);

@@ -39,3 +39,9 @@ The tracker's payoff, built on 22 November 2026. The plan is `docs/PLAN-107.md`,
   {1070, 1262, 1276, 1417}, WebKit and Firefox within 2 px.
 - The launch gate: svelte-check 0 errors in 1,867 files, 6,461 unit tests in 716 files (11 skipped), 2,877 browser tests
   (25 skipped), every test first time in every engine, on the first full run.
+
+## The deploy
+
+- 191e13e pushed and deployed on 22 November 2026 with `node scripts/deploy.mjs` (svelte-check 0 errors in 1,867 files,
+  the record's edit after the gate having moved the stamp; the unit tests left out as the stamp allows) as version
+  679418f6; the live check passed, 23 of 23, GBIF still serving the backbone.

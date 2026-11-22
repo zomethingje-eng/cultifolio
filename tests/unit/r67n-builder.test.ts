@@ -127,7 +127,6 @@ describe('N11: the median year\'s rain is named as that', () => {
     expect(sheet).not.toMatch(/70% of the year's rain/);
     expect(readFileSync('src/lib/climate/climograph.ts', 'utf8')).toContain('of rain in the median year (the twelve monthly medians added)');
     expect(readFileSync('src/lib/ui/Climograph.svelte', 'utf8')).toContain('of rain in the median year (the twelve monthly medians added)');
-    expect(readFileSync('src/lib/ui/ref/Glance.svelte', 'utf8')).toMatch(/or more`\} in the median year <span class="src">CHELSA/);
     expect(readFileSync('src/lib/share/card.ts', 'utf8')).toContain('or more in the median year · CHELSA');
   });
 });

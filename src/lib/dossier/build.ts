@@ -42,6 +42,7 @@ import { countryOf, placeWords } from '../core/place-words';
 import { extraWhy, type ExtraKey } from './extra-keys';
 import { institutionWords, type InstitutionKind, type PlaceIndex } from './clean';
 import { answeredWords } from './api-answers';
+import { isCoarse, coarseRegionOf } from '../core/coarse';
 
 /**
  * What the envelope may read beside the grid (round eighty-six; the Howea finding): whether a native region's drawn land (its
@@ -55,6 +56,11 @@ export interface ClimateProvider {
   envelope(points: ReadonlyArray<readonly [number, number, Admission?]>, opts?: EnvelopeOptions): Promise<Climate>;
   /** One point's cell (a bench, a garden): median and percentiles coincide. */
   at(lat: number, lon: number): Promise<Climate>;
+  /**
+   * Round 108 (`$core/coarse`): the climate from records placed only to within 30 km, each read as an area, where the
+   * precise records give none. Absent from a provider that cannot read it (the page then keeps its "no climate").
+   */
+  coarse?(points: ReadonlyArray<readonly [number, number, Admission?]>): Promise<Climate>;
 }
 
 const pending = async (): Promise<Climate> => ({ status: 'pending', detail: 'climate provider not configured' });
@@ -605,8 +611,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (dist.status === 'ambiguous') climate = { status: 'none', detail: `native range not verified: ${dist.detail}` };
   else if (dist.status === 'ok' && dist.data.held) climate = { status: 'none', detail: 'native range not verified: Kew holds this name with no native range, so records cannot be told from cultivation and no habitat climate is derived' };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : wideRangeWords(native) };
-  else if (forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(forClimate, drawnLandOf(native, o.regions)), o.regions);
-  else if (allPts.length) climate = { status: 'none', detail: noPlacedWords(nInRangeRecords, allPts.length) };
+  else if (forClimate.length) climate = await withCoarse(withPlace(await (o.climate ?? noClimate).envelope(forClimate, drawnLandOf(native, o.regions)), o.regions), recs.forCoarse, o);
+  else if (allPts.length) climate = await withCoarse({ status: 'none', detail: noPlacedWords(nInRangeRecords, allPts.length) }, recs.forCoarse, o);
   // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
   // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
   // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
@@ -996,6 +1002,19 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 }
 
 /**
+ * Round 108 (`$core/coarse`; docs/PLAN-108.md): where the records placed to within 10 km give no climate, the records placed
+ * only to within 30 km, inside a region round 108's proof read, are read by the provider's coarse rule; the two are never
+ * mixed. A coarse climate that is not read either keeps the 10 km reason and adds its own.
+ */
+export async function withCoarse(climate: Climate, forCoarse: ReadonlyArray<readonly [number, number, Admission]>, o: { climate?: ClimateProvider; regions?: RegionTester }): Promise<Climate> {
+  if (climate.status !== 'none' || !forCoarse.length || !o.climate?.coarse) return climate;
+  const c = await o.climate.coarse(forCoarse);
+  if (c.status === 'ok') return withPlace(c, o.regions);
+  if (c.status === 'none') return { status: 'none', detail: `${climate.detail ?? 'no habitat climate'}; and ${c.detail}` };
+  return climate;
+}
+
+/**
  * Whether a record is placed precisely enough to read climate at (round thirty; the words above `forClimate` in
  * `readRecords`): its dataset states an uncertainty of 10 km or less, or, stating none, it is a human observation with
  * coordinates to three decimals or better. The decimals are counted as the record wrote them: the download's text keeps
@@ -1032,6 +1051,11 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
   const restrictedInRange: Array<[number, number]> = [];
   /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated), each with why it is in range. */
   const forClimate: Array<[number, number, Admission]> = [];
+  /**
+   * Round 108 (`$core/coarse`): in-range records whose dataset states an uncertainty over 10 km and at most 30 km, inside a
+   * region round 108's proof read; read for a climate only where `forClimate` gives none, and never mixed with it.
+   */
+  const forCoarse: Array<[number, number, Admission]> = [];
   /** The in-range records, each counted, by why each is in range (round eighty-five; outside review B's simplification 1). */
   const admitted: Record<Admission, number> = { strict: 0, buffer: 0, coast: 0, island: 0 };
   let nOutside = 0,
@@ -1121,7 +1145,10 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
       // coordinatePrecision of 0.001° or finer counts the same as three decimals.
       if (placedForClimate(r)) forClimate.push([lat, lon, how]);
-      else nVague++;
+      else {
+        nVague++;
+        if (isCoarse(r.coordinateUncertaintyInMeters) && coarseRegionOf(lat, lon)) forCoarse.push([lat, lon, how]);
+      }
     }
   }
   // The envelope and the map marker are derived numbers, so every in-range coordinate may inform them,
@@ -1148,7 +1175,7 @@ export function readRecords(data: readonly gbif.GbifOccurrence[], boxes: readonl
       how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
-  return { open, openHow, restrictedInRange, forClimate, nOutside, nVague, datasets, apiDatasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords, admitted };
+  return { open, openHow, restrictedInRange, forClimate, forCoarse, nOutside, nVague, datasets, apiDatasets, nInstitution, institutionKinds, openPts, allPts, restrictedShiftKm, centroid, nDefault, nInRangeRecords, admitted };
 }
 
 /** The in-range records read through GBIF's search API, by dataset, as the dossier keeps them (`occurrences.api`): largest first. */
@@ -1187,8 +1214,9 @@ export function withPlace(c: Climate, regions?: RegionTester): Climate {
 export function extremesUpstream(climate: Climate, lapseWhy: string | null, at: string): Upstream | undefined {
   if (climate.status !== 'ok' || !climate.extremesStatus) return undefined;
   const st = climate.extremesStatus;
-  const status: Upstream['status'] = st === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : st === 'skipped' ? 'skipped' : st === 'none' ? 'none' : 'ok';
+  const status: Upstream['status'] = st === 'coarse' ? 'skipped' : st === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : st === 'skipped' ? 'skipped' : st === 'none' ? 'none' : 'ok';
   const why = st === 'lapse' && lapseWhy ? `; read, and set aside: ${lapseWhy}` : st === 'sea' ? '; read, and set aside: the weather cell is mostly sea' : '';
+  // Round 108: a coarse climate asks NASA POWER nothing; its record says so in the source's own line (`COARSE_NO_FLOOR`).
   return { status, at, ...(climate.src.extremes ? { detail: `${climate.src.extremes}${why}` } : {}) };
 }
 

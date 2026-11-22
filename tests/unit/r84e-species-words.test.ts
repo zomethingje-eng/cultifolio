@@ -127,26 +127,9 @@ describe("2. the chart at a phone's width", () => {
   });
 });
 
-describe('3. the glance grid and the phone\'s line', () => {
+describe('3. the phone\'s line (the glance grid, Glance.svelte, gone in round 107\'s tidy)', () => {
   const months = c('eulychnia-acida').months;
   const year = growingYear(months as never, -30);
-  it('the four figures alone in their grid, the season card under it; the cause linked to its notice', async () => {
-    const { render } = await import('svelte/server');
-    const { default: Glance } = await import('$lib/ui/ref/Glance.svelte');
-    const body = render(Glance, { props: { months, year, extremesStatus: 'lapse', extremesLapse: c('eulychnia-acida').extremesLapse, whyHref: '#lapsecell', seasonLead: 'Wet winters.', seasonRule: 'rain rule, CHELSA', readerLat: 40 } }).body.replace(/<!--[^]*?-->/g, '');
-    const grid = body.slice(body.indexOf('gcards'), body.indexOf('gseason'));
-    expect(grid.match(/class="card[ "]/g)?.length).toBe(4);
-    expect(grid).not.toContain('season');
-    expect(body).toMatch(/<a href="#lapsecell"[^>]*>extremes set aside: two sources disagree<\/a>/);
-    expect(body).toMatch(/<span class="src[^"]*">CHELSA<\/span> <a class="how[^"]*" href="\/about\/how#year">How the rain rule reads it<\/a>/);
-    expect(body).not.toMatch(/class="src[^"]*">rain rule/);
-  });
-  it('a year of 1,235 mm is drawn on a bar to 2,000 mm, not 1,200', async () => {
-    const { render } = await import('svelte/server');
-    const { default: Glance } = await import('$lib/ui/ref/Glance.svelte');
-    const body = render(Glance, { props: { months, annualRain: { p50: 1235 }, season: false } }).body;
-    expect(body).toContain('bar 0 to 2,000 mm');
-  });
   it("the phone's line: the four figures, each qualified and sourced", async () => {
     const { render } = await import('svelte/server');
     const { default: HabitatLine } = await import('$lib/ui/ref/HabitatLine.svelte');

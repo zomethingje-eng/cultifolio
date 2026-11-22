@@ -32,7 +32,6 @@ const BARE: Record<string, number> = {
   'src/lib/import/rows.ts': 2, // the field key, read for the import key (hashed into importKey: unchanged)
   'src/lib/ui/grow/keep-draft.ts': 1, // the draft's form name, kept in the tab's storage
   'src/lib/ui/grow/ExampleAddLine.svelte': 1, // the same form name, as a prop's type
-  'src/lib/ui/ref/Glance.svelte': 2, // where the reader's hemisphere came from: 'site' | 'places'
   'src/routes/species/[slug]/+page.svelte': 2, // the same value, set, and read under the chart (round 106: the year strip's hemisphere line moved here)
   'src/routes/places/+page.svelte': 2, // takeDraft('place') and ExampleAddLine what="place"
   'src/routes/plants/+page.svelte': 6, // the sort order `place` and the address's `place=` parameter

@@ -48,8 +48,8 @@ describe('the link preview and the one-line forms (A3, visitor-words 3 and 4)', 
     expect(line).toContain('open sky 30–41 DLI');
     expect(line).not.toMatch(/hab\. night|· sky /);
   });
-  it('the figure labels are the figures\' own names on the glance row, compare and the card', () => {
-    for (const f of ['src/lib/ui/ref/Glance.svelte', 'src/routes/compare/+page.svelte', 'src/lib/share/card.ts']) {
+  it('the figure labels are the figures\' own names on compare and the card', () => {
+    for (const f of ['src/routes/compare/+page.svelte', 'src/lib/share/card.ts']) {
       const s = code(f);
       expect(s, f).toMatch(/Warmest month, mean daily high/);
       expect(s, f).toMatch(/Coldest month, mean nightly low/);

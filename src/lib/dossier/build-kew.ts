@@ -46,7 +46,7 @@ import { viaSource, type RangeVia } from './range-via';
 import { ownNames, isOwnName, canonicalOf, type OwnNames } from './own-names';
 import { canonicalOfKew, sameTypeLabel, type SameTypeName } from './kew-rows';
 import { kewItemUrl, kewAskable, kewItemsOf, entityUrl } from './batch';
-import { regionsOf, readRecords, rangeTest, admissionRecord, apiDatasetsOf, ownShown, COMMONS_BELOW, commonsNotAsked, commonsNameCheck, kewIdOfPageKey, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
+import { regionsOf, readRecords, rangeTest, admissionRecord, apiDatasetsOf, ownShown, COMMONS_BELOW, commonsNotAsked, commonsNameCheck, kewIdOfPageKey, wideRangeWords, drawnLandOf, extremesUpstream, withPlace, withCoarse, defaultWords, noPlacedWords, extraOccurrences, extraKeyWords, noClimate, INAT_LEFT_TO_FILL, INAT_SETS_LEFT, type BuildResult, type SkippableSource, type ClimateProvider } from './build';
 import { institutionWords, type PlaceIndex } from './clean';
 import type { ExtraKey, NoKeyLine } from './extra-keys';
 import type { Climate } from './schema';
@@ -316,8 +316,8 @@ export async function buildKewDossier(k: KewSpecies, o: KewBuildOptions): Promis
     // A cultigen has no wild habitat (round eighty-six; review D's D1), as for a page with a GBIF key: read from Kew's area text.
     else if (cultigenOf(k.area)) climate = { status: 'none', detail: cultigenClimateWhy(cultigenOf(k.area)!) };
     else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : wideRangeWords(native) };
-    else if (r.forClimate.length) climate = withPlace(await (o.climate ?? noClimate).envelope(r.forClimate, drawnLandOf(native, o.regions)), o.regions);
-    else if (r.allPts.length) climate = { status: 'none', detail: noPlacedWords(r.nInRangeRecords, r.allPts.length) };
+    else if (r.forClimate.length) climate = await withCoarse(withPlace(await (o.climate ?? noClimate).envelope(r.forClimate, drawnLandOf(native, o.regions)), o.regions), r.forCoarse, o);
+    else if (r.allPts.length) climate = await withCoarse({ status: 'none', detail: noPlacedWords(r.nInRangeRecords, r.allPts.length) }, r.forCoarse, o);
     else climate = { status: 'none', detail: 'no georeferenced record inside the range' };
     // Extremes beyond a lapse correction's reach, or whose nights and the habitat's months disagree, are set aside too, and the record says why (round eighty, A; round eighty-four's words, `lapseCause`).
     const lapseWhy = climate.status === 'ok' && !(climate.landFraction != null && climate.landFraction < 0.5) ? lapseSetAside(climate) : null;

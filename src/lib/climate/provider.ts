@@ -19,6 +19,7 @@ import { fetchPowerSeries, extremesFor, powerCell, type PowerSeries } from './po
 import { yearLows } from './year-lows';
 import { quantile } from '$core/extremes';
 import { r1 } from '$core/num';
+import { areaRadiusM, coarseRegionOf, COARSE_KM, COARSE_NO_FLOOR } from '$core/coarse';
 
 /** PAR is ~45% of shortwave and 4.6 µmol/J, so 1 MJ/m²/day of rsds ≈ 2.07 mol/m²/day of PAR. */
 const DLI_PER_MJ = 2.07;
@@ -248,6 +249,70 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       for (const c of used) admitted[c.how]++;
       const edge = used.filter((c) => c.how !== 'strict').map((c) => [+c.lat.toFixed(3), +c.lon.toFixed(3), c.how] as [number, number, Exclude<Admission, 'strict'>]);
       return { status: 'ok', cells: used.length, records, cell: typical.id, ...(points.some((p) => p[2]) ? { admitted, ...(edge.length ? { edge } : {}) } : {}), at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, ...(hemispheres ? { hemispheres } : {}), ...(sea ? { seaCells: sea } : {}), landFraction: r2(landFraction), src };
+    },
+    async coarse(points): Promise<Climate> {
+      // Round 108 (`$core/coarse`; docs/PLAN-108.md): each record placed only to within 30 km is read as an area, the mean
+      // of the land cells whose centres lie within the half-diagonal of iNaturalist's 0.2° cell around it (the area round
+      // 108's proof measured), one area per three-decimal position; the months are the median across the areas, the rain the
+      // median of the areas' own years. No NASA POWER figure: the cold floor is read at one point, which such records
+      // cannot fix (the proof: it moved more than 2.5 °C for one species in ten).
+      const h = await o.grid.header().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
+      if ('error' in h) return { status: 'refused', detail: `climate grid unavailable: ${h.error}` };
+      const byPlace = new Map<string, { lat: number; lon: number; n: number }>();
+      for (const [lat, lon] of points) {
+        const id = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+        const e = byPlace.get(id);
+        if (e) e.n++;
+        else byPlace.set(id, { lat, lon, n: 1 });
+      }
+      const areas: Array<{ id: string; lat: number; lon: number; n: number; months: Month[]; elevationM: number; land: number }> = [];
+      let empty = 0;
+      try {
+        for (const [, p] of byPlace) {
+          const r = areaRadiusM(p.lat), dLat = r / 111_320, dLon = r / (111_320 * Math.max(0.1, Math.cos((p.lat * Math.PI) / 180)));
+          const got: Array<{ months: Month[]; elevationM: number }> = [];
+          const seen = new Set<string>();
+          for (let la = p.lat - dLat; la <= p.lat + dLat + 1e-9; la += h.cell) for (let lo = p.lon - dLon; lo <= p.lon + dLon + 1e-9; lo += h.cell) {
+            const c = cellOf(h, la, lo);
+            if (seen.has(c.id)) continue;
+            seen.add(c.id);
+            const m = cellCentre(h, c.row, c.col);
+            const dy = (m.lat - p.lat) * 111_320, dx = (m.lon - p.lon) * 111_320 * Math.cos((p.lat * Math.PI) / 180);
+            if (Math.hypot(dx, dy) > r) continue;
+            const x = await readCell(m.lat, m.lon);
+            if (x && x.elevationM != null) got.push({ months: x.months, elevationM: x.elevationM });
+          }
+          if (!got.length) { empty++; continue; }
+          const months = Array.from({ length: 12 }, (_, i) => {
+            const out: Record<string, number | undefined> = {};
+            for (const k of VARS) {
+              const xs = got.map((g) => g.months[i][k]).filter((x): x is number => typeof x === 'number');
+              out[k] = xs.length === got.length ? xs.reduce((a, x) => a + x, 0) / xs.length : undefined;
+            }
+            return out as Month;
+          });
+          areas.push({ id: cellOf(h, p.lat, p.lon).id, lat: p.lat, lon: p.lon, n: p.n, months, elevationM: got.reduce((a, g) => a + g.elevationM, 0) / got.length, land: got.length });
+        }
+      } catch (e) {
+        return { status: 'refused', detail: `climate grid unavailable: ${e instanceof Error ? e.message : String(e)}` };
+      }
+      if (areas.length < 3) return { status: 'none', detail: `the in-range records placed only to within ${COARSE_KM} km give ${areas.length} area${areas.length === 1 ? '' : 's'} with land${empty ? ` (${empty} more with none)` : ''}; three are needed` };
+      const region = coarseRegionOf(areas[0].lat, areas[0].lon);
+      const years = areas.map((a) => a.months);
+      const months = monthStat(years, 0.5), p10 = monthStat(years, 0.1), p90 = monthStat(years, 0.9);
+      const annual = years.map((y) => y.reduce((a, m) => a + m.precipMm, 0)).sort((a, b) => a - b);
+      const annualRain = { p10: r1(quantile(annual, 0.1)), p90: r1(quantile(annual, 0.9)), p50: r1(quantile(annual, 0.5)) };
+      const coldest = (y: Month[]) => Math.min(...y.map((m) => m.tmin));
+      const medCold = quantile(areas.map((a) => coldest(a.months)).sort((a, b) => a - b), 0.5);
+      const typical = [...areas].sort((a, b) => Math.abs(coldest(a.months) - medCold) - Math.abs(coldest(b.months) - medCold) || b.n - a.n || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+      const records = areas.reduce((a, x) => a + x.n, 0);
+      const src: ClimateOk['src'] = {
+        normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
+        envelope: `median and 10th–90th percentile of each month across the ${areas.length} areas of ${records} in-range records placed only to within ${COARSE_KM} km (no three land cells hold a record placed to within 10 km), each area the mean of the land cells within about ${Math.round(areaRadiusM(typical.lat) / 1000)} km of it${empty ? ` (${empty} further area${empty === 1 ? '' : 's'} with no land cell, left out)` : ''}; elevation at the typical area (its coldest month's mean nightly low nearest the median across areas), the mean of its area's land cells; its position rounded to 0.1°, a record's own position never published`,
+        extremes: `NASA POWER ${COARSE_NO_FLOOR}`,
+        elevation: `ETOPO 2022, ${Math.round(typical.elevationM)} m (the mean of the area's land cells)`
+      };
+      return { status: 'ok', cells: areas.length, records, cell: typical.id, at: { lat: +typical.lat.toFixed(1), lon: +typical.lon.toFixed(1) }, months, p10, p90, annualRain, extremes: undefined, extremesStatus: 'coarse', coarse: { km: COARSE_KM, areas: areas.length, region: region?.id ?? 'unknown' }, src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.

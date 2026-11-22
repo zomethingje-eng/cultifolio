@@ -27,7 +27,8 @@
     state = 'ok',
     why = '',
     records = null,
-    cells = null
+    cells = null,
+    coarse = null
   }: {
     months: M[];
     extremes?: { minP01: number } | null;
@@ -47,6 +48,8 @@
     /** The records and grid cells the figures are read from, said under them on a wider screen. */
     records?: number | null;
     cells?: number | null;
+    /** Round 108 (`$core/coarse`): the climate rests on records placed only to within `km` km, each read as an area; the mark takes the few-records mark's place and links to the Climate section's notice, which says both. */
+    coarse?: { km: number } | null;
   } = $props();
   const cold = $derived(months.length ? months.reduce((b, x, i) => (x.tmin < months[b].tmin ? i : b), 0) : 0);
   const yr = $derived(yearRain(months, annualRain));
@@ -57,7 +60,7 @@
 </script>
 
 <section class="hline" class:hstate={!ok} aria-labelledby="hline-t">
-  <p class="hhead" class:withfew={!!few}><span id="hline-t">Habitat<span class="ins">{' '}in short</span></span>{#if ok && few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={ok ? href : '#s-climate'}>{ok ? 'Figures' : 'Climate'} ›</a></p>
+  <p class="hhead" class:withfew={!!few || !!coarse}><span id="hline-t">Habitat<span class="ins">{' '}in short</span></span>{#if ok && coarse}<a class="few" id="coarse-line" href="#coarse-records">placed to {coarse.km} km</a>{:else if ok && few}{#if fewHref}<a class="few" id="few-records-line" href={fewHref}>from {few.records} record{few.records === 1 ? '' : 's'}</a>{:else}<span class="few">from {few.records} record{few.records === 1 ? '' : 's'}</span>{/if}{/if}<a class="figs" href={ok ? href : '#s-climate'}>{ok ? 'Figures' : 'Climate'} ›</a></p>
   {#if ok}
     <dl>
       {#if extremes}
@@ -69,7 +72,7 @@
       {#if dlis.length}<div><dt>Open-sky light</dt><dd><b>{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)} <Term k="dli" /></b> <span>lowest to highest month <i>CHELSA</i></span></dd></div>{/if}
       {#if season}<div><dt>Season</dt><dd><b class="w">{season.head}</b> <span>{season.months} <i>{season.rule}</i></span></dd></div>{/if}
     </dl>
-    {#if records && cells}<p class="hfrom">The wild habitat&rsquo;s figures, from {n(records, 'record', 'records')} in {n(cells, 'grid cell', 'grid cells')} <span class="hsep">·</span> <a href="/about/how#climate">How</a></p>{/if}
+    {#if records && cells}<p class="hfrom">{#if coarse}The wild habitat&rsquo;s figures, from {n(records, 'record', 'records')} placed only to within {coarse.km} km, in {n(cells, 'area', 'areas')} <span class="hsep">·</span> <a href="/about/how#coarse">How</a>{:else}The wild habitat&rsquo;s figures, from {n(records, 'record', 'records')} in {n(cells, 'grid cell', 'grid cells')} <span class="hsep">·</span> <a href="/about/how#climate">How</a>{/if}</p>{/if}
   {:else}
     <p class="hnone" id="hline-state"><b>{state === 'pending' ? 'Habitat climate pending.' : state === 'refused' ? 'Habitat climate not checked.' : 'No habitat climate.'}</b>{why ? ` ${why}` : ''}</p>
   {/if}

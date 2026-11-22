@@ -160,9 +160,11 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // 1070, 1262, 1276, 1417 at 1024. Measured in Chromium on 22 November 2026 with round 107's code (the base before: 1069,
 // 1272, 1286, 1427; 1092, 1285, 1299, 1441); WebKit and Firefox measured too. With round 107's lines on the base before:
 // FAILED, stripTop 1047 for 1069 at 1280.
+// Round 108: its "Changed lately" lines wrap a line fewer at 1024 (21 px higher: 1049, 1240, 1254, 1396), none at 1280;
+// measured in Chromium, WebKit and Firefox on 22 November 2026, every engine within 2 px. On 191e13e's base: FAILED at 1024.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
   '1280': { stripTop: 1047, stripBottom: 1251, searchTop: 1265, rowTop: 1406, tile: [172, 193] },
-  '1024': { stripTop: 1070, stripBottom: 1262, searchTop: 1276, rowTop: 1417, tile: [155, 182] }
+  '1024': { stripTop: 1049, stripBottom: 1240, searchTop: 1254, rowTop: 1396, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

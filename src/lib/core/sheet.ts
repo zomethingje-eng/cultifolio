@@ -13,6 +13,7 @@
  * shown apart from the habitat's figures and never changing the cold floor (round
  * sixty; self-review 3).
  */
+import { COARSE_KM } from './coarse';
 import { NO_GBIF_CLIMATE } from './no-gbif';
 import { frostWording } from './extremes';
 import { MON3 } from './months';
@@ -65,7 +66,7 @@ export interface SheetInput {
   p90?: Pick<Month, 'tmin' | 'dli'>[] | null;
   extremes?: Extremes | null;
   /** Why there are no extremes, when there are none: 'refused' (the source did not answer when the dossier was built) is said as not checked, never as none on file (round sixteen, 7). */
-  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | 'lapse' | null;
+  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | 'lapse' | 'coarse' | null;
   /**
    * The series set aside, when `extremesStatus` is 'lapse' (the dossier's `extremesLapse`, a sheet's copy of it): its
    * cause is read from it and the months, and said (round eighty-four). Left out, the words say only that it was set aside.
@@ -247,17 +248,17 @@ export interface ColdFloor {
  * `extremesLapse` (`lapseCause`); without it (a sheet built before) only that they were set aside.
  */
 const extremesWhy = (exStatus?: SheetInput['extremesStatus'], cause?: LapseCause | null): string =>
-  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : exStatus === 'lapse' ? (cause ? `The daily extremes were read and set aside: ${causeSentence(cause, U)}.` : 'The daily extremes were read and set aside; the species page says why.') : 'No daily extremes are on file.';
+  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : exStatus === 'coarse' ? `The daily extremes were not derived: this climate rests on records placed only to within ${COARSE_KM} km, and a cold floor is read at one point, which such records cannot fix.` : exStatus === 'lapse' ? (cause ? `The daily extremes were read and set aside: ${causeSentence(cause, U)}.` : 'The daily extremes were read and set aside; the species page says why.') : 'No daily extremes are on file.';
 /**
  * Why a page, compare or the share card has no floor to print, in the few words the glance row gives beside the mean
  * nightly low (rule 2: a refusal is "not checked", a skip "not asked for"). One wording for every surface (round
  * sixty-two; visitor-words 11: the card gave no reason at all); a set-aside series by its own cause (round eighty-four).
  */
 export const extremesWhyTag = (exStatus?: string | null, cause?: LapseCause | null, units: Units = METRIC): string =>
-  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : exStatus === 'lapse' ? causeTag(cause ?? null, units) : 'no extremes series';
+  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : exStatus === 'coarse' ? `extremes not derived (records placed to ${COARSE_KM} km)` : exStatus === 'lapse' ? causeTag(cause ?? null, units) : 'no extremes series';
 /** The same as a clause for a sentence, in a grower's words; exported for a plant's page, which says it beside its own figures. */
 export const extremesWhyShort = (exStatus?: SheetInput['extremesStatus'], cause?: LapseCause | null, units: Units = U): string =>
-  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'lapse' ? causeShort(cause ?? null, units) : 'no daily extremes on file';
+  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : exStatus === 'coarse' ? `the records are placed only to within ${COARSE_KM} km, so no floor is derived` : exStatus === 'lapse' ? causeShort(cause ?? null, units) : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 // The third and sixth places (the group, the climate status) are kept for callers written before round eighty-one: a
 // care group gives no figure since then, so neither changes the answer.
@@ -279,7 +280,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, _group?: ArchG
     const cause = exStatus === 'lapse' && setAside ? lapseCause({ months: m, extremes: setAside }) : null;
     // The floor's state in the glossary's words, never "none read" of extremes that were read (round eighty-five; W13, S8):
     // set aside where the checks set them aside, not checked or not asked where the source did not answer or was skipped.
-    const state = exStatus === 'lapse' || exStatus === 'sea' ? 'set aside' : exStatus === 'refused' ? 'not checked' : exStatus === 'skipped' ? 'not asked' : 'none on file';
+    const state = exStatus === 'lapse' || exStatus === 'sea' ? 'set aside' : exStatus === 'coarse' ? 'not derived' : exStatus === 'refused' ? 'not checked' : exStatus === 'skipped' ? 'not asked' : 'none on file';
     return { habitat: f, kind: 'mean', s: `Cold floor: ${state}. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus, cause)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus, cause, U)}.`, rule: 'CHELSA' } };
   }
   return null;

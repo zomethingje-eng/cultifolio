@@ -109,6 +109,16 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 108,
+    date: '2026-11-22',
+    reader: 'Plants whose locations are blurred to guard them now have a habitat climate, without a cold floor.',
+    lines: [
+      'Where no record is placed to within 10 km, records placed only to within 30 km give the months, rain and light.',
+      'Each such record is read as the land around it, in southern Africa and South-East Asia, where a test held.',
+      'No cold floor is derived from them: it is read at one point, and the test showed blurred records move it.'
+    ]
+  },
+  {
     n: 107,
     date: '2026-11-22',
     reader: 'A plant just added is set beside its habitat at once, and the frost watch takes a town.',

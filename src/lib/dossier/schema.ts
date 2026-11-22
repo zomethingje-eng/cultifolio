@@ -299,8 +299,8 @@ export const Climate = v.variant('status', [
      * (`lapseSetAside`; round eighty, A): set aside here by the parser and kept, as the sea's are.
      */
     extremesLapse: v.optional(Extremes),
-    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7); 'sea' is read at a cell that is mostly sea and set aside; 'lapse' is read at a cell whose correction is beyond `MAX_LAPSE_M`, or impossible, and set aside (round eighty). */
-    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped', 'sea', 'lapse'])),
+    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7); 'sea' is read at a cell that is mostly sea and set aside; 'lapse' is read at a cell whose correction is beyond `MAX_LAPSE_M`, or impossible, and set aside (round eighty); 'coarse' is not read, since the climate rests on records placed only to within 30 km (round 108, `$core/coarse`). */
+    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped', 'sea', 'lapse', 'coarse'])),
     /**
      * Records on both sides of the equator in strength: the envelope is the larger side's cells alone, since a January
      * median over both would be a month no place has; the other side's count is kept so the page can say so (round thirty-one, 1).
@@ -321,6 +321,11 @@ export const Climate = v.variant('status', [
      * ("São Paulo, Brazil"), so a page whose climate rests on few records can say where its figures were read.
      */
     place: v.optional(v.string()),
+    /**
+     * Round 108 (`$core/coarse`): the climate rests on records placed only to within `km` km, each read as an area, where
+     * the records placed to within 10 km give none; `cells` then counts the areas. Absent on every other climate.
+     */
+    coarse: v.optional(v.object({ km: v.number(), areas: v.number(), region: v.string() })),
     /*
      * No `wild` (round eighty-seven's review of stage 2, S4): the stage's rule that chose the typical cell among the cells
      * holding an iNaturalist research-grade record, and said so here, is taken out; the typical cell is every cell's.

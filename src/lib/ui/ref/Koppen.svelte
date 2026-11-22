@@ -10,7 +10,7 @@
   import { walterLieth, monthRuns } from '$climate/walter-lieth';
   import WalterLiethDiagram from './WalterLieth.svelte';
   // `src`: the months' own source as the climate section names it (round eighty-seven, the integration; rule 1).
-  let { koppen, months, cells = 0, src = null }: { koppen: KoppenFigures | null | undefined; months: ReadonlyArray<{ tmean: number; precipMm: number }> | null | undefined; cells?: number; src?: string | null } = $props();
+  let { koppen, months, cells = 0, src = null, areas = false }: { koppen: KoppenFigures | null | undefined; months: ReadonlyArray<{ tmean: number; precipMm: number }> | null | undefined; cells?: number; src?: string | null; areas?: boolean } = $props();
   const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const reasons = $derived(koppen ? koppenReasons(koppen) : []);
   const wl = $derived(walterLieth(months));
@@ -23,7 +23,7 @@
   <section class="kop" aria-labelledby="kop-t" id="climate-class">
     <h2 id="kop-t">Climate class</h2>
     {#if koppen?.cls}
-      <p class="cls"><b>{koppen.cls}</b> <span><Term k="koppen">Köppen–Geiger</Term>, worked out from the median year of the range&rsquo;s {cells > 1 ? `${cells} cells` : 'one cell'}</span></p>
+      <p class="cls"><b>{koppen.cls}</b> <span><Term k="koppen">Köppen–Geiger</Term>, worked out from the median year of the range&rsquo;s {areas ? `${cells} areas` : cells > 1 ? `${cells} cells` : 'one cell'}</span></p>
       <table>
         <tbody>
           {#each reasons as [l, m, test] (l)}

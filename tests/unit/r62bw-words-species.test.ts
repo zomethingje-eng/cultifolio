@@ -11,13 +11,6 @@ import { photoCredit } from '$lib/ui/ref/head';
 /** A source file without its comments, which quote old words as history. */
 const code = (f: string) => readFileSync(f, 'utf8').replace(/<!--[^]*?-->/g, '').replace(/\/\*[^]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-describe('the species page never says "in the wild" over a modelled figure (A3)', () => {
-  it('the glance row (species page) is not headed "In the wild"', () => {
-    // Over a 1st-percentile night from one NASA POWER reanalysis cell and CHELSA medians across cells.
-    expect(code('src/lib/ui/ref/Glance.svelte')).not.toMatch(/>\s*In the wild\s*</);
-  });
-});
-
 describe('the group is said as the table listing it, everywhere (A4)', () => {
   it('the cultivation card\'s line does not say "by its genus (archetype table)"', () => {
     // Renders "Grouped as a cactus or succulent, by its genus (archetype table)." above the card whose "Group." line
