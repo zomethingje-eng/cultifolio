@@ -2,6 +2,9 @@
 # climate for want of records placed to within 10 km, and three or more in-range places placed only to within 30 km) built
 # again offline on round 108's code, which reads such records as areas in southern Africa and South-East Asia and derives
 # no cold floor from them; then the fills a build does not carry, the index, the upload and the live check.
+# Second run, 22 November 2026: the first stopped at --check-ranges (377 coarse pages "not counted by reason", two typical
+# areas outside every native region by the cell's reach); round 108's follow-up counts the areas by reason and reads the
+# typical area by its own reach, and this run builds the pages again on it (the stop's changed words start it at step 1).
 # Run only after round 108's app is deployed (its pages read climate.coarse; an older app would not parse it).
 #   node scripts\corpus-step.mjs --plan scripts\corpus-plan-r108.txt
 # When: after a day's daily run has stopped; offline, so no iNaturalist or GBIF allowance is spent.
@@ -11,7 +14,7 @@
 # their build, 390 keep their reason (no coarse record in a tested region). The index's climates were 38,007.
 backup
 dossier --keys scripts/rebuild-r108-coarse.txt --offline --grid climate --bulk bulk
-stop Read the --keys build's last line ("776 built, 0 kept of 776; index now 48375 species") and drops.txt if one was written (each line expected, or stop). Then open two pages' dossiers: static/s/v3/<key>.json for Conophytum calculus (k2734812) and Lithops dinteri (k2342358): climate.status "ok", climate.coarse { km 30, areas, region "southern-africa" }, climate.extremesStatus "coarse", no climate.extremes, and upstream["climate.extremes"] "skipped" with "not derived: the records are placed only to within 30 km". Stop and paste the end of corpus-step.log back if either reads otherwise. Then --go-on.
+stop Read the --keys build's last line ("776 built, 0 kept of 776; index now 48375 species") and drops.txt if one was written (each line expected, or stop). Then open two pages' dossiers: static/s/v3/<key>.json for Conophytum calculus (k2734812) and Lithops dinteri (k2342358): climate.status "ok", climate.coarse { km 30, areas, region "southern-africa" }, climate.extremesStatus "coarse", climate.coarse.how and climate.admitted (its counts adding up to climate.cells), no climate.extremes, and upstream["climate.extremes"] "skipped" with "not derived: the records are placed only to within 30 km". Stop and paste the end of corpus-step.log back if either reads otherwise. Then --go-on.
 expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
 expect B = 776
 dossier --fill kew-published --bulk bulk

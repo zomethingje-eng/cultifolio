@@ -43,3 +43,31 @@ confirmation are `docs/PLAN-108.md`, the first hand-off's round 5.
 the two phone engines (the new section's heading was an h3 where every top-level section of /about/how has an h2; now an
 h2, kept out of the contents line, which a link more takes past sixty words); the second failed only r69p P5 on the plant
 page in Firefox, once (the summary moved under the press; 112 of 112 alone, eight times over, with no retry).
+
+## The deploy
+
+052bda0 pushed and deployed 22 November 2026 with `node scripts/deploy.mjs` as version a2a804e7 (the record written after
+the stamp, so svelte-check, 0 errors in 1,867 files, and the 6,447 unit tests ran again first); the live check passed, 23
+of 23, with GBIF still serving the backbone. Next: the corpus step, `node scripts\corpus-step.mjs --plan
+scripts\corpus-plan-r108.txt`, in the owner's CMD.
+
+## The corpus step's first run, and the follow-up
+
+The plan's first run (22 November 2026) built the 776 pages (377 gained a coarse climate; the index's climates 38,384)
+and stopped at `--check-ranges`: the 377 coarse pages had no `climate.admitted` ("records or climate cells not counted by
+reason"), and two typical areas, published rounded to 0.1°, lay past a grid cell's reach (Lithops optica at 26.7 S,
+15.0 E, offshore; Conophytum albiflorum at 32.7 S, 18.1 E). Nothing was uploaded.
+
+The follow-up:
+- each coarse area keeps the reason its record was let into the range;
+- the climate counts its areas by reason (`climate.admitted`, adding up to `cells`) and says the typical area's
+  (`climate.coarse.how`), never a record's position;
+- the range check reads a coarse typical area by that reason's reach, less a cell's half-diagonal, plus the rounding
+  (`coarseReached`, 0.071°).
+
+The two pages pass, Lithops optica only by its record's coast reason (scripts/dev/r108-reach-check.ts). /about/formats says
+the field. r108a has four tests more, FAILED on 052bda0. The plan's stop names the new fields, so its run starts again
+at step 1.
+
+The launch gate: svelte-check 0 errors in 1,867 files, 6,451 unit tests, 2,877 browser tests, every test first time in
+every engine, on the first run.

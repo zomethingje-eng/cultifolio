@@ -57,13 +57,28 @@ export function cellReached(t: RegionTester, lat: number, lon: number, codes: re
   return codes.some((c) => Number.isFinite(t.reach(lat, lon, c, REACH_DEG[how])) || (how === 'island' && !!TDWG3[c] && inBox(lat, lon, grownBox(TDWG3[c], CELL_SLACK_DEG))));
 }
 
+/** Half the diagonal of 0.1°, in degrees: how far a coarse climate's typical area, published rounded to 0.1°, may lie from its record. */
+export const COARSE_ROUND_DEG = 0.071;
+
+/**
+ * Whether a coarse climate's typical area (round 108; `climate.coarse`) lies within reach of one of `codes`: its record was
+ * let into the range by `how`, and the area is published rounded to 0.1° (a protected plant's position is never shown), so
+ * its reach is that reason's, less the grid cell's half-diagonal (an area is placed at its record, not at a cell's middle),
+ * plus the rounding. The corpus step of 22 November 2026 named Lithops optica (26.7 S, 15.0 E) and Conophytum albiflorum
+ * (32.7 S, 18.1 E), coastal plants whose areas the rounding put past the cell's reach.
+ */
+export function coarseReached(t: RegionTester, lat: number, lon: number, codes: readonly string[], how: Admission): boolean {
+  const reach = REACH_DEG[how] - CELL_SLACK_DEG + COARSE_ROUND_DEG;
+  return codes.some((c) => Number.isFinite(t.reach(lat, lon, c, reach)) || (how === 'island' && !!TDWG3[c] && inBox(lat, lon, grownBox(TDWG3[c], COARSE_ROUND_DEG))));
+}
+
 export interface CheckPage {
   key: string;
   name: { scientific: string };
   built?: string;
   distribution?: { native?: ReadonlyArray<{ code?: string; name?: string }> };
   occurrences?: { open?: ReadonlyArray<readonly [number, number, ...unknown[]]>; rangeTested?: boolean; rangeRule?: string; nOutsideRange?: number; nOpenInRange?: number; nRestrictedInRange?: number; admitted?: Record<Admission, number>; edge?: Partial<Record<Exclude<Admission, 'strict'>, number[]>> };
-  climate?: { status?: string; at?: { lat: number; lon: number }; cells?: number; admitted?: Record<Admission, number>; edge?: ReadonlyArray<readonly [number, number, Exclude<Admission, 'strict'>]> };
+  climate?: { status?: string; at?: { lat: number; lon: number }; cells?: number; coarse?: { how?: Admission }; admitted?: Record<Admission, number>; edge?: ReadonlyArray<readonly [number, number, Exclude<Admission, 'strict'>]> };
   upstream?: Record<string, { status?: string; detail?: string } | undefined>;
 }
 
@@ -117,7 +132,8 @@ export function checkPage(d: CheckPage, cell: RegionTester, records: RegionTeste
   const current = d.occurrences?.rangeRule === rule;
   const edge: ReadonlyArray<readonly [number, number, Exclude<Admission, 'strict'>]> = d.climate?.status === 'ok' ? (d.climate.edge ?? []) : [];
   const howAt: Admission = (at && edge.find((e) => e[0] === at.lat && e[1] === at.lon)?.[2]) || 'strict';
-  const cellOutside = tested && !!at && (current ? !cellReached(records, at.lat, at.lon, codes, howAt) : !codes.some((c) => cell.inRegion(at.lat, at.lon, c)));
+  const coarse = d.climate?.status === 'ok' ? d.climate.coarse : undefined;
+  const cellOutside = tested && !!at && (coarse ? !coarseReached(records, at.lat, at.lon, codes, coarse.how ?? 'strict') : current ? !cellReached(records, at.lat, at.lon, codes, howAt) : !codes.some((c) => cell.inRegion(at.lat, at.lon, c)));
   // A page whose records were read (or carried) and tested against a range says by which rule; one that read none (no
   // GBIF key and no key from Kew's synonymy: its records "not checked") has none to say.
   const read = ['ok', 'none'].includes(d.upstream?.['gbif.occurrences']?.status ?? '');

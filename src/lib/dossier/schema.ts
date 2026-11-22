@@ -325,7 +325,7 @@ export const Climate = v.variant('status', [
      * Round 108 (`$core/coarse`): the climate rests on records placed only to within `km` km, each read as an area, where
      * the records placed to within 10 km give none; `cells` then counts the areas. Absent on every other climate.
      */
-    coarse: v.optional(v.object({ km: v.number(), areas: v.number(), region: v.string() })),
+    coarse: v.optional(v.object({ km: v.number(), areas: v.number(), region: v.string(), how: v.optional(v.picklist(['strict', 'buffer', 'coast', 'island'])) })),
     /*
      * No `wild` (round eighty-seven's review of stage 2, S4): the stage's rule that chose the typical cell among the cells
      * holding an iNaturalist research-grade record, and said so here, is taken out; the typical cell is every cell's.

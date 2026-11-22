@@ -258,14 +258,17 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       // cannot fix (the proof: it moved more than 2.5 °C for one species in ten).
       const h = await o.grid.header().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
       if ('error' in h) return { status: 'refused', detail: `climate grid unavailable: ${h.error}` };
-      const byPlace = new Map<string, { lat: number; lon: number; n: number }>();
-      for (const [lat, lon] of points) {
+      // Each area keeps the reason its record was let into the range (the records at one position share it), so the climate
+      // counts its areas by reason as the 10 km climate counts its cells, and the range check reads the typical area by its
+      // reason's reach (round 108's corpus step: the check found 377 coarse pages uncounted).
+      const byPlace = new Map<string, { lat: number; lon: number; n: number; how?: Admission }>();
+      for (const [lat, lon, how] of points) {
         const id = `${lat.toFixed(3)},${lon.toFixed(3)}`;
         const e = byPlace.get(id);
         if (e) e.n++;
-        else byPlace.set(id, { lat, lon, n: 1 });
+        else byPlace.set(id, { lat, lon, n: 1, how });
       }
-      const areas: Array<{ id: string; lat: number; lon: number; n: number; months: Month[]; elevationM: number; land: number }> = [];
+      const areas: Array<{ id: string; lat: number; lon: number; n: number; how?: Admission; months: Month[]; elevationM: number; land: number }> = [];
       let empty = 0;
       try {
         for (const [, p] of byPlace) {
@@ -291,7 +294,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
             }
             return out as Month;
           });
-          areas.push({ id: cellOf(h, p.lat, p.lon).id, lat: p.lat, lon: p.lon, n: p.n, months, elevationM: got.reduce((a, g) => a + g.elevationM, 0) / got.length, land: got.length });
+          areas.push({ id: cellOf(h, p.lat, p.lon).id, lat: p.lat, lon: p.lon, n: p.n, how: p.how, months, elevationM: got.reduce((a, g) => a + g.elevationM, 0) / got.length, land: got.length });
         }
       } catch (e) {
         return { status: 'refused', detail: `climate grid unavailable: ${e instanceof Error ? e.message : String(e)}` };
@@ -312,7 +315,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         extremes: `NASA POWER ${COARSE_NO_FLOOR}`,
         elevation: `ETOPO 2022, ${Math.round(typical.elevationM)} m (the mean of the area's land cells)`
       };
-      return { status: 'ok', cells: areas.length, records, cell: typical.id, at: { lat: +typical.lat.toFixed(1), lon: +typical.lon.toFixed(1) }, months, p10, p90, annualRain, extremes: undefined, extremesStatus: 'coarse', coarse: { km: COARSE_KM, areas: areas.length, region: region?.id ?? 'unknown' }, src };
+      const admitted = { strict: 0, buffer: 0, coast: 0, island: 0 };
+      for (const a of areas) admitted[a.how ?? 'strict']++;
+      const counted = points.some((p) => p[2]);
+      return { status: 'ok', cells: areas.length, records, cell: typical.id, ...(counted ? { admitted } : {}), at: { lat: +typical.lat.toFixed(1), lon: +typical.lon.toFixed(1) }, months, p10, p90, annualRain, extremes: undefined, extremesStatus: 'coarse', coarse: { km: COARSE_KM, areas: areas.length, region: region?.id ?? 'unknown', ...(counted ? { how: typical.how ?? 'strict' } : {}) }, src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.

@@ -16,6 +16,8 @@ import { readRecords, withCoarse, type ClimateProvider } from '$dossier/build';
 import { isCoarse, coarseRegionOf, areaRadiusM, coarseSentence, COARSE_REGIONS, COARSE_KM } from '$core/coarse';
 import { coldFloor } from '$core/sheet';
 import type { Climate } from '$dossier/schema';
+import { regionTester, SHAPES_FILE, type ShapesFile } from '$dossier/tdwg-shapes';
+import { coarseReached, cellReached, checkPage, cellTester } from '$dossier/range-check';
 
 const h = makeHeader({ built: '2026-11-22T00:00:00Z' });
 /** A Namaqualand month set: `w` warms every month by that many degrees, `r` scales the rain. */
@@ -82,7 +84,7 @@ describe('r108a the provider\'s coarse reading', () => {
     if (c.status !== 'ok') return;
     expect(c.cells).toBe(3);
     expect(c.records).toBe(3);
-    expect(c.coarse).toEqual({ km: COARSE_KM, areas: 3, region: 'southern-africa' });
+    expect(c.coarse).toEqual({ km: COARSE_KM, areas: 3, region: 'southern-africa', how: 'strict' });
     // The middle place (w 1) is the median: January's high 26 + 6 + 1.
     expect(c.months[0].tmax).toBeCloseTo(33, 0);
     expect(c.p10[0].tmax).toBeLessThan(c.p90[0].tmax);
@@ -173,5 +175,47 @@ describe('r108a the strip says "placed to 30 km" and counts places', () => {
     expect(body).not.toContain('id="few-records-line"');
     expect(body.replace(/<!--[^]*?-->/g, '')).toContain('from 9 records placed only to within 30 km, in 4 areas');
     expect(body).toContain('href="/about/how#coarse"');
+  });
+});
+
+/**
+ * Round 108's follow-up. On 052bda0 the corpus step's range check stopped: the 377 coarse pages had no climate.admitted
+ * ("records or climate cells not counted by reason": FAILED) and two typical areas, published rounded to 0.1°, lay past the
+ * reach of a grid cell's middle (Lithops optica at 26.7 S, 15.0 E, offshore; Conophytum albiflorum at 32.7 S, 18.1 E: FAILED).
+ */
+describe('r108a the range check reads a coarse climate', () => {
+  it('the areas are counted by the reason their records were let in, and the typical area says its own', async () => {
+    const c = await makeClimateProvider({ grid: grid(NAMAQUA), fetcher: fixtureFetcher({}) }).coarse!([[NAMAQUA[0].lat, NAMAQUA[0].lon, 'coast'], [NAMAQUA[1].lat, NAMAQUA[1].lon, 'strict'], [NAMAQUA[2].lat, NAMAQUA[2].lon, 'strict']]);
+    if (c.status !== 'ok') throw new Error(c.status);
+    expect(c.admitted).toEqual({ strict: 2, buffer: 0, coast: 1, island: 0 });
+    expect(Object.values(c.admitted!).reduce((a, n) => a + n, 0)).toBe(c.cells);
+    expect(['strict', 'coast']).toContain(c.coarse?.how);
+    expect(c).not.toHaveProperty('edge'); // no record's position is published
+  });
+  it('points with no reason (an older caller) give no counts, as the 10 km climate gives none', async () => {
+    const c = await makeClimateProvider({ grid: grid(NAMAQUA), fetcher: fixtureFetcher({}) }).coarse!(NAMAQUA.map((p) => [p.lat, p.lon] as const));
+    if (c.status !== 'ok') throw new Error(c.status);
+    expect(c.admitted).toBeUndefined();
+    expect(c.coarse?.how).toBeUndefined();
+  });
+  it('the two pages the check named pass by the coarse reach of their reason, and a cell\'s reach still fails one', () => {
+    const t = regionTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile);
+    expect(coarseReached(t, -32.7, 18.1, ['CPP'], 'strict')).toBe(true);
+    expect(cellReached(t, -32.7, 18.1, ['CPP'], 'strict')).toBe(false);
+    expect(coarseReached(t, -26.7, 15, ['NAM'], 'coast')).toBe(true);
+    // Far from the range by any reason, it fails: the reach is the rounding's, not a licence.
+    expect(coarseReached(t, -26.7, 15, ['CPP'], 'coast')).toBe(false);
+  });
+  it('checkPage: a coarse page counted by reason is neither uncounted nor outside', () => {
+    const t = regionTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile);
+    const page = {
+      key: 'k2734756', name: { scientific: 'Conophytum albiflorum' }, distribution: { native: [{ code: 'CPP' }] },
+      occurrences: { rangeRule: 'r87', rangeTested: true, nOpenInRange: 0, nRestrictedInRange: 3, admitted: { strict: 3, buffer: 0, coast: 0, island: 0 } },
+      climate: { status: 'ok', at: { lat: -32.7, lon: 18.1 }, cells: 3, admitted: { strict: 3, buffer: 0, coast: 0, island: 0 }, coarse: { how: 'strict' as const } },
+      upstream: { 'gbif.occurrences': { status: 'ok' } }
+    };
+    const f = checkPage(page, cellTester(JSON.parse(readFileSync(SHAPES_FILE, 'utf8')) as ShapesFile), t, 'r87');
+    expect(f.cellOutside).toBe(false);
+    expect(f.uncounted).toBe(false);
   });
 });
