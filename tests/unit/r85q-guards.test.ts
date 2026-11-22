@@ -57,15 +57,17 @@ describe('1. print opens what a reader wants on paper, and closes only what it o
       const SHEETS = 'article.species details.acc, article.species details.figures';
       const before = await openState(m.page, SHEETS);
       expect(before.length).toBeGreaterThanOrEqual(2);
-      expect(before.every((o) => !o)).toBe(true);
-      // The reader opens the first one themselves.
-      await m.page.locator('article.species details.acc').first().evaluate((d) => { (d as HTMLDetailsElement).open = true; });
+      // The first care card is open at rest (round 106: a row of closed titles read as empty), the rest closed.
+      expect(before[0]).toBe(true);
+      expect(before.slice(1).every((o) => !o)).toBe(true);
+      // The reader opens the second one themselves.
+      await m.page.locator('article.species details.acc').nth(1).evaluate((d) => { (d as HTMLDetailsElement).open = true; });
       await fire(m.page, 'beforeprint');
       expect(await openState(m.page, SHEETS)).toEqual(before.map(() => true)); // fails without the page's listener
       // "How this section is made" is not for paper: print leaves it as it was.
       expect(await openState(m.page, 'article.species details.howmade')).toEqual([false]);
       await fire(m.page, 'afterprint');
-      expect(await openState(m.page, SHEETS)).toEqual(before.map((_, i) => i === 0));
+      expect(await openState(m.page, SHEETS)).toEqual(before.map((_, i) => i <= 1));
     } finally {
       await m.close();
     }

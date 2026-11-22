@@ -37,10 +37,10 @@ test('r87s2 1: every stage-2 section on the species page, each with its source a
     await expect(el, sel).toHaveCount(1);
     for (const s of says) await expect(el, `${sel} ${s}`).toContainText(s);
   }
-  // Where the look puts them: the habitat's figures, then hardiness, the climate class and At home, before the summary;
-  // flowering in Natural habitat; WFO, the publication, Elsewhere and the chromosomes under Names and registers; the risk
+  // Where the page puts them since round 106 (the grower's order): what it is, At home with the cultivation cards, the
+  // hardiness, the climate with its class folded under the chart; flowering in "Where it grows wild"; WFO, the publication, Elsewhere and the chromosomes under Names and registers; the risk
   // and CITES under the record's facts.
-  const order = await page.evaluate(() => ['#s-glance', 'section#hardiness', 'section#climate-class', 'section#at-home', '#s-summary', '#s-habitat', 'section#flowering', '#s-registers', '#wfo-line', '#first-published', '#elsewhere', '#chromosome-line', '#s-facts', '#risk-line', '#cites-line'].map((s) => document.querySelector(s)).map((e, i, a) => (i === 0 ? true : !!(a[i - 1]!.compareDocumentPosition(e!) & Node.DOCUMENT_POSITION_FOLLOWING))));
+  const order = await page.evaluate(() => ['#s-summary', 'section#at-home', '#s-cultivation', 'section#hardiness', '#s-climate', 'section#climate-class', '#s-habitat', 'section#flowering', '#s-registers', '#wfo-line', '#first-published', '#elsewhere', '#chromosome-line', '#s-facts', '#risk-line', '#cites-line'].map((s) => document.querySelector(s)).map((e, i, a) => (i === 0 ? true : !!(a[i - 1]!.compareDocumentPosition(e!) & Node.DOCUMENT_POSITION_FOLLOWING))));
   expect(order.every(Boolean), JSON.stringify(order)).toBe(true);
   // The links IUCN's and Species+'s pages by the ids the page's Wikidata item gives.
   await expect(page.locator('#risk-line a[href="https://www.iucnredlist.org/details/152240/0"]')).toHaveCount(1);
@@ -58,7 +58,8 @@ test('r87s2 2: the section row lists the new sections, and each tab takes the re
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const tabs = page.locator('nav.tabs a');
-  await expect(tabs).toHaveText(['Hardiness', 'Climate class', 'At home', 'Cultivation', 'Climate', 'Habitat', 'Photographs', 'Related', 'Registers']);
+  // Round 106 (the first hand-off's round 4): the grower's order, and the section names a grower uses.
+  await expect(tabs).toHaveText(['What it is', 'At home', 'Hardiness', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
   await tabs.filter({ hasText: 'At home' }).click();
   await expect(page).toHaveURL(/#at-home$/);
   await expect(page.locator('nav.tabs a.on')).toHaveText('At home');
@@ -100,6 +101,9 @@ test('r87s2 4: on a 320 px phone the new sections stack, with no horizontal scro
 test('r87s2 5: paper keeps every stage-2 section, without At home\'s buttons', async ({ page }) => {
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  // A print fires beforeprint, which opens the folds (round 106 folded the climate class); emulateMedia alone does not, and
+  // WebKit has no ::details-content for the print sheet to open them without the script.
+  await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
   await page.emulateMedia({ media: 'print' });
   for (const [sel] of SECTIONS) await expect(page.locator(sel), sel).toBeVisible();
   await expect(page.locator('section#at-home .hours')).toBeHidden();

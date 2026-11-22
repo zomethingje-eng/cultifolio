@@ -110,11 +110,12 @@ describe('the strip on the page', () => {
     expect(h).toContain('33 observations');
     expect(h).not.toContain('from few records');
   });
-  it('the few-records rule: under 12 observations marked and shown as read', () => {
+  it('the few-records rule: under 12 observations marked, and the months named in a sentence, no chart (round 106)', () => {
     const h = html({ dossier: { ids: { inat: 7 }, flowering: { taxon: 7, months: [0, 0, 1, 4, 3, 0, 0, 0, 0, 0, 0, 0], read: '2026-11-09' } } });
     expect(h).toContain('from few records: 8');
-    expect(h).toContain('From few records: 8 observations; a page says so under 12, and shows the counts as read.');
-    expect(h.match(/<li\b/g)?.length).toBe(12);
+    expect(h).toContain('From few records: 8 observations; under 12 a page names the months in a sentence and draws no chart.');
+    expect(h).toContain('8 flowering records: March (1), April (4) and May (3).');
+    expect(h.match(/<li\b/g)).toBeNull();
   });
   it('twelve zeros is iNaturalist\'s answer, said as that, never "none" or "does not flower"', () => {
     const h = html({ dossier: { ids: { inat: 7 }, flowering: { taxon: 7, months: Array(12).fill(0), read: '2026-11-09' } } });

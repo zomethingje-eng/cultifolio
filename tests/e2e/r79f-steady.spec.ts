@@ -91,7 +91,7 @@ test('r79f steady 2: a species page\'s cultivation cards do not move when the co
     try { sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ }
   });
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
-  const sum = 'details.cult.acc >> nth=0 >> :scope > summary';
+  const sum = 'details.cult.acc >> nth=1 >> :scope > summary'; // round 106: the first card is open at rest, so the second is pressed
   await expect(page.locator(sum)).toBeVisible();
   await expect(page.locator('html[data-collection]')).toHaveCount(0); // the collection is still opening
   await expect(page.locator('.notesline.hold')).toBeAttached(); // the line's room, unseen
@@ -105,5 +105,5 @@ test('r79f steady 2: a species page\'s cultivation cards do not move when the co
   expect(await top(page, sum)).toBe(before);
   // and the press that was lost lands: one press opens it
   await page.locator(sum).click();
-  await expect(page.locator('details.cult.acc >> nth=0')).toHaveAttribute('open', '');
+  await expect(page.locator('details.cult.acc >> nth=1')).toHaveAttribute('open', '');
 });

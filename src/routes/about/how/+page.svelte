@@ -465,7 +465,7 @@
     <li>A page not yet counted from the download shows iNaturalist's own count, read from its API on the day the page names, with a link to the same search on iNaturalist: research-grade observations, not captive or cultivated, annotated "Flowering", for the page's iNaturalist taxon. Those counts include observations iNaturalist does not share with GBIF, so they are higher.</li>
     <li>An observation not annotated is not counted, so the counts say when people saw the plant in flower and said so, not how long it flowers.</li>
     <li>The months are never moved to your hemisphere: an observation is dated where the plant was seen. Where the habitat climate is read south of the equator, the page says so.</li>
-    <li>Under 12 observations, the strip is marked "from few records", as a habitat climate is, and shown as read. Twelve months of nothing is said as no observation annotated, never as a plant that does not flower.</li>
+    <li>Under 12 observations there is no chart: a sentence names the months, with each month's count where any has more than one ("2 flowering records: September and December"), marked "from few records" as a habitat climate is. Twelve is a judgment, the same as the habitat climate's: under one a month on average, twelve bars draw a shape the counts do not hold. Twelve months of nothing is said as no observation annotated, never as a plant that does not flower.</li>
     <li>Until a page has been counted, it says "not asked"; where iNaturalist's API did not answer, "not checked", with the day.</li>
   </ul>
   </details>
@@ -798,15 +798,15 @@
   </ul>
   </details>
   <h3 id="shift">Your months</h3>
-  <p class="sum">Habitat months are named with their hemisphere. The season card shifts them by six months for a collection in the other hemisphere.</p>
+  <p class="sum">Habitat months are named with their hemisphere. The climate chart's "Show in my months" shifts them by six months for a reader in the other hemisphere.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: your months</span></summary>
   <ul class="rules">
     <li>Wherever habitat months are printed, the page names the hemisphere they belong to.</li>
     <li>Where the shift rule applies, it gives them shifted six months for a collection in the other hemisphere. The rule applies where the temperature curve moves 4 °C or more and the habitat lies 10° or more from the equator.</li>
     <li>So a Namaqualand plant whose rain falls in May to August has that season in a northern greenhouse from November to February.</li>
     <li>The label line and the sheet format a season through one function, so they cannot disagree.</li>
-    <li>The season card at the top of a species page draws the same reading as twelve months in your calendar. The months the rule names are shaded, and months under 5 mm of rain are marked; nothing is shaded for a spread year or a year with nothing to read.</li>
-    <li>Your hemisphere is your site's, else that of your first space with coordinates, else the northern, and the card says which.</li>
+    <li>A species page's climate chart is drawn in the habitat's months. Where the shift rule applies and your hemisphere is not the habitat's, "Show in my months" redraws it in yours, every figure moved by six months and named so; pressed again, it is the habitat's once more. Where the rule does not apply, or your hemisphere is the habitat's, there is no switch and the page says why.</li>
+    <li>Your hemisphere is your site's, else that of your first space with coordinates, else the northern, and the page says which under the chart.</li>
   </ul>
   </details>
   </section>
@@ -850,22 +850,21 @@
   <!-- ─────────────────────────── The figures at the top ─────────────────────────── -->
   <section aria-labelledby="notes">
   <h2 id="notes">The figures at the top</h2>
-  <p class="sum">The top of a species page states each habitat figure once, with its source beside it. The cards further down hold the full sentences and rules. A plant's own page puts the same figures beside the space it lives in, and gives no verdict.</p>
+  <p class="sum">The top of a species page states the habitat's four figures once, each with its source beside it. The Climate section further down draws the year in one chart, with the rest of the figures and the rules folded under it. A plant's own page puts the same figures beside the space it lives in, and gives no verdict.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: the figures at the top</span></summary>
   <ul class="rules">
-    <li>"Habitat in short" sits above the photographs at every width: the cold floor (or, when none is read, the coldest month's mean nightly low, named so), the rain a year, the open-sky light and the season, each with its source, and the few-records mark where it applies. On a wider screen the records and grid cells they are read from are said under them. A page with no habitat climate says so there, with the reason; a pending one says pending. The full cards stay below.</li>
+    <li>"Habitat in short" sits above the photographs at every width: the cold floor (or, when none is read, the coldest month's mean nightly low, named so), the rain a year, the open-sky light and the season, each with its source, and the few-records mark where it applies. On a wider screen the records and grid cells they are read from are said under them. A page with no habitat climate says so there, with the reason; a pending one says pending. Its "Figures" link goes to the Climate section.</li>
     <li>A word of art on a species page (the cold floor, DLI, a cell, the 10th to 90th percentile span, a typical spot, the USDA zone, the RHS band, the Köppen–Geiger class, the Walter–Lieth diagram, research grade, the CITES Appendices) is dotted, and opens the first words of its entry in the <a href="#glossary">glossary</a> below, with a link to it.</li>
     <li>A species page's title is its names, then the first description of what it holds that is true of it and fits in 60 characters ("habitat rain, cold nights and light", "habitat climate", "native range and photographs"); where none fits, the shortest is added all the same, so a search result cuts the description and never a name.</li>
-    <li>The cold floor (1 night in 100), with the record low over the same years beside it, both at a typical spot, from NASA POWER. When no floor is read, the coldest month's mean nightly low, named so.</li>
-    <li>The warmest month's mean daily high.</li>
-    <li>The rain a year: the median of the range's grid cells' own yearly totals, and how many months of the median year bring 25 mm or more. Each cell's twelve months are added first, then the middle of those totals is taken, or the halfway point between the two middle totals when the cells are even in number.</li>
+    <li>The order of a species page answers a grower's questions in turn. First what the plant is (the quoted summary), then how to keep it at home (the table, then the cultivation cards, the first open), then the hardiness of its habitat and its climate across the habitat. Then where it grows wild, its photographs, related species and its names and registers. Last, the record and where the page came from.</li>
+    <li>The warmest month's mean daily high is in the chart's description and in its figures by month.</li>
+    <li>The rain a year: the median of the range's grid cells' own yearly totals; under the chart, how many months of the median year bring 25 mm or more. Each cell's twelve months are added first, then the middle of those totals is taken, or the halfway point between the two middle totals when the cells are even in number.</li>
     <li>The open-sky light: the DLI of the darkest and brightest months.</li>
-    <li>The rain and the light each have a bar on a fixed scale, said under it and to a screen reader: full at 1,200 mm a year, and at 70 DLI for the brightest month. A year over 1,200 mm takes a bar to the next thousand, so a bar is never shorter than its figure.</li>
-    <li>All but the cold floor and the record low are from CHELSA, and all of those but the rain a year from the median year across the range.</li>
+   <li>All but the cold floor and the record low are from CHELSA, and all of those but the rain a year from the median year across the range.</li>
     <li>The chart draws each month's median, and its description gives their total as that. The season rules read the same median year, since "70% of the median year's rain" must be a share of the months it adds up. So the rain rule's total can differ from the figure at the top.</li>
     <li>The sheet's Rain line and the season reading give the median year's total, named "in the median year". Where the page has the cells' median too, the Rain line gives both and says which is which.</li>
     <li>Where two or more months tie for a figure as printed, every one of them is named.</li>
-    <li>Then the season card. The cards further down hold the full sentences and rules, each closed until opened; printing the page opens them all.</li>
+    <li>Under the chart, the season's reading in words and which hemisphere's months are yours. The cultivation cards hold the full sentences and rules, each closed until opened but the first; printing the page opens them all.</li>
     <li>A plant's printed label carries three of these in one line: the season, the cold floor ("floor 6.5 °C (1 in 100, NASA POWER)", only when the extremes are on file) and the open-sky light ("open sky 30–65 DLI (CHELSA)").</li>
     <li>Each is printed whole or not at all. On a label too small for all three, the last are left off, never cut mid-figure.</li>
     <li>A plant's own page shows, for each compared figure, the habitat median with its 10th–90th span beside the space's setting. It gives no verdict: the sky over a habitat and a climate percentile are facts about places, not tolerances of a plant in a pot.</li>
@@ -897,6 +896,7 @@
     <li>The rain is taken as each month's rain plus 1 mm, so a month with none can be compared, and weighted so that a factor of 2.7 in that figure counts as three degrees: in a month of 100 mm against one of 270 mm, three degrees; in a month of 1 mm against one of 2.7 mm, under two.</li>
     <li>Months are compared in calendar order, so a habitat with the same seasons six months apart is far, not near. On a bench in one hemisphere, two such plants want opposite halves of the year.</li>
     <li>Range, family and photographs do not enter. The list is computed once when the index is built, from the same figures the pages show, and the page says which figures were compared.</li>
+    <li>Photographs do not enter the list, only how it is shown: in each strip, and in "Other" species of the genus, the species with a photograph come first and the rest follow as tiles of their name alone, in their order. None is hidden: a related species with no photograph is still a result.</li>
   </ul>
   </details>
   </section>

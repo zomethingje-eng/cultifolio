@@ -38,21 +38,19 @@ for (const width of [360, 320]) {
   });
 }
 
-test('r84e 2: on a desktop the four habitat figures fill the column, a row each, the season card under them', async ({ page }) => {
+test('r84e 2: on a desktop the four habitat figures stand in one row, the year\'s reading under the chart', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await quiet(page);
   await page.goto('/species/copiapoa-cinerea');
-  const grid = page.locator('.glance .gcards');
-  const cards = grid.locator(':scope > .card');
+  // Round 106: "Habitat in short" is the page's one row of the four figures (round 103: four in a row from 641 px); the
+  // glance table and its season card are gone, the season's reading said under the chart.
+  const cards = page.locator('section.hline dl > div');
   await expect(cards).toHaveCount(4);
-  const g = (await grid.boundingBox())!;
   const boxes = await cards.evaluateAll((xs) => xs.map((x) => x.getBoundingClientRect()));
-  // Round eighty-seven (DESIGN-87, the owner's look): the four figures are the rows of one table, each the column's width,
-  // what it is, the figure and its source on one line; round eighty-four had them as four cards filling one row.
-  for (const b of boxes) expect(Math.abs(b.width - g.width)).toBeLessThan(2); // r84base: 153 px
-  expect(new Set(boxes.map((b) => Math.round(b.left))).size).toBe(1);
-  for (let i = 1; i < boxes.length; i++) expect(boxes[i].top).toBeGreaterThanOrEqual(boxes[i - 1].bottom - 1);
-  await expect(page.locator('.glance .gseason .card.season')).toBeVisible();
+  expect(new Set(boxes.map((b) => Math.round(b.top))).size).toBe(1);
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i].left).toBeGreaterThanOrEqual(boxes[i - 1].right - 1);
+  await expect(page.locator('.glance, .gcards, .gseason')).toHaveCount(0);
+  await expect(page.locator('#year-lines')).toBeVisible();
 });
 
 test('r84e 3: on a phone the habitat in four figures is on the first screen, above the photographs @phone-only', async ({ page }) => {
@@ -92,10 +90,11 @@ test('r84e 4: paper opens the cultivation sheets, by the script and by the sheet
   // The script: opened for the print, closed after it.
   await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
   expect(await sheets.evaluateAll((xs) => xs.every((x) => (x as HTMLDetailsElement).open))).toBe(true);
-  await expect(page.locator('details.figures')).toHaveAttribute('open', '');
+  for (const f of await page.locator('details.figures').all()) await expect(f).toHaveAttribute('open', ''); // round 106: the climate class's fold too
   await page.evaluate(() => dispatchEvent(new Event('afterprint')));
   await page.emulateMedia({ media: 'screen' });
-  expect(await sheets.evaluateAll((xs) => xs.some((x) => (x as HTMLDetailsElement).open))).toBe(false);
+  // Round 106: the first card is open at rest, and stays so; print closes only what it opened.
+  expect(await sheets.evaluateAll((xs) => xs.map((x) => (x as HTMLDetailsElement).open))).toEqual([true, ...Array(await sheets.count() - 1).fill(false)]);
 });
 
 test('r84e 5: each map is described by its caption; the record of sources shows that it opens', async ({ page }) => {
@@ -118,8 +117,9 @@ test('r84e 6: with scripts off the unit switch, which needs them, is not shown',
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const page = await ctx.newPage();
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('.glance .useg')).toBeHidden(); // r84base: visible, "°C" pressed, doing nothing
-  await expect(page.locator('.glance .card').first()).toBeVisible();
+  await expect(page.locator('.climhead .useg')).toBeHidden(); // r84base: visible, "°C" pressed, doing nothing (in the glance row's head until round 106)
+  await expect(page.locator('section.hline dl > div').first()).toBeVisible();
+  await expect(page.locator('.climo .mym')).toBeHidden(); // round 106: "Show in my months" needs scripts too
   await ctx.close();
 });
 

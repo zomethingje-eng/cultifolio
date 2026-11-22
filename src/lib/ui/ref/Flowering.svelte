@@ -9,7 +9,7 @@
    * calendar's, as observed: never moved to the reader's hemisphere, as the climate chart keeps the habitat's.
    */
   import type { Dossier } from '$dossier/schema';
-  import { floweringView, floweringCaption, floweringWhat, floweringZero, floweringMonthsWords, floweringFew } from './links-words';
+  import { floweringView, floweringCaption, floweringWhat, floweringZero, floweringMonthsWords, floweringFew, floweringFewLine } from './links-words';
   import Term from './Term.svelte';
   let { dossier }: { dossier: Pick<Dossier, 'ids' | 'flowering' | 'climate'> & { occurrences?: { keys?: unknown[] } } } = $props();
   const v = $derived(floweringView(dossier));
@@ -22,7 +22,10 @@
   {:else if v.state === 'not-checked'}
     <p class="small muted" id="flowering-not-checked">Not checked: iNaturalist was asked on {v.read} and did not answer ({v.why}).</p>
   {:else}
-    {#if v.total}
+    {#if v.total && v.few}
+      <!-- Under twelve, the months in a sentence, no chart (round 106; the first hand-off's round 4). -->
+      <p class="small" id="flowering-line">{floweringFewLine(v.months)}.</p>
+    {:else if v.total}
       <ol class="months" aria-label="Flowering observations by month, January to December">
         {#each v.months as m (m.m)}<li><span class="n">{m.n}</span><span class="bar" aria-hidden="true"><i style="height:{Math.round(m.share * 100)}%"></i></span><span class="mo">{m.m}</span></li>{/each}
       </ol>

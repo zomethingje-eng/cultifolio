@@ -40,8 +40,12 @@ async function okraRange(page: Page) {
     await route.fulfill({ status: res.status(), headers, body: [JSON.stringify(j), ...rest].join('\n') });
   });
   await page.goto('/?by=genus&open=copiapoa'); await ready(page);
-  await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).click();
-  await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
+  // Pressed again until it opens: WebKit once lost the first press while the list was still settling (round 106's fourth
+  // launch gate; it passed on its retry).
+  await expect(async () => {
+    await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).click();
+    await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/, { timeout: 3000 });
+  }).toPass({ timeout: 20_000 });
   await expect(page.locator('.factgrid')).toContainText('Bangladesh, India, West Himalaya');
 }
 const nativeCell = (page: Page) => page.locator('.factgrid > div', { has: page.locator('b', { hasText: /^Native$/ }) });

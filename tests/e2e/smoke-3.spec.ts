@@ -30,10 +30,11 @@ test('search forgives a typing error, ranks the genus first, and the picker does
 
 test('the species page answers in the first screen and relates the species by genus and by climate', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
-  const glance = page.locator('.glance');
-  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await expect(glance.locator('.card.cold')).toContainText('Record low 4.0 °C in 40 years'); // the figure says what it is (round sixty)
-  await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('72');
+  // Round 106: the four figures are "Habitat in short"'s; the record low is the Climate section's "How".
+  const glance = page.locator('section.hline');
+  await expect(glance.locator('dd').first()).toContainText('6.5');
+  await expect(page.locator('#s-climate ~ details.why .whybody').first()).toContainText('absolute minimum 4.0 °C'); // the figure says what it is (round sixty)
+  await expect(glance.locator('dl > div', { has: page.locator('dt', { hasText: /^Rain$/ }) }).locator('dd')).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
   await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('nearest by mean daily high, mean nightly low and rain, month by month');
@@ -170,27 +171,28 @@ test('the install bar waits for a second day, and stays away for thirty days onc
 test('settings: units switch every figure and sentence, survive a reload through the cookie, and a species figure flips them too', async ({ page }) => {
   // an en-US browser with no cookie is Fahrenheit from the first byte; this British one is metric
   const us = await page.request.get('/species/copiapoa-cinerea', { headers: { 'accept-language': 'en-US,en;q=0.9' } });
-  expect(await us.text()).toContain('43.7<span class="u">°F');
+  expect(await us.text()).toContain('43.7 °F'); // round 106: "Habitat in short"'s figure (the glance card's markup until then)
   await page.goto('/species/copiapoa-cinerea');
   await ready(page); // a server-drawn page: hydrated before the first press (round seventy-five; r75h-harness)
-  await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await page.locator('.glance .useg button', { hasText: '°F' }).click();
-  const glance = page.locator('.glance');
-  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('43.7');
-  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('°F');
-  await expect(glance.locator('.card.season')).not.toContainText('°C');
-  await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('2.8');
+  // Round 106: the switch is in the Climate section's head, the figures "Habitat in short"'s (the glance row's until then).
+  const glance = page.locator('section.hline');
+  await expect(glance.locator('dd').first()).toContainText('6.5');
+  await page.locator('#s-climate ~ .climhead .useg button', { hasText: '°F' }).click();
+  await expect(glance.locator('dd').first()).toContainText('43.7');
+  await expect(glance.locator('dd').first()).toContainText('°F');
+  await expect(page.locator('#year-lines')).not.toContainText('°C');
+  await expect(glance.locator('dl > div', { has: page.locator('dt', { hasText: /^Rain$/ }) }).locator('dd')).toContainText('2.8');
   await expect(page.locator('.climo .panel').first()).toHaveText('°F · day and night');
   // the cookie carries it: a fresh load is Fahrenheit from the server, no flash
   const html = await (await page.request.get('/species/copiapoa-cinerea')).text();
   expect(html).toContain('43.7');
-  expect(html).not.toMatch(/6\.5<span class="u">°C/);
+  expect(html).not.toMatch(/6\.5 °C/);
   await page.goto('/settings');
   await ready(page);
   await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '°C and mm' }).click();
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
+  await expect(page.locator('section.hline dd').first()).toContainText('6.5');
 });
 
 test('settings: numbering is previewed and saved as the vault setting; appearance is applied at once', async ({ page }) => {
@@ -216,9 +218,10 @@ test('settings: numbering is previewed and saved as the vault setting; appearanc
 
 test('the species page reads in reference order: the facts and the figures, then the quoted summary and the genus, then the cards closed to one line each', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
-  // The figures come before the encyclopedia's paragraph since round forty: what is derived here is what the page is for.
+  // Round 106 (the first hand-off's round 4): the grower's order. The four figures stand under the name ("Habitat in
+  // short"); then what the plant is, the genus, and how to keep it (round forty to 105: the figures' cards, then the summary).
   const order = await page.locator('h2.sec').allInnerTexts();
-  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['at a glance', 'summary', 'about the genus · copiapoa', 'cultivation']);
+  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['what it is', 'about the genus · copiapoa', 'cultivation', 'climate across the habitat']);
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
   // the id card is the name, the common names and one line of family · origin · archetype; the facts grid sits at the foot since round fifty
   await expect(page.locator('.idcard .vern.meta')).toContainText('Cactaceae');
@@ -228,11 +231,11 @@ test('the species page reads in reference order: the facts and the figures, then
   // one primary action; the other verbs are a quieter row under it
   await expect(page.locator('.idcard .acts .btn.pri')).toHaveText('Add one to my plants');
   await expect(page.locator('.idcard .acts2 .btn').first()).toHaveText('Sow seed');
-  // the cards: all closed at rest to their name since round sixty (the first screen's season card says the reading),
-  // opened with a click and no JavaScript needed
+  // the cards: closed at rest to their name since round sixty, but the first open since round 106 (a row of closed
+  // titles read as empty), opened with a click and no JavaScript needed
   const cards = page.locator('details.acc');
   await expect(cards).toHaveCount(4);
-  await expect(cards.nth(0)).not.toHaveAttribute('open', '');
+  await expect(cards.nth(0)).toHaveAttribute('open', '');
   await expect(cards.nth(1)).not.toHaveAttribute('open', '');
   await expect(cards.nth(1).locator('> summary')).toContainText('Rain');
   await cards.nth(1).locator('> summary').click();
@@ -265,7 +268,7 @@ test('a visitor sees the same places in the top bar and the phone\'s tab bar, an
   await expect(page.locator('.derived')).toContainText('nothing about this species is written for its page by a person or by AI');
   await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
   await expect(page.locator('.facts')).toContainText('52 open');
-  await expect(page.locator('h2.sec#s-glance')).toHaveCount(1); // the heading is there for the section bar and readers; the figures speak for themselves on screen
+  await expect(page.locator('h2.sec#s-summary')).toHaveText('What it is'); // round 106: the page opens on what the plant is (the glance cards' hidden heading until then)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -492,7 +495,7 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await page.locator('.searchbar').press('Enter');
   await expect(page).toHaveURL(new RegExp(`/plants/${year()}-0001$`));
   await page.goto('/species/copiapoa-cinerea');
-  const glance = page.locator('.glance .card.cold');
+  const glance = page.locator('section.hline dd').first(); // round 106: "Habitat in short"'s cold floor
   await expect(glance).toContainText('6.5');
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C');
 });

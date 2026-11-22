@@ -61,3 +61,9 @@ Measured in Chromium against the e2e build on 21 November 2026, at 1280 × 800, 
   `about-counts-on.json` anew ("21 November 2026") after the gate's server was built on the old day. Nothing changed.
 - **The launch gate, the third run:** svelte-check 0 errors in 1,854 files, 6,428 unit tests in 714 files, 2,846 browser
   tests, every test first time in every engine.
+
+## The deploy
+
+- Committed as dd6265c and pushed on 21 November 2026; deployed with `node scripts/deploy.mjs` as version b23d6214 (the
+  record's gate line written after the gate, so the deploy ran svelte-check and the unit tests again: 6,428 passed); the
+  live check passed 23 of 23, GBIF still serving the backbone.

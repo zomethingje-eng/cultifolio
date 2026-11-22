@@ -3,10 +3,19 @@
   import { units } from '$lib/ui/units.svelte';
   import { tempUnit, rainUnit, dryLabel, temp, rain } from '$core/units';
   import { tiedMonths, monthNames } from '$core/sheet';
+  import { inMyMonths } from '$climate/my-months';
   /** `name`: the species, for the figure's title (round fifty-eight; the accessibility review). */
   /** `south`: the habitat's hemisphere, so the chart says whose months it draws (round sixty; visitor 3); unset, it says "habitat months" alone. */
-  let { climate, id = 'climograph', name, south = null }: { climate: ClimoInput; id?: string; name?: string; south?: boolean | null } = $props();
-  const calendar = $derived(`Habitat months${south == null ? '' : `, ${south ? 'southern' : 'northern'} hemisphere`}`);
+  /**
+   * `shift`: the months between the reader's calendar and the habitat's (`myMonthsShift`), 6 where the year can be moved
+   * and the reader is in the other hemisphere; then "Show in my months" redraws the chart in the reader's months (round
+   * 106; the first hand-off's round 4), in place of the separate year strip. Off at first: the habitat's own months.
+   */
+  let { climate, id = 'climograph', name, south = null, shift = 0 }: { climate: ClimoInput; id?: string; name?: string; south?: boolean | null; shift?: number } = $props();
+  let mine = $state(false);
+  const by = $derived(mine ? shift : 0);
+  const cin = $derived(by ? { ...climate, months: inMyMonths(climate.months, by), p10: inMyMonths(climate.p10, by), p90: inMyMonths(climate.p90, by) } : climate);
+  const calendar = $derived(by && south != null ? `Your months, ${south ? 'northern' : 'southern'} hemisphere: the habitat's moved by six` : `Habitat months${south == null ? '' : `, ${south ? 'southern' : 'northern'} hemisphere`}`);
   /**
    * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean daily
    * high, the coldest month's mean nightly low and the year's rain, from the figures drawn, and whose figures they are; the longer
@@ -14,7 +23,7 @@
    * twelve monthly medians added, said so before "Medians" (round sixty-two; the words review's 5b).
    */
   const summary = $derived.by(() => {
-    const m = climate.months;
+    const m = cin.months;
     if (!m.length) return '';
     const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
@@ -36,11 +45,11 @@
   // text a chart 300 px wide is drawn 260 units wide, its labels 12.7 px; the default is as before.
   let label = $state(11);
   const scale = $derived(Math.max(1, label / 11));
-  const g = $derived(climograph(climate, shown === 0 ? 720 : Math.max(260, Math.min((shown - 20) / scale, 960)), units.current));
+  const g = $derived(climograph(cin, shown === 0 ? 720 : Math.max(260, Math.min((shown - 20) / scale, 960)), units.current));
   // With scripts off, and in the server's markup, the width is not known: the chart is drawn twice, for a phone and for
   // anything wider, and the page's own width shows one (round eighty-five; outside review A's 20: the 720-unit chart shrunk
   // to a phone had 6 px text). Once the width is measured, one is drawn at it.
-  const narrow = $derived(shown === 0 ? climograph(climate, 340, units.current) : null);
+  const narrow = $derived(shown === 0 ? climograph(cin, 340, units.current) : null);
   let fig: HTMLElement | undefined = $state();
   $effect(() => {
     if (!fig) return;
@@ -115,7 +124,10 @@
      figure's name and then again in place (round sixty-three; U4). -->
 <figure class="climo" aria-labelledby="{id}-t" bind:clientWidth={shown} bind:this={fig}>
   <!-- Whose calendar: the chart is in the habitat's months, the season card in the reader's (round sixty; visitor 3, words 14). -->
-  <p class="cal">{calendar}</p>
+  <div class="calrow">
+    <p class="cal" id="{id}-cal">{calendar}</p>
+    {#if shift}<button type="button" class="mym" aria-pressed={mine} onclick={() => (mine = !mine)}>Show in my months</button>{/if}
+  </div>
   <!-- The title names the species, and the description is one sentence of the figures with the longer account after it
        (round fifty-eight; the accessibility review). -->
   {#if narrow}{@render chart(narrow, `${id}-n`, 'narrow')}{/if}
@@ -135,7 +147,14 @@
 
 <style>
   .climo { margin: 14px 0 0; background: transparent; border-radius: 0; border-top: 1px solid var(--ink); padding: 12px 0 8px; }
-  .cal { margin: 0 0 6px; font-size: var(--fs-sm); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--mut); }
+  .calrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin: 0 0 6px; }
+  /* The switch works by script: hidden, not removed, until the app is drawn, as the unit switch is. */
+  :global(html:not([data-ready])) .mym { visibility: hidden; }
+  .mym { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--edge); border-radius: var(--r); background: var(--bg); color: var(--ink2); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+  .mym[aria-pressed='true'] { background: var(--ink); color: var(--bg); font-weight: 600; }
+  .mym:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (forced-colors: active) { .mym[aria-pressed='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; } }
+  .cal { margin: 0; font-size: var(--fs-sm); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--mut); }
   svg { width: 100%; height: auto; display: block; font-family: var(--ui); }
   .grid { stroke: var(--rule); stroke-width: 1; }
   .axis { stroke: var(--rule2); stroke-width: 1; }

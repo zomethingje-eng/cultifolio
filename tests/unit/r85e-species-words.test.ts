@@ -164,7 +164,7 @@ describe('8. the phone\'s line, one word, the rain bar (P4, B4, A16g, W12)', () 
     const HabitatLine = (await import('$lib/ui/ref/HabitatLine.svelte')).default;
     const body = render(HabitatLine, { props: { months, units: 'metric', few: { records: 3, cells: 3 }, fewHref: '#few-records' } as never }).body;
     expect(body).toMatch(/<a class="few[^"]*" id="few-records-line" href="#few-records">from 3 records<\/a>/);
-    expect(body).toMatch(/<a class="figs[^"]*" href="#s-glance">Figures ›<\/a>/);
+    expect(body).toMatch(/<a class="figs[^"]*" href="#s-climate">Figures ›<\/a>/);
   });
   it('"Photographs not asked" on the mark and in the section alike', async () => {
     const { render } = await import('svelte/server');

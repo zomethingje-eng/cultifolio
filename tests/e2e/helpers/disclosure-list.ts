@@ -22,9 +22,11 @@ export const DISCLOSURES: Disclosure[] = [
   // growing season, papers, labels, the sheet and the report, the app lock); t1's rules sit in existing sections: 46.
   ...Array.from({ length: 46 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
   ...Array.from({ length: 13 }, (_, n) => ({ file: 'src/routes/about/formats/+page.svelte', cls: 'full in-full', at: 'formats', sel: `details.full.in-full >> nth=${n}` })),
-  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=0' },
+  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=1' }, // round 106: the first is open at rest
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why howmade', at: 'species', sel: 'details.why.howmade' },
-  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'figures', at: 'species', sel: 'details.figures' },
+  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'figures', at: 'species', sel: 'details.figures:not(#climate-class-fold)' },
+  // Round 106: the climate class and the Walter–Lieth diagram, folded under the chart.
+  { file: 'src/routes/species/[slug]/+page.svelte', cls: 'figures', at: 'species', sel: 'details#climate-class-fold' },
   // The phone's one folded line of the other names and the classification (round eighty-five, E; B3, P3): drawn under 641 px.
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'pmore', at: 'species-narrow', sel: 'details.pmore' },
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why', at: 'species', sel: 'details.why:not(.howmade) >> nth=0' },

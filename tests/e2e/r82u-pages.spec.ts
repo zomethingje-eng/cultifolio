@@ -140,10 +140,10 @@ test('r82u 6: the section row marks the section an address or a tab scrolled to 
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea#s-climate'); await ready(page);
   await expect(page.locator('nav.tabs a.on')).toHaveText('Climate'); // base: Cultivation
-  await page.locator('nav.tabs a', { hasText: 'Habitat' }).click();
+  await page.locator('nav.tabs a', { hasText: 'Where it grows' }).click(); // "Habitat" until round 106
   await page.waitForTimeout(1500); // the app's own timer: past the 1.2 s the tapped tab is held marked, which nothing on the page shows the end of
   await page.evaluate(() => window.scrollBy(0, 1));
-  await expect(page.locator('nav.tabs a.on')).toHaveText('Habitat'); // base: Climate
+  await expect(page.locator('nav.tabs a.on')).toHaveText('Where it grows'); // base: Climate
 });
 
 test('r82u 7: compare gives the regions\' "+N" and says what each rain total is @phone', async ({ page }) => {
@@ -184,7 +184,7 @@ test('r82u 9: running text on a desktop is 15 px; a phone keeps its own', async 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const px = (sel: string) => page.locator(sel).first().evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
-  for (const sel of ['.factgrid > div', 'p.small', '.glance .card .sub', '.idcard .meta']) expect(await px(sel), sel).toBeGreaterThanOrEqual(15);
+  for (const sel of ['.factgrid > div', 'p.small', '#year-lines p', '.idcard .meta']) expect(await px(sel), sel).toBeGreaterThanOrEqual(15); // round 106: the year's lines under the chart, the glance cards' lines until then
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await px('.factgrid > div')).toBeCloseTo(13.5, 1);
 });
@@ -239,15 +239,15 @@ test('r82u 12: a climate from few records is marked on its figures and in its cl
   await noThirdParty(page);
   await humilis(page, (d) => { d.climate.records = 4; d.climate.cells = 4; });
   // Round eighty-four (P9): the counts in the mark's own words, and the mark a link to the notice, not a hover title.
-  await expect(page.locator('#few-records-mark')).toHaveText('from few records: 4 in 4 cells');
-  await expect(page.locator('#few-records-mark')).toHaveAttribute('href', '#few-records');
-  await expect(page.locator('#few-records-glance')).toContainText('From few records: 4 records in 4 grid cells.');
+  // Round 106: the mark is "Habitat in short"'s (#few-records-line); the glance cards' mark and line went with them.
+  await expect(page.locator('#few-records-line')).toHaveText('from 4 records');
+  await expect(page.locator('#few-records-line')).toHaveAttribute('href', '#few-records');
   await expect(page.locator('#few-records')).toHaveText('From few records: this habitat climate is read from 4 records in 4 grid cells; a page says so under 12 records or 5 cells, and shows the figures as read. The rule.'); // round eighty-six (P11): its rule linked
   await expect(page.locator('#few-records a.help')).toHaveAttribute('href', '/about/how#few');
-  await expect(page.locator('.glance .card')).toHaveCount(5); // the figures are all there
+  await expect(page.locator('section.hline dl > div')).toHaveCount(4); // the figures are all there
   // A page of many records carries no mark (guard).
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
-  await expect(page.locator('#few-records-mark, #few-records, #few-records-glance')).toHaveCount(0);
+  await expect(page.locator('#few-records-line, #few-records')).toHaveCount(0);
 });
 
 test('r82u 13: a photograph whose source names no author says "author not stated" @phone', async ({ page }) => {

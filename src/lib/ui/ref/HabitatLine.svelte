@@ -3,8 +3,8 @@
    * The habitat in four figures at the top of a species page (round eighty-four on a phone; at every width since round 103,
    * the launch review's round 2, a: on a desktop the glance cards begin at y 753, under the first screen at 1024 × 768):
    * the cold figure, the year's rain, the open-sky light and the season, each with its qualification and source. The same
-   * figures as the glance cards further down, by the same rules (`Glance.svelte`, `$core/sheet`), which stay where they are
-   * with their explanations. A page with no habitat climate says so here, and why, in the Climate section's own words
+   * figures as the glance cards gave, by the same rules (`$core/sheet`); since round 106 the glance cards are gone and these
+   * four are the page's, the rest in the Climate section's chart, its folds and its "How". A page with no habitat climate says so here, and why, in the Climate section's own words
    * (rule 2: pending and not checked are said as that, never as none).
    */
   import { temp, rain } from '$core/units';
@@ -23,7 +23,7 @@
     units,
     few = null,
     fewHref = null,
-    href = '#s-glance',
+    href = '#s-climate',
     state = 'ok',
     why = '',
     records = null,
@@ -38,7 +38,7 @@
     few?: { records: number; cells: number } | null;
     /** Where the page says more of the few records (its climate notice); the mark links there (round eighty-five; P4). */
     fewHref?: string | null;
-    /** Where the full cards are. */
+    /** Where the full figures are: the Climate section's chart and its folds (the glance cards until round 106). */
     href?: string;
     /** The habitat climate's state: its figures, or the state said as it is. */
     state?: 'ok' | 'none' | 'pending' | 'refused';

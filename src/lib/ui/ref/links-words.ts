@@ -93,7 +93,22 @@ export const floweringMonthsWords = (south: boolean) =>
   `Calendar months, as each plant was observed; not moved to your hemisphere${south ? '. The habitat lies south of the equator, where these months fall in the other season' : ''}.`;
 
 /** The few-records mark, as the climate's says it: the count and the line. */
-export const floweringFew = (total: number) => `From few records: ${total} observation${total === 1 ? '' : 's'}; a page says so under ${FEW_RECORDS}, and shows the counts as read.`;
+export const floweringFew = (total: number) => `From few records: ${total} observation${total === 1 ? '' : 's'}; under ${FEW_RECORDS} a page names the months in a sentence and draws no chart.`;
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/**
+ * Under `FEW_RECORDS` observations, the months in a sentence in place of the chart (round 106; the first hand-off's round
+ * 4): "2 flowering records: September and December", each month's count beside it where any month has more than one
+ * ("5 flowering records: March (3) and April (2)"). Twelve bars over two observations drew a shape the counts do not hold.
+ */
+export function floweringFewLine(months: Array<{ n: number }>): string {
+  const on = months.map((m, i) => ({ n: m.n, name: MONTH_NAMES[i] })).filter((m) => m.n > 0);
+  const total = on.reduce((a, m) => a + m.n, 0);
+  const many = on.some((m) => m.n > 1);
+  const names = on.map((m) => (many ? `${m.name} (${m.n})` : m.name));
+  const list = names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${total} flowering record${total === 1 ? '' : 's'}: ${list}`;
+}
 
 /* ---------- Elsewhere and the first publication ---------- */
 

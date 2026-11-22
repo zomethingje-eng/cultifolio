@@ -36,7 +36,7 @@ test('r78b: a page built before keeps its papers, and its summary is quoted and 
   await expect(page.locator('#s-research')).toHaveText('Papers naming this species');
   await expect(page.locator('.paper a').first()).toHaveText('The biology of Welwitschia mirabilis (fixture)');
   await expect(page.locator('main')).not.toContainText('Papers are not yet asked');
-  await expect(page.locator('#s-summary')).toHaveText('Summary');
+  await expect(page.locator('#s-summary')).toHaveText('What it is'); // round 106: the summary's heading ("Summary" until then)
   const credit = page.locator('#s-summary ~ p.small.muted').first();
   await expect(credit).toContainText('Quoted from');
   // The quoted article's link among the credit's (round eighty-five, E: the licence and the route are linked too).

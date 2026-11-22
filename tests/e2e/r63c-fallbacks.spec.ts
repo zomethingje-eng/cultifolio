@@ -15,11 +15,12 @@ async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
 }
 
-test('a species page from a dossier with no median keeps "sum of monthly medians" on the card and in the preview', async ({ page }) => {
+test('a species page from a dossier with no median keeps "monthly medians added" in its figures and in the preview', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
   await ready(page);
-  await expect(page.locator('.glance .card .lab', { hasText: /^Rain a year \(sum of monthly medians\)$/ })).toHaveCount(1);
-  await expect(page.locator('.glance .card .lab', { hasText: /median across the range/ })).toHaveCount(0);
+  // Round 106: the glance cards are gone; "Habitat in short" says the rain's name ("sum of monthly medians" on the card until then).
+  await expect(page.locator('section.hline dd', { hasText: /a year, monthly medians added/ })).toHaveCount(1);
+  await expect(page.locator('section.hline', { hasText: /median across the range/ })).toHaveCount(0);
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /of rain in the median year \(CHELSA\)/);
 });
 

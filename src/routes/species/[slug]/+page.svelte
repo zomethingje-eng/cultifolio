@@ -2,7 +2,8 @@
   import { ownSynonyms, isAutonymName } from '$core/shown-names';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { aLabel } from '$core/arch';
-  import Glance from '$lib/ui/ref/Glance.svelte';
+  import { myMonthsShift } from '$climate/my-months';
+  import UnitSwitch from '$lib/ui/ref/UnitSwitch.svelte';
   import HabitatLine from '$lib/ui/ref/HabitatLine.svelte';
   import Term from '$lib/ui/ref/Term.svelte';
   import Placeholder from '$lib/ui/Placeholder.svelte';
@@ -49,7 +50,7 @@
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
-  import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
+  import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed, ruleRain } from '$core/units';
   import { worldSvg, regionSvg, type LabelAt } from '$lib/map/still';
   import { drawNear, drawAll, keepForOffline } from '$lib/map/near';
   import { fewRecords, fewRecordsSentence } from '$core/few-records';
@@ -299,7 +300,7 @@
   }
   onMount(() => {
     // The stage-2 sections are each a <section> with its id, its heading inside it (round eighty-seven, stage 2).
-    const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id], section#hardiness, section#climate-class, section#at-home')].filter((h) => ['hardiness', 'climate-class', 'at-home', 's-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
+    const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id], section#hardiness, section#at-home')].filter((h) => ['s-summary', 'at-home', 's-cultivation', 'hardiness', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
     if (!heads.length) return;
     // The line a heading counts as passed at: where a tab's jump puts it, the page's scroll padding (the top bar) and the
     // headings' scroll margin (this row), and a little more. At 110 px, a heading a tab or a #s-climate address put at
@@ -448,6 +449,16 @@
   const seasonRow = $derived(sheet.rows.find((r) => r.k === 'Its year') ?? null);
   /** Where the reader's hemisphere came from, for the season card. */
   const readerFrom = $derived(readerLat == null ? null : site.current || !site.loaded ? ('site' as const) : ('places' as const));
+  /** The chart's "Show in my months": six where the year can be moved and the reader is in the other hemisphere (round 106). */
+  const myShift = $derived(myMonthsShift(sheet.year?.south ?? null, readerLat, !!sheet.year?.shiftable));
+  // "rain rule, CHELSA": the source, and the rule that read it (the year strip's words until round 106, `Glance`).
+  const seasonSrc = $derived((seasonRow?.plain?.rule ?? '').split(', ').pop() ?? '');
+  const seasonHow = $derived.by(() => {
+    const r = seasonRow?.plain?.rule ?? '';
+    if (!r.includes(', ')) return '';
+    const rule = r.slice(0, r.lastIndexOf(', '));
+    return `How the ${rule} ${/rules$/.test(rule) ? 'read' : 'reads'} it`;
+  });
   /** Four sentences of the quoted lead; the rest is a link, never a mid-sentence cut. */
   const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
   /** The summary's revision and the day it was read (decision 8; `summaryRevision`). */
@@ -529,6 +540,8 @@
     };
   });
   /** The marker's sentence, said once: the build's text already begins "the map marker: " (round sixty). */
+  /** Related tiles with a photograph first, the rest after in their order, never hidden: a related species with no photograph is still a result (round 106). */
+  const thumbFirst = <T extends { thumb?: unknown }>(xs: T[]): T[] => [...xs.filter((x) => x.thumb), ...xs.filter((x) => !x.thumb)];
   const markerHow = (how: string) => (how.toLowerCase().startsWith('the map marker: ') ? how.charAt(0).toUpperCase() + how.slice(1) : `The map marker: ${how}`);
 </script>
 
@@ -727,51 +740,33 @@
   <!-- The section menu under the card, where a phone reader still is (round fifty-eight); it stays pinned as the page scrolls. -->
   <nav class="tabs" aria-label="Sections">
     <span class="otp" aria-hidden="true">On this page:</span>
-    <!-- The habitat's derived sections, where the page shows them (round eighty-seven, stage 2). -->
+    <!-- In the grower's order (round 106; the first hand-off's round 4): what it is, can I grow it, how to keep it, and
+         why to believe it. "At home" is the table where the page has one, else the cultivation cards it heads. -->
+    {#if d.summary || refused('wikipedia')}<a href="#s-summary" class:on={active === 's-summary'} onclick={(e) => goTab(e, 's-summary')}>What it is</a>{/if}
+    {#if atHomeShown}<a href="#at-home" class:on={active === 'at-home' || active === 's-cultivation'} onclick={(e) => goTab(e, 'at-home')}>At home</a>{:else}<a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>At home</a>{/if}
     {#if extremesShown}<a href="#hardiness" class:on={active === 'hardiness'} onclick={(e) => goTab(e, 'hardiness')}>Hardiness</a>{/if}
-    {#if koppenShown}<a href="#climate-class" class:on={active === 'climate-class'} onclick={(e) => goTab(e, 'climate-class')}>Climate class</a>{/if}
-    {#if atHomeShown}<a href="#at-home" class:on={active === 'at-home'} onclick={(e) => goTab(e, 'at-home')}>At home</a>{/if}
-    <a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>Cultivation</a>
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
-    <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Habitat</a>
+    <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Where it grows</a>
     <a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>{photos.length === 1 ? 'Photograph' : 'Photographs'}</a>
     {#if papers.length || (refused('openalex') && !litOff)}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
     {#if data.siblings.length || data.near.length || unchecked}<a href="#s-related" class:on={active === 's-related'} onclick={(e) => goTab(e, 's-related')}>Related</a>{/if}
-    <a href="#s-registers" class:on={active === 's-registers'} onclick={(e) => goTab(e, 's-registers')}>Registers</a>
+    <a href="#s-registers" class:on={active === 's-registers'} onclick={(e) => goTab(e, 's-registers')}>Names</a>
   </nav>
 
-  {#if glance}
-    <h2 class="sec visually-hidden" id="s-glance">At a glance</h2>
-    <section class="glance" aria-label="At a glance">
-      <!-- The figures once, in growers' words, each with a small source tag; the season in the reader's months beside them.
-           The "In short" list that repeated these cards line by line is gone: its one new line, the season, is the season
-           card's sentence now (round sixty; visitor 2, 3, product 7, self-review "the experience" 2 and 3). -->
-      <Glance months={d.climate.status === 'ok' ? d.climate.months : []} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} extremes={glance.ex} extremesStatus={d.climate.status === 'ok' ? (d.climate.extremesStatus ?? null) : null} extremesLapse={d.climate.status === 'ok' ? (d.climate.extremesLapse ?? null) : null} whyHref={d.climate.status === 'ok' && d.climate.extremesLapse ? '#lapsecell' : d.climate.status === 'ok' && d.climate.extremesSea ? '#seacell' : null} year={sheet.year} seasonLead={seasonRow?.plain?.lead ?? null} seasonRule={seasonRow?.plain?.rule ?? ''} {readerLat} {readerFrom} chartHref="#s-climate" {few} fewHref="#few-records" />
-      {#if few}<p class="small muted thinline" id="few-records-glance">From few records: {few.records} record{few.records === 1 ? '' : 's'} in {few.cells} grid cell{few.cells === 1 ? '' : 's'}. <a href="#s-habitat">The records.</a></p>{/if}
-      {#if placeLine}
-        <!-- The grower's own place against this habitat's cold floor: the one comparison the site can make that no other does, one line under the figures (round fifty, 3). Nothing is inferred; two figures and their difference. -->
-        <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
-      {/if}
-    </section>
-  {/if}
-  {#if d.climate.status === 'ok'}
-    <!-- Under the figures, the habitat's hardiness and its climate class with the Walter–Lieth reading, then "At home, aim
-         for", the section after them in the owner's look (round eighty-seven, stage 2; LookSpecies). Each renders nothing
-         where its figures cannot exist, and says so where its record predates them. -->
-    <Hardiness hardiness={d.hardiness} {extremesShown} units={u} />
-    <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} src={d.climate.src.normals} />
-    <AtHome climate={d.climate} units={u} />
-  {/if}
-
-  <!-- The quoted summary comes after the figures: a phone reader reached At a glance only after a screen of Wikipedia (round forty, R2 design 1; R1 R12). -->
+  <!-- Round 106 (the first hand-off's round 4): the page in the grower's order. What it is (the quoted summary, moved up
+       from under the figures); at home (the table, then the cultivation cards under it); the habitat's hardiness; its
+       climate in one chart with the rest folded under it; where it grows; the photographs; related species; the names;
+       the record. The "At a glance" cards and the year strip are gone: "Habitat in short" carries the four figures, the
+       chart's "Show in my months" the year in the reader's months, and every other figure they gave is in a fold or a
+       "How" (tests/e2e/r106c-figures.spec.ts holds every figure and source the page gave before). -->
   {#if d.summary}
-    <h2 class="sec" id="s-summary">Summary</h2>
+    <h2 class="sec" id="s-summary">What it is</h2>
     <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more || d.summary.cut}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
     <!-- Which revision of the article, and the day it was read (round eighty-five, the owner's decision 8): a fill records
          the revision; a summary read before says the day the build read Wikipedia. The licence links its text (A22). -->
     <p class="small muted" id="summary-source">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>{summaryWhat(d.summary)}{#if summaryRev.rev}, {#if summaryRev.href}<a href={summaryRev.href} rel="noopener">revision {summaryRev.rev}</a>{:else}revision {summaryRev.rev}{/if}{/if}{#if summaryRev.day}, read <span class="nobr">{summaryRev.day}</span>{/if}, <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener license">{d.summary.licence}</a>{#if summaryOlderName(d.summary.title, d.name)}; {summaryOlderName(d.summary.title, d.name)}{:else if sumRoute}; {#if sumRoute.route}{sumRoute.route}{:else}its title is not this plant's name, and the build quotes such an article only on a stated proof (<a class="help" href="/about/how#summary">which</a>){/if}{/if}.</p>
   {:else if refused('wikipedia')}
-    <h2 class="sec" id="s-summary">Summary</h2>
+    <h2 class="sec" id="s-summary">What it is</h2>
     <div class="notice"><b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.</div>
   {/if}
 
@@ -792,6 +787,10 @@
     <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
   {/if}
 
+  {#if d.climate.status === 'ok'}
+    <!-- "At home, aim for", with its 12, 14 and 16 hour switch; the cultivation cards are folds under it. -->
+    <AtHome climate={d.climate} units={u} />
+  {/if}
   <h2 class="sec" id="s-cultivation">Cultivation</h2>
   <div class="note-slot" data-key={d.key}>
     {#if editingMy}
@@ -827,10 +826,10 @@
            removed in round eighty-one (the owner's decision on review D2). -->
       <p class="small archline">Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.</p>
     {/if}
-    <!-- Closed at rest, title only: the glance row above carries their figures, so a summary line under each title said
-         them a second time (round sixty; visitor 2, self-review "the experience" 2). -->
-    {#each sheetCards as c (c.title)}
-      <details class="cult acc">
+    <!-- Title only, as before (round sixty; visitor 2), but the first card open: a row of closed titles read as empty
+         (round 106; the first hand-off's round 4). -->
+    {#each sheetCards as c, i (c.title)}
+      <details class="cult acc" open={i === 0}>
         <summary>
           <span class="t">{c.title}</span>
           <span class="pm" aria-hidden="true"><span class="pmw">open</span></span>
@@ -859,13 +858,38 @@
     {/if}
   </div>
 
+  {#if d.climate.status === 'ok'}
+    <!-- The habitat's hardiness, its two scales beside "neither is a tested hardiness of the plant"; the grower's own place
+         against the cold floor under it (round fifty, 3; under the figures until round 106). -->
+    <Hardiness hardiness={d.hardiness} {extremesShown} units={u} />
+    {#if placeLine}
+      <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
+    {/if}
+  {/if}
+
   <!-- The long sections below the sheet: laid out with the page, since `content-visibility` with a 480 px placeholder made
        the page report twice its height and the scrollbar jump as it shrank (round fifty-eight; it came in round forty, R2-6). -->
   <div class="deep">
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
+    <!-- The °C | °F switch, in the glance row's head until round 106. -->
+    <div class="climhead"><UnitSwitch /></div>
     {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few, kewArea)} <a class="help" href="/about/how#few">The rule</a>.</p>{/if}<!-- linked to its rule, as the other notices are (round eighty-six; review P's P11) -->
-    <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
+    <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
+    {#if glance}
+      <!-- The year's reading in words, and the months of rain, under the chart (the year strip's lines until round 106). -->
+      <div class="yearlines" id="year-lines">
+        {#if seasonRow?.plain?.lead}<p class="small">{seasonRow.plain.lead} <span class="src">{seasonSrc}</span>{#if seasonHow}{' '}<a class="help" href="/about/how#year">{seasonHow}</a>{/if}</p>{/if}
+        <p class="small muted">{glance.wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} in the median year, CHELSA.</p>
+        {#if sheet.year}<p class="small muted" id="year-hemi">{#if !sheet.year.shiftable}The habitat's own months: it lies too near the equator, or its warmth changes too little, for them to be moved to your hemisphere.{:else}{myShift ? 'Your hemisphere is not the habitat\'s: "Show in my months" moves the chart by six months.' : 'Your hemisphere is the habitat\'s, so its months are yours.'}{' '}{#if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your spaces.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{/if}</p>{/if}
+      </div>
+    {/if}
+    {#if koppenShown}
+      <details class="figures" id="climate-class-fold">
+        <summary>Climate class and the Walter–Lieth diagram</summary>
+        <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} src={d.climate.src.normals} />
+      </details>
+    {/if}
     <details class="figures">
       <summary>Figures by month</summary>
     <!-- Reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
@@ -905,7 +929,7 @@
     <details class="why">
       <summary>How this section is made</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid <Term k="cell">cells</Term> {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the <Term k="range">10th–90th percentile span</Term> across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at a typical spot in the range, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid <Term k="cell">cells</Term> {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the <Term k="range">10th–90th percentile span</Term> across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at <Term k="typicalSpot">a typical spot in the range</Term>, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Across the range: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>
@@ -921,7 +945,7 @@
     <div class="cult"><div class="none">No habitat climate can be derived: {sentence(climateReason(d.climate.detail), 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed only roughly (to worse than 10 km, or with no stated accuracy), too roughly to read a climate at, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker (<a class="help" href="/about/how#records">which records count</a>).{/if}</div></div>
   {/if}
 
-  <h2 class="sec" id="s-habitat">Natural habitat</h2>
+  <h2 class="sec" id="s-habitat">Where it grows wild</h2>
   <div class="maprow" bind:this={maprow}>
     <div class="mapbox">{@html worldMap}<div class="mapcap" id="range-caption">{rangeCaption(d.distribution as never, d.upstream['wcvp.distribution']?.status)}{#if d.centroid}. The marker is where the records are densest{#if d.climate.status === 'ok'}; the climate comes from all the well-placed records, not from this spot{/if}{/if}.</div></div>
     <div class="mapbox">{@html regionMap}<div class="mapcap" id="records-caption">{unchecked ? 'No records drawn: see under the name.' : d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `No records drawn: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
@@ -1019,13 +1043,13 @@
     {#if data.near.length}
       <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean daily high, mean nightly low and rain, month by month. <a class="help" href="/about/how#related">How</a>.</span></p>
       <div class="relstrip">
-        {#each data.near as c (c.key)}{@render rel(c)}{/each}
+        {#each thumbFirst(data.near) as c (c.key)}{@render rel(c)}{/each}
       </div>
     {/if}
     {#if data.siblings.length}
       <p class="relhead"><b>Other <i>{genusName}</i></b> <span class="small muted">{data.siblingCount} in the reference</span></p>
       <div class="relstrip">
-        {#each data.siblings as c (c.key)}{@render rel(c)}{/each}
+        {#each thumbFirst(data.siblings) as c (c.key)}{@render rel(c)}{/each}
         {#if data.siblingCount > 12}<a class="reltile more" href="/?by=genus&open={genusSlug}"><span>all {data.siblingCount + 1} ›</span></a>{/if}
       </div>
     {/if}
@@ -1087,7 +1111,6 @@
 <style>
   /* A placeholder height only: the shorthand gave the unrendered sections a 480px width too, which on a phone narrower
      than that was a horizontal scroll until they rendered (round forty-nine, 2; round twenty-seven, 4). */
-  .thinline { margin: 6px 0 0; }
   /* One centred run of text: the sentence and its link were two flex columns, the link's words stacked, so the placeholder's
      text is one span and the flex box centres that (round fifty, 3). */
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
@@ -1123,8 +1146,10 @@
      keeps the name, the one action and the habitat's figures. */
   @media (max-width: 640px) { .spfacts, .also, nav.tabs .otp { display: none; } .spcrumb { margin-top: 12px; } }
   .hero { margin-top: 14px; }
-  .glance { margin-top: 12px; }
-  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .climhead { display: flex; justify-content: flex-end; margin: 0 0 4px; }
+  .yearlines { margin: 8px 0 0; }
+  .yearlines p { margin: 4px 0 0; }
+  .yearlines .src { color: var(--mut); margin-left: 4px; }
   .idcard .meta { margin-top: 3px; font-size: var(--fs-md); color: var(--ink3); }
   .idcard .acts { margin-top: 12px; }
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }

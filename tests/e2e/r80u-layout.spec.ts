@@ -46,7 +46,7 @@ test('r80u layout 2: the month table\'s row names stay put when the table is swi
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   // Round eighty-five (W5): months are rows now and the table fits a phone at the default text size; at 200% it is swiped.
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  await page.locator('details.figures > summary').click();
+  await page.locator('details.figures:not(#climate-class-fold) > summary').click(); // round 106: the climate class has a fold of its own
   const scroller = page.locator('.scroll-x[aria-label="Habitat climate by month"]');
   await expect(scroller).toBeVisible();
   await scroller.evaluate((el) => { el.scrollLeft = 300; });

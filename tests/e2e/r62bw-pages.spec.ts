@@ -93,17 +93,13 @@ test.describe('desktop, 1280 × 800, the fixture', () => {
     await expect(page.locator('.seccount.relaxed')).toHaveText('No name in the reference is spelt “Copiapoa cinereaa”; these are similar spellings.');
   });
 
-  test('the glance row is headed "Habitat figures", and each bar states its scale (the words review\'s 1, N10)', async ({ page }) => {
+  test('the habitat\'s figures are headed as the habitat\'s, never "In the wild" (the words review\'s 1, N10)', async ({ page }) => {
     await page.goto('/species/copiapoa-cinerea');
     await ready(page);
-    const head = page.locator('.ghead .gt').first();
-    await expect(head).toHaveText('Habitat figures');
+    // Round 106: the glance row and its bars are gone; "Habitat in short" heads the four figures.
+    await expect(page.locator('#hline-t')).toHaveText('Habitat in short');
     await expect(page.getByText('In the wild', { exact: true })).toHaveCount(0);
-    const gauges = page.locator('.gcards .gauge[role="img"]');
-    await expect(gauges).toHaveCount(2);
-    await expect(gauges.nth(0)).toHaveAttribute('aria-label', /on a bar from 0 to 1,200 mm$/);
-    await expect(gauges.nth(1)).toHaveAttribute('aria-label', /on a bar from 0 to 70 DLI$/);
-    await expect(page.locator('.gcards .gscale').first()).toHaveText('bar 0 to 1,200 mm');
+    await expect(page.locator('.gcards, .gauge')).toHaveCount(0);
   });
 });
 

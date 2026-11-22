@@ -135,7 +135,8 @@ describe('the glance row (the words review\'s 1, the self-review\'s N10)', () =>
     expect(g).not.toMatch(/class="gauge" aria-hidden="true"/);
     expect(g.match(/class="gauge" role="img" aria-label="[^"]*on a bar from 0 to/g)).toHaveLength(2);
     expect(g.match(/class="gscale"/g)).toHaveLength(2);
-    expect(how).toContain('full at 1,200 mm a year, and at 70 DLI for the brightest month');
+    // Round 106: no species page draws the glance row's bars, and /about/how no longer describes them.
+    expect(how).not.toContain('full at 1,200 mm a year, and at 70 DLI for the brightest month');
   });
 });
 

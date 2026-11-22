@@ -137,7 +137,7 @@ test('r87s2u 8: no chips, tags or filled cells outside the tracker; even footer 
   // The register links: plain links in a row (9311e8b: a 1 px edge, rounded, padded).
   expect(await css('.links a', ['border-top-width', 'padding-left', 'background-color'])).toEqual({ 'border-top-width': '0px', 'padding-left': '0px', 'background-color': 'rgba(0, 0, 0, 0)' });
   // A figure's source in plain words (9311e8b: a bordered tag).
-  const src = phone ? '#s-glance dd i' : '#s-glance .src';
+  const src = 'section.hline dd i'; // round 106: the glance row is gone; "Habitat in short"'s sources at every width
   if (await page.locator(src).count()) expect(await css(src, ['border-top-width', 'display'])).toMatchObject({ 'border-top-width': '0px' });
   // The year's months: no filled grey cell (9311e8b: --sunk under every month).
   const off = page.locator('.strip li:not(.on)').first();

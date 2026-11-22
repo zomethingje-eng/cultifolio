@@ -595,13 +595,13 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
-  // since round sixty the season card in the first screen carries the reading, fact first and its rule and source after
-  const season = page.locator('.glance .card.season');
+  // the reading, fact first and its rule and source after: the season card's from round sixty, under the chart since round 106
+  const season = page.locator('#year-lines');
   await expect(season).toContainText("72 mm of rain in the median year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
   await expect(season).toContainText('How the rain and temperature rules read it');
   await expect(season).not.toContainText(/fog/);
-  await expect(page.locator('.glance .card.cold')).toContainText('Record low 4.0 °C in 40 years');
-  await expect(page.locator('.glance .card.cold')).toContainText('6.5');
+  await expect(page.locator('#s-climate ~ details.why .whybody').first()).toContainText('absolute minimum 4.0 °C');
+  await expect(page.locator('section.hline dd').first()).toContainText('6.5');
   // the note's floor is the card's floor, the same figure with the same quantity named
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at a typical spot in the range (NASA POWER).');
   // nothing on the sheet says what the plant does, wants or tolerates, or what to do to it

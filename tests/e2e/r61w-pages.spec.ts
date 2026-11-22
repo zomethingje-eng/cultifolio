@@ -133,12 +133,15 @@ test.describe('desktop', () => {
   test('labels are the figures\' own names on the species page, with every tied month named (visitor 1, 5)', async ({ page }) => {
     await page.goto('/species/copiapoa-cinerea');
     await ready(page);
-    const g = page.locator('.glance');
-    await expect(g.locator('.card.cold')).toContainText('Cold floor (1 night in 100)');
-    await expect(g.locator('.card.cold')).toContainText('Record low 4.0 °C in 40 years');
-    await expect(g.locator('.card', { hasText: 'Warmest month, mean daily high' })).toContainText('Jan and Feb at the habitat'); // round sixty-two (visitor-words 3)
-    await expect(g.locator('.card .lab', { hasText: /^Rain a year \(sum of monthly medians\)$/ })).toHaveCount(1);
-    await expect(g.locator('.card .lab', { hasText: /^Open-sky light$/ })).toHaveCount(1);
+    // Round 106: the glance cards are gone. "Habitat in short" names its four figures; the chart's description names the
+    // warmest months, every tied one; the Climate section's "How" gives the record low.
+    const g = page.locator('section.hline');
+    await expect(g.locator('dt').first()).toHaveText('Cold floor');
+    await expect(g.locator('dd').first()).toContainText('1 night in 100 colder');
+    await expect(page.locator('.climo desc').first()).toContainText('Warmest months January and February, mean daily high'); // round sixty-two (visitor-words 3)
+    await expect(page.locator('#s-climate ~ details.why .whybody').first()).toContainText('absolute minimum 4.0 °C');
+    await expect(g.locator('dd', { hasText: 'monthly medians added' })).toHaveCount(1);
+    await expect(g.locator('dt', { hasText: /^Open-sky light$/ })).toHaveCount(1);
     await expect(g).not.toContainText('in the wild');
     await page.goto('/compare?s=copiapoa-cinerea,copiapoa-humilis');
     await ready(page);

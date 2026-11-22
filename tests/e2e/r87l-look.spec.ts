@@ -177,13 +177,12 @@ test('r87 look 9: the species page has its trail, its other names and its facts 
   const facts = page.locator('table.spfacts');
   await expect(facts.locator('th')).toHaveText(['Family', 'Native to', 'Group', 'Your plants']);
   await expect(facts.locator('tr').nth(1).locator('td')).toHaveText("Chile North · Kew's World Checklist, file of 2026-06-04");
-  // The figures as rows: what it is, the figure, where it came from.
-  const row = page.locator('.gcards .card').first();
-  const [lab, val, sub] = await Promise.all([row.locator('.lab').boundingBox(), row.locator('.val').boundingBox(), row.locator('.sub').boundingBox()]);
-  expect(Math.abs(lab!.y - val!.y)).toBeLessThan(8);
-  expect(val!.x).toBeGreaterThan(lab!.x + lab!.width);
-  expect(sub!.x).toBeGreaterThan(val!.x);
-  await expect(row.locator('.src')).toHaveText('NASA POWER');
+  // The figures with their sources: round 106's "Habitat in short", what it is over the figure and its source beside its
+  // line (the glance table's rows until then).
+  const fig = page.locator('section.hline dl > div').first();
+  const [dt, b] = await Promise.all([fig.locator('dt').boundingBox(), fig.locator('dd b').boundingBox()]);
+  expect(b!.y).toBeGreaterThan(dt!.y);
+  await expect(fig.locator('dd i')).toHaveText('NASA POWER');
   // The photograph beside the name, its credit under it; no blurred fill behind an upright one.
   const [h1, hero] = await Promise.all([page.locator('h1.sci').boundingBox(), page.locator('.hero').boundingBox()]);
   expect(hero!.x).toBeGreaterThan(h1!.x + 300);

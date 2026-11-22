@@ -829,7 +829,7 @@ table.wx tr:last-child td { border-bottom: 1px solid var(--rule2); }
 .hero .cred { border-radius: 3px; }
 .idcard { margin: 0; padding: 0; }
 nav.tabs { gap: 2px 16px; padding: 6px 0; border-bottom: 1px solid var(--rule); }
-nav.tabs a { border-radius: 0; color: var(--link); font-weight: 400; padding: 0; font-size: var(--fs-md); }
+nav.tabs a { border-radius: 0; color: var(--link); font-weight: 400; padding: 0; font-size: var(--fs-md); min-width: 40px; justify-content: center; } /* round 106: a short name ("Names") is still a finger wide */
 nav.tabs a:hover { background: none; color: var(--hov); text-decoration: underline; text-underline-offset: 2px; }
 nav.tabs a.on { background: none; color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
 @media (max-width: 640px) { nav.tabs a { padding: 0; font-size: var(--fs-md); } }

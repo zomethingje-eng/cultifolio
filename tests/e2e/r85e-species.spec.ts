@@ -50,7 +50,7 @@ test('r85e 2: "Figures ›" and the DLI help take 44 by 44 px under a finger, an
   await quiet(page);
   await page.goto('/species/copiapoa-cinerea');
   await ready(page);
-  for (const sel of ['section.hline a.figs', '.glance a.help']) {
+  for (const sel of ['section.hline a.figs']) { // round 106: the glance row's DLI help went with it
     const a = page.locator(sel).first();
     await a.scrollIntoViewIfNeeded();
     const r = await a.evaluate((e) => { const b = e.getBoundingClientRect(); const s = getComputedStyle(e, '::after'); return { w: Math.max(b.width, parseFloat(s.width) || 0), h: Math.max(b.height, parseFloat(s.height) || 0), own: b.height, pos: s.position }; });
@@ -83,7 +83,7 @@ test('r85e 4: the figures by month are twelve rows, whole on a desktop and on pa
   await quiet(page);
   await page.goto('/species/copiapoa-cinerea');
   await ready(page);
-  await page.locator('details.figures > summary').click();
+  await page.locator('details.figures:not(#climate-class-fold) > summary').click(); // round 106: the climate class has a fold of its own
   const rows = page.locator('table.wx tbody tr');
   await expect(rows).toHaveCount(12); // r85base: 5
   await expect(rows.first().locator('td').first()).toHaveText('Jan');

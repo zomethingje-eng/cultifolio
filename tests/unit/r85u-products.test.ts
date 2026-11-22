@@ -46,6 +46,8 @@ describe('a product file is written whole, and one cut off is written again (A19
   });
 });
 
+// Each of these reads every product of the 400-species corpus (twice, the second test): 5 s alone, but past the default
+// 20 s in round 106's launch gates with every unit file running at once, so they have the minute the setup has.
 describe('--index-ready reads every product the manifest names (A19, A24)', () => {
   it('a corpus whose products are whole passes, the search key files counted', () => {
     const c = checkProducts(dir);
@@ -55,7 +57,7 @@ describe('--index-ready reads every product the manifest names (A19, A24)', () =
     const all = corpusHashes(m, (h) => { try { return readFileSync(join(dir, 'p', `${h}.json`), 'utf8'); } catch { return null; } }).hashes;
     expect(c.whole).toBe(all.size);
     expect(all.size).toBeGreaterThan(Object.keys(m.files).length); // the key files the directories name, besides the manifest's own
-  });
+  }, 60_000);
   it('a product cut off, one missing, and a search directory cut off are each refused, and named', () => {
     const m = JSON.parse(manifestText) as { files: Record<string, string> };
     const sheet = join(dir, 'p', `${m.files['index.json']}.json`);
@@ -87,7 +89,7 @@ describe('--index-ready reads every product the manifest names (A19, A24)', () =
       writeFileSync(dirFile, dirWhole);
       writeFileSync(gone, goneWhole);
     }
-  });
+  }, 60_000);
   it('no manifest, or one this build cannot read, is no pass', () => {
     const empty = mkdtempSync(join(tmpdir(), 'r85u-none-'));
     try {

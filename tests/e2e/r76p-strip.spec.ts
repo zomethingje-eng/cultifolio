@@ -150,9 +150,14 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // Round 105: "Changed lately" opens on round 105's three lines, shorter than round 104's: 22 px higher at 1280 and 43 at
 // 1024. Measured in Chromium on 21 November 2026 with round 105's code (the base before: 1113, 1316, 1330, 1471 at 1280;
 // 1135, 1327, 1341, 1482 at 1024). With round 105's lines on the base before: FAILED, stripTop 1091 for 1113.
+// Round 106 measured again: round 106's three lines wrap a line fewer at 1280 (22 px higher) and one more at 1024 (22 px
+// lower): 1069, 1272, 1286, 1427 at 1280; 1114, 1305, 1319, 1461 at 1024. With round 106's lines on the base before:
+// FAILED, stripTop 1069 for 1091 at 1280. The launch gate then found Chromium's column at 1024 7 px narrower than WebKit's
+// and Firefox's (343 against 350), so round 106's third line wrapped to three lines there alone; the line was shortened to
+// wrap in two in all three, and the base at 1024 is 1092, 1285, 1299, 1441, measured in WebKit and Firefox on that gate.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
-  '1024': { stripTop: 1092, stripBottom: 1284, searchTop: 1298, rowTop: 1439, tile: [155, 182] }
+  '1280': { stripTop: 1069, stripBottom: 1272, searchTop: 1286, rowTop: 1427, tile: [172, 193] },
+  '1024': { stripTop: 1092, stripBottom: 1285, searchTop: 1299, rowTop: 1441, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put
