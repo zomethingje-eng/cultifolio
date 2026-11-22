@@ -87,3 +87,22 @@ Now:
 
 Test r108c, FAILED on 16bd0c7. The corpus gate: 6,454 unit tests, 1,079 browser tests in Chromium desktop and phone, every
 test first time.
+
+## The corpus step, second run, and the deploy
+
+`node scripts/corpus-step.mjs --plan scripts/corpus-plan-r108.txt`, run by Claude in the desktop app's terminal (the
+owner's decision of 22 November 2026), from step 1 on 16bd0c7's builder.
+
+- **The rebuild:** 776 built, 0 kept, no drops.
+- **The stop, checked against the dossiers.** Each holds `climate.coarse.how` and `climate.admitted` adding up to its
+  cells, no extremes, and "not derived" with why:
+  - Conophytum calculus: 125 areas, strict;
+  - Lithops dinteri: 14 areas, strict;
+  - Lithops optica: 9 areas, buffer.
+- **The range check:** "0 with a typical cell outside every native region"; every page inside its native range.
+- **The review:** F 48,375, N 32,284, I 48,375, C 38,384 (expected about 38,393).
+- **The upload:** 121,980 files matching, 0 differences.
+- **The live check:** 23 of 23, corpus 3eff781b5878f0b6.
+
+Then `node scripts/deploy.mjs` with the index's about counts and search examples: svelte-check 0 errors in 1,868 files,
+6,454 unit tests, version 6dd40987, live check 23 of 23.
