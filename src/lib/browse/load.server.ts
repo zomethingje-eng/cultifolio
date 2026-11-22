@@ -177,7 +177,7 @@ export async function browseView(c: Loaded, platform: Platform, fetch: Fetch, ur
   const r = a.rail;
   // The view as a pin keeps it (round eighty-seven, C6): its browse query alone (no page, order, view or rail), and the
   // page it is, an entrance page by its own address.
-  const pinQuery = queryString({ ...a.query, at: 0, sort: 'grown', view: 'tiles', in: '', more: '' });
+  const pinQuery = queryString({ ...a.query, at: 0, sort: 'grownc', view: 'tiles', in: '', more: '' });
   // The results map (C7): of every result, how many are native to each level-3 region, and a click on one narrows the
   // view to the species native there as well (all of the regions then; one region ticked if none was).
   const ticked3 = new Set(a.query.r.flatMap((c) => level3Of(c)));
@@ -230,11 +230,11 @@ export async function browseView(c: Loaded, platform: Platform, fetch: Fetch, ur
     views: { tiles: href({ view: 'tiles', at: a.query.at }), list: href({ view: 'list', at: a.query.at }), map: href({ view: 'map', at: 0 }) },
     // "Most grown" is offered only where something is counted; otherwise the order is A to Z, said so (S1). "Record low"
     // only where the index holds it (round eighty-seven, stage 2): an index of before has none, and the list says so.
-    sorts: { ...(a.grown.state === 'none' ? {} : { grown: href({ sort: 'grown', at: 0 }) }), az: href({ sort: 'az', at: 0 }), ...(p.lows ? { low: href({ sort: 'low', at: 0 }) } : {}) },
+    sorts: { ...(a.grown.state === 'none' ? {} : { grownc: href({ sort: 'grownc', at: 0 }), grown: href({ sort: 'grown', at: 0 }) }), az: href({ sort: 'az', at: 0 }), ...(p.lows ? { low: href({ sort: 'low', at: 0 }) } : {}) },
     lows: !!p.lows,
     map,
     pin: { view: pinQuery, href: entrance ? base : `/browse${pinQuery}`, label: titleOf(p, a.query), n },
-    picker: { r: a.query.r, all: a.query.all, rest: queryString({ ...a.query, r: [], all: false, only: false, at: 0, sort: 'grown', view: 'tiles', in: '', more: '' }) },
+    picker: { r: a.query.r, all: a.query.all, rest: queryString({ ...a.query, r: [], all: false, only: false, at: 0, sort: 'grownc', view: 'tiles', in: '', more: '' }) },
     grown: a.grown,
     pages: {
       from: n ? a.query.at + 1 : 0,

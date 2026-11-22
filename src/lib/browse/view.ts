@@ -66,8 +66,8 @@ export interface BrowseView {
   fixes: Link[];
   wide: Link[];
   views: { tiles: string; list: string; map: string };
-  /** "Most grown" is absent where nothing is counted (S1); "record low" where the index holds none. */
-  sorts: { grown?: string; az: string; low?: string };
+  /** "Most grown" (with the habitat climate first, the default, or alone) is absent where nothing is counted (S1); "record low" where the index holds none. */
+  sorts: { grownc?: string; grown?: string; az: string; low?: string };
   /** Whether the index holds record lows (round eighty-seven, stage 2). */
   lows: boolean;
   /**

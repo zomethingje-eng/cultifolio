@@ -250,7 +250,8 @@ test('the species page reads in reference order: the facts and the figures, then
 
 test('a visitor sees the same places in the top bar and the phone\'s tab bar, and the rest in the menu (round sixty; the visitor review; round sixty-three, V1; the owner\'s four of round eighty-seven)', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.topseg a')).toHaveText(['Reference', 'My plants', 'Today', 'About']);
+  // Round 105: from 1200 px Labels and Settings are in the bar too (the first hand-off's round 3).
+  await expect(page.locator('.topseg a:visible')).toHaveText(['Reference', 'My plants', 'Today', 'About', 'Labels', 'Settings']);
   // On a phone a visitor's tabs are the grower's five: an empty Today, My spaces or Propagation offers the example collection (round sixty-three, V1 and V2; a button since round seventy-four).
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveText([/^\s*Reference$/, /^\s*My plants$/, /^\s*Today$/, /^\s*More menu$/]);
@@ -269,7 +270,7 @@ test('a visitor sees the same places in the top bar and the phone\'s tab bar, an
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
-  await expect(page.locator('.topseg a')).toHaveText(['Reference', 'My plants', 'Today', 'About']);
+  await expect(page.locator('.topseg a:visible')).toHaveText(['Reference', 'My plants', 'Today', 'About', 'Labels', 'Settings']);
   // a grower's five, from the first plant, and on the next page load too (the hint is read before the first render)
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#tabbar :is(a, button.moretab):visible')).toHaveText([/^\s*Reference$/, /^\s*My plants$/, /^\s*Today$/, /^\s*More menu$/]);
@@ -1125,7 +1126,7 @@ test('round forty-one: a batch gets a label from its own page, with the sowing l
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
   const no = page.url().split('/').pop()!;
-  await page.getByRole('link', { name: 'Label' }).click();
+  await page.getByRole('link', { name: 'Label', exact: true }).click(); // round 105: not the bar's Labels
   await expect(page).toHaveURL(/\/labels\?batch=/);
   await expect(page.locator('#batch-picks .pick input')).toBeChecked();
   await expect(page.locator('.sheets .label', { hasText: no })).toHaveCount(1);

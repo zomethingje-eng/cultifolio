@@ -6,6 +6,7 @@
   import sourceSansLatin from '../../static/fonts/source-sans-3/source-sans-3-latin-wght-normal.woff2?url';
   import '$lib/ui/theme.css';
   import { page, updated } from '$app/state';
+  import { MediaQuery } from 'svelte/reactivity';
   import { crumb } from '$lib/ui/crumb.svelte';
   import { onMount, tick } from 'svelte';
   import SiteSearch from '$lib/browse/SiteSearch.svelte';
@@ -238,9 +239,9 @@
   });
   // What the "+" adds is what the section is about: a space on My spaces, a batch on Propagation, a plant everywhere else (round fifty-eight; the grower review).
   const adds = $derived(
-    page.url.pathname.startsWith('/places') ? { href: '/places#add', path: '', label: 'Add a space' }
-    : page.url.pathname.startsWith('/propagation') ? { href: '/propagation/new', path: '/propagation/new', label: 'Start a propagation batch' }
-    : { href: '/plants/new', path: '/plants/new', label: 'Add a plant' }
+    page.url.pathname.startsWith('/places') ? { href: '/places#add', path: '', label: 'Add a space', word: 'Add' }
+    : page.url.pathname.startsWith('/propagation') ? { href: '/propagation/new', path: '/propagation/new', label: 'Start a propagation batch', word: 'Start' }
+    : { href: '/plants/new', path: '/plants/new', label: 'Add a plant', word: 'Add' }
   );
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   // Focus moved by keyboard is scrolled clear of the sticky and fixed bars (WCAG 2.4.11; round fifty-nine).
@@ -390,7 +391,20 @@
     { href: '/plants', label: 'My plants', on: OWN },
     { href: '/today', label: 'Today', on: TODAY }
   ];
-  const navs: Array<{ href: string; label: string; on: (p: string) => boolean }> = [...tabs, { href: '/about', label: 'About', on: (p) => p.startsWith('/about') || p.startsWith('/changes') }];
+  /*
+   * Round 105 (the first hand-off's round 3): on a wide desktop (1200 px and over) Labels and Settings are in the bar too,
+   * after About; "More" keeps them and the rest, and a narrower bar and the phone have them in "More" alone. Where Labels
+   * is in the bar it is the place lit on /labels, and My plants is not, so one place is the current page.
+   */
+  const wideBar = new MediaQuery('min-width: 1200px', false);
+  const navs: Array<{ href: string; label: string; on: (p: string) => boolean; wide?: boolean }> = $derived([
+    { ...tabs[0] },
+    { ...tabs[1], on: (p: string) => OWN(p) && !(wideBar.current && /^\/labels(\/|$)/.test(p)) },
+    { ...tabs[2] },
+    { href: '/about', label: 'About', on: (p: string) => p.startsWith('/about') || p.startsWith('/changes') },
+    { href: '/labels', label: 'Labels', on: (p: string) => wideBar.current && /^\/labels(\/|$)/.test(p), wide: true },
+    { href: '/settings', label: 'Settings', on: (p: string) => p.startsWith('/settings'), wide: true }
+  ]);
   /**
    * The about pages' Data and Changes (the pages of round eighty-seven's other half): linked once their pages are in the
    * build, so a build without them never links to a page that is not there (the prerender stops at a link that is a 404).
@@ -455,15 +469,10 @@
       /* the hint is a convenience: without it the front page opens on the catalogue until the collection does */
     }
   });
-  const places = [
-    { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
-    { href: '/plants', label: 'Plants', on: (p: string) => p.startsWith('/plants') },
-    { href: '/places', label: 'My spaces', on: (p: string) => p.startsWith('/places') },
-    { href: '/propagation', label: 'Propagation', on: (p: string) => p.startsWith('/propagation') },
-    { href: '/today', label: 'Today', on: (p: string) => p.startsWith('/today') || p.startsWith('/frost') }
-  ];
-  // The crumb: what a detail page set, else the section this path belongs to.
-  const parts = $derived(crumb.parts.length ? crumb.parts : [{ label: places.find((p) => p.on(page.url.pathname))?.label === 'Plants' ? 'My plants' : (places.find((p) => p.on(page.url.pathname))?.label ?? 'Cultifolio') }]);
+  // The crumb: the trail a detail page set, drawn only where it is one (two parts or more). Round 105 (the first hand-off's
+  // round 3): a list page's crumb was its section's name ("Species", "Today", "Cultifolio"), and About's and Settings' their
+  // own one word, a label beside the wordmark that repeated the place lit in the bar and looked like a trail; it is gone.
+  const parts = $derived(crumb.parts);
   const isDetail = $derived(crumb.parts.length > 1);
   const back = $derived(isDetail ? (crumb.parts[crumb.parts.length - 2]?.href ?? '/') : null);
 </script>
@@ -494,13 +503,15 @@
        (the name is the link's). Its drawing is static/app/favicon.svg's figure alone (icon-handoff's mark.svg). -->
   <a class="wordmark" class:withback={!!back} href="/"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="14 4 100 104" fill="currentColor" aria-hidden="true" focusable="false"><path d="M64 104 C52 90 36 86 18 90 L18 54 C36 50 52 54 64 68 Z"/><path d="M64 104 C76 90 92 86 110 90 L110 54 C92 50 76 54 64 68 Z"/><path d="M61.6 72 C61 60 61.6 48 61.6 36 L66.4 36 C66.4 48 67 60 66.4 72 Z"/><path d="M64 42 C52 30 56 14 64 8 C72 14 76 30 64 42 Z"/><path d="M63 58 C44 56 30 40 34 26 C50 30 62 44 63 58 Z"/><path d="M65 52 C84 50 98 34 94 20 C78 24 66 38 65 52 Z"/></svg>Cultifolio</a>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
-  <nav class="crumb" class:detail={parts.length > 1} aria-label="Breadcrumb">
+  {#if isDetail}
+  <nav class="crumb" class:detail={isDetail} aria-label="Breadcrumb">
     <ol>
       {#each parts as c, i}
         <li>{#if i}<span class="sep" aria-hidden="true">›</span>{/if}{#if c.href && i < parts.length - 1}<a href={c.href}>{c.label}</a>{:else}<span class:last={i === parts.length - 1 && parts.length > 1} aria-current={i === parts.length - 1 ? 'page' : undefined}>{c.label}</span>{/if}</li>
       {/each}
     </ol>
   </nav>
+  {/if}
   <ExampleChip />
   <!-- The search, on every page but the front page, whose own box searches the same catalogue and more (the grower's own
        plants): the browse pages' box and its list of answers (round eighty-seven), a form that opens the front page's
@@ -518,16 +529,19 @@
   <!-- The places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
        current one says so to a screen reader, not only in colour (round fifty-eight; the accessibility review). -->
   <nav class="topseg plain" aria-label="Main">
-    {#each navs as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label}</a>{/each}
+    {#each navs as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} class:wide={pl.wide} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label}</a>{/each}
   </nav>
   <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
   <button class="menubtn" type="button" bind:this={menuBtn} aria-expanded={menuOpen} aria-controls="menu" onclick={() => toggleMenu(menuBtn)}>More<span class="sr"> menu</span></button>
-  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + (syncWords(sync.lastError)?.text ?? sync.lastError) : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
+  <!-- Round 105 (the first hand-off's round 3): Sync only once sync is set up or the collection holds a record, so a first
+       visit sees no sync control for nothing to sync (/sync stays in "More"); Sync and Add say their names beside the
+       sign from 901 px, the visible word the start of each one's accessible name (WCAG 2.5.3). -->
+  {#if sync.configured || collection.recordCount > 0}<a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + (syncWords(sync.lastError)?.text ?? sync.lastError) : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}><span class="sign" aria-hidden="true">⟳</span><span class="iw" aria-hidden="true">Sync</span></a>{/if}
   <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3).
        It adds what the section is about, and says which (round fifty-eight; the grower review). -->
   <!-- In the example it leads out of it first, to the same form in the grower's own collection: a first plant added there
        was the example's, and deleted with it (round sixty-seven; triage-66 V1). -->
-  {#if page.url.pathname !== adds.path}<a class="iconbtn" href={adds.href} title={adds.label} aria-label={adds.label} onclick={(e) => addLeavesExample(e, adds.href)}>+</a>{/if}
+  {#if page.url.pathname !== adds.path}<a class="iconbtn addbtn" href={adds.href} title={adds.label} aria-label={adds.label} onclick={(e) => addLeavesExample(e, adds.href)}><span aria-hidden="true">+</span><span class="iw" aria-hidden="true">{adds.word}</span></a>{/if}
 </header>
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
@@ -639,7 +653,10 @@
   .frostbar.warn { background: var(--warm-soft); }
   .frostbar.warn .go { color: var(--warm-ink); }
   .iconbtn.sync.on { color: var(--accent); }
-  .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
+  .iconbtn.sync.busy .sign { display: inline-block; animation: spin 1.2s linear infinite; }
+  /* Sync's and Add's names beside the sign from 901 px (round 105); under it the sign alone, its name the label's. */
+  .iconbtn .iw { display: none; }
+  @media (min-width: 901px) { .iconbtn .iw { display: inline; margin-left: 5px; font-size: var(--fs-md); } .iconbtn.sync, .iconbtn.addbtn { padding-inline: 8px 10px; } }
   .iconbtn.sync.err { color: var(--bad); }
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. Round eighty-seven: a
@@ -704,6 +721,9 @@
   #topbar .topseg > a:hover { text-decoration: underline; text-underline-offset: 3px; color: var(--hov); }
   #topbar .topseg > a.on { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
   #topbar:not(:has(.site-search)) .topseg { margin-left: auto; }
+  /* Labels and Settings, in the bar on a wide desktop only (round 105); "More" holds them everywhere. */
+  #topbar .topseg > a.wide { display: none; }
+  @media (min-width: 1200px) { #topbar .topseg > a.wide { display: inline-flex; } }
   /* Closer set where the bar is narrow (round eighty-four; P3). */
   @media (max-width: 960px) { #topbar .topseg { gap: 14px; } }
   @media (max-width: 700px) { #topbar .topseg { display: none; } }

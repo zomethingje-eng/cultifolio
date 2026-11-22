@@ -108,7 +108,8 @@ describe('the entrance pages (C2)', () => {
     expect(r.region).toMatchObject({ code: 'NAM', label: 'Namibia', level: 3 });
     expect(r.figures).toMatchObject({ total: 4, only: 1, climate: 3 });
     expect(r.line.map((x: { label: string }) => x.label)).toEqual(['Africa', 'Southern Africa']);
-    expect(r.view.items.map((x: { name: string }) => x.name)).toEqual(['Hoodia gordonii', 'Hoodia alstonii', 'Hoodia juttae', 'Welwitschia mirabilis']);
+    // Round 105: the default order puts the species with a habitat climate first; Hoodia juttae has none.
+    expect(r.view.items.map((x: { name: string }) => x.name)).toEqual(['Hoodia gordonii', 'Hoodia alstonii', 'Welwitschia mirabilis', 'Hoodia juttae']);
     expect(r.view.qs).toBe('');
     expect(r.view.items.filter((x: { only?: boolean }) => x.only).map((x: { name: string }) => x.name)).toEqual(['Hoodia juttae']); // the list's "only here"
 

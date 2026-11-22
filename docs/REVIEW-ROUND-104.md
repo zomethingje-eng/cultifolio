@@ -71,3 +71,14 @@ One search, built on 21 November 2026. The plan is `docs/PLAN-104.md`. It covers
   load; the import page is untouched by this round, and it had not failed before).
 - **The launch gate, the third run:** svelte-check 0 errors in 1,852 files, 6,421 unit tests in 713 files, 2,837 browser
   tests, every test first time in every engine (WebKit's install 175 and 177 files).
+
+## The deploy
+
+- Committed as a78a3d0 and pushed on 21 November 2026; deployed with `node scripts/deploy.mjs` as version 33eef1df (the
+  record's gate line written after the gate, so the deploy ran svelte-check and the unit tests again); the live check
+  passed 23 of 23, GBIF still serving the backbone.
+- Next, the index step (no page built, no outside service): `node scripts\corpus-step.mjs --plan
+  scripts\corpus-plan-r104-index.txt`. Until it runs, the live search's species rows show the record low or the family.
+- The index step ran on 21 November 2026 in the owner's CMD window: every check held (48,375 entries, 38,007 with the rain
+  a year and the season), uploaded as corpus 1b9a5e6034e98885, live check 23 of 23. The live search's Copiapoa cinerea
+  row reads record low 6.7, rain 50 mm, season "fog".

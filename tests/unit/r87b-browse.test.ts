@@ -87,10 +87,11 @@ describe('r87b record low: read with a fallback', () => {
   it('an index of before holds none: no column, no order by it, the default order', () => {
     const p = prepared(browseTableOf(INDEX as never));
     expect(lowsOf(p.t)).toBeNull();
-    expect(sortOf(p, 'low')).toBe('grown');
+    // Round 105: the default order is most grown with the habitat climate first ('grownc'), and still no `sort` in the address.
+    expect(sortOf(p, 'low')).toBe('grownc');
     expect(parseQuery(new URLSearchParams('sort=low')).sort).toBe('low');
     const a = runQuery(p, { ...EMPTY, sort: 'low' });
-    expect(a.query.sort).toBe('grown');
+    expect(a.query.sort).toBe('grownc');
     expect(queryString(a.query)).toBe('');
   });
   it('a column of another length is not read, nor one with no number in it (a table made from an index of before)', () => {

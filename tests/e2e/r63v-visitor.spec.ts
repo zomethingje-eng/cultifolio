@@ -69,7 +69,8 @@ test('r63v V1: on a desktop the top bar is the same places for a visitor', async
   const ctx = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 }, locale: 'en-GB', serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await page.goto('/'); await ready(page);
-  await expect(page.locator('#topbar .topseg a')).toHaveText(PLACES);
+  // Round 105 (the first hand-off's round 3): from 1200 px Labels and Settings are in the bar too, after About.
+  await expect(page.locator('#topbar .topseg a:visible')).toHaveText([...PLACES, 'Labels', 'Settings']);
   await ctx.close();
 });
 

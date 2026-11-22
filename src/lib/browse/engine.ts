@@ -19,8 +19,12 @@ import { slugAt, type BrowseTable } from './table';
 import { nameOrder, collatedOrder } from './order';
 import { regionOf, level3Of, lineOf, childrenOf, CONTINENTS, LEVEL3, COUNTRIES, REGIONS, regionOfOrigin, countriesIn, countryOfCodes, codeOf, type Region } from './tdwg';
 
-/** 'low': the record low, coldest first, where the index holds it (round eighty-seven, stage 2; `lowsOf`). */
-export type Sort = 'grown' | 'az' | 'low';
+/**
+ * 'low': the record low, coldest first, where the index holds it (round eighty-seven, stage 2; `lowsOf`). 'grownc', the
+ * default (round 105; the first hand-off's round 3): the species with a habitat climate first, most grown among each, so
+ * a view's first tiles show what the site does; 'grown' is most grown alone.
+ */
+export type Sort = 'grownc' | 'grown' | 'az' | 'low';
 /** 'map': the results as a map of the regions they are native to (round eighty-seven, C7). */
 export type View = 'tiles' | 'list' | 'map';
 export interface BrowseQuery {
@@ -54,7 +58,7 @@ export interface BrowseQuery {
 export const PAGE = 48;
 /** A genus has a page of its own when the reference holds two species of it or more (round eighty-seven, C2). */
 export const GENUS_PAGE_MIN = 2;
-export const EMPTY: BrowseQuery = { r: [], all: false, f: '', g: '', climate: false, grown: false, only: false, sort: 'grown', view: 'tiles', at: 0, in: '', more: '' };
+export const EMPTY: BrowseQuery = { r: [], all: false, f: '', g: '', climate: false, grown: false, only: false, sort: 'grownc', view: 'tiles', at: 0, in: '', more: '' };
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,80}$/;
 /** A query as an address gives it; anything it does not understand is left out, never an error. */
@@ -77,7 +81,7 @@ export function parseQuery(p: URLSearchParams): BrowseQuery {
     climate: p.get('climate') === '1',
     grown: p.get('grown') === '1',
     only: p.get('only') === '1' && r.length > 0,
-    sort: p.get('sort') === 'az' ? 'az' : p.get('sort') === 'low' ? 'low' : 'grown',
+    sort: p.get('sort') === 'az' ? 'az' : p.get('sort') === 'low' ? 'low' : p.get('sort') === 'grown' ? 'grown' : 'grownc',
     view: p.get('view') === 'list' ? 'list' : p.get('view') === 'map' ? 'map' : 'tiles',
     at: Number.isInteger(at) && at > 0 && at % PAGE === 0 && at <= 100_000 ? at : 0,
     in: inn && regionOf(inn)?.level !== 3 ? inn : '',
@@ -98,7 +102,7 @@ export function queryString(q: BrowseQuery, o: Partial<BrowseQuery> = {}): strin
   if (x.climate) p.push('climate=1');
   if (x.grown) p.push('grown=1');
   if (x.only && x.r.length) p.push('only=1');
-  if (x.sort !== 'grown') p.push(`sort=${x.sort}`);
+  if (x.sort !== 'grownc') p.push(`sort=${x.sort}`);
   if (x.view !== 'tiles') p.push(`view=${x.view}`);
   if (x.at) p.push(`at=${x.at}`);
   if (x.in) p.push(`in=${x.in}`);
@@ -425,7 +429,7 @@ export function runQuery(p: Prepared, asked: BrowseQuery): BrowseAnswer {
   const at = q.at < total ? q.at : 0;
   return {
     // An order by the record low of an index that holds none is the default order, and its links say so (no `sort`).
-    query: { ...q, at, sort: q.sort === 'low' && !p.lows ? 'grown' : q.sort },
+    query: { ...q, at, sort: q.sort === 'low' && !p.lows ? 'grownc' : q.sort },
     total,
     rows: sorted.slice(at, at + PAGE),
     families: fams.list, familiesWith: fams.with,
@@ -457,9 +461,10 @@ export function allRows(p: Prepared, asked: BrowseQuery): number[] {
 }
 
 /**
- * Rows in a view's order: A to Z; the record low, coldest first, the species with none after (A to Z among them); or
- * most grown. An address that asks for the record low of an index that holds none is given the default order, most
- * grown (or A to Z where nothing is counted), since the page offers no order by it then (`sortOf`).
+ * Rows in a view's order: A to Z; the record low, coldest first, the species with none after (A to Z among them); most
+ * grown; or, the default, the species with a habitat climate first and most grown within each part (round 105). An
+ * address that asks for the record low of an index that holds none is given the default order (or A to Z where nothing
+ * is counted), since the page offers no order by it then (`sortOf`).
  */
 export function sortRows(p: Prepared, rows: number[], sort: Sort): number[] {
   const t = p.t;
@@ -469,12 +474,16 @@ export function sortRows(p: Prepared, rows: number[], sort: Sort): number[] {
     const L = p.lows;
     return rows.sort((a, b) => { const x = lowAt(L, a), y = lowAt(L, b); return x === null ? (y === null ? p.az[a] - p.az[b] : 1) : y === null ? -1 : x - y || p.az[a] - p.az[b]; });
   }
+  if (s === 'grownc') { const c = t.climate; return rows.sort((a, b) => (c[a] === 'o' ? 0 : 1) - (c[b] === 'o' ? 0 : 1) || t.grown[b] - t.grown[a] || p.az[a] - p.az[b]); }
   return rows.sort((a, b) => t.grown[b] - t.grown[a] || p.az[a] - p.az[b]);
 }
-/** The order a view is in: "record low" only where the index holds it; "most grown" only where something is counted. */
+/**
+ * The order a view is in: "record low" only where the index holds it; "most grown", with or without the habitat climate
+ * first, only where something is counted (A to Z where nothing is, as before).
+ */
 export function sortOf(p: Prepared, sort: Sort): Sort {
-  if (sort === 'low' && !p.lows) return p.grownCounted === 0 ? 'az' : 'grown';
-  if (sort === 'grown' && p.grownCounted === 0) return 'az';
+  if (sort === 'low' && !p.lows) return p.grownCounted === 0 ? 'az' : 'grownc';
+  if ((sort === 'grown' || sort === 'grownc') && p.grownCounted === 0) return 'az';
   return sort;
 }
 

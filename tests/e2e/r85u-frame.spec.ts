@@ -93,10 +93,15 @@ test.describe('W14, P7: the crumb at 640 x 400', () => {
   test('where the five places are in the bar, the crumb is read and not drawn, and nothing in the bar is cut', async ({ page }) => {
     for (const path of ['/plants', '/species/copiapoa-cinerea']) {
       await page.goto(path); await ready(page);
-      const drawn = await page.evaluate(() => { const ol = document.querySelector('nav.crumb ol')!; const r = ol.getBoundingClientRect(); return { w: r.width, h: r.height, text: ol.textContent!.trim() }; });
-      expect(drawn.w * drawn.h, `${path} ${JSON.stringify(drawn)}`).toBeLessThanOrEqual(1); // r85base: "SPECIE", cut with no mark
-      // Still the page's trail to a screen reader.
-      await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(path === '/plants' ? 'My plants' : 'Copiapoa cinerea');
+      // Round 105 (the first hand-off's round 3): a list page has no crumb at all, its place being the one lit in the bar;
+      // a detail page's trail is read and not drawn here.
+      if (path === '/plants') { await expect(page.locator('nav.crumb')).toHaveCount(0); }
+      else {
+        const drawn = await page.evaluate(() => { const ol = document.querySelector('nav.crumb ol')!; const r = ol.getBoundingClientRect(); return { w: r.width, h: r.height, text: ol.textContent!.trim() }; });
+        expect(drawn.w * drawn.h, `${path} ${JSON.stringify(drawn)}`).toBeLessThanOrEqual(1); // r85base: "SPECIE", cut with no mark
+        // Still the page's trail to a screen reader.
+        await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Copiapoa cinerea');
+      }
       await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: path === '/plants' ? 'My plants' : 'Reference', exact: true })).toHaveAttribute('aria-current', 'page');
     }
   });

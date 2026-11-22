@@ -1093,6 +1093,7 @@
     <li>The results map shows how many of a view's species are native to each region, in steps its legend names. A region the view is filtered by holds every result and is drawn apart. Its files are fetched when the map is near the screen, and once the page is idle, so a printed page holds it.</li>
     <li>A region's page names the regions next door: those whose outlines in the shapes file touch it, a corner of one within 0.022 degrees (about 2.4 km) of the other's outline, minor islands left out. Three regions have no outline there (Cocos (Keeling) Is., Christmas I., the South China Sea), and their pages say none was worked out.</li>
     <li>The list's record low is the index's: the lowest night in NASA POWER's daily series at the habitat's typical spot, as the species page gives it. An index built without it says "not in this index" and offers no order by it.</li>
+    <li>A browse view opens in its default order: the species with a habitat climate first, then the most grown, then the alphabet, so its first tiles show what a page here holds. Its other orders are most grown alone, the alphabet and the coldest record low first. Where nothing is counted as grown, the default is the alphabet.</li>
     <li>Names on the browse pages are in one alphabet, English at base strength: accents and case are not differences, Æ is read as Ae, and numbers as numbers.</li>
   </ul>
   </section>

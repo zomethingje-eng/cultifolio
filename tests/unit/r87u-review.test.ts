@@ -180,7 +180,9 @@ describe('r87u S1: not counted is never shown as 0', () => {
     const c = await corpusNow(platform, noStatic);
     const { view } = await browseView(c, platform, noStatic, new URL('https://cultifolio.com/browse'));
     expect(view.rail.flags.find((x) => x.key === 'grown')).toMatchObject({ n: 3, notCounted: 3 });
-    expect(view.sorts.grown).toBe('/browse');
+    // Round 105: the default order (habitat climate first) is the bare address; most grown alone says so.
+    expect(view.sorts.grownc).toBe('/browse');
+    expect(view.sorts.grown).toBe('/browse?sort=grown');
     const f = await ok(familyLoad(ev(platform, '/family/apocynaceae', { slug: 'apocynaceae' })));
     expect(f.figures).toMatchObject({ grown: 2, grownNotCounted: 1 });
   });

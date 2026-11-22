@@ -140,7 +140,7 @@
       {:else if grownFlag?.notCounted}<p class="note">{fmt(grownFlag.notCounted)} of these species are not counted for Grown, and ticking it leaves them out.</p>{/if}
       {#if r.flags.find((x) => x.key === 'only')?.disabled}<p class="note">"Native only to" asks for a region ticked first.</p>{/if}
     </section>
-    {#if view.query.sort !== 'grown'}<input type="hidden" name="sort" value={view.query.sort} />{/if}
+    {#if view.query.sort !== 'grownc'}<input type="hidden" name="sort" value={view.query.sort} />{/if}
     {#if view.query.view !== 'tiles'}<input type="hidden" name="view" value={view.query.view} />{/if}
     <noscript><button class="show" type="submit">Show</button></noscript>
     <p class="note">Each number is what ticking it gives. "+" is how many a region adds to the regions ticked; beside a ticked region, how many of these are native to it.</p>
@@ -169,7 +169,7 @@
         <a href={view.views.map} aria-current={view.query.view === 'map' ? 'page' : undefined}>Map</a>
       </nav>
       {#if view.query.view !== 'map'}
-        <span class="sort">Order: {#if view.sorts.grown}<a href={view.sorts.grown} aria-current={view.query.sort === 'grown' ? 'true' : undefined}>most grown</a>{' · '}{/if}<a href={view.sorts.az} aria-current={view.query.sort === 'az' || (!view.sorts.grown && view.query.sort === 'grown') ? 'true' : undefined}>A–Z</a>{#if view.sorts.low}{' · '}<a href={view.sorts.low} aria-current={view.query.sort === 'low' ? 'true' : undefined}>coldest record low first</a>{/if}{#if !view.sorts.grown}{' (most grown is not counted in this build)'}{/if}</span>
+        <span class="sort">Order: {#if view.sorts.grownc}<a href={view.sorts.grownc} aria-current={view.query.sort === 'grownc' ? 'true' : undefined}>most grown, habitat climate first</a>{' · '}{/if}{#if view.sorts.grown}<a href={view.sorts.grown} aria-current={view.query.sort === 'grown' ? 'true' : undefined}>most grown</a>{' · '}{/if}<a href={view.sorts.az} aria-current={view.query.sort === 'az' || (!view.sorts.grown && (view.query.sort === 'grown' || view.query.sort === 'grownc')) ? 'true' : undefined}>A–Z</a>{#if view.sorts.low}{' · '}<a href={view.sorts.low} aria-current={view.query.sort === 'low' ? 'true' : undefined}>coldest record low first</a>{/if}{#if !view.sorts.grown}{' (most grown is not counted in this build)'}{/if}</span>
       {/if}
       <span class="acts">
         <PinButton state={pinState} />

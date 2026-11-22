@@ -113,7 +113,8 @@ describe('round seventy-four: a grower\'s greenhouse, bench or windowsill is a "
     const layout = readFileSync('src/routes/+layout.svelte', 'utf8');
     // The menu and the top bar's trail (its section's name). Round eighty-seven (DESIGN-87, the owner's look): the tab bar and
     // the top bar hold Reference, My plants, Today and About (and More, the menu); My spaces is in the menu, so two, not three.
-    expect(layout.match(/\{ href: '\/places', label: 'My spaces'/g)).toHaveLength(2);
+    // Round 105: a list page has no crumb (the first hand-off's round 3), so the section names it read are gone: the menu's one.
+    expect(layout.match(/\{ href: '\/places', label: 'My spaces'/g)).toHaveLength(1);
     expect(layout).not.toMatch(/label: 'Places'/);
     const list = readFileSync('src/routes/places/+page.svelte', 'utf8');
     expect(list).toContain('<title>My spaces · Cultifolio</title>');
