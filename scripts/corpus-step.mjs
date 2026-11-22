@@ -25,7 +25,8 @@
 //
 // Each step of the plan is a line: `backup`, `dossier <the builder's arguments>`, `if-exists <file> dossier ...`,
 // `review <what to read>`, `stop <what to read>` (round ninety-five: a review that stops even when its checks hold),
-// `upload`, `live-check`, and `daily dossier <a fill>` (round ninety): the day's fills, each under
+// `upload`, `live-check`, `img [--hours N]` (round 109: the photographs copied to the site's own bucket,
+// scripts/img-copy.ts), and `daily dossier <a fill>` (round ninety): the day's fills, each under
 // a daily allowance of its own; one that stops at its allowance hands over to the next daily step, and the run stops
 // before the first step after them until every one has finished. A step that finishes is recorded in corpus-step.json and not run again;
 // one that stops is run again by the next run, and every builder step is itself resumable. Everything the steps print
@@ -118,7 +119,7 @@ export function parsePlan(text) {
       steps.push({ line, kind: 'review', args: [rest.slice('stop'.length).trim()], always: true });
       continue;
     }
-    if (!['backup', 'dossier', 'review', 'upload', 'live-check'].includes(kind)) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}" is not a step this script knows`);
+    if (!['backup', 'dossier', 'img', 'review', 'upload', 'live-check'].includes(kind)) throw new Error(`corpus plan line ${i + 1}: "${raw.trim()}" is not a step this script knows`);
     steps.push({ line, kind, args: kind === 'review' ? [rest.slice('review'.length).trim()] : args, ...(when ? { when } : {}) });
   }
   return steps;
@@ -171,7 +172,9 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
   switch (result.status) {
     // The day's allowance of a source (iNaturalist's 9,000; round seventy-eight's budget) is spent until midnight UTC, so
     // the same command an hour later would stop again at once (round seventy-nine: the six days of the cultivated fill).
-    case 'unfinished': return ALLOWANCE_SPENT.test(result.why)
+    // Round 109: the photograph copy, stopped at its hours or with copies a source did not give, keeps what is up.
+    case 'unfinished': if (step.kind === 'img') return `Stopped at "${step.line}" with copies left (${result.why}). Nothing is lost: what is up stays up, and the next run copies only what is left. Run the same command again to carry on: ${cmd}`;
+      return ALLOWANCE_SPENT.test(result.why)
       ? `Stopped at "${step.line}": the day's allowance is spent (${result.why}). Nothing is lost and what was read stands. Run the same command again tomorrow, after midnight UTC: ${cmd}`
       : `Stopped at "${step.line}": a source did not answer (${result.why}). Nothing is lost and what was read stands. Run the same command again in an hour or so: ${cmd}`;
     case 'blocked':
@@ -426,6 +429,17 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         const gone = mergedAway(output);
         if (gone && state.speciesBefore) { state.speciesBefore -= gone; say(`  ${gone} page${gone === 1 ? '' : 's'} merged into another left the index on purpose: ${state.speciesBefore} species expected from here on.\n`); save(); }
         result = classify({ code, output, dropsWritten, speciesBefore: state.speciesBefore });
+      } else if (step.kind === 'img') {
+        // Round 109: the photographs copied to the site's own bucket (scripts/img-copy.ts, docs/PLAN-109.md), under this
+        // run's lock. It reads the corpus on disk and changes none of it; "run this again" (exit 3) when copies are left.
+        const t0 = Date.now();
+        let output = '';
+        let quietSince = Date.now();
+        const beat = setInterval(() => { if (Date.now() - quietSince >= heartbeatMs) { say(`  … still working: ${Math.round((Date.now() - t0) / 60000)} min on this step so far. Leave it running.
+`); quietSince = Date.now(); } }, Math.min(heartbeatMs, 30_000));
+        const code = await exec(process.execPath, [`--max-old-space-size=${heap.mb}`, '--import', 'tsx', 'scripts/img-copy.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
+        if (interrupted) break;
+        result = classify({ code, output, dropsWritten: false });
       } else if (step.kind === 'upload') {
         result = { status: 'done' };
         // Round seventy-nine: round seventy-eight's Worker cannot read a page without a GBIF key (its schema required one,

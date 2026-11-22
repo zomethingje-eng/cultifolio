@@ -1,0 +1,4 @@
+# Round 109: the photographs copied to the site's own bucket, cultifolio-img on img.cultifolio.com (docs/PLAN-109.md).
+# One step, run again after each stop until its line says "0 left". Each run stops new fetches after 18 hours so the
+# day's fills (scripts/corpus-plan-r87-daily.txt) can take the lock between runs. It reads the corpus and changes none of it.
+img --hours 18
