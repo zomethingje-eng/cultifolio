@@ -237,7 +237,7 @@ describe("the browser's own /api requests are on the pages", () => {
 
 /* ---- edge caches ---- */
 describe('every edge cache is on /about/how, with its lifetime', () => {
-  const words: Record<number, string> = { 60: 'a minute', 300: 'five minutes', 3600: 'an hour', 86400: 'a day' };
+  const words: Record<number, string> = { 60: 'a minute', 300: 'five minutes', 3600: 'an hour', 86400: 'a day', 604800: 'a week' };
   // file → [the lifetime in its source, the words /about/how uses for what it keeps]
   const table: Record<string, [RegExp, string]> = {
     // Every lifetime the forecast's put names: an hour, and five minutes for an answer whose NWS alerts were refused
@@ -247,7 +247,9 @@ describe('every edge cache is on /about/how, with its lifetime', () => {
     'src/routes/api/names/+server.ts': [/'public, max-age=(\d+)' \} \}\);\n\s*if \(cache\)/, 'a name typed into the species picker'],
     'src/lib/server/synonyms.ts': [/cache\.put\([^\n]*max-age=(\d+)/, 'a species address the backbone was asked about'],
     'src/routes/api/sheets/+server.ts': [/'cache-control': 'public, max-age=(\d+)'/, "a hash group's figure sheets"],
-    'src/hooks.server.ts': [/const PAGE_CACHE_S = (\d+)/, 'as rendered']
+    'src/hooks.server.ts': [/const PAGE_CACHE_S = (\d+)/, 'as rendered'],
+    // Round 107: a town typed for the frost watch's site, Nominatim's answer kept a week.
+    'src/routes/api/place/+server.ts': [/const TTL_S = ([\d_]+)/, 'a town looked up']
   };
   it('the files that put to the edge are the table, no more and no fewer', () => {
     expect(source.filter((f) => /caches\??\.default/.test(raw(f))).sort()).toEqual(Object.keys(table).sort());

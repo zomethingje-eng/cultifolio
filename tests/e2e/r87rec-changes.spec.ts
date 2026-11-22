@@ -39,7 +39,7 @@ test('r87rec 2: the front page\'s "Changed lately" holds the newest lines in ord
   await ready(page);
   const lines = page.locator('.lateline');
   const newest = changedLately(4);
-  expect(newest.map((l) => l.round)).toEqual([106, 106, 106, 105]); // round 106: its three lines, then round 105's first
+  expect(newest.map((l) => l.round)).toEqual([107, 107, 107, 106]); // round 107: its three lines, then round 106's first
   await expect(lines).toHaveCount(4);
   for (const [i, l] of newest.entries()) await expect(lines.nth(i)).toContainText(l.text);
   const all = (await lines.allInnerTexts()).join('\n');

@@ -41,6 +41,8 @@
   import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
   import { frame } from '$lib/ui/frame.svelte';
   import { onDestroy } from 'svelte';
+  import TownSearch from '$lib/ui/TownSearch.svelte';
+  import { LOCATION_WHY } from '$lib/weather/place';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   type Payload = { lat: number; lon: number; forecast: Forecast; alerts: Alert[]; alertsStatus: string; risk: { level: string; text: string }; attribution: string[] };
   let data = $state<Payload | null>(null);
@@ -392,7 +394,9 @@
     {:else if !collection.ready || (growing.length && !sheetsOnce)}
       <p class="small muted">{collection.ready ? (sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets…') : 'Opening the collection…'}</p>
     {:else if !growing.length}
-      <ExampleOffer><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add one</a> and this page says what it needs.</p></div></ExampleOffer>
+      <!-- Today with no plants is one step to adding one (round 107; the first hand-off's round 7): the button, not a line of
+           instructions. -->
+      <ExampleOffer><div class="emptybox" id="today-empty"><p class="muted" style="margin: 0 0 10px">No growing plants yet.</p><a class="btn pri" id="today-add" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>{collection.accessions.length ? 'Add a plant' : 'Add your first plant'}</a></div></ExampleOffer>
     {:else if !stops.length}
       <!-- What is true: no record meets the checks; not that every plant was watered. The outcome first, the rule one tap away (round sixty; the grower review, §3). -->
       <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
@@ -480,7 +484,10 @@
       {#if PAGE_IN_DEMO}
         <p class="small muted froststrip" id="frost-example">The example collection has no site of its own, so the frost watch reads no forecast here. Once you leave the example, set your site on Today with Use my location, or in Settings, and its forecast appears on Today, on the front page and under the top bar when it turns.</p>
       {:else}
-        <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button> or <a href="/settings#site">set your site in Settings</a>, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; spaces with coordinates are watched on their own pages either way{/if}.</p>
+        <!-- The reason before the browser asks, and a town instead (round 107; the first hand-off's round 7). -->
+        <p class="small muted whyline" id="frost-why">{LOCATION_WHY}</p>
+        <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>, type a town below, or <a href="/settings#site">set your site in Settings</a>, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; spaces with coordinates are watched on their own pages either way{/if}.</p>
+        <TownSearch id="frost-town" onpick={(p) => { site.set({ lat: p.lat, lon: p.lon, name: p.short }); void frost.check(true); }} />
       {/if}
     {/if}
     {#if locateMsg}<p class="small muted">{locateMsg}</p>{/if}

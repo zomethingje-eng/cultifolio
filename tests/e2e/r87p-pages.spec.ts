@@ -62,34 +62,36 @@ test('r87p 3: /changes lists the rounds, newest first, each with its date and it
   await page.goto('/changes');
   await ready(page);
   const heads = page.locator('article.changes section h2');
-  // Round 106, the newest (the species page in the grower's order), then round 105 (the top bar and browse's order), then round 104 (one search), then round 103 (the top of the
+  // Round 107, the newest (the tracker's payoff), then round 106 (the species page in the grower's order), then round 105 (the top bar and browse's order), then round 104 (one search), then round 103 (the top of the
   // species page), then round 102 (the front page), then round 100 (/backup's file preview), then round ninety-nine (the
   // collection encrypted on the device), then round 98 (the Walter–Lieth diagram, the Commons sitelink with no P373), then
   // round 95 (the keys a page leaves out), then round 93 (the names GBIF files apart); rounds 94, 96, 97 and 101 kept a
   // record and no entry. Then round 92 (flowering from GBIF's download), then round 91.
-  await expect(heads.first()).toContainText('Round 106');
-  await expect(heads.first()).toContainText('21 November 2026');
-  await expect(heads.nth(1)).toContainText('Round 105');
+  await expect(heads.first()).toContainText('Round 107');
+  await expect(heads.first()).toContainText('22 November 2026');
+  await expect(heads.nth(1)).toContainText('Round 106');
   await expect(heads.nth(1)).toContainText('21 November 2026');
-  await expect(heads.nth(2)).toContainText('Round 104');
+  await expect(heads.nth(2)).toContainText('Round 105');
   await expect(heads.nth(2)).toContainText('21 November 2026');
-  await expect(heads.nth(3)).toContainText('Round 103');
+  await expect(heads.nth(3)).toContainText('Round 104');
   await expect(heads.nth(3)).toContainText('21 November 2026');
-  await expect(heads.nth(4)).toContainText('Round 102');
-  await expect(heads.nth(4)).toContainText('20 November 2026');
-  await expect(heads.nth(5)).toContainText('Round 100');
+  await expect(heads.nth(4)).toContainText('Round 103');
+  await expect(heads.nth(4)).toContainText('21 November 2026');
+  await expect(heads.nth(5)).toContainText('Round 102');
   await expect(heads.nth(5)).toContainText('20 November 2026');
-  await expect(heads.nth(6)).toContainText('Round 99');
+  await expect(heads.nth(6)).toContainText('Round 100');
   await expect(heads.nth(6)).toContainText('20 November 2026');
-  await expect(heads.nth(7)).toContainText('Round 98');
-  await expect(heads.nth(7)).toContainText('19 November 2026');
-  await expect(heads.nth(8)).toContainText('Round 95');
+  await expect(heads.nth(7)).toContainText('Round 99');
+  await expect(heads.nth(7)).toContainText('20 November 2026');
+  await expect(heads.nth(8)).toContainText('Round 98');
   await expect(heads.nth(8)).toContainText('19 November 2026');
-  await expect(heads.nth(9)).toContainText('Round 93');
-  await expect(heads.nth(10)).toContainText('Round 92');
-  await expect(heads.nth(11)).toContainText('Round 91');
-  await expect(heads.nth(12)).toContainText('Round 87');
-  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92, 93, 95, 98, 99, 100, 102, 103, 104, 105, 106])await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
+  await expect(heads.nth(9)).toContainText('Round 95');
+  await expect(heads.nth(9)).toContainText('19 November 2026');
+  await expect(heads.nth(10)).toContainText('Round 93');
+  await expect(heads.nth(11)).toContainText('Round 92');
+  await expect(heads.nth(12)).toContainText('Round 91');
+  await expect(heads.nth(13)).toContainText('Round 87');
+  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92, 93, 95, 98, 99, 100, 102, 103, 104, 105, 106, 107])await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
   await expect(page.locator('#round-83')).toHaveCount(0);
   // The one row of links, on every about page, the page being read marked.
   for (const [path, label] of [['/about', 'About'], ['/about/how', 'How it is made'], ['/about/formats', 'Formats'], ['/about/data', 'The data'], ['/changes', 'Changes']]) {

@@ -61,7 +61,8 @@ describe('Today\'s words (the verification review\'s words 6 and 7)', () => {
     // Round sixty-seven (triage-66 V8): the example has no site of its own and none is made up for it, so in the example
     // the line says so, with neither "Use my location" nor the Settings link; outside it, both, as before (and no block
     // before "or" to drop its space: triage-66 P5).
-    expect(today).toMatch(/\{#if PAGE_IN_DEMO\}\s*<p class="small muted froststrip" id="frost-example">The example collection has no site of its own[^<]*<\/p>\s*\{:else\}\s*<p class="small muted froststrip">No site set\. <button[^>]*>\{locating \? 'Locating…' : 'Use my location'\}<\/button> or <a href="\/settings#site">/);
+    // Round 107: the reason first (#frost-why), and a town typed is offered beside the location and Settings.
+    expect(today).toMatch(/\{#if PAGE_IN_DEMO\}\s*<p class="small muted froststrip" id="frost-example">The example collection has no site of its own[^<]*<\/p>\s*\{:else\}\s*(?:<!--[^]*?-->\s*)?<p class="small muted whyline" id="frost-why">\{LOCATION_WHY\}<\/p>\s*<p class="small muted froststrip">No site set\. <button[^>]*>\{locating \? 'Locating…' : 'Use my location'\}<\/button>, type a town below, or <a href="\/settings#site">/);
   });
   it('the front page\'s one plant to water is named by its number, not "this one"', () => {
     const line = code('src/lib/ui/Today.svelte');

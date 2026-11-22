@@ -29,7 +29,8 @@ import { parsePlaces, PlaceIndex } from '../../src/lib/dossier/clean';
 import { parseDefaultPoints } from '../../src/lib/dossier/default-points';
 import { FEW_RECORDS, FEW_CELLS } from '../../src/lib/core/few-records';
 
-const ZIP = 'bulk/occurrence.zip', OUT = 'bulk/r107', CAP = 200_000;
+// CAP was 200,000: the first full run held 11 GB within five million rows (each row's strings kept its whole line alive).
+const ZIP = 'bulk/occurrence.zip', OUT = 'bulk/r107', CAP = 50_000;
 /** --rows N: stop after N rows (a trial of the script itself, its counts not the round's). */
 const STOP = (() => { const i = process.argv.indexOf('--rows'); return i >= 0 ? Number(process.argv[i + 1]) : Infinity; })();
 mkdirSync(OUT, { recursive: true });
@@ -83,14 +84,16 @@ for await (const line of createInterface({ input: child.stdout, crlfDelay: Infin
   }
   if (!line) continue;
   if (rows >= STOP) { child.kill(); break; }
-  if (++rows % 5_000_000 === 0) log(`  ${(rows / 1e6).toFixed(0)} million rows read, ${kept.toLocaleString('en-GB')} kept, ${Math.round((Date.now() - t0) / 60000)} min`);
+  if (++rows % 5_000_000 === 0) log(`  ${(rows / 1e6).toFixed(0)} million rows read, ${kept.toLocaleString('en-GB')} kept, ${Math.round((Date.now() - t0) / 60000)} min, heap ${(process.memoryUsage().heapUsed / 1e9).toFixed(1)} GB`);
   // The three key columns first, cheaply: most rows are no target page's.
   const c = line.split('\t');
   const hit = new Set<Page>();
   for (const i of [iS, iT, iA]) { const k = Number(c[i]); const ps = k ? pagesOfKey.get(k) : undefined; if (ps) for (const p of ps) hit.add(p); }
   if (!hit.size) continue;
-  const r = parseOccRow(h, line) as Row;
-  if (!r) continue;
+  const parsed = parseOccRow(h, line);
+  if (!parsed) continue;
+  // A flat copy: the parsed fields are slices of the line, and a slice keeps the whole 230-column line in memory.
+  const r = JSON.parse(JSON.stringify(parsed)) as Row;
   if ((iW >= 0 && c[iW]?.trim()) || (iG >= 0 && c[iG]?.trim())) r.flagged = true;
   for (const p of hit) {
     const list = rowsOf.get(p) ?? rowsOf.set(p, []).get(p)!;

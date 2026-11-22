@@ -18,7 +18,7 @@ const notPersisted = () => {
 };
 const plants = (n: number): Row[] => {
   const rows: Row[] = [['location', 'gh', 'name', 'Bench']];
-  for (let i = 1; i <= n; i++) rows.push(['accession', `t${i}`, 'acc', `2026-000${i}`], ['accession', `t${i}`, 'taxonName', 'Copiapoa cinerea'], ['accession', `t${i}`, 'status', 'growing'], ['accession', `t${i}`, 'nameKind', 'species'], ['accession', `t${i}`, 'locationId', 'gh']);
+  for (let i = 1; i <= n; i++) rows.push(['accession', `t${i}`, 'acc', `2026-${String(i).padStart(4, '0')}`], ['accession', `t${i}`, 'taxonName', 'Copiapoa cinerea'], ['accession', `t${i}`, 'status', 'growing'], ['accession', `t${i}`, 'nameKind', 'species'], ['accession', `t${i}`, 'locationId', 'gh']);
   return rows;
 };
 /** The reminders to back up on screen now: the layer's line, the plants list's line, the backup page's card, a toast asking for one. */
@@ -53,14 +53,14 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   await page.goto('/backup'); await ready(page);
   await expect(page.locator('.secrule', { hasText: 'Take a backup' })).toBeVisible();
   expect(await reminders(page)).toEqual([]);
-  // Six plants and no backup: the layer's line on My plants, and nothing beside it. r82base: the line and "Kept in this
+  // Ten plants and no backup (six before round 107, which asks from the tenth): the layer's line on My plants, and nothing beside it. r82base: the line and "Kept in this
   // browser only: back up", and the browser's answer as a toast asking for a backup too.
-  await inject(page, plants(6), Date.now() - 86_400_000, 'r82dddddddddddd0');
+  await inject(page, plants(10), Date.now() - 86_400_000, 'r82dddddddddddd0');
   await page.goto('/plants'); await ready(page);
   // Both at once: the toast is shown for a while from the page's load, and under a loaded machine the nudge's wait outlasted
   // it (round 83's merge, one flake in a whole run).
   const toasts = () => page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.join(' | '));
-  await expect(page.locator('#backup-nudge')).toContainText('6 plants and no backup yet', { timeout: writeWait(10_000, 50) });
+  await expect(page.locator('#backup-nudge')).toContainText('10 plants and no backup yet', { timeout: writeWait(10_000, 50) });
   await expect.poll(toasts, { timeout: writeWait(15_000, 50) }).toContain('This browser may clear your plants to free space');
   expect(await reminders(page)).toEqual(['nudge']);
   expect(await toasts()).not.toContain('take a backup'); // the nudge asks; the toast does not ask again
@@ -84,8 +84,8 @@ test('one backup reminder at a time, none over an empty collection, and a restor
   await page.click('#bk-replace-yes');
   await expect(page).toHaveURL(/\/plants$/, { timeout: writeWait(20_000, 300) });
   await ready(page);
-  await expect(page.locator('a.accrow')).toHaveCount(6, { timeout: writeWait(10_000, 100) });
-  // r82base: "6 plants and no backup yet" right after restoring from one, with two more beside it.
+  await expect(page.locator('a.accrow')).toHaveCount(10, { timeout: writeWait(10_000, 100) });
+  // r82base: "6 plants and no backup yet" (six then) right after restoring from one, with two more beside it.
   await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the line would be drawn with the list
   await expect(page.locator('#backup-nudge')).toHaveCount(0);
   expect((await reminders(page)).length).toBeLessThanOrEqual(1);

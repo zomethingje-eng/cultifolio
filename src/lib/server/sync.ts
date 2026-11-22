@@ -1574,6 +1574,8 @@ export const RATE = {
   names: { limit: 300, windowMs: 600_000 },
   /** A forecast: the frost page and the front strip ask once an hour per site; each distinct coordinate is a call to MET Norway under this site's name. */
   forecast: { limit: 60, windowMs: 600_000 },
+  /** A town looked up for the frost watch's site (round 107): a person asks a few, on a press, never as they type; each is a call to OpenStreetMap's Nominatim under this site's name unless asked that week. */
+  place: { limit: 20, windowMs: 600_000 },
   /** A sheet bucket the Worker's cache did not hold, charged per bucket derived: a device asks for at most 32 in a life, and a bucket is one R2 read when the corpus build wrote it, a few hundred when not. */
   sheets: { limit: 200, windowMs: 600_000 },
   /** A catalogue search: a person typing makes a few a second for a few seconds, each answered from memory and kept in the Worker's cache (the Cache API) for a day, so only a query not asked that day is counted (round sixty: a Worker's own answer is not kept by the edge on its own); an office or a campus behind one address is many people (round forty, R1-3). */
@@ -1713,7 +1715,12 @@ export function windowNetwork(bucket: RateBucket, ip: string): string | null {
   return BY_V4_NETWORK.has(bucket) ? upstreamNetwork(ip) : networkKey(ip);
 }
 /** The services this site calls under its own name, each with its own share of `RATE.upstream` a minute (round sixty-one). */
-export type Upstream = 'met' | 'nws' | 'gbif';
+export type Upstream = 'met' | 'nws' | 'gbif' | 'osm';
+/**
+ * OpenStreetMap's Nominatim allows a site one search a second at most, every visitor together (its usage policy), so its
+ * share is 30 a minute, not the others' `RATE.upstream.limit` (round 107). It is asked alone, never with another service.
+ */
+export const OSM_SHARE = 30;
 export type UpstreamAnswer = { ok: true } | { ok: false; who: 'site' | 'address' | 'network' | 'reserve'; service: string; retryAfter: number };
 /** The words of a call the site held back (round sixty-one; the triage, 6). */
 export const HELD_BACK = "not asked: this site's calls are used up for this minute";
@@ -1751,7 +1758,7 @@ export function upstreamNetwork(ip: string): string | null {
  * before they see one another's counts.
  */
 export async function upstreamCall(platform: App.Platform | undefined, services: Upstream[], ip: string | null, now = Date.now()): Promise<UpstreamAnswer> {
-  const share = RATE.upstream.limit;
+  const share = services.includes('osm') ? OSM_SHARE : RATE.upstream.limit;
   const net = ip ? upstreamNetwork(ip) : null; // an IPv4 /24 too since round sixty-three (S2)
   const ns = platform?.env?.COUNTERS as unknown as CountersNs | undefined;
   if (ns) {
@@ -1768,10 +1775,10 @@ export async function upstreamCall(platform: App.Platform | undefined, services:
   for (const s of services) {
     for (const [who, scale, said] of [[ip, UPSTREAM_ADDRESS_PART, 'address'], [net, UPSTREAM_ADDRESS_PART * NET_RATE_FACTOR, 'network']] as const) {
       if (!who) continue;
-      const r = await rateLimit(kv, 'upstream', `${s}:${who}`, now, 1_000, scale);
+      const r = await rateLimit(kv, 'upstream', `${s}:${who}`, now, 1_000, scale * (share / RATE.upstream.limit));
       if (!r.ok) return { ok: false, who: said, service: s, retryAfter: retry(r) };
     }
-    const r = await rateLimit(kv, 'upstream', s, now, 1_000);
+    const r = await rateLimit(kv, 'upstream', s, now, 1_000, share / RATE.upstream.limit);
     if (!r.ok) return { ok: false, who: 'site', service: s, retryAfter: retry(r) };
   }
   return { ok: true };

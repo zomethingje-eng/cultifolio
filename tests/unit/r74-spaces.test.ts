@@ -39,7 +39,9 @@ const BARE: Record<string, number> = {
   'src/routes/plants/[acc]/+page.svelte': 3, // the first steps' row key and the idcard's class
   'src/lib/server/sync.ts': 5, // the sync fault kind `place`, counted per day (FAULTS)
   'src/lib/dossier/build.ts': 1, // round eighty-four (G, A6f): the climate's reason, "4 in-range records at 2 places", geographic
-  'src/routes/about/formats/+page.svelte': 1 // round eighty-four (A): the vault ceilings' section anchor, id="places"
+  'src/routes/about/formats/+page.svelte': 1, // round eighty-four (A): the vault ceilings' section anchor, id="places"
+  'src/lib/ui/TownSearch.svelte': 1, // round 107: the town search's route, /api/place
+  'src/routes/api/place/+server.ts': 2 // round 107: its cache key's name and its request window's
 };
 
 /**
@@ -55,6 +57,8 @@ const ALLOWED: Array<[string, RegExp]> = [
   ['geographic', /No weather alerts are read for this place/],
   ['geographic', /so a place it does not cover/],
   ['geographic', /a (figure|fact) about a place/],
+  // round 107: a town typed for the frost watch's site, found in OpenStreetMap
+  ['geographic', /[Aa] town or (a )?place|The place search|No place found|Places from OpenStreetMap|up to five places|The place you choose|The places it offers|a place name of 2/],
   // round eighty-four's /about/how (A, rewritten for a grower): where a record or a weather cell is
   ['geographic', /records it has no place for|names a place but states no accuracy|a restricted record's place|Each place is counted once|at how many places|at one place in the range|the same place well enough|a plant with a place|Family and places are matched/],
   ['geographic', /facts about places/],

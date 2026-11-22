@@ -321,7 +321,8 @@
       if (wanted > 1) toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, labelsFor);
       else toast.show(addedWords({ count: 1, firstId, waterFailed }), waterFailed ? 12000 : undefined);
       // Awaited, so the form stays busy until it has left (round eighty-five; review-c C3).
-      await goto(wanted > 1 ? '/plants' : plantHref(recs[0])); // by identity while another plant shares the number (round sixty)
+      // One plant opens its page with the payoff card (round 107): in the router's state, so a reload or its address alone does not.
+      await goto(wanted > 1 ? '/plants' : plantHref(recs[0]), wanted > 1 ? {} : { state: { added: true } }); // by identity while another plant shares the number (round sixty)
     } catch {
       /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
          was typed, and nothing was written: the batch is one commit (round fifteen, 9; round sixteen, 14) */

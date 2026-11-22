@@ -78,7 +78,7 @@
     </tbody>
   </table>
   </div>
-  <p>Each licence above links its text. <a href="#notice">The full list of sources</a> is the source code's NOTICE. The frost watch's forecasts come from MET Norway (CC BY 4.0) and, in the US, the National Weather Service (public domain); they are asked for your site when you use the watch, and are no part of the reference.</p>
+  <p>Each licence above links its text. <a href="#notice">The full list of sources</a> is the source code's NOTICE. The frost watch's forecasts come from MET Norway (CC BY 4.0) and, in the US, the National Weather Service (public domain); they are asked for your site when you use the watch, and are no part of the reference. A town typed for your site is found in OpenStreetMap's data (© OpenStreetMap contributors, ODbL), through Nominatim.</p>
 
   <h3 id="names">The name</h3>
   <p class="sum">A page is headed by the name Kew's World Checklist accepts for it, with Kew's author and Kew's family. GBIF's name for the same plant, where it differs, is listed under Names &amp; registers as GBIF's name, and a plant you recorded under it still finds the page. A name is matched to a source only where the match is certain.</p>
@@ -946,6 +946,8 @@
     <li>Sync also trusts the server's listing. A device cannot detect a bundle the server withholds, since bundles carry no chain. It can detect a bundle altered in transit (the seal fails) and a photograph swapped (its hash is in the record).</li>
     <li>A plant number is at most 32 characters, with no more than 15 digits in a row. An import keeps a longer one in the plant's notes and gives the next free number.</li>
     <li>When you add a plant, start a batch or change a plant's name, the reference's own key for a name it heads is filed, whichever answer came first. One press of Add adds one plant.</li>
+    <li id="payoff">One plant added opens its page with one comparison at the top: its space's floor beside the habitat's cold floor (NASA POWER), else beside the coldest month's mean nightly low (CHELSA), else its light beside the open sky over the habitat (CHELSA). Each figure is named with where it came from, and nothing is advised. A plant with no space is asked for one there, and a space with neither figure for its floor. It shows on that visit only, until Close.</li>
+    <li>With ten plants or more, no backup ever taken on this device and no sync, My plants says so once, in one line. Not now puts it away on this device for good; a backup or sync ends it too.</li>
     <li>A pasted list knows a plant it added before by its line's words alone. Such lines are left out and said; one press adds them as new plants.</li>
     <!-- Round eighty-seven (t1): identity and provenance (src/lib/core/identity.ts). -->
     <li id="items">An offset, division or bulb split can be split off a plant as an item of its accession: a plant of its own under the accession's number and the next free letter, 2026-0012/A, then /B. A letter is never given twice.</li>
@@ -1150,6 +1152,8 @@
     <li>The number of groups doubles as the catalogue grows, and <code>/api/corpus</code> announces it. So a species is narrowed to one of its group's species and no further; <a href="/about/formats#privacy">the formats page</a> gives the rule.</li>
     <li>The coordinates of your site and of any space with coordinates, when the frost watch asks for a forecast (<code>/api/forecast</code>). They go with the space's altitude if one is set, and your units, so the answer comes back in them.</li>
     <li>They are rounded on the device before they leave it: to a hundredth of a degree, about a kilometre, and to ten metres.</li>
+    <li>A town or place you type for your site, on Today's frost watch or in Settings, when you press Find (<code>/api/place</code>): never as you type. The server asks OpenStreetMap's Nominatim for up to five places and keeps the answer in its cache for a week under the words asked, and nothing else of the request. The place you choose is kept on this device as your site, with its first name.</li>
+    <li>Before the browser is asked for your position, the watch says why in one sentence: your location gives the forecast for your nights, it is kept on this device, and only its position, rounded to about a kilometre, goes to MET Norway, through this site.</li>
     <li>Once a site is set, the watch asks from any page: when a page opens or is returned to, every five minutes while one is in view, and at once when the site is changed in Settings.</li>
     <li>An answer is kept half an hour on the device, in this tab's session storage, or five minutes when the National Weather Service refused or did not answer for its alerts. The same site is not asked again until its answer is that old.</li>
     <li>A refused request, or no answer within ten seconds, is not kept, and is said as a check that did not happen.</li>
@@ -1183,7 +1187,8 @@
     <li>The frost watch asks MET Norway (api.met.no) and, in the US and its territories (Puerto Rico, the US Virgin Islands, Guam, the Northern Mariana Islands and American Samoa, and all of Alaska, the Aleutians, St Lawrence Island and the Pribilofs included), the National Weather Service (api.weather.gov), from the server, never from your browser.</li>
     <li>The National Weather Service's are the only weather alerts read, so a place it does not cover says its forecast is clear, never "All clear.".</li>
     <li>A name the reference does not answer to is asked of GBIF (api.gbif.org) from the server too.</li>
-    <li>Those three are the only hosts the server asks. Your browser asks no host but this site and the four image hosts. "Use my location" asks the browser for its position; how the browser finds it is the browser's own.</li>
+    <li>A town typed for your site is asked of OpenStreetMap's Nominatim (nominatim.openstreetmap.org) from the server, on a press, never as you type, as its usage policy asks. The places it offers are credited to OpenStreetMap's contributors, under the Open Database Licence, where they are shown.</li>
+    <li>Those four are the only hosts the server asks. Your browser asks no host but this site and the four image hosts. "Use my location" asks the browser for its position; how the browser finds it is the browser's own.</li>
     <li>One host is Cloudflare's own, not this site's choice. Cloudflare, which serves the site, adds two headers of its network error logging to every answer (<code>Report-To</code> and <code>NEL</code>), while that setting of Cloudflare's is on for the site, as it was when last checked, on 5 November 2026.</li>
     <li>A browser that honours them (Chrome, Edge and other Chromium browsers) then reports to <code>a.nel.cloudflare.com</code>, from your address and for a week, any request to this site that fails, naming the address that failed. The site's code cannot remove these headers; the setting is the owner's to turn off.</li>
     <li>The site's three typefaces are Adobe's Source Sans 3 for the text, Source Serif 4 italic for the scientific names and Source Code Pro for identifiers such as a plant's number, under the SIL Open Font Licence, and are among the site's own files. Until they arrive, a page is set in faces the device already has, each scaled to the same average width, so the text hardly moves when they land: Segoe UI, Georgia and Consolas on Windows; Helvetica Neue, Georgia and Menlo on Apple devices; Roboto and Noto Serif on Android; Liberation and DejaVu on Linux.</li>
@@ -1201,10 +1206,11 @@
     <li>For each vault that takes a place, the network it was counted to is kept beside the vault's id with the day's counts. So a place given back on its day goes back to that network.</li>
     <li>Every address key is dropped within two days of the day it was written. The request windows a running Worker holds in memory are dropped as later requests arrive, each within ten minutes of its last use. None holds a page, a name or a record.</li>
     <li>The server's faults (a counter that did not answer, a lease not released) are counted by kind alone, a number a day kept for a week, with no address, path or name; Cloudflare's own request logs (Workers Logs) are off.</li>
-    <li>Cloudflare's edge keeps copies of public answers, linked to no address, each under its full web address, and the server keeps its own copies of searches, figure sheets, name lookups, forecasts and old-name checks under keys that name the app's version.</li>
+    <li>Cloudflare's edge keeps copies of public answers, linked to no address, each under its full web address, and the server keeps its own copies of searches, figure sheets, name lookups, forecasts, town lookups and old-name checks under keys that name the app's version.</li>
     <li>The requests the app's pages make name the app's version in their address too, so a new version is never answered from an old one's copies.</li>
     <li>It keeps a forecast for a rounded site for an hour, or five minutes when the National Weather Service refused or did not answer for its alerts, keyed by the version and the rounded position and altitude.</li>
     <li>It keeps a catalogue search for a day, by the version, the reference, the number asked for and the query, its case kept. It keeps a name typed into the species picker for a day, by the version and the name in lower case, with GBIF's answer.</li>
+    <li>It keeps a town looked up for a week, by the version and the words asked in lower case, with Nominatim's answer.</li>
     <li>It keeps a species address the backbone was asked about for a day, by the version and the name in lower case.</li>
     <li>It keeps a hash group's figure sheets for a day, by the version, the group and the reference, and its index entries and a window of the catalogue's rows for a day, keyed the same way. It keeps robots.txt and the maps' files (the coastlines and the regions' shapes) for a day.</li>
     <li>It keeps the sitemap's index for five minutes, and each of its files for a day under an address that names the reference's version. It keeps the whole species index and the reference's counts for five minutes.</li>
@@ -1230,6 +1236,7 @@
   <details class="full"><summary>Full detail: the calls this site makes for everyone</summary>
   <ul class="rules">
     <li>The server also caps how often it asks the weather services and GBIF: each of MET Norway, the National Weather Service and GBIF has a share of 600 calls a minute for every visitor together.</li>
+    <li>OpenStreetMap's Nominatim, asked for a town, has a share of 30 calls a minute, since its usage policy allows a site one search a second, every visitor together.</li>
     <li>One address (an IPv4 address or an IPv6 /64) may take a tenth of a share in a minute, and an IPv4 /24 or an IPv6 /48 four tenths. A US forecast takes from both MET Norway's share and the NWS's, both or neither.</li>
     <li>The last quarter of each share is kept, every minute, for networks that have not yet called that service in it. Once three quarters are used, a network that has made two calls that minute is held back, and one that has made fewer may make up to two.</li>
     <li>So ten addresses can no longer spend a share; it takes at least 77 different networks in one minute. That is the limit that remains, since a share is 600 calls by design.</li>
@@ -1259,6 +1266,7 @@
     <li><code>cultifolio.recentSearches</code>: the last eight searches you opened from the search box at the top of every page (the words typed, the row's name and its address), shown when the box is empty and forgotten by its "Clear recent searches". Never sent.</li>
     <li><code>cultifolio.welcomed</code>: the front page's welcome dismissed. <code>cultifolio.hasMine</code>: that this device has species of its own, so the front page opens on them; never written from the example collection.</li>
     <li><code>cultifolio.sampleGen</code>: the example collection's generation, a random value written anew by every Leave and every deletion of the example. A tab that was in the example while another tab left it opens your own collection on its next load.</li>
+    <li><code>cultifolio.backupNudgeDone</code>: that the line suggesting a backup, shown once at the tenth plant while there is no backup and no sync, was put away with Not now, so it is not shown again on this device.</li>
     <li><code>cultifolio.persistAfterFirst</code>: that the browser's answer to whether it will keep this site's storage was said (once there was a plant to keep, whichever page asked).</li>
     <li><code>cultifolio.persistAskedAt</code>: when a page last asked the browser that question, written before it asks. Every ask, the one after your first plant included, waits a month from the last, and a page asks once at most.</li>
     <li>An answer not yet said when your first plant comes within that month is read from the browser's own record, which asks nothing, and only once there is something of yours to keep, never for a visitor or in the example collection. Safari and Chrome answer by themselves, Firefox asks you, and no page waits for your answer.</li>
@@ -1279,7 +1287,7 @@
     <li><code>cultifolio.sampleClosed</code>: this tab was sent home because the example closed in another tab, so its next page opens outside it and says so.</li>
     <li><code>cultifolio.freshKey</code>: a sync key just made, so a reload still shows it.</li>
     <li><code>cultifolio.offline-tried</code>: the address the offline page last tried to open from the device's own copy, and when, so it tries each address once a minute and never in a loop.</li>
-    <li><code>cultifolio.backupNudgeHidden</code>: the line suggesting a backup put away for this tab. <code>cultifolio.iosFirstHidden</code>: the iPhone and iPad card about the Home Screen put away for this tab. <code>storage-notice-hidden</code>: the plants list's storage notice dismissed.</li>
+    <li><code>cultifolio.backupNudgeHidden</code>: the line suggesting a backup put away for this tab, where the device's own storage could not keep Not now. <code>cultifolio.iosFirstHidden</code>: the iPhone and iPad card about the Home Screen put away for this tab. <code>storage-notice-hidden</code>: the plants list's storage notice dismissed.</li>
     <li>Two the framework writes in every tab: <code>sveltekit:scroll</code>, how far each page of the tab's history was scrolled, so Back returns there; and <code>sveltekit:snapshot</code>, what a page keeps for Back and Forward.</li>
     <li>The front page keeps which catalogue row or species tile was at the top of the screen and how far down, with the grouping and chip it was under, so Back returns to it; nothing of yours.</li>
   </ul>

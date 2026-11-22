@@ -237,11 +237,11 @@ describe('every copy the Worker keeps is under a key naming the build (/about/ho
     return [...src.matchAll(/\b(cache|edge)\.put\(\s*([^,]+),/g)].map((m) => ({ f, key: m[2].trim(), src }));
   });
   it('the walk finds every put: the search, the sheets, the names, the forecast, the old-name check and the page', () => {
-    expect(puts.map((p) => p.f).sort()).toEqual(['src/hooks.server.ts', 'src/lib/server/synonyms.ts', 'src/routes/api/forecast/+server.ts', 'src/routes/api/names/+server.ts', 'src/routes/api/search/+server.ts', 'src/routes/api/sheets/+server.ts']);
+    expect(puts.map((p) => p.f).sort()).toEqual(['src/hooks.server.ts', 'src/lib/server/synonyms.ts', 'src/routes/api/forecast/+server.ts', 'src/routes/api/names/+server.ts', 'src/routes/api/place/+server.ts', 'src/routes/api/search/+server.ts', 'src/routes/api/sheets/+server.ts']);
   });
   it('each key is made by workerKey, read where the key is made; the page\'s names the build in its own address', () => {
     const s = said('how', "Cloudflare's edge keeps copies of public answers");
-    expect(s.text, s.where).toMatch(/the server keeps its own copies of searches, figure sheets, name lookups, forecasts and old-name checks under keys that name the app's version/);
+    expect(s.text, s.where).toMatch(/the server keeps its own copies of searches, figure sheets, name lookups, forecasts, town lookups and old-name checks under keys that name the app's version/);
     for (const p of puts) {
       const id = /^(\w+)(?:\(\w+\))?$/.exec(p.key)?.[1];
       expect(id, `${p.f}: ${p.key}`).toBeTruthy();

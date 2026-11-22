@@ -109,6 +109,16 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 107,
+    date: '2026-11-22',
+    reader: 'A plant just added is set beside its habitat at once, and the frost watch takes a town.',
+    lines: [
+      'A plant just added opens on one comparison: its space\'s floor or light beside its habitat\'s, each with its source.',
+      'The frost watch says why before it asks where you are, and takes a town typed instead (OpenStreetMap).',
+      'Today with no plants is one button to add one; the backup line asks once, at the tenth plant.'
+    ]
+  },
+  {
     n: 106,
     date: '2026-11-21',
     reader: 'A species page answers in a grower\'s order: what it is, how to keep it at home, then its climate.',

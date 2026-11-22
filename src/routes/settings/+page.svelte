@@ -22,6 +22,8 @@
   import { lock, LOCK_AFTER, passError } from '$lib/ui/lock.svelte';
   import { getMeta } from '$lib/db/vault';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import TownSearch from '$lib/ui/TownSearch.svelte';
+  import { LOCATION_WHY } from '$lib/weather/place';
 
   $effect(() => {
     setCrumb([{ label: 'Settings' }]);
@@ -252,6 +254,7 @@
       <label><span>Longitude (decimal degrees)</span><input id="site-lon" type="text" inputmode="decimal" bind:value={lon} placeholder="e.g. -0.12" /></label>
     </div>
     <p class="hint">North and east are positive, south and west negative.</p>
+    <p class="small muted" id="site-why" style="margin: 0 0 6px">{LOCATION_WHY}</p>
     <div class="row">
       <button class="btn pri" type="button" onclick={saveSite}>Save site</button>
       <button class="btn" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>
@@ -260,6 +263,8 @@
       {/if}
       {#if site.current}<button class="linkish" type="button" onclick={clearSite}>Clear</button>{/if}
     </div>
+    <!-- A town instead of coordinates (round 107; the first hand-off's round 7). -->
+    <TownSearch id="site-town" onpick={(p) => { lat = String(p.lat); lon = String(p.lon); siteName = p.short; saveSite(); }} />
     {#if siteMsg}<p class="small muted" role="status" style="margin: 8px 0 0">{siteMsg}</p>{/if}
     {#if site.current}<p class="small muted" style="margin: 8px 0 0">Set: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/today#frost">frost watch</a>.</p>{/if}
   </div>

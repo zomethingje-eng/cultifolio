@@ -72,6 +72,8 @@ async function measured(context: BrowserContext, percent: number): Promise<Recor
 test('r87s2u 2: at 200% text every new section and the browse pages stand to the body as at 100%', async ({ browser }) => {
   test.skip(test.info().project.name !== 'chromium', 'one engine measures the sizes');
   allowWrites(90_000);
+  // Two contexts walk every page: 25 s alone, past 30 s in round 107's Chromium run with the suite at full load.
+  test.setTimeout(90_000);
   const a = await browser.newContext({ locale: 'en-GB', serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
   const b = await browser.newContext({ locale: 'en-GB', serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
   const at100 = await measured(a, 100), at200 = await measured(b, 200);

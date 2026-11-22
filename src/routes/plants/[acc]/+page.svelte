@@ -58,6 +58,7 @@
   // Round eighty-seven, F4: the plant's parents and offspring, the plant chosen as a cross's pollen parent or a graft's parts.
   import Lineage from '$lib/ui/grow/Lineage.svelte';
   import PlantRef from '$lib/ui/grow/PlantRef.svelte';
+  import AddedPayoff from '$lib/ui/grow/AddedPayoff.svelte';
   import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
   import { MOTHER_HOW, MOTHER_HOW_LABEL } from '$lib/db/types';
   import { linkId } from '$lib/db/lineage';
@@ -338,6 +339,11 @@
     };
   });
   const cond = $derived(a?.locationId ? collection.conditions(a.locationId) : null);
+  /** The payoff card after the add form's save of this one plant (round 107): put away by Close or by leaving. */
+  let payoffClosed = $state(false);
+  const showPayoff = $derived(page.state.added === true && !payoffClosed);
+  const payoffHabitat = $derived(habitat ? { coldFloor: habitat.ex ? { minP01: habitat.ex.minP01, years: habitat.ex.years } : null, coldMonth: { tmin: habitat.night.v, month: habitat.night.at }, sky: habitat.dli ? { lo: habitat.dli.lo, hi: habitat.dli.hi } : null } : null);
+  const payoffState = $derived(ref === 'loading' ? 'loading' : ref === 'unreachable' ? 'unreachable' : ref === 'none' || !dossier ? 'none' : dossier.climate.status !== 'ok' ? 'noclimate' : 'ok');
   const hereDli = $derived(cond?.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
   const r0 = (x: number) => x.toFixed(0);
   // Side by side, no verdict: a regional radiation figure and a climate percentile are facts about the
@@ -1079,6 +1085,7 @@
     </form>
   {/if}
 
+  {#if showPayoff && a}<AddedPayoff acc={id} locationId={a.locationId} habitat={payoffHabitat} phase={payoffState} slug={ref === 'ok' ? speciesHref : null} onclose={() => (payoffClosed = true)} />{/if}
   <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. A plant that is dead or archived is not watered first: Log leads and Water waits behind More (round twenty-three, 19). -->
   <div class="quickbar">
     <!-- aria-disabled, not disabled, while it saves: a disabled button drops keyboard focus to the page (round sixty; the accessibility review, 1). -->

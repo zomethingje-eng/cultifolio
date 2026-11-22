@@ -195,7 +195,7 @@ test('P8: a link-like button in a sentence keeps the sentence\'s line, and still
   allowWrites(30_000);
   await context.addInitScript(notPersisted);
   await opened(page, '/plants');
-  await inject(page, plants(6), Date.now() - 86_400_000, 'r84uuuuuuuuuuuu5');
+  await inject(page, plants(10), Date.now() - 86_400_000, 'r84uuuuuuuuuuuu5'); // round 107: the line from the tenth plant
   await page.goto('/plants'); await ready(page);
   const hide = page.locator('#backup-nudge button', { hasText: 'Not now' });
   await expect(hide).toBeVisible({ timeout: writeWait(10_000, 50) });

@@ -45,8 +45,8 @@ hand-off's round 4.
 
   | Page | Desktop before (live, dd6265c) | Desktop after | Phone before | Phone after |
   |---|---|---|---|---|
-  | *Echeveria elegans* | 8,041 | to come | 9,762 | to come |
-  | *Welwitschia mirabilis* | 6,269 | to come | 9,225 | to come |
+  | *Echeveria elegans* | 8,041 | 5,923 | 9,762 | 8,742 |
+  | *Welwitschia mirabilis* | 6,269 | 5,489 | 9,225 | 8,387 |
 
   On the fixture, Copiapoa cinerea was 6,429 on desktop and 8,992 on a phone before.
 - **New tests:**
@@ -76,8 +76,24 @@ hand-off's round 4.
   file's setup has. Nothing in round 106 touches what they test.
 - **r75g range 2:** the fourth gate's one fault, in WebKit, passed on its retry: the press on a list tile was lost while
   the list settled. The helper presses again until the species page opens.
-- **The slow phone:** to come, on the live page after the deploy.
+- **The slow phone** (`scratchpad` script, Playwright's Chromium as an iPhone 13, CPU 4× slower, 150 ms and 1.6 Mbit/s
+  down, a cold cache, three runs each, 22 November 2026 on version 76417a2d):
+
+  | Page | LCP | CLS | INP (a fold, the hours, the months switch) | Loaded |
+  |---|---|---|---|---|
+  | *Echeveria elegans* | 3.9 to 4.3 s | 0.001 | 72 to 96 ms | 11.8 to 12.2 s |
+  | *Welwitschia mirabilis* | 4.3 to 4.4 s | 0.001 | 112 ms | 10.1 to 10.3 s |
+
+  The layout holds still and the presses answer within 200 ms. The largest paint takes about four seconds on this link,
+  over the 2.5 s Google calls good; no measure was taken before, so this is the base for a later round on the first
+  paint (the fonts and the hero photograph), not a change round 106 made.
+- **The page is shorter:** 26% on desktop and 10% on a phone for *Echeveria elegans*, 12% and 9% for *Welwitschia*.
 - **The gate:** the launch gate, on the fifth run: svelte-check 0 errors in 1,859 files, 6,443 unit tests in 715 files,
   2,866 browser tests, every test first time in every engine. The four before it each failed on one thing, each fixed
   and said above: the r85u-products timeout (first and third), the "Changed lately" wrap at 1024 with WebKit's paper
   (second), r75g range 2 (fourth).
+
+## The deploy
+
+Committed as c92f117 and pushed on 22 November 2026; `node scripts/deploy.mjs` deployed version 76417a2d, the live check
+23 of 23 (GBIF still serves the backbone).

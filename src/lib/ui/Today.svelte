@@ -1,6 +1,6 @@
 <script lang="ts">
   import { daysSince } from '$core/dates';
-  import { site, readerLat } from '$lib/ui/site.svelte';
+  import { readerLat } from '$lib/ui/site.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { ruleRain } from '$core/units';
   import { units } from '$lib/ui/units.svelte';
@@ -30,20 +30,9 @@
   /** Where the lines are shown: the front page carries them all; the Today tab shows the frost and the watering in full above, so those two lines are left to it (round fifty-three, 3). */
   let { where = 'home' }: { where?: 'home' | 'today' } = $props();
   const hasSite = $derived(frost.hasSite);
-  const readForecast = () => frost.check(true);
   onMount(() => { void frost.check(); });
-  /** The site from the device's own location, in one tap from the line that asks for it, as Settings offers (round forty-nine, 3; U4). Rounded to three decimals, as Settings rounds. */
-  let locating = $state(false);
-  let locateMsg = $state('');
-  function locate() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) { locateMsg = 'This browser has no location service; set the site in Settings.'; return; }
-    locating = true;
-    navigator.geolocation.getCurrentPosition(
-      (p) => { site.set({ lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3) }); locating = false; void readForecast(); },
-      (e) => { locating = false; locateMsg = e.message; },
-      { timeout: 10000 }
-    );
-  }
+  // The line that asks for a site goes to Today since round 107, where the reason is said before the browser asks and a
+  // town can be typed; it asked for the location here in one tap, with no reason (round forty-nine, 3).
   /** When this device last wrote a backup file, for the line below (round forty-nine, 3). */
   let lastBackup = $state<string | null>(null);
   onMount(() => { void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null)); });
@@ -215,12 +204,14 @@
         <a class="line {l.tone}" href={l.href}>{l.text}</a>
       {/if}
     {/each}
-    {#if !hasSite && where === 'home' && PAGE_IN_DEMO}<span class="small muted">The example collection has no site of its own, so the frost watch reads no forecast here; once you leave the example, set yours on Today or in Settings.</span>{:else if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg}{' '}{locateMsg}{/if}</span>{/if}
+    {#if !hasSite && where === 'home' && PAGE_IN_DEMO}<span class="small muted">The example collection has no site of its own, so the frost watch reads no forecast here; once you leave the example, set yours on Today or in Settings.</span>{:else if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <a href="/today#frost">set it on Today</a>, from your location or a town.</span>{/if}
   </div>
 {:else if collection.ready && !hasSite && growing.length && where === 'home' && PAGE_IN_DEMO}
   <p class="small muted todaynote">The example collection has no site of its own, so the frost watch reads no forecast here; once you leave the example, set yours on Today or in Settings.</p>
 {:else if collection.ready && !hasSite && growing.length && where === 'home'}
-  <p class="small muted todaynote">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.{#if locateMsg}{' '}{locateMsg}{/if}</p>
+  <!-- To Today, where the reason is said before the browser asks and a town can be typed (round 107; the first
+     hand-off's round 7): this line asked for the location with no reason. -->
+  <p class="small muted todaynote">Frost watch needs a site: <a href="/today#frost">set it on Today</a>, from your location or a town, and the forecast shows here when it turns.</p>
 {/if}
 
 <style>

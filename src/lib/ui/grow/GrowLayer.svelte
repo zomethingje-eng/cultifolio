@@ -2,7 +2,8 @@
   /**
    * What round sixty adds across the private pages, placed once in the layout (round sixty; the product review's 3 and 5,
    * the self-review's 18): the sample collection's banner, the browser's promise to keep the data asked for once after the
-   * first plant is saved, and a one-line nudge to take a backup once there are five plants and none has been taken. Each
+   * first plant is saved, and a one-line nudge to take a backup once there are ten plants and none has been taken (five
+   * until round 107). Each
    * acts only on a collection a page has already opened; none opens it on a public page.
    */
   import { page, navigating } from '$app/state';
@@ -14,7 +15,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { askToKeep } from '$lib/ui/keep-ask';
   import DemoBar from './DemoBar.svelte';
-  import { backupReminder, pageSaysKeeping, nudgeHidden } from '$lib/ui/backup-reminder.svelte';
+  import { backupReminder, pageSaysKeeping, nudgeHidden, nudgeDue, NUDGE_AT } from '$lib/ui/backup-reminder.svelte';
 
   const PERSIST = 'cultifolio.persistAfterFirst';
   const n = $derived(collection.ready ? collection.accessions.length : 0);
@@ -53,7 +54,8 @@
     writeSetting(PERSIST, 'device', '1'); // asked again next time if the browser refuses the write: harmless
   });
   /**
-   * The fifth plant with no backup taken and no sync: one line on My plants, put away for this tab on request. Not on
+   * The tenth plant with no backup taken and no sync (round 107; the fifth before): one line on My plants, put away on
+   * this device for good on request (for the tab before), so it reminds once. Not on
    * Today, whose own line already says "no backup yet" (round eighty-two; the independent review's 15). A restore that
    * left the device the file counts as a backup (backup/io.ts `countedAsBackup`).
    *
@@ -70,9 +72,9 @@
     void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null), () => (lastBackup = null));
   });
   const where = $derived(page.url.pathname === '/plants');
-  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !backupReminder.hidden && !PAGE_IN_DEMO && !backupReminder.page);
+  const nudge = $derived(where && nudgeDue({ plants: n, lastBackup, synced: sync.configured, putAway: hidden || backupReminder.hidden }) && !PAGE_IN_DEMO && !backupReminder.page);
   // Settled once the last backup is read, or when no line can be due whatever it says.
-  const known = $derived(collection.ready && (lastBackup !== undefined || n < 5 || PAGE_IN_DEMO || sync.configured));
+  const known = $derived(collection.ready && (lastBackup !== undefined || n < NUDGE_AT || PAGE_IN_DEMO || sync.configured));
   $effect(() => { backupReminder.nudge = nudge; backupReminder.known = known; });
 </script>
 

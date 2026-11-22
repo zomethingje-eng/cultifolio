@@ -13,6 +13,8 @@ declare global {
     interface PageState {
       /** What is open on the page and closes on Back, in the order opened: the photo viewer, the menu, the Record form (round eighty-one; src/lib/ui/back-layer.svelte.ts). */
       layers?: string[];
+      /** The plant page was opened by the save of this one plant on the add form: its payoff card shows (round 107). */
+      added?: boolean;
     }
     interface Locals {
       /** The corpus this request reads, loaded once by the hook for a page it may hold, so the cache key, the page's query and the page itself are one corpus (round fifty-nine). */
