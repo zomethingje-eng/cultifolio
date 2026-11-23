@@ -246,13 +246,18 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   // live front page's own; a corpus that changed the count fails here until the card is drawn again. Not with the fixture
   // corpus, whose count is a handful.
   if (!process.env.LIVE_CHECK_FIXTURE_OK) {
-    const card = /<meta property="og:image:alt" content="[^"]*?([\d,]+) species/.exec(r.text)?.[1];
+    // Round 110: the list grows each day, so the card says the count rounded down to the thousand ("More than 49,000
+    // species"): it fails here only when it says more than the reference holds, and a note says when it is 5,000 behind.
+    const card = /<meta property="og:image:alt" content="[^"]*?More than ([\d,]+) species/.exec(r.text)?.[1];
     // Round 102: the front page's H1 says the count ("48,375 species, and every figure…"); the catalogue's facts line
     // ("48,375 plant species") is read where an older page is served.
     const live = (/<h1[^>]*>([\d,]+) species, and every figure/.exec(r.text) ?? /([\d,]+) plant species/.exec(r.text))?.[1];
     if (!card || !live) fail(`/: the share card's count (${card ?? 'not found in og:image:alt'}) or the page's (${live ?? 'not found'}) could not be read`, r);
-    if (card !== live) fail(`/: the share card says ${card} species and the reference holds ${live}: set OG_ALT's count (src/lib/ui/ref/head.ts) to ${live}, draw the card again (node scripts/dev/og.mjs), and deploy`, r);
-    ok(`/: the share card's count is the reference's, ${live} species`);
+    const num = (x) => Number(x.replace(/,/g, ''));
+    const floor = (Math.floor(num(live) / 1000) * 1000).toLocaleString('en-GB');
+    if (num(card) > num(live)) fail(`/: the share card says more than ${card} species and the reference holds ${live}: set OG_ALT (src/lib/ui/ref/head.ts) to "More than ${floor} species", draw the card again (node scripts/dev/og.mjs), and deploy`, r);
+    ok(`/: the share card says more than ${card} species, and the reference holds ${live}`);
+    if (num(live) - num(card) >= 5000) note(`/: the share card says more than ${card} species and the reference has grown to ${live}: set OG_ALT to "More than ${floor} species", draw the card again (node scripts/dev/og.mjs), and deploy when convenient`);
   }
 }
 

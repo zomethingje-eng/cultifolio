@@ -15,11 +15,13 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const data = (p, type) => `data:${type};base64,${readFileSync(root + p).toString('base64')}`;
 const species = JSON.parse(readFileSync(root + 'static/s/v3/index.json', 'utf8')).length;
-const count = species.toLocaleString('en-GB');
+// Round 110: the list grows each day, and the card is not drawn each day. It says the count rounded down to the thousand
+// ("More than 49,000 species"), true as the list grows; the live check fails a card that says more than the site holds.
+const count = (Math.floor(species / 1000) * 1000).toLocaleString('en-GB');
 // OG_ALT's count, read from its line in head.ts (this script is plain Node, and head.ts is TypeScript).
 const alt = /export const OG_ALT = '([^']+)'/.exec(readFileSync(root + 'src/lib/ui/ref/head.ts', 'utf8'))?.[1] ?? '';
-const altCount = /([\d,]+) species/.exec(alt)?.[1];
-if (altCount !== count) throw new Error(`og.mjs: the index holds ${count} species and OG_ALT says ${altCount ?? 'no count'}: set OG_ALT's count to ${count} first, so the card and its words say the same`);
+const altCount = /More than ([\d,]+) species/.exec(alt)?.[1];
+if (altCount !== count) throw new Error(`og.mjs: the index holds ${species.toLocaleString('en-GB')} species and OG_ALT says ${altCount ? `more than ${altCount}` : 'no count'}: set OG_ALT to "More than ${count} species" first, so the card and its words say the same`);
 const html = readFileSync(root + 'scripts/dev/og.html', 'utf8')
   .replaceAll('{{FONT_SANS}}', data('static/fonts/source-sans-3/source-sans-3-latin-wght-normal.woff2', 'font/woff2'))
   .replaceAll('{{FONT_SERIF_ITALIC}}', data('static/fonts/source-serif-4/source-serif-4-latin-opsz-italic.woff2', 'font/woff2'))

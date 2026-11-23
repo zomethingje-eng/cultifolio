@@ -77,7 +77,7 @@ describe('round seventy-four: the site speaks to every home grower, not to cactu
   it('the files a reader meets outside the pages say the same: the link preview, its image, the manifest, the app shell', () => {
     for (const [name, text] of [['OG_ALT', OG_ALT], ['scripts/dev/og.html', readFileSync('scripts/dev/og.html', 'utf8')], ['static/app/manifest.webmanifest', readFileSync('static/app/manifest.webmanifest', 'utf8')], ['src/app.html', readFileSync('src/app.html', 'utf8')]] as const) expect(text.match(KIND), name).toBeNull();
     // Round ninety-one: the card in the site's look, its words checked against /about (docs/REVIEW-ROUND-91.md).
-    expect(OG_ALT).toContain('A reference for the plants people grow. 48,375 species, every figure with its source.');
+    expect(OG_ALT).toContain('A reference for the plants people grow. More than 49,000 species, every figure with its source.');
   });
   it('the README is for anyone who grows plants at home; succulents are named only as one end of that range', () => {
     const readme = readFileSync('README.md', 'utf8');

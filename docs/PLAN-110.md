@@ -141,3 +141,52 @@ r85q-species-page); the whole unit suite had passed half an hour before, and pas
 
 The about snapshot (src/lib/ui/about-counts-on.json) and the search examples were written by the trial's index: 48,425
 species. The live corpus is 48,375 until the first daily run uploads, and /about shows the live counts once they load.
+
+## The first daily run (23 November 2026) and what it changed
+
+Run by Claude in the desktop app's terminal, `node scripts\corpus-step.mjs --plan scripts\corpus-plan-daily.txt`, begun
+23:50 UTC on 22 November (so its day is the 22nd's; the 23rd's day began during it).
+
+1. **The grow:** 1,000 added from the queue's ranks 1 to 1,000 (inat 1,595 + gbif 1 down to inat 2 + gbif 0), 53 of
+   them with a page already (the trial's 50 and three more), 947 to build, 26,864 left in the queue.
+2. **Three queued species already had pages under another id:** Handroanthus impetiginosus (Kew 317146, the page
+   g4092242), Harpephyllum afrum (2839757) and Tylecodon cacalioides (2434528). The queue was written against the
+   list's lines, and the reference holds these three by another of their ids. Their three lines were taken out of the
+   list by hand (997 "queued, added" lines remain), and select-species.ts --queue-only now leaves out every species the
+   reference holds as well as the list's. The queue written again on 23 November, offline from the counts of the 22nd:
+   26,864 species (7,929 with two records, 18,935 with one).
+3. **The build:** 947 built, 0 kept, no drops, in about two and a half hours; GBIF asked it to slow down at about page
+   700 (one request every 4 s, its 429s answered by the gap doubling). 653 given a Köppen–Geiger class, 617 a hardiness
+   band. Index then 49,372 species.
+4. **The fills:** the other registers' identifiers for 1,039 items; iNaturalist's for the 1,352 pages without its
+   photographs (698 ids checked first, 1.7 s a page); BHL stopped after 109 citations at "5 requests in a row not
+   answered" (its resolver did not answer within 60 s).
+5. **The review threw on its own expect line** (`B = T`: the right side of a comparison must be a number). It is
+   `B - T = 0` now, and r110b reads the real plan's expect lines.
+6. **A silent source held the day's upload.** Under `each-day` only a fill that had spent its allowance passed the index;
+   BHL's silence held it, which would hold the day's new pages for as long as BHL is down. Now any daily fill that
+   stopped unfinished (allowance spent or a source not answering) passes, the run ends saying it carries on, and the
+   same command asks it again; a fill that failed still stops the run (r110b, two tests more). The run asked again an
+   hour later: BHL answered (5 not answered), and it went on.
+7. **The review:** T 947, B 947, BU 5, I 49,372: every check held. **Uploaded**, 190,744 files matching.
+8. **The live check failed on the share card:** it said 48,375 species, the reference 49,372. The card is an image drawn
+   by hand and deployed with the app, so an exact count goes stale every day the list grows. It now says the count
+   rounded down to the thousand, "More than 49,000 species" (OG_ALT and scripts/dev/og.html, drawn again by og.mjs); the
+   live check fails only a card that says more than the reference holds, and notes when the reference has grown 5,000
+   past it.
+9. **The day's species moved to a file of their own.** The gate for these fixes failed 18 unit tests in 10 files (rounds
+   78 to 81): they hold figures of scripts/species-list.txt as made on 19 October (48,375 species, 46,021 GBIF keys,
+   2,354 without one, the genera's counts, the hybrids), and /about/how's paragraph script refused a list whose lines
+   no longer matched its header. The list is not to move: its figures are the ones /about/how states. So `--grow` now
+   appends to scripts/species-added.txt, in the list's form with a header of its own, and the list stays as made. The
+   997 lines moved there; growList reads both files (and refuses a species in both), the index's cultivated counts read
+   both, select-species.ts --queue-only leaves out both, and keepQueued is gone (the list written again never held the
+   additions). /about/how#queue links the additions.
+10. **The hybrids among the additions.** 27 of the 997 are hybrids, and the table that gives a page Kew's sign
+    (src/lib/core/hybrids.json) was made from the list alone, so Rhododendron × intermedium and the rest were headed
+    without the sign. scripts/hybrid-names.ts reads the additions too; the table made again holds 513 (it held 486), and
+    /about/how says 513.
+
+A slip of the rule: on 22 November, while the trial build held the lock, select-species.ts --queue-only and a vitest
+file were run in this folder (both read-only of the corpus). CLAUDE.md allows only reading the log and the lock while it
+is held. Nothing was written to static/s/, and nothing has been run under a held lock since.

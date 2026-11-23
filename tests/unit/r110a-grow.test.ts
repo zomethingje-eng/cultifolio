@@ -3,16 +3,18 @@
  *
  * 1. The queue is every accepted species with a cultivated record, by the list's own counts, that the list does not hold
  *    (those that reached the list's bar after it was made first). It is ranked by records, then iNaturalist's observations, then Kew's name, and read back as written.
- * 2. `growList` appends the next species to the list with their counts and the day, and builds the list's unbuilt first,
- *    so a stopped day is made up within the day's number. It never rebuilds a species listed as already in the
- *    reference, and says what is left in the queue.
- * 3. Writing the list again keeps what the days added (`keepQueued`).
- * 4. The list's parser reads the appended lines.
+ * 2. `growList` appends the next species to the days' additions (scripts/species-added.txt, the list's form) with their
+ *    counts and the day, never to the list as made, and builds the list's unbuilt first (both files), so a stopped day
+ *    is made up within the day's number. It never rebuilds a species listed as already in the reference, and says what
+ *    is left in the queue.
+ * 3. The list's parser reads the additions' lines.
  *
- * On 32d681f there is no queue, no --grow and no keepQueued: every test FAILED.
+ * On 32d681f there is no queue and no --grow: every test FAILED. On 54052e6 the day's species were appended to
+ * scripts/species-list.txt itself, which moved the figures eighteen tests of rounds 78 to 81 hold of the list as made
+ * (the first daily run's gate, 23 November 2026): the tests of the additions' file FAILED.
  */
 import { describe, it, expect } from 'vitest';
-import { queueOf, formatQueue, parseQueue, growList, keepQueued, formatSpeciesList, parseSpeciesList, QUEUED, type Kew, type KewRow, type Selected } from '../../scripts/select-species-lib';
+import { queueOf, formatQueue, parseQueue, growList, formatSpeciesList, parseSpeciesList, QUEUED, LIST_MAGIC, ADDED_FILE, type Kew, type KewRow, type Selected } from '../../scripts/select-species-lib';
 
 const row = (id: string, name: string, o: Partial<KewRow> = {}): KewRow => ({ id, rank: 'Species', status: 'Accepted', family: 'Aizoaceae', genus: name.split(' ')[0], name, authors: 'L.', acc: id, parent: '', powo: '', hybrid: false, ...o });
 const kew: Kew = {
@@ -46,49 +48,44 @@ describe('r110a the queue: the next tier by the same counts', () => {
 
   describe('the day\'s growth', () => {
     const QUEUE = formatQueue(['test'], q);
-    it('appends the next N with their counts and the day, and writes the --keys file of them', () => {
-      const g = growList(LIST, QUEUE, (e) => e.kewId === '8', 2, '2026-11-23');
+    it('appends the next N to the additions with their counts and the day, never to the list, and writes the --keys file of them', () => {
+      const g = growList(LIST, null, QUEUE, (e) => e.kewId === '8', 2, '2026-11-23');
       expect(g.added.map((x) => x.name)).toEqual(['Aloe delta', 'Aloe gamma']);
       expect(g.left).toBe(3);
-      const list = parseSpeciesList(g.listText);
-      expect(list.map((e) => e.name)).toEqual(['Aloe theta', 'Aloe delta', 'Aloe gamma']);
-      expect(list[1].reason).toBe(`inat 3 + gbif 0; ${QUEUED} 2026-11-23`);
+      expect(g.addedText.startsWith(LIST_MAGIC)).toBe(true);
+      expect(g.addedText).toContain('scripts/species-list.txt is left as made on 19 October 2026');
+      const list = parseSpeciesList(g.addedText);
+      expect(list.map((e) => e.name)).toEqual(['Aloe delta', 'Aloe gamma']);
+      expect(list[0].reason).toBe(`inat 3 + gbif 0; ${QUEUED} 2026-11-23`);
+      expect(ADDED_FILE).toBe('scripts/species-added.txt');
       expect(g.growText.split('\n').filter((l) => l && !l.startsWith('#'))).toEqual(['9004 Aloe delta', '9003 Aloe gamma']);
     });
     it('the list\'s unbuilt come first and count toward N; a species with no GBIF key is built from Kew\'s file by its id', () => {
-      const day1 = growList(LIST, QUEUE, (e) => e.kewId === '8', 2, '2026-11-23');
+      const day1 = growList(LIST, null, QUEUE, (e) => e.kewId === '8', 2, '2026-11-23');
       // Day 1 stopped with nothing built: day 2 builds those two again, and takes one more.
-      const day2 = growList(day1.listText, QUEUE, (e) => e.kewId === '8', 3, '2026-11-24');
+      const day2 = growList(LIST, day1.addedText, QUEUE, (e) => e.kewId === '8', 3, '2026-11-24');
       expect(day2.carried).toBe(2);
       expect(day2.added.map((x) => x.name)).toEqual(['Aloe alpha']);
-      const day3 = growList(day2.listText, QUEUE, (e) => ['8', '4', '3', '1'].includes(e.kewId!), 5, '2026-11-25');
+      const day3 = growList(LIST, day2.addedText, QUEUE, (e) => ['8', '4', '3', '1'].includes(e.kewId!), 5, '2026-11-25');
       expect(day3.growText.split('\n').filter((l) => l && !l.startsWith('#'))).toEqual(['9002 Aloe beta', 'k5 -']);
       expect(day3.left).toBe(0);
       // The queue run out: nothing added, nothing to build.
-      const day4 = growList(day3.listText, QUEUE, () => true, 5, '2026-11-26');
+      const day4 = growList(LIST, day3.addedText, QUEUE, () => true, 5, '2026-11-26');
       expect([day4.added.length, day4.carried, day4.left, day4.toBuild]).toEqual([0, 0, 0, 0]);
     });
     it('a species of the queue that has a page already joins the list and is not built again', () => {
-      const g = growList(LIST, QUEUE, (e) => e.kewId !== '3', 2, '2026-11-23');
+      const g = growList(LIST, null, QUEUE, (e) => e.kewId !== '3', 2, '2026-11-23');
       expect(g.added.map((x) => x.name)).toEqual(['Aloe delta', 'Aloe gamma']);
       expect(g.toBuild).toBe(1);
       expect(g.growText.split('\n').filter((l) => l && !l.startsWith('#'))).toEqual(['9003 Aloe gamma']);
     });
     it('a species listed as already in the reference with no page under its id is never built again', () => {
       const ref = formatSpeciesList(['test'], [sel('8', 'Aloe theta', { byCounts: false, byReference: true })]);
-      expect(growList(ref, QUEUE, () => false, 0, '2026-11-23').carried).toBe(0);
+      expect(growList(ref, null, QUEUE, () => false, 0, '2026-11-23').carried).toBe(0);
     });
-  });
-});
-
-describe('r110a the list written again keeps what the days added', () => {
-  it('a queued line the new list lacks is kept; one it holds only as in the reference keeps its queued reason', () => {
-    const grown = growList(LIST, formatQueue(['test'], queueOf(kew, new Map([['1', 2], ['2', 1]]), new Map(), new Set(['8']), keyOf)), () => true, 2, '2026-11-23').listText;
-    const fresh = formatSpeciesList(['again'], [sel('1', 'Aloe alpha', { byCounts: false, byReference: true }), sel('8', 'Aloe theta')]);
-    const k = keepQueued(fresh, grown);
-    expect(k.kept).toBe(2);
-    const back = parseSpeciesList(k.text);
-    expect(back.map((e) => [e.name, e.reason])).toEqual([['Aloe alpha', `inat 2 + gbif 0; ${QUEUED} 2026-11-23`], ['Aloe theta', 'inat 3 + gbif 0'], ['Aloe beta', `inat 1 + gbif 0; ${QUEUED} 2026-11-23`]]);
-    expect(keepQueued(fresh, null).text).toBe(fresh);
+    it('refuses additions that hold a species the list as made holds', () => {
+      const twice = formatSpeciesList(['test'], [sel('8', 'Aloe theta')]);
+      expect(() => growList(LIST, twice, QUEUE, () => true, 1, '2026-11-23')).toThrow(/holds Aloe theta \(k8\), which scripts\/species-list.txt holds already/);
+    });
   });
 });

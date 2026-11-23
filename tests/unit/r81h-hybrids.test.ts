@@ -18,7 +18,8 @@ import { indexLookup, addressOf } from '$lib/server/lookup';
 import type { IndexEntry } from '$dossier/index-entry';
 import type { PageId } from '$core/page-id';
 
-const list = listHybrids(readFileSync('scripts/species-list.txt', 'utf8'));
+// Round 110: the list as made and the days' additions beside it (scripts/species-added.txt).
+const list = new Map([...listHybrids(readFileSync('scripts/species-list.txt', 'utf8')), ...(existsSync('scripts/species-added.txt') ? listHybrids(readFileSync('scripts/species-added.txt', 'utf8')) : [])]);
 const table = JSON.parse(readFileSync('src/lib/core/hybrids.json', 'utf8')) as { rows: Record<string, { name: string; ipni?: string; powo?: string; parents?: string }> };
 
 describe('the table is the species list’s hybrids, by Kew’s plant_name_id', () => {

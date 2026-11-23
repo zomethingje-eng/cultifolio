@@ -128,8 +128,9 @@ export function parsePlan(text) {
 /**
  * Round 110 (docs/PLAN-110.md): a plan that says `each-day` is the run of a UTC day. A run begun on an earlier UTC day that
  * finished, or stopped only at day's fills not finished, starts again at step 1; one stopped at a review, a block, a
- * failure or a Ctrl-C does not, and stops where it stopped. And its fills that stopped at their day's allowance do not
- * hold the steps after them: the index and the upload run, and each fill carries on in the next day's run.
+ * failure or a Ctrl-C does not, and stops where it stopped. And its fills that stopped unfinished (their day's allowance
+ * spent, or a source that did not answer) do not hold the steps after them: the index and the upload run, and each fill
+ * carries on in the next run. A fill that failed stops the run as any step does.
  */
 export const eachDay = (text) => text.split(/\r?\n/).some((l) => l.replace(/#.*$/, '').trim() === 'each-day');
 /** Whether the kept run of an `each-day` plan begins again at step 1 on `day` (YYYY-MM-DD, UTC). */
@@ -383,7 +384,7 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       const rec = state.steps[i];
       if (rec.status === 'done' || rec.status === 'skipped') continue;
       // Round ninety: not past the day's fills until every one has finished.
-      const left = step.daily ? [] : dailyGate(plan, state.steps, i).filter((x) => !(daily && ALLOWANCE_SPENT.test(x.why)));
+      const left = step.daily ? [] : dailyGate(plan, state.steps, i).filter(() => !daily);
       if (left.length) { say(`\n${dailySentence(left, step.line, cmd)}\n`); return EXIT.unfinished; }
       if (rec.status === 'review') {
         // A stop for review is passed only by --go-on, and only this one: a later stop stops again.
@@ -515,10 +516,14 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
       return EXIT[result.status];
     }
     if (!interrupted) {
-      const left = dailyGate(plan, state.steps, plan.length).filter((x) => !(daily && ALLOWANCE_SPENT.test(x.why)));
+      const left = dailyGate(plan, state.steps, plan.length).filter(() => !daily);
       if (left.length) { say(`\n${dailySentence(left, null, cmd)}\n`); return EXIT.unfinished; }
+      const carriedOf = daily ? plan.flatMap((p, j) => (p.daily && state.steps[j].status === 'unfinished' ? [state.steps[j].why ?? ''] : [])) : [];
       const carried = daily ? plan.flatMap((p, j) => (p.daily && state.steps[j].status === 'unfinished' ? [`"${p.line}" (${state.steps[j].why ?? ''})`] : [])) : [];
-      if (carried.length) { say(`\n=== ${stamp()}  the day's run is done. The fills that spent their day's allowance carry on in tomorrow's run: ${carried.join('; ')}. Run the same command again after midnight UTC: ${cmd}\n`); return EXIT.done; }
+      if (carried.length && carriedOf.every((w) => ALLOWANCE_SPENT.test(w))) { say(`\n=== ${stamp()}  the day's run is done. The fills that spent their day's allowance carry on in tomorrow's run: ${carried.join('; ')}. Run the same command again after midnight UTC: ${cmd}\n`); return EXIT.done; }
+      // Round 110: a fill whose source did not answer does not hold the day's pages either; what it did not ask stays
+      // "not asked" on the pages (rule 2), and the same command asks it again.
+      if (carried.length) { say(`\n=== ${stamp()}  the day's run is done. The fills not finished carry on in the next run: ${carried.join('; ')}. A source did not answer: run the same command again in an hour or so to ask it again (a fill whose allowance is spent stops at once, asking nothing); after midnight UTC the next day's run starts at step 1: ${cmd}\n`); return EXIT.done; }
     }
     if (interrupted) {
       const i = state.steps.findIndex((s) => s.status === 'running');

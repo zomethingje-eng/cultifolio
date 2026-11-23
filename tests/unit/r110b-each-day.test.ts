@@ -4,8 +4,12 @@
  * 1. A run of an `each-day` plan begun on an earlier UTC day that finished, or that stopped only at day's fills, starts
  *    again at step 1. On the same day it carries on where it was. One stopped at a review or a failure is never started
  *    over.
- * 2. In such a plan a fill that spent its day's allowance does not hold the index and the upload. The run ends saying
- *    the fill carries on tomorrow. Without `each-day` the round 90 gate holds as before.
+ * 2. In such a plan a fill that spent its day's allowance, or whose source did not answer, does not hold the index and
+ *    the upload. The run ends saying the fill carries on. A fill that failed stops the run. Without `each-day` the round
+ *    90 gate holds as before.
+ *
+ * On 54052e6 a fill whose source did not answer held the index (the first daily run, 23 November 2026, on BHL's
+ * silence): the test of it FAILED.
  *
  * On 32d681f there is no `each-day`: parsePlan throws on the line ("is not a step this script knows"), and a finished
  * plan run again the next day only says "every step is done": FAILED.
@@ -21,6 +25,13 @@ const bhlSpent = (day: string) => `${bhlLine({ pages: 48375, asked: 4000, linked
 const PLAN = 'each-day\ndossier --grow 3\ndaily dossier --fill bhl\ndossier --index\nupload\n';
 
 describe('r110b 1: the mark and the rule', () => {
+  it('the daily plan in scripts/ parses, its review checks with it, and says each-day (its first run threw on "B = T")', () => {
+    const text = readFileSync('scripts/corpus-plan-daily.txt', 'utf8');
+    const plan = parsePlan(text);
+    expect(eachDay(text)).toBe(true);
+    expect(plan.map((s) => s.kind)).toEqual(['dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'review', 'upload', 'live-check']);
+    expect(plan[6].expects?.length).toBeGreaterThanOrEqual(7);
+  });
   it('each-day marks the plan and is not a step', () => {
     expect(parsePlan(PLAN).map((s) => s.line)).toEqual(['dossier --grow 3', 'daily dossier --fill bhl', 'dossier --index', 'upload']);
     expect(eachDay(PLAN)).toBe(true);
@@ -78,6 +89,22 @@ describe('r110b 2: the runner', () => {
     expect(out).toMatch(/is run each day: the run of 2026-11-23 ended, so today's starts at step 1/);
     expect(calls[0]).toBe('--grow 3');
     expect(status()).toEqual(['done', 'done', 'done', 'done']);
+  });
+  it('a fill whose source did not answer does not hold the upload either; the same command asks it again (its first run held the index on BHL\'s silence)', async () => {
+    setup(PLAN);
+    const silent = { out: '  109 citations asked of BHL on 2026-11-23: 21 linked, 9 not answered; stopped: 5 requests in a row not answered: run --fill bhl again (tomorrow, if the day\'s allowance is spent); it asks only what is left.\n', code: 3 };
+    expect(await runOn('2026-11-23', { '--fill bhl': silent })).toBe(EXIT.done);
+    expect(calls.slice(0, 4)).toEqual(['--grow 3', '--fill bhl', '--index', '--index-ready']);
+    expect(status()).toEqual(['done', 'unfinished', 'done', 'done']);
+    expect(out).toMatch(/The fills not finished carry on in the next run: "daily dossier --fill bhl".*A source did not answer: run the same command again in an hour or so/);
+    await runOn('2026-11-23', {});
+    expect(calls).toEqual(['--fill bhl']);
+    expect(status()).toEqual(['done', 'done', 'done', 'done']);
+  });
+  it('a fill that failed still stops the run', async () => {
+    setup(PLAN);
+    expect(await runOn('2026-11-23', { '--fill bhl': { out: '  Error: something broke\n', code: 1 } })).toBe(EXIT.failed);
+    expect(calls).toEqual(['--grow 3', '--fill bhl']);
   });
   it('a run stopped at a review is not started over the next day', async () => {
     setup('each-day\ndossier --grow 3\nreview Read it.\nupload\n');

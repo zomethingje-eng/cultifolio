@@ -274,7 +274,7 @@ import { cultigenOf } from '../src/lib/core/cultigen';
 import { wcvpRow } from '../src/lib/dossier/bulk';
 import { downloadDay } from '../src/lib/dossier/bulk';
 import { outsideLog } from '../src/lib/dossier/range-via';
-import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange, growList, type ListEntry } from './select-species-lib';
+import { isSpeciesList, parseSpeciesList, jobsFromList, downloadKeysOf, heldThroughRange, growList, ADDED_FILE, type ListEntry } from './select-species-lib';
 import { buildKewDossier, kewInatTaxon, fillKewWhy, type KewSpecies } from '../src/lib/dossier/build-kew';
 import { canonicalOfKew } from '../src/lib/dossier/kew-rows';
 import { loadKewSpecies } from './kew-species-load';
@@ -2475,9 +2475,10 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number, aliase
  * Each species' count of iNaturalist's observations marked captive or cultivated, from `scripts/species-list.txt` ("inat
  * N", by Kew's plant_name_id, the page id without its k): the strip's rule and the index's `grown` (round eighty-five).
  */
-function grownCounts(listFile = 'scripts/species-list.txt'): Map<string, number> {
+function grownCounts(listFiles = ['scripts/species-list.txt', ADDED_FILE]): Map<string, number> {
   const species = new Map<string, number>();
-  if (existsSync(listFile)) for (const line of readFileSync(listFile, 'utf8').split(/\r?\n/)) {
+  // Round 110: the list as made, and the days' growth beside it.
+  for (const listFile of listFiles) if (existsSync(listFile)) for (const line of readFileSync(listFile, 'utf8').split(/\r?\n/)) {
     if (!line || line.startsWith('#')) continue;
     const f = line.split('\t');
     const n = /\binat (\d+)/.exec(f[4] ?? '');
@@ -2489,7 +2490,7 @@ function grownRule(index: IndexEntry[]): GrownRule | null {
   const generaFile = 'scripts/most-grown-genera.txt', listFile = 'scripts/species-list.txt';
   if (!existsSync(generaFile)) { console.log(`  the front page's strip: no ${generaFile}, so chosen by the rule before the popular genera`); return null; }
   const genera = openingGenera(parseMostGrown(readFileSync(generaFile, 'utf8')), index.map((e) => genusOf(e.name))).genera;
-  const species = grownCounts(listFile);
+  const species = grownCounts([listFile, ADDED_FILE]);
   console.log(`  the front page's strip: from the ${genera.length} popular genera, each by its species most observed in cultivation (${species.size} species counted in ${listFile})`);
   return { genera, species };
 }
@@ -2845,7 +2846,7 @@ function writeIndexFromDisk(): void {
 
 /**
  * `--grow N` (round 110, docs/PLAN-110.md): the day's growth of the species list, asking nothing. The next species of
- * scripts/species-queue.txt (written by scripts/select-species.ts) not yet listed are appended to scripts/species-list.txt,
+ * scripts/species-queue.txt (written by scripts/select-species.ts) not yet listed are appended to scripts/species-added.txt,
  * so many that with the species listed and not yet built they come to N; grow-keys.txt is the --keys file of all of them,
  * for the build after it (`dossier --keys grow-keys.txt --grid climate --bulk bulk --skip inat`). A species is built when a
  * page on disk has its page id, or its GBIF key. With nothing to build, grow-keys.txt is removed, so the plan's
@@ -2862,13 +2863,13 @@ function growStep(): void {
   try { idx = JSON.parse(readFileSync(`${dir}/index.json`, 'utf8')); } catch { /* no index yet: the files alone */ }
   const gbifs = new Set(idx.flatMap((e) => (e.gbif != null ? [e.gbif] : [])));
   const built = (e: ListEntry) => ids.has(e.pageId) || (e.gbifKey != null && (gbifs.has(e.gbifKey) || ids.has(`g${e.gbifKey}`)));
-  const g = growList(readFileSync(listFile, 'utf8'), readFileSync(queueFile, 'utf8'), built, n, today());
-  if (g.added.length) writeAtomic(listFile, g.listText);
+  const g = growList(readFileSync(listFile, 'utf8'), existsSync(ADDED_FILE) ? readFileSync(ADDED_FILE, 'utf8') : null, readFileSync(queueFile, 'utf8'), built, n, today());
+  if (g.added.length) writeAtomic(ADDED_FILE, g.addedText);
   const total = g.toBuild;
   if (total) writeAtomic(out, g.growText);
   else if (existsSync(out)) unlinkSync(out);
   const ends = g.added.length ? ` (the queue's ranks ${g.added[0].rank} to ${g.added[g.added.length - 1].rank}, ${g.added[0].reason} to ${g.added[g.added.length - 1].reason})` : '';
-  console.log(`grow: ${g.added.length} species added to ${listFile} from ${queueFile}${ends}; ${g.carried} listed before with no page yet, ${g.added.length - (total - g.carried)} of the added with a page already; ${total} to build${total ? ` → ${out}` : ', nothing to build'}; ${g.left} left in the queue.`);
+  console.log(`grow: ${g.added.length} species added to ${ADDED_FILE} from ${queueFile}${ends}; ${g.carried} listed before with no page yet, ${g.added.length - (total - g.carried)} of the added with a page already; ${total} to build${total ? ` → ${out}` : ', nothing to build'}; ${g.left} left in the queue.`);
 }
 
 async function main() {

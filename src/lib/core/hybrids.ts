@@ -15,7 +15,7 @@ import { withoutSign } from './names';
 export type HybridRow = { name: string; ipni?: string; powo?: string; parents?: string };
 
 /** The file's own note, written by the script (so the file says what it is without a comment). */
-export const HYBRIDS_FILE_NOTE = "Kew's hybrid sign for the species list's hybrids, by Kew's plant_name_id (the page id without its k): made by scripts/hybrid-names.ts from scripts/species-list.txt and Kew's wcvp_names.csv; read by src/lib/core/hybrids.ts";
+export const HYBRIDS_FILE_NOTE = "Kew's hybrid sign for the species list's hybrids, by Kew's plant_name_id (the page id without its k): made by scripts/hybrid-names.ts from scripts/species-list.txt, the days' additions (scripts/species-added.txt) and Kew's wcvp_names.csv; read by src/lib/core/hybrids.ts";
 
 const rows = (file as { rows: Record<string, HybridRow> }).rows;
 

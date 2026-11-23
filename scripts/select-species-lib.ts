@@ -719,18 +719,31 @@ export function parseQueue(text: string): QueueEntry[] {
   return out;
 }
 
+/** The days' growth (round 110): its own file beside the list, in the list's form. The list as made is never written with it. */
+export const ADDED_FILE = 'scripts/species-added.txt';
+export const ADDED_HEADER = [
+  "The days' growth of the species list (round 110, docs/PLAN-110.md): the species of scripts/species-queue.txt that build-dossiers.ts --grow N added, a day at a time, in the queue's order. scripts/species-list.txt is left as made on 19 October 2026; the two files together are the list.",
+  `reason: the species' counts in the queue ("inat <observations> + gbif <records>"), then "${QUEUED} <day>".`
+];
+
 /**
  * The day's growth (`build-dossiers.ts --grow N`; round 110), asking nothing. `built(e)` says whether a page on disk holds
- * a list entry (its page id, or a page of its GBIF key). The species to build are those of the list with no page yet
- * (never one listed as already in the reference: its page is there under another id, or merged away), then the queue's next species
- * not listed, so that together they come to `n` (none from the queue when the list's unbuilt alone reach it). The new
- * ones are appended to the list, each with its counts and "queued, added <day>".
+ * a list entry (its page id, or a page of its GBIF key). The species to build are those of the list (the list as made and
+ * the days' additions, `ADDED_FILE`) with no page yet (never one listed as already in the reference: its page is there
+ * under another id, or merged away), then the queue's next species not listed, so that together they come to `n` (none
+ * from the queue when the list's unbuilt alone reach it). The new ones are appended to the additions (`addedText`, begun
+ * with its header when there is none yet), each with its counts and "queued, added <day>".
  */
-export function growList(listText: string, queueText: string, built: (e: ListEntry) => boolean, n: number, day: string): {
+export function growList(listText: string, addedText: string | null, queueText: string, built: (e: ListEntry) => boolean, n: number, day: string): {
   /** `growText`: the --keys file of the species to build. */
-  listText: string; growText: string; carried: number; added: QueueEntry[]; toBuild: number; left: number;
+  addedText: string; growText: string; carried: number; added: QueueEntry[]; toBuild: number; left: number;
 } {
-  const list = parseSpeciesList(listText);
+  const made = parseSpeciesList(listText);
+  const before = addedText ? parseSpeciesList(addedText) : [];
+  const madeIds = new Set(made.map((e) => e.pageId));
+  const twice = before.find((e) => madeIds.has(e.pageId));
+  if (twice) throw new Error(`${ADDED_FILE} holds ${twice.name} (${twice.pageId}), which scripts/species-list.txt holds already`);
+  const list = [...made, ...before];
   const queue = parseQueue(queueText);
   const listed = new Set(list.flatMap((e) => (e.kewId ? [e.kewId] : [])));
   const unbuilt = list.filter((e) => !built(e) && e.reason !== REASON_REFERENCE && !e.reason.endsWith(`; ${REASON_REFERENCE}`));
@@ -741,40 +754,17 @@ export function growList(listText: string, queueText: string, built: (e: ListEnt
     c[4] = `${q.reason}; ${QUEUED} ${day}`;
     return c.join('\t');
   });
-  const out = (listText.endsWith('\n') ? listText : `${listText}\n`) + lines.map((l) => `${l}\n`).join('');
+  const base = addedText ?? formatSpeciesList(ADDED_HEADER, []);
+  const out = (base.endsWith('\n') ? base : `${base}\n`) + lines.map((l) => `${l}\n`).join('');
   // A --keys file (not a species list: a list given to the build is held to the GBIF download, which was not asked for
   // these): "<GBIF key> <name>", or "k<plant_name_id> -" for a species with no GBIF key, built from Kew's file by its id.
   const keyLine = (gbifKey: number | null, kewId: string | null, name: string) => (gbifKey != null ? `${gbifKey} ${name}` : `k${kewId} -`);
   // A species of the queue that has a page already (a trial built it) joins the list and is not built again.
   const fresh = added.filter((q) => !built({ kewId: q.kewId, pageId: kewPage(q.kewId), name: q.name, author: '', family: '', reason: q.reason, gbifKey: q.gbifKey }));
   const growText = [
-    `# The day's growth, written by build-dossiers.ts --grow ${n} on ${day}: the species of scripts/species-list.txt with no page yet (${unbuilt.length}), then the queue's next (${added.length}, ${fresh.length} with no page yet).`,
+    `# The day's growth, written by build-dossiers.ts --grow ${n} on ${day}: the species of the list (scripts/species-list.txt and ${ADDED_FILE}) with no page yet (${unbuilt.length}), then the queue's next (${added.length}, ${fresh.length} with no page yet).`,
     ...unbuilt.map((e) => keyLine(e.gbifKey, e.kewId, e.name)),
     ...fresh.map((q) => keyLine(q.gbifKey, q.kewId, q.name))
   ].join('\n') + '\n';
-  return { listText: out, growText, carried: unbuilt.length, added, toBuild: unbuilt.length + fresh.length, left: waiting.length - added.length };
-}
-
-/**
- * The list written again by scripts/select-species.ts keeps what the days' growth added (round 110): a species the list
- * before held from the queue keeps its line where the new list does not hold it, and its reason where the new list holds
- * it only as already in the reference. One whose counts now reach the list's bar is listed by its counts.
- */
-export function keepQueued(newText: string, oldText: string | null): { text: string; kept: number } {
-  if (!oldText || !isSpeciesList(oldText)) return { text: newText, kept: 0 };
-  const old = new Map<string, string>();
-  for (const l of oldText.split(/\r?\n/)) { const c = l.split('\t'); if (!l.startsWith('#') && c.length === LIST_COLUMNS.length && c[4].includes(QUEUED)) old.set(c[0], l); }
-  if (!old.size) return { text: newText, kept: 0 };
-  const seen = new Set<string>();
-  const lines = newText.replace(/\n$/, '').split('\n').map((l) => {
-    const c = l.split('\t');
-    if (l.startsWith('#') || c.length !== LIST_COLUMNS.length || !old.has(c[0])) return l;
-    seen.add(c[0]);
-    if (c[4] !== REASON_REFERENCE) return l;
-    const was = old.get(c[0])!.split('\t');
-    c[4] = was[4];
-    return c.join('\t');
-  });
-  const missing = [...old].filter(([id]) => !seen.has(id)).map(([, l]) => l);
-  return { text: [...lines, ...missing].join('\n') + '\n', kept: old.size };
+  return { addedText: out, growText, carried: unbuilt.length, added, toBuild: unbuilt.length + fresh.length, left: waiting.length - added.length };
 }

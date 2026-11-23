@@ -18,7 +18,7 @@ expect let T /; ([\d,]+) to build/
 expect let B /([\d,]+) built, [\d,]+ kept of [\d,]+; index now/
 expect let BU /BHL on .*?, (\d+) not answered/
 expect let I /index: ([\d,]+) species/
-expect B = T
+expect B - T = 0
 expect BU <= 300
 expect I >= 48375
 upload

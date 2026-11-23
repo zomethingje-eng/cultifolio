@@ -49,6 +49,9 @@ export function listHybrids(text: string): Map<string, string> {
 async function main() {
   if (!bulk || !existsSync(`${bulk}/wcvp_names.csv`)) { console.error('needs --bulk <dir> with wcvp_names.csv'); process.exit(2); }
   const wanted = listHybrids(readFileSync(listPath, 'utf8'));
+  // Round 110: and the days' additions beside the list (scripts/species-added.txt), when the list is the list.
+  const added = 'scripts/species-added.txt';
+  if (!arg('--list') && existsSync(added)) for (const [id, name] of listHybrids(readFileSync(added, 'utf8'))) wanted.set(id, name);
   // The index's `k` pages (round eighty-five, D6): their entries are read whatever the list writes, and taken when signed.
   const indexPath = arg('--index');
   const fromIndex = new Set<string>();

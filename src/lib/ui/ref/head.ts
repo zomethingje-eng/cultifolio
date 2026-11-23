@@ -22,7 +22,7 @@ import { yearRain } from '$climate/year-rain';
  * Round ninety-one: the card in the site's look, with the icon; its count is the index's, and og.mjs will not draw a card
  * whose count is not this line's (the live check fails when the live front page's count is not it).
  */
-export const OG_ALT = 'Cultifolio, the icon: a plant growing from an open book. A reference for the plants people grow. 48,375 species, every figure with its source. No account, open source. Your plants stay on your device, or sync encrypted.';
+export const OG_ALT = 'Cultifolio, the icon: a plant growing from an open book. A reference for the plants people grow. More than 49,000 species, every figure with its source. No account, open source. Your plants stay on your device, or sync encrypted.';
 
 type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
 export interface HeadInput {
