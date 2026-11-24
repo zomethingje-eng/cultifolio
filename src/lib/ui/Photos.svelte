@@ -16,7 +16,18 @@
   const rest = $derived(spreadByObserver(photos.filter((p) => p !== hero), 6));
   let showAll = $state(false);
   const LIMIT = 6;
-  const shown = $derived(showAll ? rest : rest.slice(0, LIMIT));
+  /**
+   * Round 117 (SPECIES 22): the rows by what each photograph's source marks, the wild, the cultivated, and those whose
+   * source marks neither (Commons and GBIF carry no mark: never called wild, round thirty, R2-12), each with its count and
+   * at most six, from as many observers as there are. "Show all" lays every one out as before.
+   */
+  const KINDS: Array<{ k: string; label: string; is: (p: Photo) => boolean }> = [
+    { k: 'wild', label: 'In the wild', is: (p) => p.captive === false },
+    { k: 'cult', label: 'In cultivation', is: (p) => p.captive === true },
+    { k: 'none', label: 'Not marked by their source', is: (p) => p.captive == null }
+  ];
+  const rows = $derived(KINDS.map((x) => ({ ...x, n: photos.filter(x.is).length, shown: spreadByObserver(rest.filter(x.is), LIMIT) })).filter((r) => r.shown.length));
+  const shown = $derived(showAll ? rest : rows.flatMap((r) => r.shown));
   // A credit names its licence only when the attribution does not already, and says so when the two disagree: one helper
   // for the gallery, compare and the tests (round sixty-two; outside review A35).
   const credit = (p: Photo) => photoCredit(p);
@@ -42,14 +53,25 @@
   <!-- One credit line for any count (round eighty-six; outside review B's 1): with a lead and nothing else, the line still
        names the lead's credit and the day it was read; the grid is drawn only when there is more to show. -->
   {#if rest.length}
+    {#if showAll}
     <div class="grid">
       {#each shown as p, i (p.src + p.id)}
         <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={imgUrl(p.thumb)} alt="{name}, photograph {i + 1}" loading="lazy" onerror={(e) => { const a = (e.currentTarget as HTMLImageElement).closest('a'); a?.classList.add('failed'); }} />{#if p.captive}<span class="tag">cultivated</span>{/if}<span class="nope">did not load</span></a>
       {/each}
     </div>
+    {:else}
+    {#each rows as r (r.k)}
+    <p class="rowhead" id="photos-{r.k}">{r.label} · {r.n}</p>
+    <div class="grid">
+      {#each r.shown as p, i (p.src + p.id)}
+        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {r.shown.length}, {credit(p)}"><img src={imgUrl(p.thumb)} alt="{name}, photograph {i + 1}" loading="lazy" onerror={(e) => { const a = (e.currentTarget as HTMLImageElement).closest('a'); a?.classList.add('failed'); }} />{#if p.captive}<span class="tag">cultivated</span>{/if}<span class="nope">did not load</span></a>
+      {/each}
+    </div>
+    {/each}
+    {/if}
   {/if}
   {#if rest.length || leadCredit}
-    <p class="credits faint">{#if leadCredit}{rest.length ? 'The photograph at the top' : 'The photograph'}: {leadCredit}.{' '}{/if}{#if credits}Photographs: {credits}.{/if}{#if days}{' '}<span id="credit-days">{days}.</span>{/if} <a class="help" href="https://creativecommons.org/about/cclicenses/" rel="noopener">What each licence allows</a>.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
+    <p class="credits faint">{#if leadCredit}{rest.length ? 'The photograph at the top' : 'The photograph'}: {leadCredit}.{' '}{/if}{#if credits}Photographs: {credits}.{/if}{#if days}{' '}<span id="credit-days">{days}.</span>{/if} <a class="help" href="https://creativecommons.org/about/cclicenses/" rel="noopener">What each licence allows</a>.{#if rest.length > shown.length || showAll}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
   {/if}
 {:else}
   <div class="empty card">
@@ -70,6 +92,7 @@
   .ph { position: relative; display: block; border-radius: var(--r); overflow: hidden; background: var(--sunk); }
   .ph img { width: 100%; aspect-ratio: 1; object-fit: cover; }
   .ph .tag { position: absolute; left: 0.35rem; bottom: 0.35rem; font-family: var(--ui); font-size: var(--fs-xs); padding: 0.1em 0.45em; border-radius: var(--r); background: rgba(0, 0, 0, 0.55); color: #fff; }
+  .rowhead { margin: 14px 0 0; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mut); font-weight: 600; }
   .credits { font-size: var(--fs-sm); margin: 0.45rem 0 0; line-height: 1.4; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; }
   .empty { padding: 1rem 1.2rem; }

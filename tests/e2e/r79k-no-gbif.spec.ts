@@ -46,7 +46,7 @@ test('the species page says GBIF\'s records, the map, the climate and the neares
   expect(all.match(/GBIF's records not asked/g)?.length).toBe(1);
   // Kew's range and names stand; the registers are Kew's and Wikidata's, with no GBIF link; the older names are Kew's.
   await expect(page.locator('.factgrid')).toContainText('Mexico Central');
-  const links = page.locator('#s-registers ~ .links a');
+  const links = page.locator('#s-registers ~ .namecols .links a'); // in columns since round 117
   await expect(links.filter({ hasText: 'POWO' })).toHaveCount(1);
   await expect(links.filter({ hasText: 'GBIF' })).toHaveCount(0);
   await expect(page.locator('.names').first()).toContainText('(WCVP, RBG Kew)');

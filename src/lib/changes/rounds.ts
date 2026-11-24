@@ -109,6 +109,15 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 117,
+    date: '2026-11-25',
+    reader: 'The lower part of a species page says where its figures come from, and how to cite it.',
+    lines: [
+      'The record names the registers that accept the name, what was looked for and is not there, and where each figure comes from; "Cite this page" gives what a citation needs.',
+      'Photographs stand in rows by how their source marks them, the ground under the range is named, and a species of similar climate you grow says so.'
+    ]
+  },
+  {
     n: 116,
     date: '2026-11-24',
     reader: 'On an iPhone, the site now says how to keep your plants before Safari can clear them.',

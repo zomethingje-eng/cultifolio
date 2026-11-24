@@ -18,6 +18,9 @@
   import { AS_CULTIGEN, cultigenOf } from '$core/cultigen';
   import { habitatBrief, briefDescription, titleWords } from '$lib/ui/ref/brief';
   import { firstSentences as cutSentences } from '$lib/ui/ref/sentences';
+  import { growing, plantSlug } from '$lib/browse/lens';
+  import { localDateOf } from '$core/dates';
+  import { elevationOf } from '$lib/ui/ref/six-answers';
   import { usdaOfShown } from '$dossier/hardiness';
   import { commonOf, speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT, shownAttribution } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
@@ -29,6 +32,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { photoLabel } from '$lib/ui/photo-label';
   import Provenance from '$lib/ui/Provenance.svelte';
+  import RecordParts from '$lib/ui/ref/RecordParts.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import CompareButton from '$lib/ui/CompareButton.svelte';
@@ -579,6 +583,18 @@
   /** The marker's sentence, said once: the build's text already begins "the map marker: " (round sixty). */
   /** Related tiles with a photograph first, the rest after in their order, never hidden: a related species with no photograph is still a result (round 106). */
   const thumbFirst = <T extends { thumb?: unknown }>(xs: T[]): T[] => [...xs.filter((x) => x.thumb), ...xs.filter((x) => !x.thumb)];
+  /**
+   * Round 117 (SPECIES 22): the species the reader grows, decided here in the browser from the open collection as the
+   * lens decides it (`$lib/browse/lens`); nothing of it is sent. A similar-climate tile of one says "You grow this" and
+   * comes first.
+   */
+  // Round 117 (SPECIES 22): the page's citation: the site, the name with its author, the build's day and fingerprint, the address.
+  const citeText = $derived(`Cultifolio. ${d.name.scientific}${d.name.authorship ? ` ${d.name.authorship}` : ''}. Page built ${localDateOf(d.built) ?? d.built}${d.changed?.h ? `, fingerprint ${d.changed.h}` : ''}. https://cultifolio.com/species/${d.slug}`);
+  let citeCopied = $state(false);
+  async function copyCite() { try { await navigator.clipboard.writeText(citeText); citeCopied = true; setTimeout(() => (citeCopied = false), 2000); } catch { /* the text is on the page to select */ } }
+  const grownSlugs = $derived(new Set(collection.ready ? growing(collection.accessions).map(plantSlug) : []));
+  const groundM = $derived(d.climate.status === 'ok' ? elevationOf(d.climate.src.elevation) : null);
+  const youFirst = <T extends { slug: string }>(xs: T[]): T[] => [...xs.filter((x) => grownSlugs.has(x.slug)), ...xs.filter((x) => !grownSlugs.has(x.slug))];
   const markerHow = (how: string) => (how.toLowerCase().startsWith('the map marker: ') ? how.charAt(0).toUpperCase() + how.slice(1) : `The map marker: ${how}`);
 </script>
 
@@ -594,6 +610,7 @@
     <!-- An English name is set as written, a family in small capitals, as the front page's tiles set them (round eighty-six;
          the plan's A13: a common name was set in capitals, as a family is). -->
     <span class="rf" class:common={!!c.common}>{c.common ?? c.family ?? ''}</span>
+    {#if grownSlugs.has(c.slug)}<span class="yougrow">You grow this</span>{/if}
     {#if c.thumb && tileCredit(c)}<span class="rc">{tileCredit(c)}</span>{/if}
   </a>
 {/snippet}
@@ -1008,6 +1025,8 @@
     <p class="small muted" id="kew-keys-records">{kewKeysSentence(d.occurrences.keys)} <a class="help" href="/about/how#no-gbif-key">How</a>.</p>
   {/if}
   <div class="factgrid">
+    <!-- Round 117 (SPECIES 22): the ground, as the Ground answer gives it, with what is not read yet (rule 2). -->
+    {#if d.climate.status === 'ok'}<div class="wide" id="ground"><b>Ground</b>{#if groundM != null}{groundM.toLocaleString('en-GB')} m, the elevation of the typical cell<span class="small muted">{' · '}ETOPO 2022, the cell's mean</span>{:else}Not in this page's record{/if}<span class="small muted">{' · '}the range across the cells, and the soil's pH and texture: not read yet</span></div>{/if}
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if cultigen}{asCultigen}<span class="small muted" id="cultigen-note">{' · '}Kew's World Checklist lists it only as a cultigen (its words below): the region is where the crop comes from, not a wild range</span>{/if}{#if d.distribution.verified === false}<span class="small muted">{' · '}stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted">{' '}Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted">{' · '}introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}{#if d.distribution.native.length || d.distribution.introduced.length || d.distribution.reported?.length}<span class="small muted" id="units-note">{' · '}{UNITS_NOTE} (<a class="help" href="/about/how#regions">how</a>).</span>{/if}</div>
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <!-- A range Kew files under another of the species' names says which (round sixty-eight). -->
@@ -1092,7 +1111,7 @@
     {#if data.near.length}
       <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean daily high, mean nightly low and rain, month by month. <a class="help" href="/about/how#related">How</a>.</span></p>
       <div class="relstrip">
-        {#each thumbFirst(data.near) as c (c.key)}{@render rel(c)}{/each}
+        {#each youFirst(thumbFirst(data.near)) as c (c.key)}{@render rel(c)}{/each}
       </div>
     {/if}
     {#if data.siblings.length}
@@ -1105,6 +1124,8 @@
   {/if}
 
   <h2 class="sec" id="s-registers">Names &amp; registers</h2>
+  <!-- Round 117 (SPECIES 22): the same content in columns on a wide screen, each block whole. -->
+  <div class="namecols">
   {#if gbifOwn}
     <p class="small muted names" id="gbif-own-name"><b>GBIF's name</b> {#each gbifOwn as p, i (i)}{#if p.i}<i>{p.t}</i>{:else}{p.t}{/if}{/each} <span class="faint">(GBIF Backbone; WCVP, RBG Kew)</span></p>
   {/if}
@@ -1138,6 +1159,7 @@
   <Elsewhere dossier={d} />
   <div class="srclines"><ChromosomeLine chromosomes={d.chromosomes} /></div>
   {#if d.parents}<Parents parents={d.parents} pages={data.parentPages} units={u} />{/if}
+  </div>
 
   </div>
   <!-- The facts that led the page until round fifty, and the sentence about derivation: here, where someone checking the page looks. -->
@@ -1154,6 +1176,14 @@
        Wikidata item gives. -->
   <div class="srclines conserve" id="conservation"><RiskLine risk={d.risk} iucnId={wdValue('P627')} /><CitesLine cites={d.cites} speciesPlusId={wdValue('P2040')} /></div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing about this species is written for its page by a person or by AI, apart from the marked, credited quotations. <a class="help" href="/about/how#written">How&nbsp;→</a></p>
+  <!-- Round 117 (SPECIES 22): the record in a reader's three parts, over "Where this page came from". -->
+  <RecordParts {d} />
+  <!-- Round 117 (SPECIES 22): how to cite this page, with its build's day and its fingerprint, and its data's address. -->
+  <section class="cite" aria-labelledby="cite-h">
+    <h2 class="sec" id="cite-h">Cite this page</h2>
+    <p class="citetext" id="cite-text">{citeText}</p>
+    <p class="small"><button type="button" class="linkish" onclick={copyCite}>{citeCopied ? 'Copied' : 'Copy'}</button> · <a href="/api/dossier/{d.key}">The page's data (JSON)</a></p>
+  </section>
   <Provenance dossier={d} datasets={data.datasets} />
 </article>
 
@@ -1202,6 +1232,10 @@
   /* Round 114 (SPECIES 18 d, option B): the paragraph in body text and the main text colour, its figures one step heavier,
      its sources on one small line; its label in the six answers' small capitals. */
   .brief { margin: 12px 0 2px; }
+  @media (min-width: 900px) { .namecols { columns: 3 16rem; column-gap: 28px; } .namecols > :global(*) { break-inside: avoid; } }
+  .cite { margin: 24px 0 0; }
+  .citetext { margin: 4px 0; font-size: var(--fs-md); user-select: all; overflow-wrap: anywhere; }
+  .yougrow { display: block; font-size: var(--fs-xs); font-weight: 600; color: var(--accent); }
   /* Round 115: "What it is" in the secondary colour, under the page's own figures; the chips, small and ruled. */
   .what { margin: 10px 0 2px; }
   .whattext { margin: 0; font-size: var(--fs-base); line-height: 1.5; color: var(--ink2); }

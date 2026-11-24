@@ -101,4 +101,4 @@ The addition says "with round 18 if round 18 is not yet committed". Round 114 wa
 
 ## The gate and the deploy
 
-(Written when they have run.)
+Gated together as rounds 111 to 116 on 23 to 24 November 2026: svelte-check 0 errors in 1,891 files; 6,535 unit tests and 2,946 browser tests, every test first time in every engine, on the fourth run (WebKit and Firefox at one worker each). Committed as 83c266a, pushed, and deployed with node scripts/deploy.mjs on 24 November 00:25 EST as version e2b68573; live check 24 of 24, the front page's photographs every one from img.cultifolio.com.

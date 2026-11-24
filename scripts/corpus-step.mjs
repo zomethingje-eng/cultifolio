@@ -479,7 +479,10 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
 `); quietSince = Date.now(); } }, Math.min(heartbeatMs, 30_000));
         const code = await exec(process.execPath, [`--max-old-space-size=${heap.mb}`, '--import', 'tsx', 'scripts/img-copy.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
         if (interrupted) break;
-        result = classify({ code, output, dropsWritten: false });
+        // Its exit code decides (round 111's follow-up, 24 November): its progress lines say "not answered", which
+        // `classify` reads as a fill's unfinished stop, so a day's copy that had asked every photograph (exit 0, a few a
+        // host did not answer, asked again by the next run) held the upload.
+        result = code === 0 ? { status: 'done' } : classify({ code, output, dropsWritten: false });
       } else if (step.kind === 'upload') {
         result = { status: 'done' };
         // Round seventy-nine: round seventy-eight's Worker cannot read a page without a GBIF key (its schema required one,

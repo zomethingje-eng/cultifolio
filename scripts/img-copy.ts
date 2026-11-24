@@ -232,7 +232,11 @@ export async function copyImages(o: CopyOptions): Promise<{ code: number; line: 
   }
   const left = todo.length - copied - goneNow;
   const why = [timeUp ? `the run's ${o.hours} hours are up` : '', leftHosts.length ? `left for this run: ${leftHosts.join(', ')}` : ''].filter(Boolean).join('; ');
-  const askedAll = !timeUp && !leftHosts.length;
+  // A host that stopped answering (20 running) is left for the run, and what it had not been asked waits for the next
+  // run with those not answered: a few photographs a host will not serve today must not hold a day's pages, which say
+  // "did not load" for them meanwhile (24 November: 28 of iNaturalist's held the day's upload). Only hours running out
+  // leave copies unasked that the upload would need.
+  const askedAll = !timeUp;
   const code = !left || (o.askedOnce && askedAll) ? 0 : 3;
   const line = `img: ${want.size} copies wanted, ${before} up before this run, ${copied} copied this run (${(bytes / 1048576).toFixed(0)} MB), ${goneNow + goneHeld} gone at their source, ${unanswered} not answered; ${left} left${left ? (code === 0 ? ', each asked this run, asked again by the next' : `${why ? ` (${why})` : ''}: run this again`) : ''}.`;
   log(`${line}\n`);

@@ -66,6 +66,8 @@ describe('r110b 2: the runner', () => {
   const runOn = async (day: string, answers: Record<string, { out: string; code: number }>) => {
     out = ''; calls = [];
     const exec = async (cmd: string, args: string[], on: (s: string) => void) => {
+      // Round 111's follow-up: the photograph copy, answered as a test says (`img`).
+      if (args.includes('scripts/img-copy.ts')) { calls.push('img'); const a = answers.img ?? { out: 'img: done.\n', code: 0 }; on(a.out); return a.code; }
       const i = args.indexOf('scripts/build-dossiers.ts');
       if (i < 0) { if (cmd === 'rclone') calls.push('rclone'); return 0; }
       const key = args.slice(i + 1).join(' ');
@@ -122,5 +124,20 @@ describe('r110b 2: the runner', () => {
     setup('dossier --grow 3\ndaily dossier --fill bhl\ndossier --index\nupload\n');
     expect(await runOn('2026-11-23', { '--fill bhl': { out: bhlSpent('2026-11-23'), code: 3 } })).toBe(EXIT.unfinished);
     expect(calls).toEqual(['--grow 3', '--fill bhl']);
+  });
+  it('a day\'s copy that asked every photograph goes on to the upload, though its lines say "not answered" (24 November: it held the day\'s upload)', async () => {
+    setup('img --asked-once --served-only\nupload\n');
+    const said = '  26376 copied this run (2377 MB fetched), 31 not answered, 0 gone at source; 8 min.\nimg: 3967276 copies wanted, 3940630 up before this run, 26376 copied this run (2377 MB), 239 gone at their source, 31 not answered; 31 left, each asked this run, asked again by the next.\n';
+    const code = await runOn('2026-11-24', { img: { out: said, code: 0 } });
+    expect(status()).toEqual(['done', 'done']);
+    expect(calls).toContain('rclone');
+    expect(code).toBe(EXIT.done);
+  });
+  it('a copy that left photographs unasked (exit 3) still holds the upload', async () => {
+    setup('img --asked-once --served-only\nupload\n');
+    const code = await runOn('2026-11-24', { img: { out: "img: 9000 left (the run's 3 hours are up): run this again.\n", code: 3 } });
+    expect(status()[0]).toBe('unfinished');
+    expect(calls).not.toContain('rclone');
+    expect(code).toBe(EXIT.unfinished);
   });
 });
