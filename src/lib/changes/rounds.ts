@@ -109,6 +109,62 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 116,
+    date: '2026-11-24',
+    reader: 'On an iPhone, the site now says how to keep your plants before Safari can clear them.',
+    lines: [
+      'After the first plant on an iPhone or iPad, a sheet offers sync, the Home Screen or a backup, sync first: the Home Screen app keeps a collection of its own, and a scanned label opens Safari.',
+      'The card and the bar that asked iPhones to add the Home Screen first are gone.'
+    ]
+  },
+  {
+    n: 115,
+    date: '2026-11-24',
+    reader: 'A species page leads with what the plant is and its classes, and its photographs by how they were taken.',
+    lines: [
+      'Under the name: the Köppen class, USDA zone, RHS band, CITES Appendix and records as chips, and the first two sentences of what it is.',
+      'A switch shows all the photographs, those observed growing wild, or those in cultivation, as their sources mark them.'
+    ]
+  },
+  {
+    n: 114,
+    date: '2026-11-24',
+    reader: 'The top of a species page answers six questions of the habitat: Cold, Heat, Rain, Light, Air and Ground.',
+    lines: [
+      'Six answers in the same order on every page, each a figure with its source: the cold floor, the warmest month\'s days, the year\'s rain, the light, the air\'s humidity and dryness, and the ground\'s height.',
+      'On a wider screen each has the lines that qualify it and a small chart of its year.'
+    ]
+  },
+  {
+    n: 113,
+    date: '2026-11-24',
+    reader: 'A species page draws how cold its habitat gets: the coldest night of every year since 1981.',
+    lines: [
+      'The hardiness section is now "How cold it gets": a bar for each year\'s lowest night, their mean with the USDA zone it gives, and the cold floor.',
+      'Beside it, four figures: the USDA zone, the RHS band, the frost nights, and the hottest day in 100.'
+    ]
+  },
+  {
+    n: 112,
+    date: '2026-11-24',
+    reader: 'The species suggestions on "Add a plant" are readable again, and stay where they are as they arrive.',
+    lines: [
+      'The list of suggestions has its own background again; its rows printed over the fields beneath it.',
+      'Species pages come first, then at most two names with no species page, then GBIF\'s other names behind one row; each group keeps its place while the two searches answer.',
+      'The part of a name not yet typed is set in bold, and every row is a finger\'s height.'
+    ]
+  },
+  {
+    n: 111,
+    date: '2026-11-24',
+    reader: 'The reference\'s photographs from iNaturalist and GBIF are served from the site\'s own copies, so those hosts no longer see who looks.',
+    lines: [
+      'Every photograph a page shows comes from img.cultifolio.com, copies made at the sizes the pages show, each under its own licence and credited as before.',
+      'Photographs from iNaturalist and GBIF no longer tell those hosts your address; Wikimedia Commons\' follow once their copy, made at Commons\' polite pace, is complete.',
+      'Each day\'s new pages have their photographs copied before they go up.'
+    ]
+  },
+  {
     n: 108,
     date: '2026-11-22',
     reader: 'Plants whose locations are blurred to guard them now have a habitat climate, without a cold floor.',

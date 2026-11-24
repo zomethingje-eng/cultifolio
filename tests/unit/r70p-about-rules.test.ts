@@ -210,7 +210,7 @@ describe('the Commons sizes, slot by slot (/about/how)', () => {
   }
   it('the compare page loads the 500 the dossier keeps', () => {
     expect(Number(claim(s, /(\d+) on the compare page/))).toBe(500);
-    expect(raw('src/routes/compare/+page.svelte')).toMatch(/<img src=\{c\.hero\.thumb \?\? c\.hero\.url\}/);
+    expect(raw('src/routes/compare/+page.svelte')).toMatch(/<img src=\{imgUrl\(c\.hero\.thumb \?\? c\.hero\.url\)\}/); // its copy since round 111
   });
   const o = said('how', 'An upload from 501');
   const o2 = said('how', 'One no wider than 500 is loaded');

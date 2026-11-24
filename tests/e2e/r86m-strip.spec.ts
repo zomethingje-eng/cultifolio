@@ -19,7 +19,7 @@ test.use({ serviceWorkers: 'block' });
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGNoWJAARww4OQBgthIBDttNdgAAAABJRU5ErkJggg==', 'base64');
-const PHOTO_HOST = /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//;
+const PHOTO_HOST = /^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//;
 /** The thumbnails' addresses: as the strip's <noscript> holds them (text to a browser running scripts), or as given. */
 const stripUrls = (page: Page) => page.locator('.thumbstrip .tb').evaluateAll((tbs) => tbs.map((t) => /src="([^"]+)"/.exec(t.querySelector('noscript')?.textContent ?? '')?.[1].replace(/&amp;/g, '&') ?? t.querySelector('img')?.getAttribute('src') ?? ''));
 
@@ -29,7 +29,7 @@ async function photos(page: Page, lead: (r: Route) => Promise<void>) {
   const t0 = Date.now();
   await page.route(PHOTO_HOST, async (r) => {
     asked.push({ url: r.request().url(), at: Date.now() - t0 });
-    if (/\/(medium|large)\.\w+$/.test(r.request().url()) && r.request().url().includes('/photos/')) return lead(r);
+    if (/\/(medium|large)\.\w+$/.test(r.request().url()) && /\/(photos|inat)\/\d+\//.test(r.request().url())) return lead(r);
     return r.fulfill({ status: 200, contentType: 'image/png', body: PNG });
   });
   return asked;

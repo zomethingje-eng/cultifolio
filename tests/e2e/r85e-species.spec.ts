@@ -17,7 +17,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-const quiet = (p: Page) => p.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort()));
+const quiet = (p: Page) => p.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort()));
 const ready = (p: Page) => p.locator('html[data-ready]').waitFor({ state: 'attached' });
 
 for (const [width, height] of [[320, 568], [320, 700], [375, 667], [390, 664]]) {
@@ -30,7 +30,11 @@ for (const [width, height] of [[320, 568], [320, 700], [375, 667], [390, 664]]) 
     await expect(line).toBeVisible();
     const l = (await line.boundingBox())!;
     const bar = (await page.locator('#tabbar').boundingBox())!;
-    expect(l.y + l.height, JSON.stringify({ l, bar })).toBeLessThanOrEqual(bar.y + 1); // r85base: 581 against 511 at 320 by 568
+    // Round 114 (SPECIES 18 d): the habitat's figures on the first screen are "Habitat in brief"'s first three lines,
+    // above the six answers.
+    const br = (await page.locator('section.brief').boundingBox())!;
+    expect(br.y + 72, JSON.stringify({ br, bar })).toBeLessThanOrEqual(bar.y + 1); // r85base: 581 against 511 at 320 by 568
+    expect(l.y).toBeGreaterThan(br.y);
     // After the one primary action, before the secondary ones.
     const add = (await page.locator('.idcard .acts .btn.pri').boundingBox())!;
     const acts2 = (await page.locator('.idcard .acts2').boundingBox())!;

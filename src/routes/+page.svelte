@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl, imgHosts } from '$core/img';
   import Placeholder from '$lib/ui/Placeholder.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { goto, replaceState, afterNavigate } from '$app/navigation';
@@ -7,7 +8,7 @@
   import { accNo } from '$lib/db/types';
   import SiteSearch from '$lib/browse/SiteSearch.svelte';
   import type { PageId } from '$core/page-id';
-  import { photoAt, photoHosts } from '$dossier/photo-size';
+  import { photoAt } from '$dossier/photo-size';
   import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, gbifNamedOr, isUnreached, type Found, type SearchRegion, type SearchHeld } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
@@ -876,7 +877,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Cultifolio" />
     <meta property="og:url" content="https://cultifolio.com/?by={data.by}&open={data.open}" />
-    <meta property="og:image" content={openRow.thumb ? photoAt(openRow.thumb, 'medium') : 'https://cultifolio.com/og.png'} />
+    <meta property="og:image" content={openRow.thumb ? imgUrl(photoAt(openRow.thumb, 'medium')) : 'https://cultifolio.com/og.png'} />
     {#if !openRow.thumb}<meta property="og:image:alt" content={OG_ALT} />{/if}
     <meta name="twitter:card" content="summary_large_image" />
   {:else}
@@ -902,15 +903,15 @@
          past a desktop's first screen (1,091 px at 1280): the lead's is preloaded at high priority, and the strip's first
          tile is not, where it once took the bandwidth from the photograph the page leads with (the review of stage 1, S6). -->
     <link rel="preload" as="image" href={lead.photo.src} fetchpriority="high" />
-    {#each photoHosts([lead.photo.src]) as h (h)}<link rel="preconnect" href={h} />{/each}
+    {#each imgHosts([lead.photo.src]) as h (h)}<link rel="preconnect" href={h} />{/each}
   {:else if visitor && data.featured.length}
     <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
          hosts of the first three are preconnected, so the handshakes start with the stylesheet (round forty-two, 1). A grower's own
          page replaces the strip after the collection opens; the one small file this costs them is cached by then. -->
     <!-- At every width since round seventy-six: the strip is above the search on a phone too (the owner's decision), and its
          first tile is on a phone's first screen again (round sixty-three, V4, had made it a desktop's only). -->
-    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" />
-    {#each photoHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
+    <link rel="preload" as="image" href={imgUrl(photoAt(data.featured[0].thumb, 'small'))} fetchpriority="high" />
+    {#each imgHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
 </svelte:head>
 
@@ -972,7 +973,7 @@
                three are fetched at once, the first two with priority, the rest of the strip lazily (round thirty-seven, R2-4;
                round forty, R2-5; round seventy-six, measured). A photograph that does not load leaves a placeholder with the
                name, not a blank card (round forty, own). -->
-          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={imgUrl(photoAt(c.thumb, 'small'))} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <!-- The name and the English name may be cut to one line on a phone; both are whole in the link's name. -->
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
@@ -992,7 +993,7 @@
 {#snippet tile(c: Tile)}
   {@const own = owned.get(c.slug) ?? (c.gbif != null ? owned.get(`key:${c.gbif}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="no page under this name" /></div>{:else if c.genus}<div class="im"><Placeholder name={c.name} caption="genus" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={imgUrl(c.thumb)} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="no page under this name" /></div>{:else if c.genus}<div class="im"><Placeholder name={c.name} caption="genus" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <!-- A genus's tile has no photograph to wait for: it is its row of the catalogue, said so, never "loading…" for good (round eighty-five; review-w W8). -->
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
@@ -1024,7 +1025,7 @@
   {@const was = older ?? homonym?.name}
   <a class="azrow hitrow" href="/species/{c.slug}{was ? `?was=${encodeURIComponent(was)}` : ''}" data-slug={c.slug}>
     <!-- The thumbnail's letter and the "›" are for the eye: the link's name is the species' (round eighty-one; the desktop review's 7). -->
-    <span class="im" aria-hidden="true">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
+    <span class="im" aria-hidden="true">{#if c.thumb}<img src={imgUrl(photoAt(c.thumb, 'square'))} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
       <span class="fam">{[merged ? mergedSentence(merged) : older && isGbifName(older, c as unknown as Found) ? gbifNameWords(older) : older ? `older name: ${older}` : homonym ? `older name under another author: ${homonym.text}` : '', c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' && keyless(c) ? 'climate not asked' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
@@ -1325,7 +1326,7 @@
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.remove(); if (box) { box.classList.add('mono'); box.setAttribute('aria-hidden', 'true'); box.textContent = r.label[0] ?? ''; } }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={imgUrl(photoAt(r.thumb, 'square'))} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.remove(); if (box) { box.classList.add('mono'); box.setAttribute('aria-hidden', 'true'); box.textContent = r.label[0] ?? ''; } }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}

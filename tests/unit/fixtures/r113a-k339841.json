@@ -1,0 +1,77 @@
+{
+ "_note": "Round 113: Welwitschia mirabilis (k339841), its climate.extremes and hardiness as the corpus held them on 23 November 2026 (static/s/v3/k339841.json), for r113a.",
+ "extremes": {
+  "years": 44,
+  "minAbs": 2.1,
+  "minP01": 5.5,
+  "maxP99": 41.2,
+  "frostDaysPerYear": 0,
+  "frostNights": 0,
+  "lapseAppliedM": 70,
+  "lows": {
+   "from": 1981,
+   "t": [
+    3.2,
+    2.2,
+    3.2,
+    5.6,
+    6.3,
+    5.2,
+    4.7,
+    4.4,
+    3.9,
+    2.8,
+    2.1,
+    5,
+    5.8,
+    4.3,
+    5.5,
+    2.4,
+    5.4,
+    4.4,
+    3.6,
+    4.1,
+    2.6,
+    2.6,
+    4.4,
+    3.3,
+    3.7,
+    2.9,
+    4.6,
+    4,
+    4.6,
+    4.9,
+    2.9,
+    3.3,
+    3.3,
+    3.7,
+    3.3,
+    3.5,
+    5.7,
+    2.7,
+    5.9,
+    4.7,
+    4.1,
+    4.6,
+    3.9,
+    3.3
+   ]
+  }
+ },
+ "hardiness": {
+  "usda": {
+   "years": 44,
+   "from": 1981,
+   "to": 2024,
+   "meanC": 4,
+   "meanF": 39.2,
+   "zone": "10b"
+  },
+  "rhs": {
+   "lowC": 2.1,
+   "band": "H2",
+   "years": 44
+  },
+  "src": "NASA POWER (MERRA-2) daily 1981–2024, cell -20.50_14.375, lapse-corrected +70 m at 6.5 °C/km"
+ }
+}

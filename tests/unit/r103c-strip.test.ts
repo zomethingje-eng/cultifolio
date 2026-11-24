@@ -29,7 +29,9 @@ describe('r103c: the habitat in short', () => {
   it('with no habitat climate: the state and the reason, no figure', async () => {
     const h = await draw({ months: [], state: 'none', why: 'None can be derived: 69 in-range records at 66 places, none placed to within 10 km.' });
     expect(text(h)).toContain('No habitat climate. None can be derived: 69 in-range records at 66 places, none placed to within 10 km.');
-    expect(h).not.toContain('<dl');
+    // Round 114: the six answers' row is kept, a dash in each slot, and no figure.
+    expect(h).toContain('<dl class="six dashes');
+    expect(text(h)).not.toMatch(/\d °C/);
     expect(h).toContain('href="#s-climate"');
   });
 
@@ -42,9 +44,11 @@ describe('r103c: the habitat in short', () => {
   it('each figure keeps its source; a closed tip adds no words', async () => {
     const h = await draw({ months, extremes: { minP01: -2.5 }, records: 3, cells: 2 });
     const t = text(h);
-    expect(t).toMatch(/Cold floor [-−]?2\.5 °C 1 night in 100 colder NASA POWER/);
-    expect(t).toMatch(/Rain \d+ mm a year, monthly medians added CHELSA/);
-    expect(t).toMatch(/Open-sky light 20–31 DLI lowest to highest month CHELSA/);
+    // Round 114: the six answers' words.
+    expect(t).toMatch(/Cold [-−]?2\.5 °C Cold floor ?: 1 night in 100 is colder/); // the tip's button and its colon, set apart by the tags' removal
+    expect(t).toContain('NASA POWER');
+    expect(t).toMatch(/Rain \d+ mm a year, monthly medians added/);
+    expect(t).toMatch(/Light 20–31 DLI lowest to highest month, under open sky CHELSA/);
     expect(t).not.toContain(TERMS.coldFloor.tip.slice(0, 30));
     expect(h).toMatch(/<button type="button" class="tw[^"]*" aria-expanded="false"/);
   });

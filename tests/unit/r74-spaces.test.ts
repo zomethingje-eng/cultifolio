@@ -66,6 +66,8 @@ const ALLOWED: Array<[string, RegExp]> = [
   // round eighty-four removed the species page's "cannot place a climate cell" (A7: a grower's words)
   // Kew's word for a name it does not place under an accepted species, and a verb
   ['Kew', /\bunplaced\b/i],
+  // Round 114 (SPECIES 18 d): "Habitat in brief"'s fixed sentences, the verb, of the habitat and of Kew's climate phrase.
+  ['brief', /That places its habitat in|Kew places it in/],
   ['Kew', /Kew's file places under|where neither places it|Kew's checklist does not place|Kew's file places only in|Kew places in another plant/], // round eighty-six (S4): the Kew rule's words
   // the sync ceilings: a vault's place among the day's new vaults and among the vaults in all
   ['vault', /vault('s)? place|its place (was|is) (given back|kept)|takes? (a|its) place|day's (new-vault )?places|places in all|gives (its )?places? back|gives the place back|the place is given back|for the places new vaults|new-vault places|keeps no place|no place recorded|no place is free|keeps its place|that place is checked|count of places|loses no place|a place given back|a place left unused|whose place was given back|its place was not|after its place was|its place could not|a reclaimed vault's place|does not reclaim places/],

@@ -61,6 +61,11 @@ function ok(what) {
   n++;
   console.log(`  ok  ${what}`);
 }
+// Round 111: a line said, never a failure, and not counted. Round 110's share-card note called it before it was defined,
+// a ReferenceError the first day the reference grew 5,000 past the card.
+function note(what) {
+  console.log(`  note  ${what}`);
+}
 const headersOn = (r, path) => {
   if (r.h('referrer-policy') !== 'no-referrer') fail(`${path}: Referrer-Policy is "${r.h('referrer-policy')}", not no-referrer (round sixteen, 9)`, r);
   if (r.h('x-frame-options').toUpperCase() !== 'DENY') fail(`${path}: X-Frame-Options is "${r.h('x-frame-options')}", not DENY (round sixteen, 15)`, r);
@@ -375,6 +380,11 @@ if (!skip.has('weight') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   }
   if (total > 1.5 * 1024 * 1024) fail(`the home page's ${srcs.length} photographs weigh ${(total / 1048576).toFixed(2)} MB together, over 1.5 MB`);
   ok(`home-page photographs: ${srcs.length}, ${(total / 1024).toFixed(0)} kB together, none over 300 kB`);
+  // Round 111: the pages ask the site's own copies (img.cultifolio.com). Said, not failed: a corpus step's live check can
+  // run on the Worker before round 111's.
+  const elsewhere = srcs.filter((u) => !u.startsWith('https://img.cultifolio.com/'));
+  if (elsewhere.length) note(`home-page photographs: ${elsewhere.length} of ${srcs.length} not from the site's copies (img.cultifolio.com), the first ${elsewhere[0]}`);
+  else ok(`home-page photographs: every one from the site's copies (img.cultifolio.com)`);
 }
 
 // The vault route refuses a body that is not an object with a 400, never a 500 (round sixteen, 16). Creates nothing.

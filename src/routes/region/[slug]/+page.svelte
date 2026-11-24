@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   import BrowseView from '$lib/browse/BrowseView.svelte';
   import Crumbs from '$lib/browse/Crumbs.svelte';
   import { grownFigure } from '$lib/browse/view';
@@ -28,7 +29,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cultifolio" />
   <meta property="og:url" content="https://cultifolio.com/region/{r.slug}" />
-  {#if data.view.share}<meta property="og:image" content={photoAt(data.view.share.src, 'medium')} /><meta property="og:image:alt" content={data.view.share.alt} />{/if}
+  {#if data.view.share}<meta property="og:image" content={imgUrl(photoAt(data.view.share.src, 'medium'))} /><meta property="og:image:alt" content={data.view.share.alt} />{/if}
 </svelte:head>
 
 <Crumbs parts={[{ label: 'Regions', href: '/region' }, ...data.line, { label: r.label }]} />

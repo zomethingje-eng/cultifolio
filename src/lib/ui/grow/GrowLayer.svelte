@@ -15,6 +15,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { askToKeep } from '$lib/ui/keep-ask';
   import DemoBar from './DemoBar.svelte';
+  import { iosInBrowser } from './ios';
   import { backupReminder, pageSaysKeeping, nudgeHidden, nudgeDue, NUDGE_AT } from '$lib/ui/backup-reminder.svelte';
 
   const PERSIST = 'cultifolio.persistAfterFirst';
@@ -76,6 +77,22 @@
   // Settled once the last backup is read, or when no line can be due whatever it says.
   const known = $derived(collection.ready && (lastBackup !== undefined || n < NUDGE_AT || PAGE_IN_DEMO || sync.configured));
   $effect(() => { backupReminder.nudge = nudge; backupReminder.known = known; });
+  // Round 116 (MYPLANTS 26): the "keep your plants" sheet, on its own once after the first plant in Safari on an iPhone
+  // or iPad, again a week on while nothing has been done; from the list's line at any time. Read once the last backup is.
+  const iosSafari = $derived(typeof navigator !== 'undefined' && iosInBrowser());
+  // Loaded on demand, only there: the root layout loads no tracker module on every page (round sixty, a11y-perf 3).
+  let ks = $state<typeof import('./keep-sheet.svelte') | null>(null);
+  let Sheet = $state<typeof import('./KeepSheet.svelte').default | null>(null);
+  $effect(() => {
+    if (!iosSafari || n < 1 || ks) return;
+    void import('./keep-sheet.svelte').then((m) => (ks = m));
+    void import('./KeepSheet.svelte').then((m) => (Sheet = m.default));
+  });
+  $effect(() => {
+    if (!ks || ks.keepSheet.open || lastBackup === undefined) return;
+    if (ks.sheetDue({ iosSafari, plants: n, lastBackup, synced: sync.configured, lastShown: ks.lastShown(), now: Date.now(), demo: PAGE_IN_DEMO })) { ks.markShown(); ks.keepSheet.open = true; }
+  });
 </script>
 
 <DemoBar />
+{#if Sheet}<Sheet plants={n} {lastBackup} synced={sync.configured} />{/if}

@@ -15,7 +15,7 @@ const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQ
 /** No outside host, and the photograph hosts answered with a pixel, so a photograph loads offline. */
 const photosLoad = async (page: Page) => {
   await page.route(/^https:\/\/(?!127\.0\.0\.1)/, (r: Route) => r.abort());
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
 };
 const wide = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
@@ -67,33 +67,43 @@ test('r87p 3: /changes lists the rounds, newest first, each with its date and it
   // collection encrypted on the device), then round 98 (the Walter–Lieth diagram, the Commons sitelink with no P373), then
   // round 95 (the keys a page leaves out), then round 93 (the names GBIF files apart); rounds 94, 96, 97 and 101 kept a
   // record and no entry. Then round 92 (flowering from GBIF's download), then round 91.
-  await expect(heads.first()).toContainText('Round 108');
-  await expect(heads.first()).toContainText('22 November 2026');
-  await expect(heads.nth(1)).toContainText('Round 107');
-  await expect(heads.nth(1)).toContainText('22 November 2026');
-  await expect(heads.nth(2)).toContainText('Round 106');
-  await expect(heads.nth(2)).toContainText('21 November 2026');
-  await expect(heads.nth(3)).toContainText('Round 105');
-  await expect(heads.nth(3)).toContainText('21 November 2026');
-  await expect(heads.nth(4)).toContainText('Round 104');
-  await expect(heads.nth(4)).toContainText('21 November 2026');
-  await expect(heads.nth(5)).toContainText('Round 103');
-  await expect(heads.nth(5)).toContainText('21 November 2026');
-  await expect(heads.nth(6)).toContainText('Round 102');
-  await expect(heads.nth(6)).toContainText('20 November 2026');
-  await expect(heads.nth(7)).toContainText('Round 100');
-  await expect(heads.nth(7)).toContainText('20 November 2026');
-  await expect(heads.nth(8)).toContainText('Round 99');
-  await expect(heads.nth(8)).toContainText('20 November 2026');
-  await expect(heads.nth(9)).toContainText('Round 98');
-  await expect(heads.nth(9)).toContainText('19 November 2026');
-  await expect(heads.nth(10)).toContainText('Round 95');
-  await expect(heads.nth(10)).toContainText('19 November 2026');
-  await expect(heads.nth(11)).toContainText('Round 93');
-  await expect(heads.nth(12)).toContainText('Round 92');
-  await expect(heads.nth(13)).toContainText('Round 91');
-  await expect(heads.nth(14)).toContainText('Round 87');
-  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92, 93, 95, 98, 99, 100, 102, 103, 104, 105, 106, 107, 108])await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
+  // Rounds 116 (the iPhone sheet) and 115 (the photographs by kind, the chips), then round 114.
+  await expect(heads.first()).toContainText('Round 116');
+  await expect(heads.nth(1)).toContainText('Round 115');
+  await expect(heads.nth(2)).toContainText('Round 114');
+  await expect(heads.nth(2)).toContainText('24 November 2026');
+  // Round 114 (the six answers and Habitat in brief), then rounds 113, 112 and 111 (the yearly lows drawn, the picker's groups, the photographs' copies), then round 108.
+  await expect(heads.nth(3)).toContainText('Round 113');
+  await expect(heads.nth(3)).toContainText('24 November 2026');
+  await expect(heads.nth(4)).toContainText('Round 112');
+  await expect(heads.nth(5)).toContainText('Round 111');
+  await expect(heads.nth(6)).toContainText('Round 108');
+  await expect(heads.nth(6)).toContainText('22 November 2026');
+  await expect(heads.nth(7)).toContainText('Round 107');
+  await expect(heads.nth(7)).toContainText('22 November 2026');
+  await expect(heads.nth(8)).toContainText('Round 106');
+  await expect(heads.nth(8)).toContainText('21 November 2026');
+  await expect(heads.nth(9)).toContainText('Round 105');
+  await expect(heads.nth(9)).toContainText('21 November 2026');
+  await expect(heads.nth(10)).toContainText('Round 104');
+  await expect(heads.nth(10)).toContainText('21 November 2026');
+  await expect(heads.nth(11)).toContainText('Round 103');
+  await expect(heads.nth(11)).toContainText('21 November 2026');
+  await expect(heads.nth(12)).toContainText('Round 102');
+  await expect(heads.nth(12)).toContainText('20 November 2026');
+  await expect(heads.nth(13)).toContainText('Round 100');
+  await expect(heads.nth(13)).toContainText('20 November 2026');
+  await expect(heads.nth(14)).toContainText('Round 99');
+  await expect(heads.nth(14)).toContainText('20 November 2026');
+  await expect(heads.nth(15)).toContainText('Round 98');
+  await expect(heads.nth(15)).toContainText('19 November 2026');
+  await expect(heads.nth(16)).toContainText('Round 95');
+  await expect(heads.nth(16)).toContainText('19 November 2026');
+  await expect(heads.nth(17)).toContainText('Round 93');
+  await expect(heads.nth(18)).toContainText('Round 92');
+  await expect(heads.nth(19)).toContainText('Round 91');
+  await expect(heads.nth(20)).toContainText('Round 87');
+  for (const n of [80, 81, 82, 84, 85, 86, 87, 91, 92, 93, 95, 98, 99, 100, 102, 103, 104, 105, 106, 107, 108, 111, 112, 113, 114, 115, 116])await expect(page.locator(`#round-${n} a[href$="docs/REVIEW-ROUND-${n}.md"]`)).toHaveCount(1);
   await expect(page.locator('#round-83')).toHaveCount(0);
   // The one row of links, on every about page, the page being read marked.
   for (const [path, label] of [['/about', 'About'], ['/about/how', 'How it is made'], ['/about/formats', 'Formats'], ['/about/data', 'The data'], ['/changes', 'Changes']]) {

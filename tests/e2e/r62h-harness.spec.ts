@@ -72,7 +72,7 @@ test('in the sample collection the front page writes no "this device has plants"
 });
 
 test('a plant page with the reference\'s photograph on shows it, credited, offering "add your own" (B14, over a local image)', async ({ page }) => {
-  await page.route(/inaturalist|wikimedia|api\.gbif\.org/, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: png(400, 300) }));
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|api\.gbif\.org/, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: png(400, 300) }));
   await page.goto('/settings'); await ready(page);
   await page.check('#pref-refphotos'); // the species' photograph on a private page is opt-in (round twelve, A1)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');

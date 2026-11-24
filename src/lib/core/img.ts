@@ -52,8 +52,25 @@ export function imgKey(url: string): string | null {
   return null;
 }
 
-/** The copy's address on img.cultifolio.com, or the source's own where it has none (for round 111's pages). */
+/**
+ * The copy's address on img.cultifolio.com, or the source's own where it has none. From round 111 every place a page
+ * shows a reference photograph asks this of the address `photoAt`, `photoOf`, `srcsetOf` and `shownAt` give, which stay
+ * the source's (the copy step reads the same functions for what to copy, `img-wanted.ts`); r111a reads src/ for a place
+ * that does not.
+ */
+/**
+ * The hosts whose copies the pages ask for: those whose copy is complete. On 23 November 2026 iNaturalist's (3,829,568)
+ * and GBIF's (111,110) were; Wikimedia Commons' was about a third done, its thumbnails made on request at two at a time,
+ * so a Commons photograph is still loaded from Commons until its copy is, and a round then adds `commons` here.
+ */
+export const SERVED: ReadonlySet<string> = new Set(['inat', 'gbif']);
+/** Whether the pages ask this copy (its path's first part is a served host's). */
+export const servedKey = (k: string | null): k is string => !!k && SERVED.has(k.split('/')[0]);
 export const imgUrl = (url: string): string => {
   const k = imgKey(url);
-  return k ? `${IMG_ORIGIN}/${k}` : url;
+  return servedKey(k) ? `${IMG_ORIGIN}/${k}` : url;
 };
+/** A `srcset` of sources' addresses (`srcsetOf`), each its copy's (round 111). */
+export const imgSrcset = (s: string | undefined): string | undefined => (s ? s.split(', ').map((x) => { const m = /^(\S+)( \d+w)$/.exec(x); return m ? `${imgUrl(m[1])}${m[2]}` : imgUrl(x); }).join(', ') : undefined);
+/** The origins a page's photographs come from, for a `preconnect`: the copies' one host, once (round 111; was `photoHosts`). */
+export const imgHosts = (urls: Array<string | null | undefined>): string[] => (urls.some((u) => !!u && (u.startsWith(`${IMG_ORIGIN}/`) || servedKey(imgKey(u)))) ? [IMG_ORIGIN] : []);

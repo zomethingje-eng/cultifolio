@@ -59,6 +59,8 @@ test('r82s 2: the picker shows and writes a variety with "var.", and files its k
   await ready(page);
   const input = page.locator('#species-name');
   await input.fill('Lithops lesliei lut');
+  // Round 112: a GBIF name not spelt as typed waits behind the "more" row.
+  await page.locator('.picker [role=option]', { hasText: /more name/ }).click();
   const opt = page.locator('.picker [role=option]', { hasText: 'Lithops lesliei var. luteoviridis' }); // base: no such row
   await expect(opt).toBeVisible();
   await expect(opt).not.toContainText('· variety');

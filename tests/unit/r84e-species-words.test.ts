@@ -130,14 +130,15 @@ describe("2. the chart at a phone's width", () => {
 describe('3. the phone\'s line (the glance grid, Glance.svelte, gone in round 107\'s tidy)', () => {
   const months = c('eulychnia-acida').months;
   const year = growingYear(months as never, -30);
-  it("the phone's line: the four figures, each qualified and sourced", async () => {
+  // Round 114 (SPECIES 18): the six answers, each qualified and sourced, in place of the four figures.
+  it("the phone's line: the six answers, each qualified and sourced", async () => {
     const { render } = await import('svelte/server');
     const { default: HabitatLine } = await import('$lib/ui/ref/HabitatLine.svelte');
     const text = render(HabitatLine, { props: { months, year, units: 'metric', annualRain: { p50: 157.5 }, readerLat: 40, few: { records: 3, cells: 3 } } }).body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    expect(text).toContain('Coldest month 6.8 °C mean nightly low, not a floor CHELSA');
-    expect(text).toContain('Rain 158 mm a year, median across the range CHELSA');
-    expect(text).toContain('Open-sky light 20–57 DLI lowest to highest month CHELSA');
-    expect(text).toContain('Season Wet winters Nov–Feb, your months CHELSA');
+    expect(text).toContain("Cold 6.8 °C coldest month's mean nightly low, not a floor CHELSA");
+    expect(text).toContain('Rain 158 mm a year, median across the range Wet winters, Nov–Feb, your months; 7 months under 5 mm CHELSA');
+    expect(text).toContain('Light 20–57 DLI lowest to highest month, under open sky CHELSA');
+    for (const k of ['Heat', 'Air', 'Ground']) expect(text).toContain(` ${k} `);
     expect(text).toContain('from 3 records');
   });
 });

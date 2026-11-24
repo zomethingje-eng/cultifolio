@@ -42,7 +42,7 @@ function png240(): Buffer {
 /** Photographs from the outside hosts answer at once, as 240 px squares, so the strip lays out at its real size. */
 export async function servePhotos(page: Page) {
   const img = png240();
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: img }));
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: img }));
 }
 
 /** The front page's data, reshaped to the live corpus's, on every client-side load of `/` (`__data.json`). */

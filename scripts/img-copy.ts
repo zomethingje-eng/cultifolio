@@ -20,13 +20,14 @@
 // `--hours N` stops starting new fetches after N hours, so the day's fills can have the lock; the run says what is left,
 // and "run this again" (exit 3, the corpus step's "unfinished"). The pages are not changed: they ask the sources until
 // round 111 switches them, once every copy is up.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { parseDossier, DOSSIER_V } from '../src/lib/dossier/schema';
 import { heldNamesOf } from '../src/lib/dossier/photo-kind';
 import { pageWanted, rowWanted } from '../src/lib/dossier/img-wanted';
+import { SERVED, servedKey } from '../src/lib/core/img';
 import { imgKey } from '../src/lib/core/img';
 import { takeLock } from './run-lock.mjs';
 
@@ -50,6 +51,14 @@ export type CopyOptions = {
   dryRun?: boolean;
   relist?: boolean;
   retryGone?: boolean;
+  /**
+   * Round 111: done once every copy wanted has been asked this run (`--asked-once`), those not answered left to the next
+   * run, so a day's run uploads with a few photographs a host did not answer: their pages say "did not load" until then.
+   * A run whose hours ran out, or that left a host silent, has not asked them all, and stays unfinished.
+   */
+  askedOnce?: boolean;
+  /** Only the copies of the hosts the pages ask (`SERVED`), so a day's upload waits for nothing it does not show (round 111). */
+  servedOnly?: boolean;
   batchFiles?: number;
   /** How long a lane waits after a 429 with no Retry-After, in ms (a test gives 0). */
   backoffMs?: number;
@@ -124,6 +133,7 @@ export async function copyImages(o: CopyOptions): Promise<{ code: number; line: 
 
   log(`Reading the corpus on disk for every photograph a page or an index row can ask…\n`);
   const { want, pages, rows, unreadable, uncopied } = wantedOf(root, log);
+  if (o.servedOnly) { for (const k of [...want.keys()]) if (!servedKey(k)) want.delete(k); log(`  only the hosts the pages ask (${[...SERVED].join(', ')}).\n`); }
   log(`  ${want.size} copies wanted: from ${pages} pages and ${rows} index rows${unreadable.length ? `; ${unreadable.length} dossiers could not be read (${unreadable.slice(0, 5).join(', ')}${unreadable.length > 5 ? ', …' : ''}), their photographs not listed` : ''}.\n`);
   if (uncopied.size) log(`  not copied, a host or a kind of file this step does not copy (the page keeps the source's address): ${[...uncopied].map(([h, n]) => `${h} ${n}`).join(', ')}.\n`);
 
@@ -222,9 +232,15 @@ export async function copyImages(o: CopyOptions): Promise<{ code: number; line: 
   }
   const left = todo.length - copied - goneNow;
   const why = [timeUp ? `the run's ${o.hours} hours are up` : '', leftHosts.length ? `left for this run: ${leftHosts.join(', ')}` : ''].filter(Boolean).join('; ');
-  const line = `img: ${want.size} copies wanted, ${before} up before this run, ${copied} copied this run (${(bytes / 1048576).toFixed(0)} MB), ${goneNow + goneHeld} gone at their source, ${unanswered} not answered; ${left} left${left ? `${why ? ` (${why})` : ''}: run this again` : ''}.`;
+  const askedAll = !timeUp && !leftHosts.length;
+  const code = !left || (o.askedOnce && askedAll) ? 0 : 3;
+  const line = `img: ${want.size} copies wanted, ${before} up before this run, ${copied} copied this run (${(bytes / 1048576).toFixed(0)} MB), ${goneNow + goneHeld} gone at their source, ${unanswered} not answered; ${left} left${left ? (code === 0 ? ', each asked this run, asked again by the next' : `${why ? ` (${why})` : ''}: run this again`) : ''}.`;
   log(`${line}\n`);
-  return { code: left ? 3 : 0, line, copied, left };
+  // Round 111: what the upload's guard reads (corpus-step.mjs): the index this run read the wanted copies from, by its
+  // time, and whether the run asked them all. An index written after it has rows no copy was asked for.
+  const index = join(root, 'static/s/v3/index.json');
+  writeFileSync(join(work, 'last-run.json'), JSON.stringify({ at: new Date(now()).toISOString(), indexMtimeMs: existsSync(index) ? statSync(index).mtimeMs : null, code, left }));
+  return { code, line, copied, left };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -232,6 +248,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const opt = (n: string) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : undefined);
   const lock = takeLock('.', `img-copy ${argv.join(' ')}`.trim(), { parent: process.ppid }) as { ok: boolean; sentence?: string; release?: () => void };
   if (!lock.ok) { process.stdout.write(`${lock.sentence}\n`); process.exit(2); }
-  copyImages({ root: process.cwd(), hours: opt('--hours') ? Number(opt('--hours')) : undefined, dryRun: argv.includes('--dry-run'), relist: argv.includes('--relist'), retryGone: argv.includes('--retry-gone') })
+  copyImages({ root: process.cwd(), hours: opt('--hours') ? Number(opt('--hours')) : undefined, dryRun: argv.includes('--dry-run'), relist: argv.includes('--relist'), retryGone: argv.includes('--retry-gone'), askedOnce: argv.includes('--asked-once'), servedOnly: argv.includes('--served-only') })
     .then((r) => { lock.release?.(); process.exit(r.code); }, (e) => { lock.release?.(); process.stdout.write(`img: failed: ${e instanceof Error ? e.stack : String(e)}\n`); process.exit(1); });
 }

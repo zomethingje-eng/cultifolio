@@ -89,7 +89,9 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   // two gates (FAILED once in phone-webkit at the old ceiling, 183, passing on its retry at 175). The install list is 168
   // build files (offlineBuild on round 104's manifest), against a build of about 230: the ceiling is WebKit's 183, with the
   // margin of two.
-  expect(files.length, report).toBeLessThan(186);
+  // Rounds 111 to 116 add the modules a page of the collection draws (the suggestions' groups, the keep sheet's rule, the
+  // header's sentences and figures): WebKit 188 on their gate (Chromium 128, Firefox 91), so 192, the margin kept.
+  expect(files.length, report).toBeLessThan(192);
   await ctx.close();
 });
 

@@ -101,7 +101,7 @@ describe('about pages against the code', () => {
     const line = /'img-src':\s*\[([^\]]*)\]/.exec(cfg)![1];
     const hosts = [...line.matchAll(/https:\/\/([^'"]+)/g)].map((m) => m[1]).sort();
     for (const h of hosts) expect(how).toContain(h);
-    expect(hosts.length).toBe(4);
+    expect(hosts.length).toBe(2); // round 111: img.cultifolio.com, the copies, and Commons' host until its copy is complete
     expect(/'connect-src':\s*\[([^\]]*)\]/.exec(cfg)![1].trim()).toBe("'self'");
   });
 

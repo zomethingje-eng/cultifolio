@@ -12,7 +12,7 @@ import { ready } from './helpers/smoke';
 
 test.use({ serviceWorkers: 'block' });
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-async function noThirdParty(page: Page) { await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort())); }
+async function noThirdParty(page: Page) { await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort())); }
 
 /** Every section and line of stage 2, by its element, with what it must say of its source and day. */
 const SECTIONS: Array<[string, RegExp[]]> = [
@@ -59,7 +59,7 @@ test('r87s2 2: the section row lists the new sections, and each tab takes the re
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const tabs = page.locator('nav.tabs a');
   // Round 106 (the first hand-off's round 4): the grower's order, and the section names a grower uses.
-  await expect(tabs).toHaveText(['What it is', 'At home', 'Hardiness', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
+  await expect(tabs).toHaveText(['What it is', 'At home', 'How cold', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
   await tabs.filter({ hasText: 'At home' }).click();
   await expect(page).toHaveURL(/#at-home$/);
   await expect(page.locator('nav.tabs a.on')).toHaveText('At home');

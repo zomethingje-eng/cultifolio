@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { iosInBrowser } from '$lib/ui/grow/ios';
+  import { keepSheet, storageWords } from '$lib/ui/grow/keep-sheet.svelte';
+  import { imgUrl } from '$core/img';
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import Opening from '$lib/db/Opening.svelte';
@@ -282,7 +285,8 @@
   <!-- The layer's line, drawn here with the list, under the search, never above the title (round eighty-four; P2, A12). -->
   <p class="backupnudge" id="backup-nudge">{collection.accessions.length} plants and no backup yet: a backup is one file you keep somewhere else. <a href="/backup">Back up now</a> <button class="linkish nudgehide" type="button" onclick={hideNudge}>Not now</button></p>
 {:else if opened && collection.persisted === false && !sync.configured && collection.accessions.length}<!-- one backup reminder at a time, and none over an empty list (round eighty-two; the independent review's 15) -->
-  <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
+  <!-- Round 116 (MYPLANTS 26): true of the device it is read on; on an iPhone or iPad in Safari it opens the sheet. -->
+  {#if iosInBrowser()}<p class="small muted keepline" id="storage-notice">{storageWords(true).lead} <button type="button" class="linkish" onclick={() => (keepSheet.open = true)}>{storageWords(true).act}</button>.</p>{:else}<p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>{/if}
 {/if}
 <!-- What "set aside" meant, and "version of the app", not "build" (round fifty-eight; the accessibility review). -->
 {#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a sync bundle from a newer version of the app, which could not be read here; see <a href="/sync">Sync</a>{:else}a file that never had it, or a sync bundle from a newer version of the app that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
@@ -331,7 +335,7 @@
         <!-- By its identity while another plant shares its number (round sixty). -->
         <a class="azrow accrow" href={plantHref(a)}>
           <!-- No photograph: the name's initials, not a grey dash that read as a missing image thirty times (round sixty; the grower review, 17). -->
-          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>{/if}
+          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={imgUrl(th)} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>{/if}
           <span class="txt">
             <span class="nm"><span class="accno lead">{accNo(a)}</span>{' '}<PlantName plant={a} /></span>
             <!-- On a phone the watering figure leads the second line, so a row is two lines, not three (round fifty-eight; the grower review). -->

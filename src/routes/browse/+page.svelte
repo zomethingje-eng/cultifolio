@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   import BrowseView from '$lib/browse/BrowseView.svelte';
   import Crumbs from '$lib/browse/Crumbs.svelte';
   import { photoAt } from '$dossier/photo-size';
@@ -20,7 +21,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Cultifolio" />
   <meta property="og:url" content="https://cultifolio.com/browse{v.qs}" />
-  {#if v.share}<meta property="og:image" content={photoAt(v.share.src, 'medium')} /><meta property="og:image:alt" content={v.share.alt} />{/if}
+  {#if v.share}<meta property="og:image" content={imgUrl(photoAt(v.share.src, 'medium'))} /><meta property="og:image:alt" content={v.share.alt} />{/if}
 </svelte:head>
 
 <Crumbs parts={[{ label: 'Reference', href: '/' }, { label: 'Browse' }]} />

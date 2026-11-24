@@ -37,7 +37,7 @@ test.use({ serviceWorkers: 'block' });
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGNoWJAARww4OQBgthIBDttNdgAAAABJRU5ErkJggg==', 'base64');
-const PHOTO_HOST = /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//;
+const PHOTO_HOST = /^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//;
 
 /** The collection's database answers 3 s late, as on a slow phone (smoke-4's numbering test waits 1.5 s). */
 async function collectionLate(page: Page) {

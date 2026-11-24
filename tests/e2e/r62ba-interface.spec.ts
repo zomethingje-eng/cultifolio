@@ -242,7 +242,7 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
       w.__cls = 0;
       new PerformanceObserver((l) => { for (const e of l.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) w.__cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
     });
-    await ctx.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+    await ctx.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
     // The web fonts held back a second and a half, as on a phone's network: the text is set in the fallback first.
     await ctx.route(/\.woff2(\?|$)/, async (r) => { await new Promise((x) => setTimeout(x, 1500)); await r.continue(); });
     const page = await ctx.newPage();

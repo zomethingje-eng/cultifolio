@@ -163,7 +163,8 @@ test('r85k 6: with a phone\'s keyboard up, no row of the list runs under the pin
   await input.fill('Copiapoa x');
   const menu = page.locator('.picker .menu');
   await expect(menu).toBeVisible();
-  await expect(page.locator('.picker [role=option]')).toHaveCount(7);
+  // Round 112: at most six species pages are listed.
+  await expect(page.locator('.picker [role=option]')).toHaveCount(6);
   // The list's foot against the bar's top, both where they are drawn now.
   await expect.poll(async () => { const m = (await menu.boundingBox())!; const bar = (await page.locator('.actions.sticky').boundingBox())!; return Math.round(m.y + m.height) - Math.round(bar.y); }).toBeLessThanOrEqual(0); // base: 555 against 380
   // Every row is still there, the list scrolling within its room.
@@ -211,7 +212,8 @@ test('r85k 9: the reference\'s rows sit under "Species pages", and no row shows 
   await page.locator('#species-name').fill('Crassula ov');
   const menu = page.locator('.picker .menu');
   await expect(menu.locator('li.grp').first()).toHaveText('Species pages'); // base: no heading
-  await expect(menu.locator('li.grp').nth(1)).toHaveText("GBIF's names");
+  // Round 112 (MYPLANTS 25): GBIF's names sit under "Other names", in a fixed place after the pages.
+  await expect(menu.locator('li.grp').nth(1)).toHaveText(/^Other names/);
   // What the screen shows: each row without its words for a screen reader alone.
   const shown = await menu.locator('[role=option]').evaluateAll((els) => els.map((e) => { const c = e.cloneNode(true) as HTMLElement; c.querySelectorAll('.sr').forEach((x) => x.remove()); return c.textContent ?? ''; }));
   expect(shown.filter((t) => t.includes('has a species page'))).toEqual([]); // base: on every reference row

@@ -22,7 +22,7 @@ test('the maps drawn in the browser are the ones the server drew @phone', async 
   // 404 and WebKit logs each as a console error (the owner's run, round seventy-seven). They are answered here with a
   // pixel, so the console holds the page's own faults only.
   const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
   // As the server sent them, before any script ran.
   const raw = await browser.newPage({ javaScriptEnabled: false });
   const server = async (slug: string) => { await raw.goto(`/species/${slug}`); return maps(raw); };

@@ -62,6 +62,25 @@ export const EXIT = { done: 0, failed: 1, review: 2, blocked: 2, unfinished: 3, 
 /** The dossier version (src/lib/dossier/schema.ts): the corpus is `static/s/v<N>` and the bucket's `s/v<N>`, as the Worker reads it. */
 export const VERSION = Number(/export const DOSSIER_V = (\d+) as const/.exec(readFileSync(new URL('../src/lib/dossier/schema.ts', import.meta.url), 'utf8'))?.[1] ?? NaN);
 const CORPUS = `static/s/v${VERSION}`;
+/**
+ * Round 111: why the upload must wait for the photographs' copies, or null when it need not. The copy step writes
+ * bulk/img/last-run.json at the end of each run (scripts/img-copy.ts): the index's time it read the wanted copies from,
+ * and whether it asked them all. The upload waits when there is no such run, when it did not ask them all, or when the
+ * index on disk was written after it.
+ */
+export function imgGuard(root) {
+  const f = join(root, 'bulk/img/last-run.json');
+  const index = join(root, `${CORPUS}/index.json`);
+  if (!existsSync(index)) return null;
+  // Where the copy has never run (no bulk/img/done.txt: a test's folder, a fresh clone), there is nothing it guards.
+  if (!existsSync(join(root, 'bulk/img/done.txt'))) return null;
+  let last = null;
+  try { last = JSON.parse(readFileSync(f, 'utf8')); } catch { last = null; }
+  if (!last) return 'no run of the photograph copy is recorded (bulk/img/last-run.json)';
+  if (last.code !== 0) return `the last run of the photograph copy (${last.at}) did not ask for every copy (${last.left} left)`;
+  if (last.indexMtimeMs == null || statSync(index).mtimeMs > last.indexMtimeMs + 1) return `the index was written after the last run of the photograph copy (${last.at}), so its new photographs are not copied yet`;
+  return null;
+}
 const BUCKET = `r2:cultifolio/s/v${VERSION}`;
 /** The corpus of the version before, which this version's is written from once (`--rekey`, round seventy-eight) and never changed. */
 const BEFORE = `static/s/v${VERSION - 1}`;
@@ -196,6 +215,7 @@ export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs')
       if (result.why === 'drops') return `Stopped at "${step.line}": some species lost what the build before had; drops.txt in the project folder lists them. Read every line. When each one is expected, carry on with: ${cmd} --go-on`;
       if (result.why === 'unreadable') return `Stopped at "${step.line}": a dossier on disk could not be read (the line above names it), so the index left it out. Do not upload. Paste the end of corpus-step.log back.`;
       if (result.why === 'deploy first') return `Stopped at "${step.line}": the corpus on disk holds ${result.keyless} page${result.keyless === 1 ? '' : 's'} without a GBIF key, and the live Worker ${result.live ? 'does not say it reads one (round seventy-eight\'s answers 503 for such a page)' : 'could not be asked whether it reads one'}. Nothing was uploaded. Deploy this round's Worker first, on the corpus live now (node scripts/predeploy.mjs --tier=app, then node scripts/corpus-ready.mjs && npm run deploy), then run: ${cmd}`;
+      if (result.why === 'img first') return `Stopped at "${step.line}": ${result.detail}. Nothing was uploaded: the pages ask the site's own copies of their photographs (img.cultifolio.com). Put an \`img --asked-once\` line before \`upload\` in the plan, or run node --import tsx scripts/img-copy.ts --asked-once, then run: ${cmd}`;
       if (result.why === 'index older') return `Stopped at "${step.line}": the index on disk is older than the dossiers it would publish (or the builder's code changed after it was written; the line above says which). Nothing was uploaded. Write it again with npm run dossier -- --index, then run: ${cmd}`;
       if (/^index/.test(result.why)) return `Stopped at "${step.line}": the index now holds fewer species than before (${result.why.replace('index ', '').replace(' < ', ', was ')}). Do not upload. Paste the end of corpus-step.log back.`;
       return `Review: ${result.why}. When it is as expected, carry on with: ${cmd} --go-on`;
@@ -475,6 +495,10 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         // Round eighty-four (G; review A21): never an index older than the dossiers it would publish. The builder says
         // whether the index on disk is the one the dossiers and the code on disk would write (`--index-ready`); when it
         // is not, nothing goes up, and the stop names --index.
+        // Round 111: the pages ask the site's own copies of their photographs (img.cultifolio.com), so nothing goes up
+        // before an `img` step has asked for every copy the index on disk names: an index written after the last such run
+        // has rows (and pages) whose photographs no one copied (`imgGuard`).
+        if (result.status === 'done') { const g = imgGuard(root); if (g) result = { status: 'blocked', why: 'img first', detail: g }; }
         if (result.status === 'done') {
           const code = await exec(process.execPath, ['--import', 'tsx', 'scripts/build-dossiers.ts', '--index-ready'], say, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } });
           if (interrupted) break;

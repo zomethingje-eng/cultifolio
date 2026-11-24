@@ -27,7 +27,7 @@ test('r92a 1: a page counted from the download cites GBIF.org, its day and its D
 });
 
 test('r92a 2: a page still on the API count keeps the API line and its link to iNaturalist', async ({ page }) => {
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => r.abort());
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => r.abort());
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   const src = page.locator('section#flowering #flowering-source');
   await expect(src).toHaveAttribute('data-source', 'api');

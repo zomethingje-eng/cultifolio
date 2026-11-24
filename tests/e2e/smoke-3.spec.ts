@@ -221,7 +221,7 @@ test('the species page reads in reference order: the facts and the figures, then
   // Round 106 (the first hand-off's round 4): the grower's order. The four figures stand under the name ("Habitat in
   // short"); then what the plant is, the genus, and how to keep it (round forty to 105: the figures' cards, then the summary).
   const order = await page.locator('h2.sec').allInnerTexts();
-  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['what it is', 'about the genus · copiapoa', 'cultivation', 'climate across the habitat']);
+  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['about the genus · copiapoa', 'cultivation', 'climate across the habitat', 'where it grows wild']); // round 115: "What it is" is in the header
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
   // the id card is the name, the common names and one line of family · origin · archetype; the facts grid sits at the foot since round fifty
   await expect(page.locator('.idcard .vern.meta')).toContainText('Cactaceae');
@@ -268,7 +268,7 @@ test('a visitor sees the same places in the top bar and the phone\'s tab bar, an
   await expect(page.locator('.derived')).toContainText('nothing about this species is written for its page by a person or by AI');
   await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
   await expect(page.locator('.facts')).toContainText('52 open');
-  await expect(page.locator('h2.sec#s-summary')).toHaveText('What it is'); // round 106: the page opens on what the plant is (the glance cards' hidden heading until then)
+  await expect(page.locator('h2#s-summary')).toHaveText('What it is'); // in the header since round 115 // round 106: the page opens on what the plant is (the glance cards' hidden heading until then)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -1046,7 +1046,7 @@ test('round thirty-seven: the hemisphere notice is one sentence with its spaces,
 test('round thirty-eight: a monotypic genus does not quote the species paragraph twice', async ({ page }) => {
   // The genus article is the species article: the "About the genus" block would repeat the Summary one heading down (R2-3).
   await page.goto('/species/welwitschia-mirabilis');
-  await expect(page.locator('#s-summary + .sumbody')).toContainText('Welwitschia is a monotypic genus');
+  await expect(page.locator('.what .whattext')).toContainText('Welwitschia is a monotypic genus'); // in the header since round 115
   await expect(page.locator('#s-genus')).toHaveCount(0);
   // A genus with its own article keeps its block.
   await page.goto('/species/copiapoa-cinerea');
@@ -1152,13 +1152,13 @@ test('round forty-one, as round fifty-eight has it: the site is a first-visit st
 
 test('round forty-two: the species photograph is preloaded from the head, one size by surface, in a box that is laid out before it lands (1)', async ({ page }) => {
   // The photograph's host is never reached here; the request is held open so the box is measured before anything arrives.
-  await page.route(/inaturalist-open-data\.s3\.amazonaws\.com/, () => new Promise(() => {}));
+  await page.route(/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com)/, () => new Promise(() => {}));
   await page.setViewportSize({ width: 390, height: 800 });
   await page.goto('/species/copiapoa-cinerea', { waitUntil: 'domcontentloaded' }); // the held request means the load event never fires
   // The fixture's cultivated set's first (1000) leads since round eighty-two (the independent review's 13); its wild first (900) before.
-  await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /photos\/1000\/medium\.jpg$/);
+  await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /(photos|inat)\/1000\/medium\.jpg$/); // the copy since round 111
   await expect(page.locator('head link[rel="preload"][as="image"][media="(min-width: 641px)"]')).toHaveAttribute('imagesrcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
-  await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://inaturalist-open-data.s3.amazonaws.com');
+  await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://img.cultifolio.com'); // the copies' host since round 111
   // The photograph's own box (round eighty-seven: its credit is a caption under it, in the same block).
   // To within 0.01 px (round eighty-seven, the owner's predeploy): Firefox gives a box's corners in single precision, so
   // a 150 px box whose top is at a fraction of a pixel reads as 150.0000076. The trail above it is a whole number of px
@@ -1166,7 +1166,7 @@ test('round forty-two: the species photograph is preloaded from the head, one si
   const box = await page.locator('.hero.photo > a:first-child').boundingBox();
   expect(Math.abs((box?.height ?? 0) - 150)).toBeLessThan(0.01);
   // the phone's source is the medium file alone; the wide screen's img chooses between medium and large for a 480 px box
-  await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/1000\/medium\.jpg$/);
+  await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /(photos|inat)\/1000\/medium\.jpg$/);
   await expect(page.locator('.hero.photo source')).toHaveAttribute('media', '(max-width: 640px)');
   await expect(page.locator('.hero.photo img')).toHaveAttribute('srcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
   await expect(page.locator('.hero.photo img')).toHaveAttribute('sizes', '480px');
@@ -1177,7 +1177,7 @@ test('round forty-two: the species photograph is preloaded from the head, one si
 test('round forty-two: the home page preloads its first screen\'s photograph (the lead\'s, since round eighty-seven) and preconnects to its host (1)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', (await page.locator('section.lead .leadph img').getAttribute('src'))!);
-  await expect(page.locator('head link[rel="preconnect"]').first()).toHaveAttribute('href', /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|api\.gbif\.org)$/);
+  await expect(page.locator('head link[rel="preconnect"]').first()).toHaveAttribute('href', /^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|api\.gbif\.org)$/);
 });
 
 test('round forty-six: a client-side navigation to a species page whose HTML the Worker holds gets its data, not the held HTML (3)', async ({ page }) => {
@@ -1891,7 +1891,8 @@ test('round fifty-nine: a species page\'s description is cut at a word and claim
   for (const slug of ['copiapoa-cinerea', 'welwitschia-mirabilis', 'refusia-testii']) {
     await page.goto(`/species/${slug}`);
     const d = (await page.locator('meta[name="description"]').getAttribute('content'))!;
-    expect(d.length).toBeLessThanOrEqual(155);
+    // 160 since round 114 (SPECIES 18 d, "under about 160": its own Welwitschia line is 157).
+    expect(d.length).toBeLessThanOrEqual(160);
     expect(d).toMatch(/(\S…|[.!?)])$/); // a whole word before the ellipsis, or the text's own end
     expect(await page.locator('meta[property="og:description"]').getAttribute('content')).toBe(d);
   }

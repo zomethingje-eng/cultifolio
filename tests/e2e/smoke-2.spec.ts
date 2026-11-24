@@ -259,7 +259,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   const acc = page.url().split('/').pop()!;
   await page.setViewportSize({ width: 360, height: 780 });
   // the species image host is unreachable: no hero, the card says so beside the tile, and the card sits below the topbar
-  await page.route(/inaturalist|wikimedia/, (r) => r.abort());
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia/, (r) => r.abort());
   await page.goto(`/plants/${acc}`);
   // The photograph is asked for only once the species' sheet has answered, and the card says nothing of it before: the
   // answer is waited for first (the "Species page" link stands for it), up to 20 s. With the four smoke files side by side
@@ -589,7 +589,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect(offer).toContainText('Show the reference’s photograph of this species');
   await expect(offer.locator('.why')).toBeHidden();
   await offer.locator('summary').click();
-  await expect(offer.locator('.why')).toContainText('which then sees which species you grow');
+  await expect(offer.locator('.why')).toContainText("which so sees which species' photographs you are shown; a Wikimedia Commons photograph not yet copied comes from Commons"); // round 111: the copies
   await expect(offer.getByRole('button', { name: 'Show it' })).toBeVisible();
   await offer.locator('summary').click(); // closed again, nothing switched on
   await expect(offer.locator('.why')).toBeHidden();
@@ -614,16 +614,16 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect(page.locator('.hero img')).toHaveCount(0);
   // the offer is one line; what showing discloses opens on tap, and the switch is thrown there (round fifty, 4)
   await page.locator('details.rpo summary', { hasText: 'Show the reference’s photographs on your tiles' }).click();
-  await expect(page.locator('details.rpo')).toContainText('which then sees which species you grow');
+  await expect(page.locator('details.rpo')).toContainText("which so sees which species' photographs you are shown; a Wikimedia Commons photograph not yet copied comes from Commons"); // round 111: the copies
   await page.locator('details.rpo .go', { hasText: 'Show it' }).click();
-  await expect.poll(() => outside.some((u) => u === '/ -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg'), { timeout: 10000 }).toBe(true); // the tile asked the image host at once (the stub refuses it, so the tile says it did not load)
+  await expect.poll(() => outside.some((u) => u === '/ -> https://img.cultifolio.com/inat/700/medium.jpg'), { timeout: 10000 }).toBe(true); // the tile asked the image host at once (the stub refuses it, so the tile says it did not load)
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph did not load');
   await page.goto('/settings');
   await ready(page);
   await expect(page.locator('#pref-refphotos')).toBeChecked();
   await page.goto(`/plants/${acc}`);
-  await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
-  expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true); // the front page's and the plant page's requests, and nothing to any other host
+  await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://img.cultifolio.com/inat/700/medium.jpg`), { timeout: 10000 }).toBe(true);
+  expect(outside.every((u) => u.includes('img.cultifolio.com'))).toBe(true); // the front page's and the plant page's requests, to the site's copies (round 111), and nothing to any other host
   expect(api.some((u) => u.startsWith('/api/dossier') || /welwitschia|5411106/.test(u))).toBe(false); // still no key and no name to this server
 });
 });

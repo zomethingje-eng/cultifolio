@@ -156,7 +156,7 @@ describe('r87p about 6: /about/how says what this round\'s code does', () => {
   const t = visible(HOW);
   it('the not-found page\'s photograph and its one request', () => {
     // The browse pages named among them since the review of stage 1 (S3): their tiles load from the same hosts.
-    expect(t).toMatch(/Species pages, the front page, the browse pages \(\s*\/browse\s* and the pages of a region, a genus and a family\), the compare page and the not-found page load photographs from iNaturalist/);
+    expect(t).toMatch(/Species pages, the front page, the browse pages \(\s*\/browse\s* and the pages of a region, a genus and a family\), the compare page and the not-found page load photographs from img\.cultifolio\.com/); // the site's copies since round 111
     expect(t).toMatch(/The not-found page asks once for the species of the day \(\s*\/about\/data\/today\s*\)/);
     expect(t).toContain('The not-found page of an address that is neither a species address nor a page of your own collection shows the first species of the day\'s strip');
   });

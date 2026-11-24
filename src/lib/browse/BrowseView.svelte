@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   /**
    * The browse engine's page (round eighty-seven, C1 to C4): the rail of choices, each with its count, and the results as
    * tiles or a list, from the view the server worked out ($lib/browse/load.server). Every choice is a link the server
@@ -221,7 +222,7 @@
         {#each items as it, i (it.slug)}
           <li class:yours={mine?.has(it.slug)}>
             <a href="/species/{it.slug}">
-              {#if it.thumb}<img src={photoAt(it.thumb, 'small')} width="240" height="240" alt="" loading={i < 4 ? 'eager' : 'lazy'} />{:else}<span class="noph">{view.photosRead ? 'no open photograph on file' : 'photograph not read'}</span>{/if}
+              {#if it.thumb}<img src={imgUrl(photoAt(it.thumb, 'small'))} width="240" height="240" alt="" loading={i < 4 ? 'eager' : 'lazy'} />{:else}<span class="noph">{view.photosRead ? 'no open photograph on file' : 'photograph not read'}</span>{/if}
               <span class="nm"><SpeciesName name={it.name} /></span>
               {#if it.common}<span class="com">{it.common}</span>{/if}
               <span class="meta">{it.where}{#if it.only}{' · only here'}{/if}</span>

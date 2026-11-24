@@ -20,10 +20,14 @@ for (const [width, height] of [[1024, 768], [1280, 800], [1440, 900]] as const) 
     const line = page.locator('section.hline');
     await expect(line).toBeVisible();
     const b = (await line.boundingBox())!;
-    expect(b.y + b.height, `strip bottom ${b.y + b.height} of ${height}`).toBeLessThanOrEqual(height);
+    // Round 114: the habitat's figures on the first screen are "Habitat in brief"'s, which comes first; its first three
+    // lines are on it. The six answers follow it.
+    const br = (await page.locator('section.brief').boundingBox())!;
+    expect(br.y + 72, `brief at ${br.y} of ${height}`).toBeLessThanOrEqual(height);
+    expect(b.y).toBeGreaterThan(br.y);
     const figs = line.locator('dl > div');
-    await expect(figs).toHaveCount(4);
-    for (const [i, src] of ['NASA POWER', 'CHELSA', 'CHELSA'].entries()) await expect(figs.nth(i).locator('dd i')).toHaveText(src);
+    await expect(figs).toHaveCount(6);
+    for (const [i, src] of ['NASA POWER', 'CHELSA, NASA POWER', 'CHELSA', 'CHELSA', 'CHELSA', 'ETOPO 2022'].entries()) await expect(figs.nth(i).locator('dd i')).toHaveText(src);
     await expect(line.locator('.hfrom')).toHaveText(/^The wild habitat’s figures, from [\d,]+ records? in [\d,]+ grid cells? · How$/);
   });
 }
@@ -32,7 +36,8 @@ test('r103d 2: a pending page says pending in the strip, not none (rule 2) @phon
   await page.goto('/species/welwitschia-mirabilis');
   await ready(page);
   await expect(page.locator('#hline-state')).toHaveText('Habitat climate pending. It has not been derived yet; this is not a refusal.');
-  await expect(page.locator('section.hline dl')).toHaveCount(0);
+  // Round 114: the six answers' row is kept, a dash in each slot, no figure.
+  await expect(page.locator('section.hline dl.dashes dd')).toHaveText(['–', '–', '–', '–', '–', '–']);
   await expect(page.locator('.idcard .pill', { hasText: 'Climate pending' })).toHaveCount(0); // said once, in the strip
 });
 
@@ -80,7 +85,8 @@ test('r103d 5: every word of art in the cards is a tip, named and reachable by T
 
 test('r103d 6: every fixture page\'s title says what it holds, within 60 characters before the site\'s name', async ({ page }) => {
   for (const [slug, want] of [
-    ['copiapoa-cinerea', 'Copiapoa cinerea: habitat rain, cold nights and light'],
+    // Round 114 (SPECIES 18 d, the owner's call 1): a page with a hardiness zone or its daily extremes says so, past 60.
+    ['copiapoa-cinerea', 'Copiapoa cinerea: hardiness zone, minimum temperature, habitat climate'],
     ['welwitschia-mirabilis', 'Welwitschia mirabilis: native range and photographs'],
     ['refusia-testii', 'Refusia testii: native range'],
     ['hesperocyparis-lusitanica', 'Hesperocyparis lusitanica (Mexican cypress): native range']
@@ -89,6 +95,6 @@ test('r103d 6: every fixture page\'s title says what it holds, within 60 charact
     await ready(page);
     await expect(page, slug).toHaveTitle(`${want} · Cultifolio`);
     await expect(page.locator('meta[property="og:title"]'), slug).toHaveAttribute('content', want);
-    expect(want.length).toBeLessThanOrEqual(60);
+    if (!want.includes('hardiness zone')) expect(want.length).toBeLessThanOrEqual(60);
   }
 });

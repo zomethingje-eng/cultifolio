@@ -597,7 +597,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>Nor is anything shaped like a plant number: two to four digits and another, a dash between or not, as 2026-0013; under a prefix scheme, the collection's prefix followed by a dash or a digit, as ACC-0013; or a batch's number, as S2026-001.</li>
     <li>The catalogue's rows you scroll or jump to by letter are asked for by position (<code>/api/rows</code>: a grouping and a row number, nothing of yours).</li>
     <li>The service worker keeps those answers under the reference's id (each request carries it, from <code>/api/corpus</code>), so a second visit asks nothing until the reference is refreshed.</li>
-    <li>The reference's photographs are not fetched for your own pages unless you switch them on in Settings. Then they come from the image host directly, which sees which species this address asked a picture of.</li>
+    <li>The reference's photographs are not fetched for your own pages unless you switch them on in Settings. Then they come from this site's copies (img.cultifolio.com), or, for a Wikimedia Commons photograph not yet copied, from Commons, which then sees which species this address asked a picture of.</li>
   </ul>
   </details>
   </section>

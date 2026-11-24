@@ -75,7 +75,10 @@ const config = {
         // before hydration be replayed after it; `unsafe-hashes` is what lets a hash cover an attribute handler.
         'script-src': ['self', 'sha256-3LsFZZq160FJW5LRYuIRIzg3GbQ1+kDj7c38jJL9RU4=', 'unsafe-hashes', 'sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I='],
         'style-src': ['self', 'unsafe-inline'],
-        'img-src': ['self', 'data:', 'blob:', 'https://inaturalist-open-data.s3.amazonaws.com', 'https://static.inaturalist.org', 'https://upload.wikimedia.org', 'https://api.gbif.org'],
+        // Round 111: the reference's photographs are served from the site's own copies (img.cultifolio.com, the bucket
+        // cultifolio-img; docs/PLAN-109.md), so no page asks iNaturalist or GBIF for an image; Wikimedia Commons' until its
+        // copy is complete (`SERVED` in src/lib/core/img.ts), when its host leaves this list.
+        'img-src': ['self', 'data:', 'blob:', 'https://img.cultifolio.com', 'https://upload.wikimedia.org'],
         'font-src': ['self'],
         'connect-src': ['self'],
         'worker-src': ['self'],

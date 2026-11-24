@@ -16,7 +16,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-const quiet = (p: Page) => p.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort()));
+const quiet = (p: Page) => p.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort()));
 const ready = (p: Page) => p.locator('html[data-ready]').waitFor({ state: 'attached' });
 
 for (const width of [360, 320]) {
@@ -45,7 +45,7 @@ test('r84e 2: on a desktop the four habitat figures stand in one row, the year\'
   // Round 106: "Habitat in short" is the page's one row of the four figures (round 103: four in a row from 641 px); the
   // glance table and its season card are gone, the season's reading said under the chart.
   const cards = page.locator('section.hline dl > div');
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(6);
   const boxes = await cards.evaluateAll((xs) => xs.map((x) => x.getBoundingClientRect()));
   expect(new Set(boxes.map((b) => Math.round(b.top))).size).toBe(1);
   for (let i = 1; i < boxes.length; i++) expect(boxes[i].left).toBeGreaterThanOrEqual(boxes[i - 1].right - 1);
@@ -58,10 +58,11 @@ test('r84e 3: on a phone the habitat in four figures is on the first screen, abo
   await page.goto('/species/copiapoa-cinerea');
   const line = page.locator('section.hline');
   await expect(line).toBeVisible();
-  await expect(line.locator('dt')).toHaveText(['Cold floor', 'Rain', 'Open-sky light', 'Season']);
-  await expect(line.locator('dd').first()).toContainText('1 night in 100 colder');
+  await expect(line.locator('dt')).toHaveText(['Cold', 'Heat', 'Rain', 'Light', 'Air', 'Ground']); // round 114
+  await expect(line.locator('dd').first()).toContainText('1 night in 100 is colder');
   await expect(line.locator('dd').first()).toContainText('NASA POWER');
-  const top = (await line.boundingBox())!.y;
+  // Round 114 (the owner's decision of 23 November): the figures on the first screen are "Habitat in brief"'s, before the six.
+  const top = (await page.locator('section.brief').boundingBox())!.y;
   expect(top).toBeLessThan(page.viewportSize()!.height - 120); // its first figures are on the first screen
   const strip = await page.locator('a.thumbstrip').boundingBox();
   if (strip) expect(top).toBeLessThan(strip.y);

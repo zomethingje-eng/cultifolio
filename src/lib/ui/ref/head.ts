@@ -35,7 +35,7 @@ export interface HeadInput {
 }
 
 /** A common name worth adding: not the genus again (Welwitschia's English name is "Welwitschia"). */
-const commonOf = (h: HeadInput) => (h.common && h.common.toLowerCase() !== h.name.scientific.split(' ')[0].toLowerCase() ? h.common : null);
+export const commonOf = (h: HeadInput) => (h.common && h.common.toLowerCase() !== h.name.scientific.split(' ')[0].toLowerCase() ? h.common : null);
 
 /** How long a title may be before " · Cultifolio" and still be shown whole in a search result (round 103). */
 export const TITLE_ROOM = 60;

@@ -116,7 +116,8 @@ describe('the picker on the add form', () => {
       await m.page.waitForFunction(() => document.querySelector('form button[type=submit].add') !== null);
       await m.page.locator('#species-name').fill('Copiapoa humilis');
       await until(() => s.asked.search > 0 && s.asked.names > 0, 'both services asked');
-      await expect.poll(() => m.page.locator('.picker [role=option]', { hasText: 'Copiapoa cinerea' }).isVisible()).toBe(true);
+      // The name service's answer drawn: since round 112 a GBIF name not spelt as typed waits behind the "more" row.
+      await expect.poll(() => m.page.locator('.picker [role=option]', { hasText: /more name/ }).isVisible()).toBe(true);
       await add(m.page).click();
       await expect.poll(() => add(m.page).innerText()).toBe('Checking the name…'); // waiting for the search, not armed
       held.open();

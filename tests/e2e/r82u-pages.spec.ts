@@ -38,7 +38,7 @@ test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreEr
 const WHY = "GBIF's backbone holds no one accepted species of this name";
 /** A 4 × 3 PNG, so a photograph routed here loads, landscape. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGNoWJAARww4OQBgthIBDttNdgAAAABJRU5ErkJggg==', 'base64');
-const photosLoad = (page: Page) => page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+const photosLoad = (page: Page) => page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
 const noThirdParty = (page: Page) => page.route(/^https:\/\/(?!127\.0\.0\.1)/, (r: Route) => r.abort());
 
 /** A page's data changed on its way in, for a client-side visit (the r73p pattern; every streamed line kept). */
@@ -244,7 +244,7 @@ test('r82u 12: a climate from few records is marked on its figures and in its cl
   await expect(page.locator('#few-records-line')).toHaveAttribute('href', '#few-records');
   await expect(page.locator('#few-records')).toHaveText('From few records: this habitat climate is read from 4 records in 4 grid cells; a page says so under 12 records or 5 cells, and shows the figures as read. The rule.'); // round eighty-six (P11): its rule linked
   await expect(page.locator('#few-records a.help')).toHaveAttribute('href', '/about/how#few');
-  await expect(page.locator('section.hline dl > div')).toHaveCount(4); // the figures are all there
+  await expect(page.locator('section.hline dl > div')).toHaveCount(6); // the six answers are all there (round 114)
   // A page of many records carries no mark (guard).
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   await expect(page.locator('#few-records-line, #few-records')).toHaveCount(0);

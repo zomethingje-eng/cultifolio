@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl, imgSrcset, imgHosts } from '$core/img';
   import { ownSynonyms, isAutonymName } from '$core/shown-names';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { aLabel } from '$core/arch';
@@ -15,7 +16,10 @@
   import { afterLead, idleAfterLead } from '$lib/ui/ref/after-lead';
   import { summaryRevision, summaryRoute, summaryWhat } from '$lib/ui/ref/credit-days';
   import { AS_CULTIGEN, cultigenOf } from '$core/cultigen';
-  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT, shownAttribution } from '$lib/ui/ref/head';
+  import { habitatBrief, briefDescription, titleWords } from '$lib/ui/ref/brief';
+  import { firstSentences as cutSentences } from '$lib/ui/ref/sentences';
+  import { usdaOfShown } from '$dossier/hardiness';
+  import { commonOf, speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, OG_ALT, shownAttribution } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -30,7 +34,7 @@
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi, literatureOff } from '$dossier/sources/openalex';
-  import { photoAt, photoOf, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
+  import { photoAt, photoOf, srcsetOf, shownAt } from '$dossier/photo-size';
   import { heroOf, spreadByObserver } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
   import { notAnswered, climateDetail, registersNotChecked, namesSource } from '$lib/ui/ref/upstream';
@@ -127,7 +131,17 @@
   const noSentence = $derived(uncheckedSentence(d));
   /** The plant forms' query: the species, and its GBIF key where it has one (none is filed for a page without). */
   const addQuery = $derived(`species=${encodeURIComponent(d.name.scientific)}${d.ids.gbif != null ? `&key=${d.ids.gbif}` : ''}`);
-  const hero = $derived(heroOf(photos));
+  /**
+   * Round 115 (SPECIES 18 a): which photographs the lead and the strip show: all, those their source marks as observed
+   * growing wild, or those it marks as in cultivation. "Wild" is what a source says (iNaturalist marks each photograph;
+   * Commons and GBIF carry no mark), so a photograph with no mark is in neither count and stays under All (round thirty,
+   * R2-12; rule 3). The switch shows only when both counts are above zero.
+   */
+  let photoKind = $state<'all' | 'wild' | 'cult'>('all');
+  const wildN = $derived(photos.filter((p) => p.captive === false).length);
+  const cultN = $derived(photos.filter((p) => p.captive === true).length);
+  const kindPhotos = $derived(photoKind === 'wild' ? photos.filter((p) => p.captive === false) : photoKind === 'cult' ? photos.filter((p) => p.captive === true) : photos);
+  const hero = $derived(heroOf(kindPhotos.length ? kindPhotos : photos));
   const heroSrc = $derived(hero ? shownAt(hero) : undefined);
   const heroCredit = $derived(hero ? creditParts(hero) : { lic: '', who: '', whoAlone: '', named: false, disagree: false });
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
@@ -181,8 +195,23 @@
   // Kew's own words for where the plant grows (WCVP's geographic_area; round eighty-six, review D2), where a build gave them.
   const kewArea = $derived((d.distribution.kew as { area?: string } | undefined)?.area);
   const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null, annualRain: d.climate.annualRain ?? null } : { status: unchecked ? 'unchecked' : d.climate.status }, native: d.distribution.native.length, photos: photos.length, summary: !!d.summary });
-  const title = $derived(speciesTitle(headIn));
-  const desc = $derived(speciesDescription(headIn, u));
+  // Round 114 (SPECIES 18 d): "Habitat in brief", and the title and description from the same figures.
+  const headCommon = $derived(commonOf(headIn));
+  const briefIn = $derived({ name: d.name.scientific, months: d.climate.status === 'ok' ? d.climate.months : null, annualRain: d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null, extremes: extremesShown && d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, hardiness: extremesShown ? (d.hardiness ?? null) : null, kewClimate: (d.distribution as { kew?: { climate?: string } }).kew?.climate ?? null, native: d.distribution.native.map((r) => unitName(r.name)), src: d.climate.status === 'ok' ? d.climate.src : null });
+  // Round 115 (SPECIES 18 b): "What it is" in the header, and the chips.
+  let whatOpen = $state(false);
+  const chipList = $derived.by(() => {
+    const out: Array<{ k: string; label: string; value: string; href: string; term?: 'koppen' | 'usda' | 'rhs' | 'cites' }> = [];
+    if (koppenShown && d.koppen?.cls) out.push({ k: 'kop', label: 'Köppen', value: d.koppen.cls, href: '#climate-class', term: 'koppen' });
+    if (extremesShown && d.hardiness?.usda) out.push({ k: 'usda', label: 'USDA zone', value: usdaOfShown(d.hardiness.usda.meanC).zone, href: '#hardiness', term: 'usda' });
+    if (extremesShown && d.hardiness?.rhs) out.push({ k: 'rhs', label: 'RHS', value: d.hardiness.rhs.band, href: '#hardiness', term: 'rhs' });
+    if (d.cites?.status === 'ok' && d.cites.appendix) out.push({ k: 'cites', label: 'CITES', value: `Appendix ${d.cites.appendix}`, href: '#conservation', term: 'cites' });
+    if (d.climate.status === 'ok') out.push({ k: 'rec', label: 'Records', value: `${d.climate.records.toLocaleString('en-GB')} in ${d.climate.cells.toLocaleString('en-GB')} ${coarse ? 'areas' : 'cells'}`, href: '#s-climate' });
+    return out;
+  });
+  const brief = $derived(d.climate.status === 'ok' ? habitatBrief(briefIn, u) : null);
+  const title = $derived.by(() => { const w = d.climate.status === 'ok' ? titleWords({ hardiness: extremesShown && !!(d.hardiness?.usda || d.hardiness?.rhs), extremes: extremesShown }) : null; return w ? `${d.name.scientific}${headCommon ? ` (${headCommon})` : ''}: ${w}` : speciesTitle(headIn); });
+  const desc = $derived((d.climate.status === 'ok' ? briefDescription(briefIn, u) : null) ?? speciesDescription(headIn, u));
   /** The photograph's own words for a screen reader: the species and the credit (round sixty; a11y 12). */
   const heroAlt = $derived(hero ? `${d.name.scientific}${hero.place ? `, ${hero.place}` : ''}; photograph ${shownAttribution(hero)}` : '');
   const jsonld = $derived(
@@ -196,7 +225,9 @@
       // The page's own identifiers: GBIF's key, or for a page without one (round seventy-nine) Kew's IPNI number.
       identifier: d.ids.gbif != null ? [{ '@type': 'PropertyValue', propertyID: 'GBIF', value: String(d.ids.gbif) }] : d.ids.ipni ? [{ '@type': 'PropertyValue', propertyID: 'IPNI', value: d.ids.ipni }] : undefined,
       url: `https://cultifolio.com/species/${d.slug}`,
-      image: heroSrc
+      image: heroSrc ? imgUrl(heroSrc) : heroSrc,
+      // Round 114 (SPECIES 18 d): the paragraph as plain text, without its source line.
+      description: brief?.text
     })
   );
   // A range of more than a few regions stacks a dozen lines deep in one narrow cell of the fact grid beside a blank row; the cell, and the marker's beside it, take the whole row instead.
@@ -360,7 +391,8 @@
   const compared = $derived(joined.filter(isCompared));
   /** Your own photographs of this species, across every plant of it you own. */
   /** Up to six photographs other than the one at the top, for the strip under the card. */
-  const stripPhotos = $derived(spreadByObserver(photos.filter((p) => p !== hero && p.thumb), 6).slice(0, 6)); // from as many observers as there are (round eighty-four; W2)
+  // Five, and a sixth tile for them all (round 115; SPECIES 18 a), of the kind the switch shows.
+  const stripPhotos = $derived(spreadByObserver(kindPhotos.filter((p) => p !== hero && p.thumb), 5).slice(0, 5)); // from as many observers as there are (round eighty-four; W2)
   const myPhotos = $derived(mine.flatMap((a) => collection.photos(a.id).map((p) => ({ ...p, plant: a }))).sort((x, y) => y.d.localeCompare(x.d)));
   let lightbox = $state<number | null>(null);
   let heroFailed = $state(false);
@@ -464,6 +496,8 @@
   });
   /** Four sentences of the quoted lead; the rest is a link, never a mid-sentence cut. */
   const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
+  // Round 115: the header's two sentences of the excerpt, the rest behind "more".
+  const whatCut = $derived(cutSentences(excerpt?.text ?? '', 2));
   /** The summary's revision and the day it was read (decision 8; `summaryRevision`). */
   const summaryRev = $derived(summaryRevision(d.summary as never, d.upstream['wikipedia']));
   /** How an article under another title was reached (A9h; `summaryRoute`). */
@@ -555,7 +589,7 @@
     <!-- Its credit is hidden with it: no credit stands under a photograph that did not load (round sixty-seven; triage-66 P7). -->
     <!-- The small size, as the front page's tiles load it (round seventy; triage-69 C5, S-C14). -->
     <!-- A photograph that did not load leaves its square saying so, as the species grid does, not a blank white tile (round eighty; the phone review's 9). -->
-    {#if c.thumb}<span class="relim"><img src={photoAt(c.thumb, 'small')} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.parentElement?.classList.add('failed'); const rc = im.closest('.reltile')?.querySelector<HTMLElement>('.rc'); if (rc) rc.style.visibility = 'hidden'; }} /></span>{:else}<span class="relim relph"><Placeholder name={c.name} family={c.family ?? ''} caption="no open photograph on file" /></span>{/if}<!-- no photograph: the catalogue's tinted initial, not a white card with no picture (round eighty-four; W11) -->
+    {#if c.thumb}<span class="relim"><img src={imgUrl(photoAt(c.thumb, 'small'))} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.parentElement?.classList.add('failed'); const rc = im.closest('.reltile')?.querySelector<HTMLElement>('.rc'); if (rc) rc.style.visibility = 'hidden'; }} /></span>{:else}<span class="relim relph"><Placeholder name={c.name} family={c.family ?? ''} caption="no open photograph on file" /></span>{/if}<!-- no photograph: the catalogue's tinted initial, not a white card with no picture (round eighty-four; W11) -->
     <span class="rn"><SpeciesName name={c.name} /></span>
     <!-- An English name is set as written, a family in small capitals, as the front page's tiles set them (round eighty-six;
          the plan's A13: a common name was set in capitals, as a family is). -->
@@ -573,16 +607,16 @@
   <meta property="og:site_name" content="Cultifolio" />
   <meta property="og:url" content="https://cultifolio.com/species/{d.slug}" />
   <!-- A species with no photograph previews as the site's own card, not as no picture (round sixty; product 6, visitor 20). -->
-  <meta property="og:image" content={hero ? heroSrc : 'https://cultifolio.com/og.png'} />
+  <meta property="og:image" content={hero && heroSrc ? imgUrl(heroSrc) : 'https://cultifolio.com/og.png'} />
   <meta property="og:image:alt" content={hero ? heroAlt : OG_ALT} />
   <meta name="twitter:card" content="summary_large_image" />
   {#if hero}
     <!-- The photograph is the largest paint on a phone and lives on a third party's host. Preloaded from the head, one size by
          surface (the 500 px file under 640 px, the 1024 px file above), so the handshake and the download start with the
          stylesheet, not when the parser reaches the image (round forty-two, 1). The hosts are preconnected for the rest. -->
-    <link rel="preload" as="image" href={photoOf(hero, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
-    <link rel="preload" as="image" href={photoOf(hero, 'large')} imagesrcset={srcsetOf(heroSrc!, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
-    {#each photoHosts([heroSrc]) as h (h)}<link rel="preconnect" href={h} />{/each}
+    <link rel="preload" as="image" href={imgUrl(photoOf(hero, 'medium'))} media="(max-width: 640px)" fetchpriority="high" />
+    <link rel="preload" as="image" href={imgUrl(photoOf(hero, 'large'))} imagesrcset={imgSrcset(srcsetOf(heroSrc!, ['medium', 'large']))} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
+    {#each imgHosts([heroSrc]) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
   <link rel="canonical" href="https://cultifolio.com/species/{d.slug}" />
   <!-- A vernacular name is user-contributed upstream; a "<" in it must not end this script early. -->
@@ -628,7 +662,7 @@
     <div class="hero photo" class:only={photos.length < 2}>
       <!-- One size by surface, not by pixel density (round thirty-five, R2-7): under 640 px the 500 px file fills a 150 px band cropped to cover,
            and a phone's density promoted it to the 1024 px one, three times the bytes for a crop that showed a third of it (round forty-two, 1). -->
-      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoOf(hero, 'medium')} /><img src={photoOf(hero, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" bind:this={leadImg} use:failedBeforeHydration={() => (heroFailed = true)} use:leadShape /></picture></a>
+      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={imgUrl(photoOf(hero, 'medium'))} /><img src={imgUrl(photoOf(hero, 'large'))} srcset={imgSrcset(srcsetOf(heroSrc!, ['medium', 'large']))} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" bind:this={leadImg} use:failedBeforeHydration={() => (heroFailed = true)} use:leadShape /></picture></a>
       <!-- Licence first, then the author's line: on a phone the two are two lines, so a long author name never cuts the
            licence to an ellipsis (round sixty-two; outside review A12); a licence the author's line contradicts is said. -->
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{heroCredit.whoAlone}<span class="xtra">{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{#if hero.observedOn}{' · '}<span class="nobr">observed {hero.observedOn}</span>{/if}<!-- the observation's day, named apart from the credits' "as read" day (round eighty-six; review W's W11) --></span></span></a>
@@ -660,6 +694,9 @@
       <!-- Its other names, as the record holds them: GBIF's name for it where Kew's heads the page, then the older names;
            the whole list under Names and registers (round eighty-seven; the owner's look). -->
       {#if (gbifOwn && d.name.gbif) || synonyms.length}<p class="also">Also called {#if gbifOwn && d.name.gbif}<i class="sciname">{d.name.gbif.scientific}</i> (GBIF's name){#if synonyms.length}, {/if}{/if}{#each synonyms.slice(0, 2) as n, i (n)}{i ? ', ' : ''}<i class="sciname">{n}</i>{/each}{#if synonyms.length > 2}, and <a href="#s-registers">{synonyms.length - 2} more</a>{/if}.</p>{/if}
+      <!-- Round 115 (SPECIES 18 b): the page's classes as chips, each only where the page holds it (never "none"), each
+           with its glossary tip and a way to its section. -->
+      {#if chipList.length}<p class="chips">{#each chipList as c (c.k)}<span class="chip">{#if c.term}<Term k={c.term}>{c.label}</Term>{:else}{c.label}{/if} <a href={c.href}>{c.value}</a></span>{/each}</p>{/if}
       <!-- The facts a reader looks for first, as a table (round eighty-seven): the family, where it is native by Kew's file,
            the group the list files its genus under, and the reader's own plants of it. A phone folds them into one line. -->
       <table class="spfacts">
@@ -676,6 +713,14 @@
       {#if namesMore}<details class="pmore"><summary><span class="pm1">{namesMore}</span><span class="pm2" aria-hidden="true">more</span></summary>{#if common.length > 1}<p class="pline"><b>Also called</b> {common.slice(1).join('; ')}</p>{/if}{#if d.name.family}<p class="pline"><b>Family</b> {d.name.family}</p>{/if}{#if d.distribution.native.length}<p class="pline"><b>Native to</b> {d.distribution.native.map((r) => unitName(r.name)).join(', ')}{asCultigen}</p>{/if}{#if sheet.arch}<p class="pline"><a class="grouped help" href="#s-cultivation">{groupLine(sheet.arch)}</a></p>{/if}</details>{/if}
       {#if cited}<p class="small muted" id="kew-cited">{cited}</p>{/if}
       {#if hybrid?.parents}<p class="small muted" id="hybrid-parents">A hybrid: <SpeciesName name={hybrid.parents} />, the parents Kew's World Checklist states for it (WCVP, RBG Kew).</p>{/if}
+      <!-- Round 114 (SPECIES 18 d): the six answers read aloud, fixed sentences filled from the page's figures, each figure's
+           source on the line under it, in the HTML the server sends. None on a page without a habitat climate. -->
+      {#if brief}<section class="brief" aria-labelledby="brief-h"><h2 id="brief-h" class="brief-h">Habitat in brief</h2><p class="brieftext">{#each brief.runs as r, i (i)}{#if r.i}<i>{r.t}</i>{:else if r.b}<b>{r.t}</b>{:else}{r.t}{/if}{/each}</p><p class="briefsrc">{brief.sources.join(' · ')}</p></section>{/if}
+      <!-- Round 115 (SPECIES 18 b): "What it is", the quotation's first two sentences (cut at a sentence's end, rule 4), with
+           its credit; "more" opens the whole quotation in place. Quoted, never reworded. -->
+      {#if d.summary}<section class="what" aria-labelledby="s-summary"><h2 class="brief-h" id="s-summary">What it is</h2><p class="whattext">{whatCut.head}{#if whatCut.rest}{' '}<span id="what-rest" hidden={!whatOpen}>{whatCut.rest}</span>{' '}<button type="button" class="linkish" aria-expanded={whatOpen} aria-controls="what-rest" onclick={() => (whatOpen = !whatOpen)}>{whatOpen ? 'less' : 'more'}</button>{/if}{#if excerpt?.more || d.summary.cut}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p>
+        <p class="small muted" id="summary-source">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>{summaryWhat(d.summary)}{#if summaryRev.rev}, {#if summaryRev.href}<a href={summaryRev.href} rel="noopener">revision {summaryRev.rev}</a>{:else}revision {summaryRev.rev}{/if}{/if}{#if summaryRev.day}, read <span class="nobr">{summaryRev.day}</span>{/if}, <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener license">{d.summary.licence}</a>{#if summaryOlderName(d.summary.title, d.name)}; {summaryOlderName(d.summary.title, d.name)}{:else if sumRoute}; {#if sumRoute.route}{sumRoute.route}{:else}its title is not this plant's name, and the build quotes such an article only on a stated proof (<a class="help" href="/about/how#summary">which</a>){/if}{/if}.</p>
+      </section>{:else if refused('wikipedia')}<section class="what" aria-labelledby="s-summary"><h2 class="brief-h" id="s-summary">What it is</h2><div class="notice"><b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.</div></section>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
       {#if (d.climate.status === 'refused' && !unchecked) || (!photos.length && photoGaps)}
         <div class="pills">
@@ -698,7 +743,7 @@
       <!-- The habitat in four figures on the first screen (round eighty-four on a phone, the owner's decision 3; at every width
            since round 103), in the card after the one primary action and before the secondary ones (round eighty-five;
            outside review B's 3, P3). -->
-      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" {coarse} records={d.climate.status === 'ok' ? d.climate.records : null} cells={d.climate.status === 'ok' ? d.climate.cells : null} />
+      <HabitatLine months={d.climate.status === 'ok' ? d.climate.months : []} p10={d.climate.status === 'ok' ? d.climate.p10 : null} p90={d.climate.status === 'ok' ? d.climate.p90 : null} elevation={d.climate.status === 'ok' ? (d.climate.src.elevation ?? null) : null} extremes={glance.ex} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} year={sheet.year} {readerLat} units={u} {few} fewHref="#few-records" {coarse} records={d.climate.status === 'ok' ? d.climate.records : null} cells={d.climate.status === 'ok' ? d.climate.cells : null} />
     {:else if !unchecked && d.climate.status !== 'refused'}
       <!-- No habitat climate: the strip says the state and why, in the Climate section's words (round 103; rule 2), where
            the top of the page had only a pill. A page whose records were not asked says so once, under the name. -->
@@ -736,9 +781,17 @@
            that the page's load event never fires, Safari's engine asked for none of the six in the 5.5 s after the page was
            ready, though they were on the first screen and the 2.5 s wait had passed; Chromium asked for all six, and a
            lead that failed (the load event fired) let Safari's ask too. The <noscript> copy, with no wait of its own, stays lazy. -->
-      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={stripGo ? photoAt(p.thumb, 'small') : undefined} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="eager" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /><noscript><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" /></noscript></span>{/each}
+      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={stripGo ? imgUrl(photoAt(p.thumb, 'small')) : undefined} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="eager" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /><noscript><img src={imgUrl(photoAt(p.thumb, 'small'))} alt="{d.name.scientific}, photograph {shownAttribution(p)}" title={shownAttribution(p)} loading="lazy" width="72" height="72" /></noscript></span>{/each}
       <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
+  {/if}
+  {#if wildN && cultN}
+    <!-- Round 115 (SPECIES 18 a): the lead and the strip by kind, as their sources mark them. -->
+    <div class="phkind" role="group" aria-label="Which photographs the lead and the strip show">
+      <button type="button" aria-pressed={photoKind === 'all'} onclick={() => { photoKind = 'all'; heroFailed = false; }}>All · {photos.length}</button>
+      <button type="button" aria-pressed={photoKind === 'wild'} onclick={() => { photoKind = 'wild'; heroFailed = false; }}>In the wild · {wildN}</button>
+      <button type="button" aria-pressed={photoKind === 'cult'} onclick={() => { photoKind = 'cult'; heroFailed = false; }}>In cultivation · {cultN}</button>
+    </div>
   {/if}
   <!-- The section menu under the card, where a phone reader still is (round fifty-eight); it stays pinned as the page scrolls. -->
   <nav class="tabs" aria-label="Sections">
@@ -747,7 +800,7 @@
          why to believe it. "At home" is the table where the page has one, else the cultivation cards it heads. -->
     {#if d.summary || refused('wikipedia')}<a href="#s-summary" class:on={active === 's-summary'} onclick={(e) => goTab(e, 's-summary')}>What it is</a>{/if}
     {#if atHomeShown}<a href="#at-home" class:on={active === 'at-home' || active === 's-cultivation'} onclick={(e) => goTab(e, 'at-home')}>At home</a>{:else}<a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>At home</a>{/if}
-    {#if extremesShown}<a href="#hardiness" class:on={active === 'hardiness'} onclick={(e) => goTab(e, 'hardiness')}>Hardiness</a>{/if}
+    {#if extremesShown}<a href="#hardiness" class:on={active === 'hardiness'} onclick={(e) => goTab(e, 'hardiness')}>How cold</a>{/if}
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Where it grows</a>
     <a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>{photos.length === 1 ? 'Photograph' : 'Photographs'}</a>
@@ -762,16 +815,7 @@
        the record. The "At a glance" cards and the year strip are gone: "Habitat in short" carries the four figures, the
        chart's "Show in my months" the year in the reader's months, and every other figure they gave is in a fold or a
        "How" (tests/e2e/r106c-figures.spec.ts holds every figure and source the page gave before). -->
-  {#if d.summary}
-    <h2 class="sec" id="s-summary">What it is</h2>
-    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more || d.summary.cut}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
-    <!-- Which revision of the article, and the day it was read (round eighty-five, the owner's decision 8): a fill records
-         the revision; a summary read before says the day the build read Wikipedia. The licence links its text (A22). -->
-    <p class="small muted" id="summary-source">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>{summaryWhat(d.summary)}{#if summaryRev.rev}, {#if summaryRev.href}<a href={summaryRev.href} rel="noopener">revision {summaryRev.rev}</a>{:else}revision {summaryRev.rev}{/if}{/if}{#if summaryRev.day}, read <span class="nobr">{summaryRev.day}</span>{/if}, <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener license">{d.summary.licence}</a>{#if summaryOlderName(d.summary.title, d.name)}; {summaryOlderName(d.summary.title, d.name)}{:else if sumRoute}; {#if sumRoute.route}{sumRoute.route}{:else}its title is not this plant's name, and the build quotes such an article only on a stated proof (<a class="help" href="/about/how#summary">which</a>){/if}{/if}.</p>
-  {:else if refused('wikipedia')}
-    <h2 class="sec" id="s-summary">What it is</h2>
-    <div class="notice"><b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.</div>
-  {/if}
+  <!-- "What it is" is in the header since round 115 (SPECIES 18 b), under "Habitat in brief". -->
 
   {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary && !genusRepeats}
     <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
@@ -864,7 +908,7 @@
   {#if d.climate.status === 'ok'}
     <!-- The habitat's hardiness, its two scales beside "neither is a tested hardiness of the plant"; the grower's own place
          against the cold floor under it (round fifty, 3; under the figures until round 106). -->
-    <Hardiness hardiness={d.hardiness} {extremesShown} units={u} />
+    <Hardiness hardiness={d.hardiness} {extremesShown} units={u} extremes={d.climate.extremes ?? null} />
     {#if placeLine}
       <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
     {/if}
@@ -1155,6 +1199,19 @@
   .yearlines { margin: 8px 0 0; }
   .yearlines p { margin: 4px 0 0; }
   .yearlines .src { color: var(--mut); margin-left: 4px; }
+  /* Round 114 (SPECIES 18 d, option B): the paragraph in body text and the main text colour, its figures one step heavier,
+     its sources on one small line; its label in the six answers' small capitals. */
+  .brief { margin: 12px 0 2px; }
+  /* Round 115: "What it is" in the secondary colour, under the page's own figures; the chips, small and ruled. */
+  .what { margin: 10px 0 2px; }
+  .whattext { margin: 0; font-size: var(--fs-base); line-height: 1.5; color: var(--ink2); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 999px; font-size: var(--fs-sm); color: var(--ink2); }
+  .chip a { font-weight: 600; color: var(--ink); }
+  .brief-h { margin: 0 0 3px; font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); font-weight: 700; font-family: var(--ui); }
+  .brieftext { margin: 0; font-size: var(--fs-base); line-height: 1.5; color: var(--ink); }
+  .brieftext b { font-weight: 600; }
+  .briefsrc { margin: 3px 0 0; font-size: var(--fs-xs); color: var(--mut); }
   .idcard .meta { margin-top: 3px; font-size: var(--fs-md); color: var(--ink3); }
   .idcard .acts { margin-top: 12px; }
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
@@ -1244,7 +1301,11 @@
   .thumbstrip img { display: block; width: 72px; height: 72px; object-fit: cover; border-radius: 2px; flex: none; background: var(--sunk); }
   /* A thumbnail not yet given its address takes no room of its own: its square (.tb, 72 by 72) is the room (round eighty-six). */
   .thumbstrip img:not([src]) { display: none; }
-  .thumbstrip .more { flex: none; font-size: var(--fs-md); padding: 0 6px; }
+  /* The sixth tile: the count of every photograph, a square like the five (round 115). */
+  .thumbstrip .more { flex: none; display: flex; align-items: center; justify-content: center; text-align: center; width: 72px; height: 72px; box-sizing: border-box; padding: 4px; border: 1px solid var(--rule); border-radius: 2px; font-size: var(--fs-sm); line-height: 1.2; }
+  .phkind { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+  .phkind button { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--rule); border-radius: 999px; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+  .phkind button[aria-pressed='true'] { border-color: var(--ink); color: var(--ink); font-weight: 600; }
   .names { margin: 0 0 8px; }
   .archline { margin: 0 0 10px; color: var(--ink2); }
   .howmade { margin: 10px 0 0; }

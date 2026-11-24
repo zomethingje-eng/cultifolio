@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   import { backLayer } from '$lib/ui/back-layer.svelte';
   import { climateReason } from '$dossier/range-via';
   import { noGbif, recordsUnchecked, keylessPlantNotice, NO_GBIF_SENTENCE } from '$core/no-gbif';
@@ -987,7 +988,7 @@
     </div>
   {:else if speciesThumb && !thumbFailed}
     <div class="hero">
-      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph{dossier?.credit ? ` (${dossier.credit})` : ''} · add your own</button>
+      <img src={imgUrl(speciesThumb)} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph{dossier?.credit ? ` (${dossier.credit})` : ''} · add your own</button>
     </div>
   {:else if heroHeld}
     <!-- The hero's room while the sheet is asked, unseen and out of the accessibility tree (round seventy-nine; `heroHeld`). -->

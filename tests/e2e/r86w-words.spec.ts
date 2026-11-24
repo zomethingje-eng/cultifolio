@@ -29,7 +29,7 @@ test('r86w 1: the No climate chip says its pending page too (S15) @phone', async
 });
 
 test('r86w 2: a Related tile sets an English name as written, a family in capitals (A13)', async ({ page }) => {
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
   await page.goto('/species/copiapoa-humilis'); await ready(page);
   // The fixture's related species have no English name, so the tile shows the family, in capitals (guard) ...
   const rf = page.locator('a.reltile .rf', { hasText: 'Cactaceae' }).first();
@@ -55,7 +55,7 @@ test('r86w 3: each fold on the about pages shows that it opens, and has a name o
 });
 
 test('r86w 4: a photograph that did not load prints nothing (W14)', async ({ page }) => {
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   await expect(page.locator('.hero.photo.failed')).toBeVisible();
   await page.emulateMedia({ media: 'print' });

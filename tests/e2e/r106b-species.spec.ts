@@ -21,7 +21,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ serviceWorkers: 'block' });
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-async function noThirdParty(page: Page) { await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort())); }
+async function noThirdParty(page: Page) { await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.abort())); }
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached' }); }
 /** Each selector follows the one before it in the page. */
 const inOrder = (page: Page, sels: string[]) => page.evaluate((sels) => sels.map((s) => document.querySelector(s)).map((e, i, a) => (e ? (i === 0 ? true : !!a[i - 1] && !!(a[i - 1]!.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING)) : `missing ${sels[i]}`)), sels);
@@ -29,11 +29,11 @@ const inOrder = (page: Page, sels: string[]) => page.evaluate((sels) => sels.map
 test('r106b 1: the sections in the grower\'s order, and the section row in their words @phone', async ({ page }) => {
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
-  const order = await inOrder(page, ['section.hline', 'nav.tabs', '#s-summary', 'section#at-home', '#s-cultivation', 'section#hardiness', '#s-climate', 'figure.climo', '#year-lines', '#climate-class-fold', '#s-habitat', 'section#flowering', '#s-photos', '#s-related', '#s-registers', '#s-facts']);
+  const order = await inOrder(page, ['#s-summary', 'section.hline', 'nav.tabs', 'section#at-home', '#s-cultivation', 'section#hardiness', '#s-climate', 'figure.climo', '#year-lines', '#climate-class-fold', '#s-habitat', 'section#flowering', '#s-photos', '#s-related', '#s-registers', '#s-facts']);
   expect(order.every((x) => x === true), JSON.stringify(order)).toBe(true);
   await expect(page.locator('#s-summary')).toHaveText('What it is');
   await expect(page.locator('#s-habitat')).toHaveText('Where it grows wild');
-  await expect(page.locator('nav.tabs a')).toHaveText(['What it is', 'At home', 'Hardiness', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
+  await expect(page.locator('nav.tabs a')).toHaveText(['What it is', 'At home', 'How cold', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
   // The glance cards and the year strip are gone; the four figures are "Habitat in short"'s, and "Figures" goes to the chart.
   await expect(page.locator('#s-glance, .glance, .gseason')).toHaveCount(0);
   await expect(page.locator('section.hline a.figs')).toHaveAttribute('href', '#s-climate');

@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * The one-tap way to switch the reference's photographs on for your own pages, with the disclosure in the same
-   * breath: showing them fetches each picture from the image host, which then sees which species this address grows.
+   * breath: showing them fetches each picture from this site's copies (img.cultifolio.com, since round 111), which so sees
+   * which species' photographs this address shows; no outside host is asked.
    * Shown only where a photograph is being withheld; the preference is the same one Settings holds, and pages that
    * read it update at once. Off again in Settings.
    *
@@ -13,7 +14,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   let { compact = false, center = false, link = false, hold = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; link?: boolean; hold?: boolean; what?: string; buckets?: boolean } = $props();
   // "hash groups", not "hash buckets": the glossary's plain words (round fifty-eight; the accessibility review).
-  const why = $derived(`They come straight from the image host (iNaturalist, Wikimedia Commons or the GBIF image cache), which then sees which species you grow. ${buckets ? 'This site is asked for the hash groups your species fall in, a few hundred species each, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}`);
+  const why = $derived(`They come from this site's own copies of the photographs (img.cultifolio.com), which so sees which species' photographs you are shown; a Wikimedia Commons photograph not yet copied comes from Commons, which sees the same. ${buckets ? 'This site is also asked for the hash groups your species fall in, a few hundred species each, as the plant pages ask; nothing more.' : 'Nothing else is sent.'}`);
   function on() {
     prefs.set({ referencePhotos: true });
     toast.show('Reference photographs on. Off again in Settings.');

@@ -12,7 +12,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ state: 'attached', timeout: 60_000 }); }
 test.use({ serviceWorkers: 'block' });
 test.beforeEach(async ({ context }) => {
-  await context.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => r.abort());
+  await context.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => r.abort());
 });
 
 const LIGHT_INK = 'rgb(27, 29, 28)'; // --ink of the light theme (#1b1d1c since round eighty-seven, DESIGN-87; #16211d before)

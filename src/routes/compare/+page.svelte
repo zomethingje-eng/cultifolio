@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import { AS_CULTIGEN, cultigenOf } from '$core/cultigen';
   /**
@@ -208,7 +209,7 @@
       {#each cols as c (c.d.key)}
         <div class="cell" role="columnheader">
           <!-- A photograph that failed, or none on file, is said in the box with the name, as the tiles say it, never a blank slab (the merge, round eighty-five; review-w W11). -->
-          <div class="hero">{#if c.hero && shownImg[c.d.key] !== 'fail'}<img src={c.hero.thumb ?? c.hero.url} alt="{c.d.name.scientific}; photograph {shownAttribution(c.hero)}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{:else}<Placeholder name={c.d.name.scientific} family={c.d.name.family ?? ''} caption={c.hero ? 'photograph did not load' : 'no open photograph on file'} />{/if}</div>
+          <div class="hero">{#if c.hero && shownImg[c.d.key] !== 'fail'}<img src={imgUrl(c.hero.thumb ?? c.hero.url)} alt="{c.d.name.scientific}; photograph {shownAttribution(c.hero)}" loading="lazy" class:ready={shownImg[c.d.key] === 'ok'} use:loaded={String(c.d.key)} />{:else}<Placeholder name={c.d.name.scientific} family={c.d.name.family ?? ''} caption={c.hero ? 'photograph did not load' : 'no open photograph on file'} />{/if}</div>
           {#if c.hero && shownImg[c.d.key] !== 'fail'}<a class="cred" href={c.hero.page ?? c.hero.url} rel="noopener">{creditOf(c.hero)}</a>{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <!-- The first two regions and how many more, as the species page's line under the name says them (round eighty-two; the independent review's 20). -->

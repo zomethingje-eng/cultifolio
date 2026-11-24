@@ -13,7 +13,7 @@ test('the maps draw the regions by their shapes, from files kept a day @phone', 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
   await page.goto('/species/welwitschia-mirabilis'); await ready(page);
   // Round eighty-six (outside review B's 4): the maps take their files when they near the viewport.
   await page.locator('.maprow').scrollIntoViewIfNeeded();

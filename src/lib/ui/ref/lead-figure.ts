@@ -19,6 +19,7 @@
  * review of stage 1, M2).
  */
 import type { Dossier } from '$dossier/schema';
+import { imgUrl } from '$core/img';
 import { heroOf } from '$dossier/dedupe';
 import { showable } from '$lib/ui/ref/photos';
 import { photoAt } from '$dossier/photo-size';
@@ -84,7 +85,7 @@ export function leadOf(d: Pick<Dossier, 'slug' | 'name' | 'climate' | 'distribut
     place: c.place ?? null,
     from: { download, href: doi, day },
     power: c.src.extremes ?? null,
-    photo: { src: photoAt(hero.thumb, 'medium'), alt: `${d.name.scientific}${hero.place ? `, ${hero.place}` : ''}`, lic: cp.lic, who: cp.whoAlone, via: VIA[hero.src] ?? hero.src, read, href: hero.page ?? hero.url }
+    photo: { src: imgUrl(photoAt(hero.thumb, 'medium')), alt: `${d.name.scientific}${hero.place ? `, ${hero.place}` : ''}`, lic: cp.lic, who: cp.whoAlone, via: VIA[hero.src] ?? hero.src, read, href: hero.page ?? hero.url }
   };
 }
 

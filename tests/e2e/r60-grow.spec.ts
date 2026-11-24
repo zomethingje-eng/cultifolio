@@ -417,7 +417,11 @@ test('r60 12: the sample never touches the grower\'s own collection', async ({ p
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const iphone = { userAgent: IPHONE_UA, viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true };
 
-test('r60 13: on an iPhone in Safari, the Home Screen card comes before the first plant, in place of the install bar, and goes once there is a plant', async ({ browser }) => {
+// Round 116 (MYPLANTS 26, the owner's iPhone test and decision of 23 November 2026, docs/PLAN-IPHONE.md): the Home Screen
+// app keeps a collection of its own and a scanned label opens Safari, so neither the card before the first plant nor the
+// install bar asks an iPhone to add the Home Screen; the "keep your plants" sheet offers it after the first plant, with
+// that said (r116b). On round 115 the card and the bar asked it: this test FAILED there.
+test('r60 13: on an iPhone in Safari, no card and no install bar ask for the Home Screen; the sheet comes after the first plant', async ({ browser }) => {
   const ctx = await browser.newContext(iphone);
   await ctx.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, 'standalone', { get: () => false, configurable: true });
@@ -426,39 +430,15 @@ test('r60 13: on an iPhone in Safari, the Home Screen card comes before the firs
   const page = await ctx.newPage();
   await page.goto('/plants');
   await ready(page);
-  const card = page.locator('#ios-first');
-  await expect(card).toBeVisible();
-  await expect(card.locator('p').first()).toHaveText("On iPhone, add Cultifolio to your Home Screen before adding plants: Safari can clear a website's data after a week without a visit, and the Home Screen app keeps its own.");
+  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
+  await expect(page.locator('#ios-first')).toHaveCount(0);
   await expect(page.locator('.install')).toHaveCount(0);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await ready(page);
-  await expect(card).toBeVisible();
   await addPlant(page);
-  await page.goto('/plants');
-  await ready(page);
-  await expect(page.locator('.rows > *')).toHaveCount(1);
-  await expect(card).toHaveCount(0);
-  await expect(page.locator('.install')).toBeVisible(); // the install bar's own iPhone line, now that the card has stood down
-  await page.goto('/plants/new');
-  await ready(page);
-  await expect(page.locator('#f-loc')).toBeVisible();
-  // Not a fixed pause: the card is drawn from the opened collection (ready, and no plant yet), and the form's number
-  // preview is drawn from the same collection; once it reads the second number the collection is open with one plant,
-  // so the card's answer is settled (round sixty-one; docs/review-60/harness.md 18, review B).
-  await expect(page.locator('.accno').first()).toHaveText(`${year()}-0002`);
-  await expect(card).toHaveCount(0);
+  await expect(page.locator('dialog.keep')).toBeVisible();
+  await expect(page.locator('.install')).toHaveCount(0);
   await ctx.close();
-
-  // opened from the Home Screen: no card
-  const home = await browser.newContext(iphone);
-  await home.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true, configurable: true }); });
-  const hp = await home.newPage();
-  await hp.goto('/plants');
-  await ready(hp);
-  await expect(hp.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
-  await expect(hp.locator('#ios-first')).toHaveCount(0);
-  await expect(hp.locator('.install')).toHaveCount(0);
-  await home.close();
 });
 
 test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page, browserName }) => {

@@ -15,7 +15,8 @@
 import { mergedOf, olderNameOf, homonymOf } from '$lib/ui/ref/searched';
 import { sameName, cleanTyped } from '$lib/ui/picked-name';
 import { words as nameWords } from '$core/postings';
-import { speciesOf } from '$core/names';
+import { speciesOf, nameParts } from '$core/names';
+import { isSeasonKey, type SeasonKey } from '$core/season-key';
 import type { Searchable } from '$core/search';
 
 /** A row of the list. `key` is the GBIF key a pick files (below 1: none). */
@@ -44,10 +45,14 @@ export type PickerRow = {
   gname?: string;
   /** The name of this page's record under another author that the row was found by. */
   hom?: { name: string; text: string };
+  /** The page's rain season, as the browse rows say it (round 112; MYPLANTS 25). */
+  yr?: SeasonKey;
+  /** The row that opens GBIF's other names in place: how many (round 112). */
+  more?: number;
 };
 
 /** A hit of the reference's search as the check reads it. */
-export type Hit = Searchable & { gbif?: number; homBy?: string[][]; gname?: string };
+export type Hit = Searchable & { gbif?: number; homBy?: string[][]; gname?: string; yr?: unknown };
 
 /**
  * Whether the words typed take the hit by one of its common names (its headline, its other English names or their
@@ -68,7 +73,7 @@ export function localRow(text: string, hit: Hit, similar: boolean): PickerRow {
   const typedGenus = (nameWords(text)[0] ?? '').slice(0, 4);
   const far = !!typedGenus && !hit.name.toLowerCase().startsWith(typedGenus) && !byCommonName(text, hit);
   const gname = older && hit.gname && sameName(older, hit.gname) ? older : null;
-  return { key: hit.gbif ?? -1, name: hit.name, family: hit.family, local: true, similar, far, ...(merged ? { merged } : {}), ...(older ? { older } : {}), ...(gname ? { gname } : {}), ...(hom ? { hom } : {}) };
+  return { key: hit.gbif ?? -1, name: hit.name, family: hit.family, local: true, similar, far, ...(merged ? { merged } : {}), ...(older ? { older } : {}), ...(gname ? { gname } : {}), ...(hom ? { hom } : {}), ...(isSeasonKey(hit.yr) ? { yr: hit.yr } : {}) };
 }
 
 /**
@@ -123,4 +128,71 @@ export function genusReading(relaxed: string | undefined, typed: string): boolea
   const words = (s: string) => cleanTyped(s).trim().toLowerCase().split(/\s+/);
   const r = words(relaxed), t = words(typed);
   return r.length === t.length && r.length >= 1 && r[0] !== t[0] && r.slice(1).join(' ') === t.slice(1).join(' ');
+}
+
+/**
+ * The list's groups (round 112; MYPLANTS 25: the list moved under the finger as its two sources answered, and a fossil
+ * genus of GBIF's could be its first row). In fixed places, whichever source answers first:
+ *
+ * - `pages`, the reference's species pages, first, at most six: the exact rows, then those by a similar spelling (left out
+ *   when the genus with a cultivar is offered for a genus followed by capitalised words, `dropSimilar`, as round sixty-two
+ *   never put a similar spelling first for that shape);
+ * - `others`, at most two names with no species page: the genus with the rest kept as a cultivar, and GBIF's name spelt
+ *   exactly as typed (`typed`, the name the service was asked), never one a page of the list already holds;
+ * - `more`, GBIF's other names, shown only when asked for, behind one row. A row of GBIF's whose key a page holds is
+ *   the page's, and not listed again.
+ */
+export function pickerGroups<T extends PickerRow>(o: { local: readonly T[]; remote: readonly T[]; genus: readonly T[]; typed: string; dropSimilar: boolean }): { pages: T[]; others: T[]; more: T[] } {
+  const exact = o.local.filter((l) => !l.similar);
+  const pages = [...exact, ...(o.dropSimilar ? [] : o.local.filter((l) => l.similar))].slice(0, 6);
+  const held = new Set(pages.filter((p) => p.key > 0).map((p) => p.key));
+  const remote = o.remote.filter((x) => !(x.key > 0 && held.has(x.key)));
+  const exactRemote = remote.filter((x) => sameName(x.name, o.typed) && !pages.some((p) => sameName(p.name, x.name)));
+  const others: T[] = [];
+  for (const x of [...o.genus, ...exactRemote]) if (others.length < 2 && !others.some((y) => sameName(y.name, x.name) && y.rank === x.rank)) others.push(x);
+  const more = remote.filter((x) => !others.includes(x));
+  return { pages, others, more };
+}
+
+const foldChar = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/**
+ * A name in its parts (`nameParts`: the Latin italic, a rank word roman), each split where the text typed ends, so the
+ * part not typed can be set apart (round 112; MYPLANTS 25, Baymard's advice: emphasise what the suggestion adds). The
+ * words typed are read against the name's words in order, each the start of one; a hybrid sign in the name is passed
+ * over. When they are not the name's start (a common name, "jade plant", or a similar spelling), nothing is set apart.
+ */
+export function emphasised(name: string, typed: string): Array<{ text: string; italic: boolean; em: boolean }> {
+  const parts = nameParts(name);
+  const full = parts.map((p) => p.text).join('');
+  const tw = cleanTyped(typed).trim().split(/\s+/).filter(Boolean).map(foldChar);
+  const mask = new Array<boolean>(full.length).fill(false);
+  let ok = tw.length > 0;
+  if (ok) {
+    const words: Array<{ at: number; w: string }> = [];
+    full.replace(/\S+/g, (w, at: number) => { words.push({ at, w }); return w; });
+    let k = 0;
+    for (const { at, w } of words) {
+      if (k >= tw.length) break;
+      const fw = foldChar(w);
+      if (fw.startsWith(tw[k])) { for (let c = 0; c < tw[k].length; c++) mask[at + c] = true; k++; continue; }
+      if (w === '×' || fw === 'x') { for (let c = 0; c < w.length; c++) mask[at + c] = true; continue; }
+      ok = false;
+      break;
+    }
+    if (k < tw.length) ok = false;
+  }
+  const out: Array<{ text: string; italic: boolean; em: boolean }> = [];
+  let at = 0;
+  for (const p of parts) {
+    for (let c = 0; c < p.text.length; c++) {
+      const em = ok && !mask[at + c] && p.text[c] !== ' ';
+      const last = out[out.length - 1];
+      // A space joins the run before it, so a run is a word or the words between.
+      if (last && last.italic === p.italic && (last.em === em || p.text[c] === ' ')) last.text += p.text[c];
+      else out.push({ text: p.text[c], italic: p.italic, em });
+    }
+    at += p.text.length;
+  }
+  return out;
 }

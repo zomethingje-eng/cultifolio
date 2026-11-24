@@ -60,7 +60,8 @@ describe('r109b the photographs copied a batch at a time, resumably', () => {
     const copies = calls.filter((c) => c[1] === 'copy');
     expect(copies.length).toBe(Math.ceil(asked.length / 3));
     for (const c of copies) { expect(c).toContain(REMOTE); expect(c).toContain('--no-check-dest'); expect(c).toContain(`Cache-Control: ${CACHE_CONTROL}`); }
-    expect(readdirSync(join(root, 'bulk/img'))).toEqual(['done.txt']); // the batches deleted once up
+    // The batches deleted once up; round 111's record of the run beside the list.
+    expect(readdirSync(join(root, 'bulk/img'))).toEqual(['done.txt', 'last-run.json']);
     expect(r.line).toMatch(/ 0 left\.$/);
   });
   it('a 404 is gone, with the day, and not asked again; no answer is asked again by the next run, which asks only that', async () => {

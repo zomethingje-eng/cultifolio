@@ -17,7 +17,8 @@
   import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import { mergedSentence, gbifNameWords } from '$lib/ui/ref/searched';
-  import { localRow, olderLine, offeredReading, genusReading, type PickerRow } from '$lib/ui/picker-rows';
+  import { localRow, olderLine, offeredReading, genusReading, pickerGroups, type PickerRow } from '$lib/ui/picker-rows';
+  import { SEASON_HEAD } from '$core/season-key';
   import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick, rankedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
@@ -34,6 +35,17 @@
   // Round eighty-five: the rows and the older-name line are read by `$lib/ui/picker-rows`, tested over real index entries.
   type Sugg = PickerRow;
   let suggestions = $state<Sugg[]>([]);
+  /**
+   * The list in its groups, in fixed places (round 112; MYPLANTS 25, the owner's review of 23 November: the rows moved as
+   * the two sources answered, the species pages inserted above GBIF's names a second after they were shown): the species
+   * pages first, then at most two other names, then GBIF's other names behind one row. Each source fills its own group,
+   * and a group still asked shows "Looking…" in its place (`refState`, `namesState`: not asked, asked, answered).
+   */
+  let groups = $state<{ pages: Sugg[]; others: Sugg[]; more: Sugg[] }>({ pages: [], others: [], more: [] });
+  let refState = $state<'off' | 'looking' | 'done'>('off');
+  let namesState = $state<'off' | 'looking' | 'done'>('off');
+  /** GBIF's other names opened in place, for this text. */
+  let moreOpen = $state(false);
   let open = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** Bumped on every keystroke: a search or exact check answers only if it is still the latest, so a slow answer for text since changed never replaces the menu (round eighteen, B2). */
@@ -81,6 +93,10 @@
     reqGen++;
     clearTimeout(timer);
     suggestions = [];
+    groups = { pages: [], others: [], more: [] };
+    refState = 'off';
+    namesState = 'off';
+    moreOpen = false;
     open = false;
     hi = -1;
     resolved = 'unknown';
@@ -102,13 +118,41 @@
    * only the rows of that name (round eighty-five; review-p P5: with "Crassula ovata" typed, the list of six covered the
    * next three fields, and a tap meant for Acquired picked its fourth row). The rest come back with the next letter.
    */
+  // Round 112: the options in the groups' order, GBIF's other names behind one row until it is picked.
+  /** A row's identity across answers, for the highlight. */
+  const rowId = (r: Sugg) => `${r.more ? 'more' : r.local ? 'p' : 'g'}:${r.key}:${r.rank ?? ''}:${r.name}`;
+  const options = $derived<Sugg[]>([...groups.pages, ...groups.others, ...(moreOpen ? groups.more : groups.more.length ? [{ key: -2, name: '', more: groups.more.length }] : [])]);
   const rows = $derived.by(() => {
     const want = parseName(value).scientific;
-    const first = suggestions[0];
-    if (!first?.local || first.similar || !want || !sameName(first.name, want)) return suggestions;
-    return suggestions.filter((x) => sameName(x.name, want));
+    const first = options[0];
+    if (!first?.local || first.similar || !want || !sameName(first.name, want)) return options;
+    return options.filter((x) => !x.more && sameName(x.name, want));
   });
-  const menuOpen = $derived(open && rows.length > 0);
+  /** The list cut to the name typed (`rows`): its groups' "Looking…" is not shown then. */
+  const cut = $derived(rows.length !== options.length);
+  /**
+   * What the list draws, in order: each group's heading, its rows (`i`, the option's index), or one line in its place while
+   * its source is asked or when it answered none (rule 2: said, never an empty group).
+   */
+  type Item = { kind: 'head'; text: string; sub?: string } | { kind: 'note'; text: string } | { kind: 'row'; s: Sugg; i: number };
+  const items = $derived.by((): Item[] => {
+    const out: Item[] = [];
+    const pageRows = rows.filter((r) => r.local);
+    const otherRows = rows.filter((r) => !r.local);
+    let i = 0;
+    if (pageRows.length || (!cut && refState !== 'off')) {
+      out.push({ kind: 'head', text: 'Species pages' });
+      for (const s of pageRows) out.push({ kind: 'row', s, i: i++ });
+      if (!pageRows.length) out.push({ kind: 'note', text: refState === 'looking' ? 'Looking…' : refDown ? refWords(refDown) : 'No species page matches what is typed' });
+    }
+    if (otherRows.length || (!cut && namesState === 'looking')) {
+      out.push({ kind: 'head', text: 'Other names', sub: 'no species page, so no habitat figures' });
+      for (const s of otherRows) out.push({ kind: 'row', s, i: i++ });
+      if (!otherRows.length) out.push({ kind: 'note', text: 'Looking…' });
+    }
+    return out;
+  });
+  const menuOpen = $derived(open && (rows.length > 0 || (!cut && (refState === 'looking' || namesState === 'looking'))));
   const optionId = (i: number) => `${listId}-${i}`;
 
   type Row = { key: number; canonicalName?: string; scientificName?: string; family?: string; rank?: string; status?: string };
@@ -202,24 +246,33 @@
     // only for a genus of the reference).
     let refGenus = false;
     const show = () => {
-      // Exact reference rows first; then the backbone's exact species; then, for a genus followed by capitalised words with
-      // no exact row, the genus with the rest as a cultivar, when it is a genus; then similar spellings, never first for
-      // that shape (round sixty-two; A7); then the rest of the backbone's.
+      // In the groups' fixed places (round 112; `pickerGroups`): the reference's pages, exact then similar spellings; the
+      // genus with the rest as a cultivar, for a genus followed by capitalised words with no exact row, when it is a genus,
+      // and GBIF's name spelt as typed; then the rest of GBIF's, behind one row. A similar spelling is never first for that
+      // shape (round sixty-two; A7): with the reference's genus offered, the similar spellings are left out.
       const exact = local.filter((l) => !l.similar);
-      const exactRemote = shape ? remote.filter((x) => sameName(x.name, needle)) : [];
       let genus: Sugg[] = [];
       const g = shape ? genusRows.find((x) => x.name.toLowerCase() === shape.genus.toLowerCase()) : undefined;
       if (shape && !exact.length && (g || refGenus)) genus = [{ key: g?.key ?? -1, name: g?.name ?? shape.genus, family: g?.family, rank: 'GENUS', asCultivar: shape.rest }];
-      const listed = [...exact, ...exactRemote, ...genus, ...local.filter((l) => l.similar)];
-      suggestions = [...listed, ...remote.filter((x) => !listed.some((l) => l.key === x.key))];
+      // The highlight stays on its row, not its place (round 112): rows that arrive above it (the pages after GBIF's
+      // names) moved a highlighted "more" row down, and Enter then picked the species page now in its place.
+      const was = hi >= 0 && rows[hi] ? rowId(rows[hi]) : null;
+      groups = pickerGroups({ local, remote, genus, typed: needle, dropSimilar: !!shape && refGenus && !exact.length });
+      suggestions = [...groups.pages, ...groups.others, ...groups.more];
+      if (was != null) hi = rows.findIndex((r) => rowId(r) === was);
       if (hi >= rows.length) hi = -1;
       open = !quiet && focused();
     };
     hi = -1;
+    moreOpen = false;
     open = !quiet && focused();
     // A cross or a cultivar of a bare genus is not looked for among the species; anything else is, a common name too.
-    const indexP = ((genusOnly && (p.kind === 'hybrid' || speciesNotStated(p))) || text.length < 2 ? Promise.resolve([] as Found[]) : searchCatalogue(text, 6)).then((answer) => {
+    const refAsked = !((genusOnly && (p.kind === 'hybrid' || speciesNotStated(p))) || text.length < 2);
+    refState = refAsked ? 'looking' : 'off';
+    namesState = needle.length < 3 ? 'off' : 'looking';
+    const indexP = (!refAsked ? Promise.resolve([] as Found[]) : searchCatalogue(text, 6)).then((answer) => {
       if (!live()) return;
+      if (refAsked) refState = 'done';
       // Said, never silence: the reference's search did not answer, or this site asked this device to wait (rule 2).
       refDown = answer === null ? 'unreached' : !Array.isArray(answer) ? (answer.kind ?? 'limited') : null;
       // Too many of the reference's species match every word to list them (round seventy-seven): said, not "none".
@@ -271,6 +324,7 @@
       .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
     const namesP = needle.length < 3 ? Promise.resolve() : namesFor(needle).then(async (rows) => {
       if (!live()) return;
+      namesState = 'done';
       nameServiceDown = false;
       nameRefusal = null;
       gbifRefused = false;
@@ -287,7 +341,7 @@
       }
     }, (e: unknown) => {
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
-      if (live()) { nameServiceDown = true; nameRefusal = e instanceof Refused ? e.message : null; gbifRefused = e instanceof GbifRefused; } // offline: local suggestions only, and said
+      if (live()) { namesState = 'done'; nameServiceDown = true; nameRefusal = e instanceof Refused ? e.message : null; gbifRefused = e instanceof GbifRefused; } // offline: local suggestions only, and said
     });
     return { ref: indexP, names: namesP };
   }
@@ -314,6 +368,9 @@
     timer = setTimeout(() => void search(value), 180);
   }
   function pick(s: Sugg) {
+    // The row that opens GBIF's other names: opened in place, below every row already shown; the highlight stays on the
+    // place, now the first of them (round 112).
+    if (s.more) { moreOpen = true; return; }
     // Keep the cross as typed; only the matched part changes, and a species keeps the rank and epithet typed after it (`pickedName`).
     // A key only when the name filed is the picked taxon's own (round sixty-two; B3, A7): a kept qualifier, an unmatched
     // variety or a variety reached through a synonym is filed with no key, and said.
@@ -481,8 +538,6 @@
     if (s.key > 0 && suggestions.some((x) => x.local && x.key <= 0 && sameName(x.name, s.name))) return said(` · GBIF's name service, key ${s.key}; the species page of this name holds no GBIF key${keyed ? '' : '; no key filed'}`);
     return said(keyed ? '' : ' · no key filed');
   }
-  /** The heading over a run of rows from one source: the reference's pages, or GBIF's names (outside review A16g). */
-  const sourceOf = (s: Sugg) => (s.local ? 'page' : 'gbif');
   // The two services' silences, each in its own words: a refusal as "not asked", a failure as "did not answer" (rule 2).
   const namesSaid = $derived(nameServiceDown ? (gbifRefused ? "GBIF refused this site's request for names. " : nameRefusal ? `The name service was not asked: ${nameRefusal}. ` : 'The name service did not answer. ') : '');
   /** Why the reference's own search gave no rows, as a clause with no full stop. */
@@ -621,7 +676,7 @@
   }
   $effect(() => {
     if (!menuOpen) { room = null; return; }
-    void rows.length;
+    void items.length;
     measureRoom();
     let frame = 0;
     const soon = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measureRoom(); }); };
@@ -714,14 +769,23 @@
     onfocus={() => { if (value) open = true; }}
     onblur={onBlur}
   />
-  <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen} bind:this={menuEl} style:max-height={room != null ? `${room}px` : undefined}>
-    {#each rows as s, i (s.key > 0 ? s.key : `${s.local ? 'page' : 'row'}:${s.rank ?? ''}:${s.name}`)}
+  <ul class="menu" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen} bind:this={menuEl} style:max-height={room != null ? `${room}px` : undefined}>
+    {#each items as it, n (it.kind === 'row' ? (it.s.more ? 'more' : it.s.key > 0 ? `${it.s.local ? 'p' : 'g'}${it.s.key}` : `${it.s.local ? 'page' : 'row'}:${it.s.rank ?? ''}:${it.s.name}`) : `${it.kind}${n}`)}
+      {#if it.kind === 'head'}
+        <!-- Each group's heading, in its fixed place (round 112; round eighty-five, outside review A16g). Hidden from a screen
+             reader, which reads each row's own words, "has a species page" among them. -->
+        <li class="grp" role="presentation" aria-hidden="true" onmousedown={(e) => e.preventDefault()}>{it.text}{#if it.sub}<span class="grpsub"> · {it.sub}</span>{/if}</li>
+      {:else if it.kind === 'note'}
+        <li class="wait" role="presentation" onmousedown={(e) => e.preventDefault()}>{it.text}</li>
+      {:else if it.s.more}
+        <li role="option" class="more" id={optionId(it.i)} aria-selected={it.i === hi} class:hi={it.i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(it.s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(it.s); } }} onmousemove={() => (hi = it.i)}>{it.s.more} more name{it.s.more === 1 ? '' : 's'} in GBIF ›</li>
+      {:else}
+      {@const s = it.s}
+      {@const i = it.i}
       {@const note = rowNote(s)}
-      <!-- A heading where the rows' source changes, so a row need not say it (round eighty-five; outside review A16g). Hidden
-           from a screen reader, which reads each row's own words, "has a species page" among them. -->
-      {#if i === 0 || sourceOf(rows[i - 1]) !== sourceOf(s)}<li class="grp" role="presentation" aria-hidden="true" onmousedown={(e) => e.preventDefault()}>{s.local ? 'Species pages' : "GBIF's names"}</li>{/if}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : /\s(?:(?:notho)?(?:var|subsp)|f|nothof)\.\s/.test(s.name) ? '' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{#if note.sr}<span class="sr">{note.sr}</span>{/if}{note.shown}</span></li>
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} typed={value} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : /\s(?:(?:notho)?(?:var|subsp)|f|nothof)\.\s/.test(s.name) ? '' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{#if s.local && s.yr && s.yr !== 'none'}{' · '}{SEASON_HEAD[s.yr].charAt(0).toLowerCase() + SEASON_HEAD[s.yr].slice(1)}{/if}{#if note.sr}<span class="sr">{note.sr}</span>{/if}{note.shown}</span></li>
+      {/if}
     {/each}
   </ul>
   </div>
@@ -767,11 +831,18 @@
   .hint { display: inline; margin: 0; font-size: var(--fs-md); color: var(--ink2); }
   .hint.svc { color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
-  .menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; list-style: none; margin: 0.3rem 0 0; padding: 0.3rem; box-shadow: var(--sh2); max-height: 18rem; overflow: auto; }
+  /* Solid, over the fields beneath it (round 112; MYPLANTS 25): the list was "menu card", and the look's "No cards" rule
+     (theme.css) makes every .card transparent with no shadow, so its rows printed over the Space and Acquired fields. Its
+     own background, border and shadow now, in both themes. */
+  .menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; list-style: none; margin: 0.3rem 0 0; padding: 0.3rem; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); max-height: 18rem; overflow: auto; }
   .menu[hidden] { display: none; }
-  .menu li { display: block; width: 100%; text-align: left; padding: 0.45em 0.6em; border-radius: var(--r-sm); cursor: pointer; }
+  /* A row at least 48 px tall, a finger's target (round 112). */
+  .menu li { display: block; width: 100%; box-sizing: border-box; min-height: 48px; text-align: left; padding: 0.7em 0.6em; border-radius: var(--r-sm); cursor: pointer; }
   .menu li:hover, .menu li.hi { background: var(--sunk); }
-  /* The source's heading: small, and never a target. */
-  .menu li.grp { padding: 0.35em 0.6em 0.1em; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); cursor: default; }
-  .menu li.grp:hover { background: none; }
+  /* The group's heading and its waiting line: small, and never a target. */
+  .menu li.grp { min-height: 0; padding: 0.45em 0.6em 0.1em; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink3); cursor: default; }
+  .menu li.grp .grpsub { text-transform: none; letter-spacing: 0; }
+  .menu li.wait { color: var(--ink3); cursor: default; }
+  .menu li.grp:hover, .menu li.wait:hover { background: none; }
+  .menu li.more { color: var(--accent); }
 </style>

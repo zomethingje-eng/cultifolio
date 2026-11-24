@@ -17,7 +17,7 @@ import { controlledBy } from './helpers/controlled';
 
 /** The fixture's photographs are made-up addresses on the real hosts: answered here with a pixel, so the console holds the page's own faults only. */
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-const pixels = (p: Page) => p.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+const pixels = (p: Page) => p.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
 const DOT = /<path d="M-?[\d.]+ ?-?[\d.]+h0"/g;
 /** A record on the map, as this round draws it or as the rounds before did (a circle each), for the tests that guard what did not change. */
 const RECORD = /<path d="M-?[\d.]+ ?-?[\d.]+h0"|<circle class="occ"/g;

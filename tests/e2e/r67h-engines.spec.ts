@@ -96,7 +96,7 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
     test.skip(!['linux', 'win32', 'darwin'].includes(process.platform), `the fallback faces are tuned for Linux's, Windows' and Apple's fonts, not ${process.platform}'s`);
     const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, locale: 'en-GB', serviceWorkers: 'block' });
     await ctx.addInitScript(quiet);
-    await ctx.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+    await ctx.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
     await ctx.route(/\.woff2(\?|$)/, async (r) => { await new Promise((x) => setTimeout(x, 1500)); await r.continue(); });
     // What a reader's eye is on as the page settles: the page's title, the first heading and paragraph of the content,
     // and the tab bar.

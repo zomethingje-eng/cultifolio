@@ -115,7 +115,7 @@ test('r80u layout 10: a "You grow" tile\'s number does not cover its placeholder
 });
 
 test('r80u layout 11: a related tile whose photograph failed says so in its square, not a blank white tile @phone', async ({ page }) => {
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
   // The fixture's related species have no photograph: the page's data gives them one, from a host that does not answer.
   await page.route(/\/species\/copiapoa-cinerea\/__data\.json/, async (route) => {
     const res = await route.fetch();

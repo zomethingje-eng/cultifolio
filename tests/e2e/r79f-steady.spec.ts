@@ -27,7 +27,7 @@ const top = async (page: Page, sel: string) => (await page.locator(sel).first().
 for (const size of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'phone', width: 390, height: 844 }]) {
   test(`r79f steady 1, ${size.name}: with the reference's photographs on, the verb bar does not move when the species' photograph arrives`, async ({ page }) => {
     await page.addInitScript(() => { try { localStorage.setItem('cultifolio.prefs', JSON.stringify({ referencePhotos: true })); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } });
-    await page.route(/inaturalist-open-data\.s3\.amazonaws\.com\//, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
+    await page.route(/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com)\//, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
     await page.setViewportSize({ width: size.width, height: size.height });
     await page.goto('/plants/new?species=Copiapoa%20cinerea'); await ready(page);
     await addPlant(page);

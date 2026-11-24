@@ -163,8 +163,10 @@ test('r76p strip 1: on a 390 px phone the strip is above the search, drawn once,
 // Round 108: its "Changed lately" lines wrap a line fewer at 1024 (21 px higher: 1049, 1240, 1254, 1396), none at 1280;
 // measured in Chromium, WebKit and Firefox on 22 November 2026, every engine within 2 px. On 191e13e's base: FAILED at 1024.
 const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; searchTop: number; rowTop: number; tile: [number, number] }> = {
-  '1280': { stripTop: 1047, stripBottom: 1251, searchTop: 1265, rowTop: 1406, tile: [172, 193] },
-  '1024': { stripTop: 1049, stripBottom: 1240, searchTop: 1254, rowTop: 1396, tile: [155, 182] }
+  // Rounds 111 to 114: "Changed lately" holds their lines, which wrap more than round 108's: 44 px lower at 1280
+  // (1091, 1294, 1308, 1449) and, with rounds 115 and 116's, 86 at 1024 (1135, 1327, 1341, 1482).
+  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
+  '1024': { stripTop: 1135, stripBottom: 1327, searchTop: 1341, rowTop: 1482, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put
@@ -235,6 +237,9 @@ const fit = (page: Page, tiles: string, cred: string) => page.evaluate(async ([t
 }, [tiles, cred] as const);
 
 test('r76p strip 3: a credit long enough to wrap is whole inside its card at 320 and 390 px and on a desktop, at 100% and 200% text, and the row stays even', { tag: '@phone' }, async ({ browser, baseURL }) => {
+  // Five layouts of one page (three widths, two text sizes): it ran 30.0 s, the default limit, in Firefox under the
+  // gate's three engines at once (rounds 111 to 116's second run).
+  test.setTimeout(60_000);
   for (const [w, h, text] of [[320, 568, 100], [390, 664, 100], [1280, 800, 100], [390, 664, 200], [1280, 800, 200]] as const) {
     const ctx = await context(browser, baseURL, w, h, text);
     const page = await ctx.newPage();

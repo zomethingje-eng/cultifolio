@@ -91,7 +91,7 @@ test('r67p P6: the menu says the current page and its items take a thumb; Today\
 
 test('r67p P7: a species page whose photographs fail keeps the strip\'s squares, moves nothing, and lays no credit over the failed photograph (R45-8)', async ({ page }) => {
   // Every photograph host fails, a second late, as a blocked or flaky network does.
-  await page.route(/inaturalist|wikimedia\.org|api\.gbif\.org\/v1\/image/, async (r) => { await new Promise((f) => setTimeout(f, 1000)); await r.abort(); });
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia\.org|api\.gbif\.org\/v1\/image/, async (r) => { await new Promise((f) => setTimeout(f, 1000)); await r.abort(); });
   await page.setViewportSize({ width: 390, height: 664 });
   // How many photographs the server put in the strip: a failure can land before the page is ready.
   const html = await (await page.request.get('/species/copiapoa-cinerea')).text();

@@ -21,5 +21,6 @@ expect let I /index: ([\d,]+) species/
 expect B - T = 0
 expect BU <= 300
 expect I >= 48375
+img --asked-once --served-only --hours 3
 upload
 live-check

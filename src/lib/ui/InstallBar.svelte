@@ -2,18 +2,18 @@
   /**
    * "Add to your home screen", once, on the second day the app is opened, never inside an installed app. A visit is a
    * day, not a page load, so two loads in one sitting do not make a "second visit". Chrome and Edge hand us
-   * their own prompt (beforeinstallprompt); Safari on iPhone has no such event, so the bar says which two taps do it.
+   * their own prompt (beforeinstallprompt), and the app they install shares the browser's storage. Not on an iPhone or iPad
+   * since round 116 (MYPLANTS 26, docs/PLAN-IPHONE.md): there the Home Screen app keeps a collection of its own and a
+   * scanned label opens Safari, so the Home Screen is offered only in the "keep your plants" sheet, with that said.
    * Dismissed is remembered for thirty days in this browser. Nothing here is sent anywhere.
    */
   import { onMount } from 'svelte';
   import { localDate } from '$core/dates';
-  import IosFirst from './grow/IosFirst.svelte'; // round sixty, agent F: the Home Screen before the first plant
   import { isIos } from './grow/ios';
   type BIP = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
   let deferred = $state<BIP | null>(null);
   let show = $state(false);
   let ios = $state(false);
-  let iosFirst = $state(false); // round sixty, agent F: the Home Screen card says it first; this bar waits
   const VISITS = 'cultifolio.visits', LAST = 'cultifolio.lastVisit', SNOOZE = 'cultifolio.installSnoozedUntil';
   onMount(() => {
     const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -33,7 +33,7 @@
     }
     if (visits < 2 || Date.now() < snoozed) return;
     ios = isIos() && !/crios|fxios|edgios/i.test(navigator.userAgent); // by features, an iPad asking for the desktop site included (round sixty)
-    if (ios) show = true;
+    if (ios) return; // round 116: not on an iPhone or iPad
     const onBip = (e: Event) => {
       e.preventDefault();
       deferred = e as BIP;
@@ -60,8 +60,7 @@
   }
 </script>
 
-<IosFirst bind:shown={iosFirst} />
-{#if show && !iosFirst}
+{#if show}
   <div class="install" role="region" aria-label="Add to your home screen">
     <img src="/icon-192.png" alt="" width="36" height="36" />
     <div class="tx">

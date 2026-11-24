@@ -64,7 +64,7 @@ test.describe('the reference photograph', () => {
 test.use({ serviceWorkers: 'block' });
 test('r80u plant 2b: with the reference\'s photographs on, the species\' photograph fills the hero\'s box on a phone too @phone', async ({ page }) => {
   await page.addInitScript(() => { try { localStorage.setItem('cultifolio.prefs', JSON.stringify({ referencePhotos: true })); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } });
-  await page.route(/inaturalist-open-data\.s3\.amazonaws\.com\//, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
+  await page.route(/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com)\//, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }));
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await addPlant(page);
   await expect(page.locator('.hero img.spthumb')).toBeVisible();

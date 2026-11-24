@@ -29,7 +29,8 @@ describe('r110b 1: the mark and the rule', () => {
     const text = readFileSync('scripts/corpus-plan-daily.txt', 'utf8');
     const plan = parsePlan(text);
     expect(eachDay(text)).toBe(true);
-    expect(plan.map((s) => s.kind)).toEqual(['dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'review', 'upload', 'live-check']);
+    // Round 111: the day's photographs copied after the review and before the upload.
+    expect(plan.map((s) => s.kind)).toEqual(['dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'dossier', 'review', 'img', 'upload', 'live-check']);
     expect(plan[6].expects?.length).toBeGreaterThanOrEqual(7);
   });
   it('each-day marks the plan and is not a step', () => {
@@ -56,6 +57,10 @@ describe('r110b 2: the runner', () => {
     mkdirSync(join(root, 'scripts'));
     writeFileSync(join(root, 'static/s/v3/manifest.json'), JSON.stringify({ v: 3, id: 'aaaa1111', files: {} }));
     writeFileSync(join(root, 'static/s/v3/index.json'), JSON.stringify([{ key: 'g1' }]));
+    // Round 111: the upload's guard reads the photograph copy's last run; these runs test the fills, so it is recorded as
+    // having asked for every copy of an index written after this one.
+    mkdirSync(join(root, 'bulk/img'), { recursive: true });
+    writeFileSync(join(root, 'bulk/img/last-run.json'), JSON.stringify({ at: '2026-11-24T00:00:00Z', code: 0, left: 0, indexMtimeMs: Date.now() + 365 * 86400_000 }));
     writeFileSync(join(root, 'scripts/corpus-plan.txt'), plan);
   };
   const runOn = async (day: string, answers: Record<string, { out: string; code: number }>) => {

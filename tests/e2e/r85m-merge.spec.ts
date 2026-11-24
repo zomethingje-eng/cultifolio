@@ -42,7 +42,7 @@ test('r85m 2: two plants of one species are counted in words on the front page (
 });
 
 test('r85m 3: compare says a photograph that did not load, in its box (W11) @phone', async ({ page }) => {
-  await page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
+  await page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org|api\.gbif\.org)\//, (r) => r.abort());
   await page.goto('/compare?s=copiapoa-cinerea,welwitschia-mirabilis'); await ready(page);
   await expect(page.locator('.head .hero', { hasText: 'photograph did not load' }).first()).toBeVisible(); // r85base: an empty box
 });

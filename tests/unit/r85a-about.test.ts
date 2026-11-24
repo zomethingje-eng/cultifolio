@@ -148,7 +148,11 @@ describe('2. summaries first, the rules one tap away (S11, A22)', () => {
     // (44 words seen), since a species page's mark links to it and a rule folded inside another would hide it.
     // Round 110: 6,565: the list's summary says it grows each day by the next species with one or two records (ten words
     // seen), since a page added from the queue is otherwise not explained where the list is.
-    expect(visibleWords(src)).toBeLessThan(6565);
+    // Rounds 111 to 113: 6,700: where the photographs come from now (the copies, how they are made, the host the browser
+    // asks), the picker's groups, and the yearly lows' chart, each a sentence the reader needs to see without a tap.
+    // Round 111's second look: 6,800: which photographs still come from Wikimedia Commons, and why, where the privacy
+    // lines are read.
+    expect(visibleWords(src)).toBeLessThan(6800);
   });
   it('/about/formats: each section is its summary, the format in full one tap away', () => {
     const src = raw(FILE.formats);

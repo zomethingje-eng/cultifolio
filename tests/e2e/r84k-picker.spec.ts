@@ -92,8 +92,9 @@ test('r84k 2: Add pressed while the reference\'s search is out waits for it, and
   await ready(page);
   const input = page.locator('#species-name');
   await input.fill('Copiapoa humilis');
-  // The list from the name service, the search still out.
-  await expect(page.locator('.picker [role=option]', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  // The list from the name service, the search still out: since round 112 a GBIF name not spelt as typed waits behind
+  // the "more" row.
+  await expect(page.locator('.picker [role=option]', { hasText: /more name/ })).toBeVisible();
   await expect.poll(() => searchAsked).toBe(true);
   const add = page.locator('form button[type=submit].add');
   if (test.info().project.name.startsWith('phone')) await add.tap(); else await add.click();

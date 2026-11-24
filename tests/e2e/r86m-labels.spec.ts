@@ -13,7 +13,7 @@ import { ready } from './helpers/smoke';
 test.use({ serviceWorkers: 'block' });
 
 test('r86m labels: a close-up drawn after a move inside the app names its region, from the table it loads @phone', async ({ page }) => {
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => r.abort());
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => r.abort());
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto('/about/how'); await ready(page);

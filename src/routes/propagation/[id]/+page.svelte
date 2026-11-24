@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { imgUrl } from '$core/img';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import Parked from '$lib/ui/Parked.svelte';
   import { restoredWords } from '$lib/ui/held-words';
@@ -387,7 +388,7 @@
   {#if waiting}<WaitingRecord kind="sowing" label={param} {waiting} />{:else}<p class="muted">No batch with this number on this device.</p>{/if}
 {:else}
   <div class="hero">
-    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph{idx.credit ? ` (${idx.credit})` : ''}</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="a reference photograph" /><!-- one line, the host's disclosure behind it; the full choice is in Settings (round sixty; the grower review, §3) -->{/if}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={imgUrl(idx.thumb)} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph{idx.credit ? ` (${idx.credit})` : ''}</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="a reference photograph" /><!-- one line, the host's disclosure behind it; the full choice is in Settings (round sixty; the grower review, §3) -->{/if}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">

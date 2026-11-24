@@ -17,7 +17,7 @@ const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst',
 test.use({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 test.beforeEach(async ({ context }) => {
   await context.addInitScript(quiet);
-  await context.route(/inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => r.abort());
+  await context.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|gbif\.org\/.*\.(jpe?g|png)|api\.gbif\.org\/v1\/image/, (r) => r.abort());
 });
 
 async function threePlants(page: Page) {

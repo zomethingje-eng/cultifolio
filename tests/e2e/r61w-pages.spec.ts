@@ -37,7 +37,7 @@ test.describe('phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'en-GB' });
 
   test("a species page's photograph shows its credit (author and licence) on a phone, not under the name card (visitor 2)", async ({ page }) => {
-    await page.route(/inaturalist|wikimedia|api\.gbif\.org/, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: png(400, 300) }));
+    await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|api\.gbif\.org/, (r) => r.fulfill({ status: 200, contentType: 'image/png', body: png(400, 300) }));
     await page.goto('/species/copiapoa-cinerea');
     await ready(page);
     const cred = page.locator('.hero .cred');
@@ -136,12 +136,13 @@ test.describe('desktop', () => {
     // Round 106: the glance cards are gone. "Habitat in short" names its four figures; the chart's description names the
     // warmest months, every tied one; the Climate section's "How" gives the record low.
     const g = page.locator('section.hline');
-    await expect(g.locator('dt').first()).toHaveText('Cold floor');
-    await expect(g.locator('dd').first()).toContainText('1 night in 100 colder');
+    // Round 114: the six answers, Cold first.
+    await expect(g.locator('dt').first()).toHaveText('Cold');
+    await expect(g.locator('dd').first()).toContainText('1 night in 100 is colder');
     await expect(page.locator('.climo desc').first()).toContainText('Warmest months January and February, mean daily high'); // round sixty-two (visitor-words 3)
     await expect(page.locator('#s-climate ~ details.why .whybody').first()).toContainText('absolute minimum 4.0 °C');
     await expect(g.locator('dd', { hasText: 'monthly medians added' })).toHaveCount(1);
-    await expect(g.locator('dt', { hasText: /^Open-sky light$/ })).toHaveCount(1);
+    await expect(g.locator('dt', { hasText: /^Light$/ })).toHaveCount(1);
     await expect(g).not.toContainText('in the wild');
     await page.goto('/compare?s=copiapoa-cinerea,copiapoa-humilis');
     await ready(page);

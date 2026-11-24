@@ -23,8 +23,10 @@ describe('svelte.config.js (round sixty)', () => {
     // and the worker filters its own list the same way, whatever the config passes
     expect(readFileSync('src/service-worker.ts', 'utf8')).toMatch(/const FILES = new Set\(files\.filter\(\(f\) => !dotFile\(f\)\)\)/);
   });
-  it('images only from this site, data: and blob: URLs, and the four photograph hosts', () => {
-    expect(kit.csp.directives['img-src']).toEqual(['self', 'data:', 'blob:', 'https://inaturalist-open-data.s3.amazonaws.com', 'https://static.inaturalist.org', 'https://upload.wikimedia.org', 'https://api.gbif.org']);
+  // Round 111: the four photograph hosts gave way to the site's own copies.
+  it('images only from this site, data: and blob: URLs, and the photographs\' copies', () => {
+    // Commons' host until its copy is complete (`SERVED`, src/lib/core/img.ts).
+    expect(kit.csp.directives['img-src']).toEqual(['self', 'data:', 'blob:', 'https://img.cultifolio.com', 'https://upload.wikimedia.org']);
   });
 });
 

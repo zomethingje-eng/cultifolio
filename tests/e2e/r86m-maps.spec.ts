@@ -42,7 +42,7 @@ const mapFiles = (page: Page) => {
 /** A 4 × 3 red PNG: every photograph answered with it, so a photograph printed is counted by its red. */
 const RED = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==', 'base64');
 async function redPhotos(page: Page) {
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: RED }) : r.continue()));
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: RED }) : r.continue()));
 }
 /** The maps' land (theme.css `--map-land`, #e7e2d4, the light theme a print takes) and the photographs' red, counted in RGB pixels. */
 function counted(px: Uint8Array | Uint8ClampedArray, step: 3 | 4) {
@@ -108,7 +108,7 @@ test.describe('maps near the viewport', () => {
     let release!: () => void;
     const held = new Promise<void>((ok) => (release = ok));
     const small: string[] = [];
-    await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, async (r) => {
+    await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, async (r) => {
       if (r.request().resourceType() !== 'image') return r.continue();
       if (/\/(medium|large)\.\w+$/.test(r.request().url())) await held; // the lead (and the gallery's tiles, which wait for it)
       else small.push(r.request().url());
@@ -146,7 +146,7 @@ test.describe('maps near the viewport', () => {
   });
 
   test('r86m 1b: scrolled near, a map is drawn while the lead photograph is still on its way @phone-only', async ({ page }) => {
-    await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, async (r) => {
+    await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, async (r) => {
       if (r.request().resourceType() !== 'image') return r.continue();
       if (/\/(medium|large)\.\w+$/.test(r.request().url())) return; // never answered
       await r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL });

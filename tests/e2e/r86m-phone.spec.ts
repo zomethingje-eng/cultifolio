@@ -41,7 +41,7 @@ async function rewrite(page: Page, path: RegExp, change: (d: Record<string, unkn
 type Dossier = { name: Record<string, unknown>; climate: Record<string, unknown>; upstream: Record<string, Record<string, unknown>> };
 /** A 4 × 3 PNG for every photograph (r82u's), so a page with photographs is laid out as one, its lead beside nothing. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGNoWJAARww4OQBgthIBDttNdgAAAABJRU5ErkJggg==', 'base64');
-const photosLoad = (page: Page) => page.route(/^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+const photosLoad = (page: Page) => page.route(/^https:\/\/(img\.cultifolio\.com|inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org|upload\.wikimedia\.org)\//, (r: Route) => r.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
 /**
  * A species page by a client-side visit from another's related tile, its dossier changed by `change`: Copiapoa cinerea
  * (twenty photographs, so the name card is the page's width under its lead, as on a rich page) from Copiapoa humilis.
@@ -75,6 +75,7 @@ test.describe('at 320 px', () => {
     const few = page.locator('#few-records-line'), figs = page.locator('.hline .hhead a.figs');
     await expect(few).toBeVisible();
     // One line: the mark and "Figures ›" side by side.
+    await few.scrollIntoViewIfNeeded(); // below the first screen since round 114's paragraph
     const [f, g] = [(await few.boundingBox())!, (await figs.boundingBox())!];
     expect(Math.abs(f.y + f.height / 2 - (g.y + g.height / 2))).toBeLessThan(4);
     expect(g.x).toBeGreaterThan(f.x + f.width);
@@ -112,6 +113,7 @@ test.describe('where the head still wraps', () => {
     await expect(page.locator('h1.sci')).toContainText('Copiapoa humilis');
     const few = page.locator('#few-records-line'), figs = page.locator('.hline .hhead a.figs');
     await expect(few).toBeVisible();
+    await few.scrollIntoViewIfNeeded(); // below the first screen since round 114's paragraph
     const [f, g] = [(await few.boundingBox())!, (await figs.boundingBox())!];
     // Wrapped ("Figures ›" under the mark, in a column 164 px wide), the two finger margins, 44 px each, do not meet in
     // height; beside it on one line (Source Sans 3 is narrower than Public Sans was; round eighty-seven), nor in width.

@@ -7,6 +7,7 @@
  * Null where there is nothing true to show: no pool, the species not found, or its record not read. A photograph is
  * shown only with its author and licence and the day its credit was read: one without a day is not shown (rule 4).
  */
+import { imgUrl } from '$core/img';
 import { corpusNow, getDossier, resolveSlug, type Loaded } from '$lib/server/dossiers';
 import { featuredOfCorpus } from '$lib/server/catalogue';
 import { heroOf } from '$dossier/dedupe';
@@ -59,7 +60,7 @@ export async function today(platform: Platform, fetch: Fetch, held?: Loaded, now
     name: d.name.scientific,
     common: pick.common ?? null,
     day: dayOf(day),
-    photo: hero && dated ? { src: photoOf(hero, 'medium'), page: hero.page ?? hero.url, credit: photoCredit(hero), read, captive: hero.captive ?? null } : null,
+    photo: hero && dated ? { src: imgUrl(photoOf(hero, 'medium')), page: hero.page ?? hero.url, credit: photoCredit(hero), read, captive: hero.captive ?? null } : null,
     downloads: downloadsOf(up['gbif.occurrences']?.detail)
   };
 }

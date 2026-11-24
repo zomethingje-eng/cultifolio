@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseDossier } from '$lib/dossier/schema';
 import { photoAt, srcsetOf, shownAt, type PhotoSize } from '$lib/dossier/photo-size';
+import { imgUrl } from '$core/img';
 import { GEN_LIST_PAGES } from '$lib/server/photogen';
 import { MARK_FAULT_NIGHTS } from '$lib/server/counters';
 import { said, claim, numberWord, spanWords } from '../about-pages';
@@ -70,13 +71,14 @@ function addresses(p: { url: string; thumb: string }): string[] {
     for (const s of SIZES) out.add(photoAt(u, s));
     for (const part of (srcsetOf(u, SIZES) ?? '').split(',').map((x) => x.trim().split(/\s+/)[0]).filter(Boolean)) out.add(part);
   }
-  return [...out];
+  // Round 111: each as the page asks it, its copy's address.
+  return [...out].map(imgUrl);
 }
 const read = parseDossier({ ...base, photos });
 
 describe('the photographs a page loads are on the image policy (R46-31)', () => {
   it('every address, of every shape, is on a host the CSP lets images come from', () => {
-    expect(policy.size).toBe(4);
+    expect(policy.size).toBe(2); // round 111: img.cultifolio.com, and Commons' host until its copy is complete
     expect(read.photos.length).toBeGreaterThan(0);
     const off = read.photos.flatMap(addresses).filter((u) => !policy.has(new URL(u).host));
     expect(off).toEqual([]);

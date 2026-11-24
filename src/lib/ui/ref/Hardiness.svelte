@@ -6,9 +6,13 @@
    * page shows the daily extremes it was worked out from; a page whose record has no `hardiness` yet says so.
    */
   import Term from './Term.svelte';
+  import YearLows from './YearLows.svelte';
+  import { frostWording } from '$core/extremes';
   import { rhsOf, usdaRange, usdaOfShown, USDA_YEARS_MIN, type HardinessFigures } from '$dossier/hardiness';
   import { tempN, tempUnit, type Units } from '$core/units';
-  let { hardiness, extremesShown, units }: { hardiness: HardinessFigures | null | undefined; extremesShown: boolean; units: Units } = $props();
+  // `extremes`: the shown daily extremes, for round 113's chart and tiles (SPECIES 21: "How cold it gets").
+  type Shown = { years: number; minP01: number; maxP99: number; frostDaysPerYear: number; frostNights?: number; lows?: { from: number; t: Array<number | null> } };
+  let { hardiness, extremesShown, units, extremes = null }: { hardiness: HardinessFigures | null | undefined; extremesShown: boolean; units: Units; extremes?: Shown | null } = $props();
   const h = $derived(extremesShown ? (hardiness ?? null) : null);
   const t = (c: number) => `${tempN(c, units, 1)} ${tempUnit(units)}`;
   const minus = (s: string) => s.replace(/(^|\s)-(?=\d)/g, '$1−');
@@ -19,7 +23,18 @@
 
 {#if extremesShown}
   <section class="hard" aria-labelledby="hard-t" id="hardiness">
-    <h2 id="hard-t">Hardiness of the habitat</h2>
+    <!-- Round 113 (SPECIES 21): the section is "How cold it gets", its yearly lows drawn, four tiles, and the derivation
+         under them as before. -->
+    <h2 id="hard-t">How cold it gets</h2>
+    {#if extremes}
+      <div class="tiles">
+        {#if h?.usda && u}<div class="tile"><div class="tl"><Term k="usda">USDA zone</Term></div><div class="tv">{u.zone}</div></div>{/if}
+        {#if h}<div class="tile"><div class="tl"><Term k="rhs">RHS band</Term></div><div class="tv">{h.rhs.band}</div></div>{/if}
+        <div class="tile"><div class="tl">Frost</div><div class="tv small">{frostWording(extremes)}</div></div>
+        <div class="tile"><div class="tl">Hottest day in 100</div><div class="tv">{minus(t(extremes.maxP99))}</div></div>
+      </div>
+      {#if extremes.lows}<YearLows lows={extremes.lows} floorC={extremes.minP01} zone={u?.zone ?? null} {units} />{/if}
+    {/if}
     {#if h}
       <table>
         <tbody>
@@ -49,6 +64,12 @@
 
 <style>
   .hard { margin: 28px 0 0; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 18px; margin: 4px 0 8px; }
+  .tile { border-top: 1px solid var(--rule); padding: 8px 0 6px; }
+  .tl { font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); font-weight: 600; }
+  .tv { font-size: 1.35rem; font-variant-numeric: tabular-nums lining-nums; margin-top: 2px; }
+  .tv.small { font-size: var(--fs-base); }
+  @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   h2 { margin: 0 0 6px; font-size: var(--fs-head); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mut); }
   table { border-collapse: collapse; width: 100%; font-size: var(--fs-base); }
   tr { border-bottom: 1px solid var(--rule2); }

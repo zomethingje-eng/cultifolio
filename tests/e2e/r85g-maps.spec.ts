@@ -20,7 +20,7 @@ function contrast(a: string, b: string): number {
 
 test("a species page fetches its own regions' map files, and no others @phone", async ({ page }) => {
   const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-  await page.route(/inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
+  await page.route(/img\.cultifolio\.com|inaturalist|wikimedia|staticflickr|api\.gbif\.org/, (r) => (r.request().resourceType() === 'image' ? r.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }) : r.continue()));
   const maps: string[] = [];
   page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.startsWith('/maps/')) maps.push(u.pathname); });
   await page.goto('/species/welwitschia-mirabilis'); await ready(page);
