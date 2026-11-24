@@ -79,6 +79,7 @@ test('r63u U4: a grower\'s pages say what they show (chips, Today, the labels, t
 
 test('r63u U4: the climate chart\'s figure is named by the chart\'s title, not by its key', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea', { waitUntil: 'domcontentloaded' }); await ready(page);
+  await page.locator('#one-chart-fold > summary').click(); // round 118: the one chart is folded under the year panel
   const fig = page.locator('figure.climo').first();
   await expect(fig).toHaveAccessibleName('Habitat climate of Copiapoa cinerea through the year'); // the first run: "day night rain medians and …"
   await expect(fig.getByRole('img', { name: 'Habitat climate of Copiapoa cinerea through the year' })).toBeVisible();

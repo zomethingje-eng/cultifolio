@@ -87,12 +87,14 @@ test('r85e 4: the figures by month are twelve rows, whole on a desktop and on pa
   await quiet(page);
   await page.goto('/species/copiapoa-cinerea');
   await ready(page);
-  await page.locator('details.figures:not(#climate-class-fold) > summary').click(); // round 106: the climate class has a fold of its own
-  const rows = page.locator('table.wx tbody tr');
+  const yp = page.locator('#year-panel');
+  await yp.getByRole('button', { name: 'Table', exact: true }).click(); // round 118: the year panel's Table
+  await yp.getByRole('button', { name: 'Its months', exact: true }).click();
+  const rows = yp.locator('table.wx tbody tr');
   await expect(rows).toHaveCount(12); // r85base: 5
   await expect(rows.first().locator('td').first()).toHaveText('Jan');
-  await expect(page.locator('table.wx thead th')).toHaveText(['Month', 'Day °C', 'Night °C', 'Rain mm', 'DLI', 'RH %']);
-  const fits = () => page.locator('.figures .scroll-x').evaluate((e) => e.scrollWidth <= e.clientWidth + 1);
+  await expect(yp.locator('table.wx thead th')).toHaveText(['Month', 'Day °C', 'Night °C', 'Apart °C', 'Rain mm', 'DLI', 'RH %', 'VPD kPa', 'Wind m/s', 'Day h']); // round 118: SPECIES 19's columns
+  const fits = () => yp.locator('.scroll-x').evaluate((e) => e.scrollWidth <= e.clientWidth + 1);
   expect(await fits()).toBe(true); // r85base: 1,430 px in 980
   await page.emulateMedia({ media: 'print' });
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
@@ -124,6 +126,7 @@ test('r85e 6: with scripts off a phone shows the chart drawn for a phone, its wo
   const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 664 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block', locale: 'en-GB' });
   const page = await ctx.newPage();
   await page.goto('/species/copiapoa-cinerea');
+  await page.locator('#one-chart-fold > summary').click(); // round 118: folded under the year panel; a <details> opens with scripts off
   const svg = page.locator('figure.climo svg:visible');
   await expect(svg).toHaveCount(1);
   await expect(svg).toHaveClass(/narrow/);

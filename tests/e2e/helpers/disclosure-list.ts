@@ -21,7 +21,7 @@ export const DISCLOSURES: Disclosure[] = [
   // Round eighty-seven, stage 3: one more under the lineage (t2), and five more under "Your collection" (t3: a plant's
   // growing season, papers, labels, the sheet and the report, the app lock); t1's rules sit in existing sections: 46.
   // Round 108: one more, the climate from records placed only to within 30 km (#coarse): 47.
-  ...Array.from({ length: 47 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
+  ...Array.from({ length: 48 }, (_, n) => ({ file: 'src/routes/about/how/+page.svelte', cls: 'full in-full', at: 'how', sel: `details.full.in-full >> nth=${n}` })),
   ...Array.from({ length: 13 }, (_, n) => ({ file: 'src/routes/about/formats/+page.svelte', cls: 'full in-full', at: 'formats', sel: `details.full.in-full >> nth=${n}` })),
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'cult acc', at: 'species', sel: 'details.cult.acc >> nth=1' }, // round 106: the first is open at rest
   { file: 'src/routes/species/[slug]/+page.svelte', cls: 'why howmade', at: 'species', sel: 'details.why.howmade' },

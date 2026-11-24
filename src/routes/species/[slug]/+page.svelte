@@ -33,6 +33,7 @@
   import { photoLabel } from '$lib/ui/photo-label';
   import Provenance from '$lib/ui/Provenance.svelte';
   import RecordParts from '$lib/ui/ref/RecordParts.svelte';
+  import YearPanel from '$lib/ui/ref/YearPanel.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import CompareButton from '$lib/ui/CompareButton.svelte';
@@ -940,7 +941,12 @@
     <div class="climhead"><UnitSwitch /></div>
     {#if coarse}<p class="notice small" id="coarse-records">{coarseSentence(coarse, d.climate.records)} <a class="help" href="/about/how#coarse">The rule</a>.</p>{/if}<!-- round 108 -->
     {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few, kewArea)} <a class="help" href="/about/how#few">The rule</a>.</p>{/if}<!-- linked to its rule, as the other notices are (round eighty-six; review P's P11) -->
+    <!-- Round 118 (SPECIES 19): the year panel, three charts and four thin rows on one month axis, Chart | Table, the halves. -->
+    <YearPanel months={d.climate.months} p10={d.climate.p10} p90={d.climate.p90} lat={d.climate.at.lat} shift={myShift} floorC={d.climate.extremes?.minP01 ?? null} units={u} year={sheet.year ?? null} dossierKey={d.key} name={d.name.scientific} src={`CHELSA V2.1, 1981–2010; ${d.climate.cells} ${coarse ? 'areas' : 'cells'}`} />
+    <details class="figures" id="one-chart-fold">
+      <summary>The year as one chart</summary>
     <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ areas: !!coarse, months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
+    </details>
     {#if glance}
       <!-- The year's reading in words, and the months of rain, under the chart (the year strip's lines until round 106). -->
       <div class="yearlines" id="year-lines">
@@ -955,24 +961,7 @@
         <Koppen koppen={d.koppen} months={d.climate.months} cells={d.climate.cells} areas={!!coarse} src={d.climate.src.normals} />
       </details>
     {/if}
-    <details class="figures">
-      <summary>Figures by month</summary>
-    <!-- Reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div class="scroll-x" tabindex="0" role="region" aria-label="Habitat climate by month">
-      <!-- Months as rows, the five figures as columns (round eighty-five; W5, outside review A's 16e): twelve columns were
-           1,430 px in a 980 px box, four months off the right of a desktop with no cue and July to December off the paper.
-           Six columns fit a desktop and a sheet of A4; a phone still swipes, with the month kept in view. -->
-      <table class="wx bymonth">
-        <thead><tr><th scope="col">Month</th><th scope="col">Day {tempUnit(u)}</th><th scope="col">Night {tempUnit(u)}</th><th scope="col">Rain {rainUnit(u)}</th><th scope="col">DLI</th><th scope="col">RH %</th></tr></thead>
-        <tbody>
-          {#each d.climate.months as m, i}
-            <tr><td>{months[i]}</td><td>{cell(m.tmax, d.climate.p10[i].tmax, d.climate.p90[i].tmax, 0, tC)}</td><td>{cell(m.tmin, d.climate.p10[i].tmin, d.climate.p90[i].tmin, 0, tC)}</td><td>{cell(m.precipMm, d.climate.p10[i].precipMm, d.climate.p90[i].precipMm, u === 'us' ? (mmToIn(Math.max(m.precipMm, d.climate.p90[i].precipMm ?? 0)) < 1 ? 2 : 1) : 0, rMm)}</td><td>{cell(m.dli, d.climate.p10[i].dli, d.climate.p90[i].dli)}</td><td>{cell(m.rh, d.climate.p10[i].rh, d.climate.p90[i].rh)}</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-    </details>
+    <!-- "Figures by month" is the year panel's Table since round 118 (SPECIES 19). -->
     {#if d.climate.hemispheres}
       {@const hs = d.climate.hemispheres}
       {@const other = hs.used === 'north' ? hs.south : hs.north}
@@ -1306,8 +1295,6 @@
   .figures { margin: 10px 0 0; }
   .figures summary { cursor: pointer; font-size: var(--fs-md); color: var(--ink2); font-weight: 600; padding: 6px 0; }
   .figures summary:hover { color: var(--accent); }
-  .figures table.wx { margin-top: 6px; }
-  .figures table.bymonth { width: auto; min-width: min(100%, 640px); }
   .mine .accno { margin-right: 2px; }
   .fields { display: grid; gap: 8px; padding: 10px 0 14px; }
   .fields textarea { width: 100%; font: inherit; font-size: 0.9375rem; font-family: var(--ui); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); min-height: 96px; }
@@ -1462,7 +1449,6 @@
     /* At home's hours are the screen's choice; the sheet prints the row for the hours chosen (round eighty-seven, stage 2). */
     :global(section#at-home .hours) { display: none !important; }
     /* The table whole on the sheet, not cut at a scroll box's edge (W5, A16e); the phone's folded lines as a wide screen shows them. */
-    .figures .scroll-x { overflow: visible !important; }
     /* The related strips wrap on paper rather than run off the sheet's edge. */
     .relstrip { grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); overflow: visible; }
     .restnames { display: inline !important; }

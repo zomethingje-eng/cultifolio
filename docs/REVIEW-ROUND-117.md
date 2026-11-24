@@ -47,4 +47,4 @@ The species hand-off's round 22. Built in the clone (Desktop\AI Work\cultifolio-
 
 ## The gate and the deploy
 
-(Written when they have run.)
+svelte-check 0 errors in 1,893 files; 6,541 unit tests and 2,946 browser tests, every test first time in every engine (WebKit and Firefox at one worker each), on the second run: the first stopped at r81h, the five hybrids the day's growth added (the table made again, 518). Committed as 19ec7a8, pushed, and deployed on 24 November 12:35 EST; live check 24 of 24.

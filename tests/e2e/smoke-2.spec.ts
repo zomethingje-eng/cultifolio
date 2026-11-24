@@ -92,8 +92,11 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.goto('/species/copiapoa-cinerea');
   await ready(page); // a disclosure opened before hydration is closed again by it (WebKit, round seventy-one, the owner's run)
   // every table cell is "median / p10–p90" where the span differs
-  await expect(page.locator('table.wx tbody tr').first().locator('td').nth(1)).toHaveText('22 / 20–24'); // January's day
-  await expect(page.locator('table.wx tbody tr').first().locator('td').nth(3)).toHaveText('4'); // rain: no spread in the fixture, so the median alone (months as rows since round eighty-five, W5)
+  await page.locator('#year-panel').getByRole('button', { name: 'Its months', exact: true }).click(); // round 118: the year panel's table, in the habitat's months
+  const jan = page.locator('#year-panel table.wx tbody tr').first().locator('td');
+  await expect(jan.nth(1)).toHaveText('2220–24'); // January's day: the median, and under it the span (round 118)
+  await expect(jan.nth(1).locator('.pp')).toHaveText('20–24');
+  await expect(jan.nth(4)).toHaveText('4'); // rain: no spread in the fixture, so the median alone (months as rows since round eighty-five, W5)
   await page.locator('#s-climate ~ details.why').first().locator('summary').click(); // the provenance is one tap from the chart
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
   await expect(page.getByText(/Extremes and elevation were read at a typical spot in the range, cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();

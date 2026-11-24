@@ -48,6 +48,7 @@ test('r106b 1: the sections in the grower\'s order, and the section row in their
 test('r106b 2: "Show in my months" for a northern reader moves the chart six months, and back', async ({ page }) => {
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
+  await page.locator('#one-chart-fold > summary').click(); // round 118: the one chart is folded under the year panel
   const sw = page.getByRole('button', { name: 'Show in my months' });
   const cal = page.locator('figure.climo .cal');
   const desc = page.locator('figure.climo svg:visible desc');

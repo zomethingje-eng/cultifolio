@@ -738,6 +738,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>In LibreOffice, tick "Evaluate formulas" when opening the sheet, or those cells show as <code>="…"</code>.</li>
     <li>A plant's lineage is in the sheets by plant number. <code>plants.csv</code> has "taken from" and "taken as", which the import reads back. <code>events.csv</code> has a cross's pollen parent and a graft's scion and stock plants. <code>batches.csv</code> has the cross a batch was sown from, seed parent first, and a graft batch's stock plant.</li>
     <li>A linked plant this file holds no record of is written by its record id.</li>
+    <li>A species page's year panel offers its table as CSV, <code>&lt;the species&gt;-months.csv</code>, made in your browser from the page's figures: a first line naming the species and the source, then a row per month (your month, the habitat's, each figure with its 10th and 90th percentile, light, humidity, VPD, wind and day length).</li>
   </ul>
   <h3 id="calendar">The watering calendar</h3>
   <ul class="rules">

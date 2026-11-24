@@ -42,7 +42,9 @@ async function open(page: Page) {
   await page.goto('/?by=genus&open=copiapoa'); await ready(page);
   await page.locator('html[data-collection="open"]').waitFor({ state: 'attached' });
   await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).click();
-  await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
+  // 15 s: a client-side visit through the route above; 2.5 s alone in Firefox, past the default 5 s with four engines at
+  // once (round 118's two gate runs: r83a 1 and 2, once each, after the species page gained the year panel).
+  await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/, { timeout: 15_000 });
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
 }
 

@@ -109,6 +109,15 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 118,
+    date: '2026-11-25',
+    reader: 'A species page draws the habitat\'s year as one panel: temperature, rain and light on one month axis, with a table of the figures.',
+    lines: [
+      'The year panel: three charts and thin rows for day length, humidity, VPD and wind, this month marked, in your months or the habitat\'s.',
+      'Table gives the same figures with their spans, and a CSV; under the panel the year is said in two halves.'
+    ]
+  },
+  {
     n: 117,
     date: '2026-11-25',
     reader: 'The lower part of a species page says where its figures come from, and how to cite it.',

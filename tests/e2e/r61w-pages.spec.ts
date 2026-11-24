@@ -100,6 +100,7 @@ test.describe('desktop', () => {
   test('the habitat climate chart names CHELSA where a reader can see it (visitor 3)', async ({ page }) => {
     await page.goto('/species/copiapoa-cinerea');
     await ready(page);
+    await page.locator('#one-chart-fold > summary').click(); // round 118: the one chart is folded under the year panel
     const fig = page.locator('figure.climo').first();
     await expect(fig).toBeVisible();
     // On round sixty-one's base the chart's visible text named only NASA POWER; "CHELSA" was in the SVG <desc> alone.

@@ -815,15 +815,27 @@
   </ul>
   </details>
   <h3 id="shift">Your months</h3>
-  <p class="sum">Habitat months are named with their hemisphere. The climate chart's "Show in my months" shifts them by six months for a reader in the other hemisphere.</p>
+  <p class="sum">Habitat months are named with their hemisphere. The year panel's "My months" shifts them by six months for a reader in the other hemisphere.</p>
   <details class="full in-full"><summary>The rules in full<span class="sr">: your months</span></summary>
   <ul class="rules">
     <li>Wherever habitat months are printed, the page names the hemisphere they belong to.</li>
     <li>Where the shift rule applies, it gives them shifted six months for a collection in the other hemisphere. The rule applies where the temperature curve moves 4 °C or more and the habitat lies 10° or more from the equator.</li>
     <li>So a Namaqualand plant whose rain falls in May to August has that season in a northern greenhouse from November to February.</li>
     <li>The label line and the sheet format a season through one function, so they cannot disagree.</li>
-    <li>A species page's climate chart is drawn in the habitat's months. Where the shift rule applies and your hemisphere is not the habitat's, "Show in my months" redraws it in yours, every figure moved by six months and named so; pressed again, it is the habitat's once more. Where the rule does not apply, or your hemisphere is the habitat's, there is no switch and the page says why.</li>
+    <li>A species page's year panel (<a href="#year-panel">below</a>) opens in your months where the shift rule applies and your hemisphere is not the habitat's, the habitat's month under each of yours; "Its months" draws it in the habitat's. Where the rule does not apply, or your hemisphere is the habitat's, it has no switch.</li>
+    <li>The one chart under it, folded, is drawn in the habitat's months. Where the shift rule applies and your hemisphere is not the habitat's, "Show in my months" redraws it in yours, every figure moved by six months and named so; pressed again, it is the habitat's once more. Where the rule does not apply, or your hemisphere is the habitat's, there is no switch and the page says why.</li>
     <li>Your hemisphere is your site's, else that of your first space with coordinates, else the northern, and the page says which under the chart.</li>
+  </ul>
+  </details>
+  <h3 id="year-panel">The year panel</h3>
+  <p class="sum">A species page draws the habitat's year as three charts and four thin rows on one month axis, with a table of the same figures.</p>
+  <details class="full in-full"><summary>The rules in full<span class="sr">: the year panel</span></summary>
+  <ul class="rules">
+    <li>Temperature (days, nights dashed, the cold floor dotted where the extremes are on file), rain (bars, the 10th to 90th span as whiskers) and light (the open sky's DLI) each have their own scale. This month is shaded, and its figure is named beside the chart's name.</li>
+    <li>Day length, humidity, VPD and wind are thin rows on fixed scales, so two species can be compared by eye: 0 to 24 h, 40 to 75%, 0 to 2 kPa and 0 to 6 m/s, from the 1st and 99th percentiles of the reference's months. A month outside a scale is drawn at its edge; the table holds its figure.</li>
+    <li>Day length is computed, not read: the hours the sun's centre is above −0.833° (the standard refraction and the sun's half-width) on the 15th of each month, at the typical cell's latitude.</li>
+    <li>Table shows the charts' figures, each median with its 10th to 90th span where the span differs. It is read by screen readers in either view. CSV gives the table as shown, made in your browser; JSON is the page's record.</li>
+    <li>Under the panel the year is said in two halves: the wet months and the dry where the season rule reads a rainy season, else the warmer six months and the cooler six, with their days, nights, rain and light.</li>
   </ul>
   </details>
   </section>
@@ -880,7 +892,7 @@
     <li>Under the strip of photographs, where a page holds both, a switch shows all of them, those observed growing wild, or those in cultivation, for the lead and the strip. Only what a source marks counts: iNaturalist marks each photograph, and Commons and GBIF photographs, which carry no mark, are under All alone.</li>
     <li>Lower on the page: "Where it grows wild" opens its facts with the ground, the typical cell's elevation from ETOPO 2022, and says that the range across the cells and the soil are not read yet. The photographs stand in rows by what their source marks, in the wild, in cultivation, and not marked, each with its count. A species of similar climate you grow says "You grow this" and comes first, decided in this browser from your collection, which is not sent. The record names the registers that accept the name, with each file's day and the id; what was looked for and is not there; and where each figure comes from, with the day it was read. "Cite this page" gives the site, the name, the build's day and the page's fingerprint, and its address.</li>
     <li>The order of a species page answers a grower's questions in turn. First what the plant is (the quoted summary, under the name), then how to keep it at home (the table, then the cultivation cards, the first open), then the hardiness of its habitat and its climate across the habitat. Then where it grows wild, its photographs, related species and its names and registers. Last, the record and where the page came from.</li>
-    <li>The warmest month's mean daily high is in the chart's description and in its figures by month.</li>
+    <li>The warmest month's mean daily high is in the chart's description and in the year panel's table.</li>
     <li>The rain a year: the median of the range's grid cells' own yearly totals; under the chart, how many months of the median year bring 25 mm or more. Each cell's twelve months are added first, then the middle of those totals is taken, or the halfway point between the two middle totals when the cells are even in number.</li>
     <li>The open-sky light: the DLI of the darkest and brightest months.</li>
    <li>All but the cold floor and the record low are from CHELSA, and all of those but the rain a year from the median year across the range.</li>
