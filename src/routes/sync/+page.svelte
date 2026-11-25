@@ -39,6 +39,8 @@
     await collection.load();
     if (demo) return;
     await sync.init();
+    // Round 119 (MYPLANTS 27 a): the empty My plants page's "Join your sync" lands on the key's field.
+    if (location.hash === '#join' && !sync.configured && mode === 'idle') mode = 'join';
     try {
       // A key made before a replace is not offered again (round eighty-six; `fresh-key.ts`).
       const kept = resumeFresh(sessionStorage.getItem(FRESH), sync.wasIn);

@@ -186,7 +186,7 @@ export interface Photo {
   doc?: string | null;
 }
 
-export type EventType = 'acquire' | 'repot' | 'water' | 'feed' | 'treat' | 'prune' | 'flower' | 'pollinate' | 'fruit' | 'seed' | 'graft' | 'measure' | 'move' | 'note' | 'death' | 'propagate' | 'audit' | 'germinate' | 'potup' | 'loss';
+export type EventType = 'acquire' | 'repot' | 'water' | 'dry' | 'feed' | 'treat' | 'prune' | 'flower' | 'pollinate' | 'fruit' | 'seed' | 'graft' | 'measure' | 'move' | 'note' | 'death' | 'propagate' | 'audit' | 'germinate' | 'potup' | 'loss';
 
 export interface PlantEvent {
   id: string;
@@ -235,6 +235,8 @@ export const EVENT_LABEL: Record<EventType, string> = {
   acquire: 'Acquired',
   repot: 'Repotted',
   water: 'Watered',
+  // Round 120 (MYPLANTS 28): looked at and not watered; it does not reset "since watered" (docs/PLAN-RECORD-FORMAT.md 1).
+  dry: 'Looked at, left dry',
   feed: 'Fed',
   treat: 'Treated',
   prune: 'Pruned',

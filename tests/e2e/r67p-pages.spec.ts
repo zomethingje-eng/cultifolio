@@ -86,7 +86,7 @@ test('r67p P6: the menu says the current page and its items take a thumb; Today\
   for (const h of await page.locator('#menu a, #menu .menuexample').evaluateAll((els) => els.filter((e) => (e as HTMLElement).offsetParent).map((e) => e.getBoundingClientRect().height))) expect(h).toBeGreaterThanOrEqual(44);
   await page.keyboard.press('Escape');
   await page.goto('/today'); await ready(page);
-  await expect(page.getByRole('heading', { name: /^Greenhouse ?, 2 growing$/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: /^Greenhouse ?, 2 growing\b/ })).toBeVisible({ timeout: 30_000 }); // round 120: the space's pill follows in its name
 });
 
 test('r67p P7: a species page whose photographs fail keeps the strip\'s squares, moves nothing, and lays no credit over the failed photograph (R45-8)', async ({ page }) => {

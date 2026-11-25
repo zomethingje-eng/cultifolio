@@ -207,7 +207,7 @@ test('r67v V5: the seed comes with its mark and boundary, a cut-off mark is repa
   await expect(page.locator('.rows > *')).toHaveCount(12); // not set out twice
   // One watering, then Leave: the visitor's line is counted and asked about.
   await page.goto('/today'); await ready(page);
-  await page.locator('#water .stop .waterbtn, #water .stop button').first().click();
+  await page.locator('#water .stop button.doneall').first().click(); // round 120: the open space's Done
   await goneQuiet(page); // the watering written
   const asked: string[] = [];
   page.on('dialog', (d) => { asked.push(d.message()); void d.accept(); });

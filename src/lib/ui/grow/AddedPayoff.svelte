@@ -5,6 +5,10 @@
    * (`payoff.ts`). Where the plant has no space, the card asks for one there, in one step; where the space holds no floor,
    * for the floor, saved to the space. "Close" puts it away; a reload or a shared address never shows it (the router's
    * page state, not the address).
+   *
+   * Round 119 (MYPLANTS 27 b): with six spaces or fewer, each is a chip, one tap places the plant and the comparison
+   * shows at once in the same card; "+ New space" last opens the picker, as do more than six spaces. Under the line, the
+   * fixed words "It compares. It does not say what the plant will do."
    */
   import { collection } from '$lib/db/collection.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -18,6 +22,22 @@
   const cond = $derived(placed ? collection.conditions(placed) : null);
   const line = $derived(placed && cond && habitat ? payoff({ space: collection.locationName(placed), floorC: cond.floorC, floorHeld: cond.floorHeld, ppfd: cond.ppfd, lightHours: cond.lightHours, ...habitat, units: units.current }) : null);
   let where = $state<string | null>(null);
+  /** Every space, depth-first, each by its full path ("Greenhouse › Bench 2"), as the picker lists them. */
+  const spaces = $derived.by(() => {
+    const out: Array<{ id: string; label: string }> = [];
+    const seen = new Set<string>();
+    const walk = (parent: string | null) => { for (const l of collection.children(parent)) { if (seen.has(l.id)) continue; seen.add(l.id); out.push({ id: l.id, label: collection.locationName(l.id) || l.name }); walk(l.id); } };
+    walk(null);
+    return out;
+  });
+  let picking = $state(false);
+  async function placeIn(id: string) {
+    if (busy) return;
+    busy = true; msg = '';
+    try { await collection.movePlantsUndoable([acc], id); }
+    catch { msg = `Not saved: ${(collection.lastWriteError ?? 'the browser refused the write').replace(/\.$/, '')}.`; }
+    finally { busy = false; }
+  }
   let floor = $state('');
   let busy = $state(false);
   let msg = $state('');
@@ -54,11 +74,18 @@
   {:else if phase === 'noclimate' || !habitat}
     <p class="small" id="payoff-line">This species has no habitat climate, so there is nothing to set beside your space's figures.{#if slug}{' '}<a href="/species/{slug}#s-climate">Why, on its page</a>.{/if}</p>
   {:else if !placed}
-    <p class="small">Where does it grow? Give it a space, and its figures are set beside the habitat's.</p>
-    <div class="row"><LocationPicker bind:value={where} id="payoff-loc" label="Space" /><button class="btn pri" type="button" onclick={giveSpace} aria-disabled={busy}>Use this space</button></div>
+    <p class="small" id="payoff-ask">Where does it live? Give it a space, and its figures are set beside the habitat's.</p>
+    {#if spaces.length <= 6 && !picking}
+      <div class="chips" role="group" aria-labelledby="payoff-ask" id="payoff-chips">
+        {#each spaces as sp (sp.id)}<button type="button" class="spacechip" onclick={() => placeIn(sp.id)} aria-disabled={busy}>{sp.label}</button>{/each}
+        <button type="button" class="spacechip new" onclick={() => (picking = true)}>+ New space</button>
+      </div>
+    {:else}
+      <div class="row"><LocationPicker bind:value={where} id="payoff-loc" label="Space" /><button class="btn pri" type="button" onclick={giveSpace} aria-disabled={busy}>Use this space</button></div>
+    {/if}
   {:else if line && line.kind !== 'none'}
     <p id="payoff-line">{line.text}</p>
-    <p class="small muted">A comparison, not a verdict: <a href="#habitat">the plant page's habitat figures</a> hold the rest.</p>
+    <p class="small muted" id="payoff-fixed">It compares. It does not say what the plant will do. <a href="#habitat">The plant page's habitat figures</a> hold the rest.</p>
   {:else if line}
     <p class="small" id="payoff-line">{line.text}</p>
     <div class="row"><label class="fl"><span>Coldest it gets ({tempUnit(units.current)})</span><input id="payoff-floor" type="text" inputmode="decimal" bind:value={floor} /></label><button class="btn pri" type="button" onclick={setFloor} aria-disabled={busy}>Use this floor</button></div>
@@ -73,4 +100,8 @@
   .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
   .fl { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); }
   #payoff-line { margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 2px; }
+  .spacechip { min-height: var(--tap); padding: 0 14px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: none; color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+  .spacechip:hover { background: var(--sunk); }
+  .spacechip.new { border-style: dashed; color: var(--ink2); }
 </style>

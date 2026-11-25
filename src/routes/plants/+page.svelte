@@ -30,7 +30,8 @@
   import { placeTail, plantName } from '$lib/ui/plant-label';
   // Each by its own path, not the barrel: a barrel import carries every grower component into this page's chunk (round sixty-one; the accessibility review, 3).
   import PlantsMenu from '$lib/ui/grow/PlantsMenu.svelte'; // round sixty, agent F: import, the sample, selection, Wanted and spending
-  import PlantsEmpty from '$lib/ui/grow/PlantsEmpty.svelte';
+  import WayRows from '$lib/ui/grow/WayRows.svelte';
+  import { FIRST_WAYS } from '$lib/ui/grow/ways';
   import TrySample from '$lib/ui/grow/TrySample.svelte'; // round sixty-three, V2: the example at the head of the empty page
   import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
   import { CLOSED_WORDS, PAGE_IN_DEMO } from '$lib/db/demo';
@@ -245,7 +246,7 @@
 <!-- "N growing" alone: "31 growing · 41 plant numbers" left the grower wondering why the two differ (round sixty; the grower review, 16). -->
 <!-- And no count while the collection is still opening: "0 growing" stood over "Opening your collection…" for as long as the
      open took (round sixty-six; the all-engines run, smoke 2527, a minute in Safari's engine on the PC; rule 2). -->
-<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={!opened || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
+<PageHead compact title="My plants" sub="Your plants, each under its own number. Kept on this device, with no account." count={!opened || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
   <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
   <a class="btn pri wideonly" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>
   <PlantsMenu />
@@ -297,20 +298,19 @@
   <!-- The example being set out: said, not "Nothing here yet" under it (round sixty-three, V2). -->
   <p class="muted" role="status" id="example-opening">Setting out the example collection…</p>
 {:else if !collection.accessions.length}
-  <!-- Three steps in the order they help, each a link, a step done says so: a sort menu and zero chips over nothing was the first thing a new grower saw (round fifty-eight; the grower review). -->
-  <div class="emptybox firststeps">
-    <h2 class="q" style="font-size: var(--fs-2xl)">Nothing here yet</h2>
-    <!-- The example first, where a visitor starts: a look at every page filled in before typing a plant (round sixty-three, V2). -->
-    <TrySample />
-    <ol class="steps">
-      <!-- To the add form: this step is for the grower's own space (round sixty-three, V2). -->
-      <li><a href="/places#add" onclick={(e) => addLeavesExample(e, '/places#add')}><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one space' : `${collection.locations.length} spaces`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
-      <li><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}><span class="n">2</span><span class="t">Your first plant</span><span class="w">its name, where it came from and where it lives</span></a></li>
-      <li><a href="/settings#site"><span class="n">3</span><span class="t">Your location for the frost watch</span><span class="w">{site.current ? `set${site.current.name ? `: ${site.current.name}` : ''}` : 'the frost watch reads its forecast there, and the months follow its hemisphere'}</span></a></li>
-    </ol>
-    <p class="muted small">Your plants are recorded on this device and nowhere else until you choose to sync. Moving from another device? <a href="/backup">Restore a backup</a>.</p>
+  <!-- Round 119 (MYPLANTS 27 a): three ways in, no setup first. The numbered steps (round fifty-eight) are gone: a plant's
+       own page asks where it lives, and Today asks for the frost watch's site. -->
+  <div class="emptybox firstways" id="first-ways">
+    <WayRows ways={FIRST_WAYS} />
+    <h2 class="kick gets-h">What you get</h2>
+    <dl class="gets">
+      <div><dt>A number and a label</dt> <dd>for every plant, with a code that opens its record.</dd></div>
+      <div><dt>Today</dt> <dd>what is due a look, and frost at your site.</dd></div>
+      <div><dt>Its habitat beside your space</dt> <dd>the species' figures set against yours.</dd></div>
+    </dl>
+    <TrySample quiet />
+    <p class="muted small" id="first-moving">Moving from another device? <a href="/sync#join">Join your sync</a> or <a href="/backup">restore a backup</a>.</p>
   </div>
-  <PlantsEmpty />
 {:else}
   {#if byPlace.length && !place}
     <!-- What the list is held to, said, with the way to the words instead (round sixty-one; the grower review, 7). -->
@@ -335,7 +335,7 @@
         <!-- By its identity while another plant shares its number (round sixty). -->
         <a class="azrow accrow" href={plantHref(a)}>
           <!-- No photograph: the name's initials, not a grey dash that read as a missing image thirty times (round sixty; the grower review, 17). -->
-          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={imgUrl(th)} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>{/if}
+          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={imgUrl(th)} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /><span class="refmark" title="The reference's photograph of the species, not of this plant">ref<span class="sr"> photo</span></span>{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>{/if}
           <span class="txt">
             <span class="nm"><span class="accno lead">{accNo(a)}</span>{' '}<PlantName plant={a} /></span>
             <!-- On a phone the watering figure leads the second line, so a row is two lines, not three (round fifty-eight; the grower review). -->
@@ -386,13 +386,13 @@
   .accrow .nm :global(i) { overflow-wrap: break-word; }
   .rows.nopic .azrow { grid-template-columns: minmax(0, 1fr) auto; }
   .figphone { display: none; }
-  .firststeps .steps { list-style: none; padding: 0; margin: 12px 0 14px; display: grid; gap: 0; border-bottom: 1px solid var(--rule2); }
-  .firststeps .steps a { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; padding: 10px 0; min-height: 56px; border-top: 1px solid var(--rule2); color: inherit; text-decoration: none; }
-  .firststeps .steps a:hover { background: var(--sunk); }
-  .firststeps .steps a:hover .t { text-decoration: underline; text-underline-offset: 2px; }
-  .firststeps .n { grid-row: span 2; font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-md); color: var(--ink3); }
-  .firststeps .t { font-weight: 600; color: var(--accent); }
-  .firststeps .w { font-size: var(--fs-md); color: var(--ink3); }
+  .firstways { display: grid; gap: 14px; margin: 4px 0 16px; }
+  .gets-h { margin: 8px 0 0; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); }
+  .gets { margin: 0; display: grid; border-top: 1px solid var(--rule2); }
+  .gets div { padding: 10px 0; border-bottom: 1px solid var(--rule2); font-size: var(--fs-md); }
+  .gets dt { display: inline; font-weight: 600; }
+  .gets dd { display: inline; margin: 0; color: var(--ink2); }
+  #first-moving { margin: 0; }
   .small { font-size: var(--fs-md); }
   /* On a phone the figure goes under the name instead of away: "which of these did I water last" is the question the list is for. */
   /* The first screen is for the list: the search and the sort share a row, the chips are one row scrolled sideways (round fifty, 4). */
@@ -425,4 +425,7 @@
   .pill { border: 0; background: none; padding: 0; border-radius: 0; letter-spacing: 0; }
   .pill.c { color: var(--cool); }
   .fnchip { background: none; border: 0; padding: 0; border-radius: 0; }
+  /* A reference photograph in the list is marked as one (round 119; MYPLANTS 27 c). */
+  .im { position: relative; }
+  .refmark { position: absolute; right: 2px; bottom: 2px; padding: 0 4px; border-radius: 4px; background: rgb(0 0 0 / 0.55); color: #fff; font-size: 10px; line-height: 14px; }
 </style>

@@ -64,10 +64,9 @@ test('r107b 2: with no space, the card asks for one, then for its floor, and the
   await space(page, 'Bench 2', null);
   await addFromSpecies(page, null);
   const card = page.locator('#payoff');
-  await expect(card).toContainText('Where does it grow?');
-  const opt = await page.locator('#payoff-loc option', { hasText: 'Bench 2' }).getAttribute('value');
-  await page.selectOption('#payoff-loc', opt!);
-  await card.getByRole('button', { name: 'Use this space' }).click();
+  await expect(card).toContainText('Where does it live?');
+  // Round 119 (MYPLANTS 27 b): six spaces or fewer are chips; one tap places the plant.
+  await card.locator('#payoff-chips').getByRole('button', { name: 'Bench 2', exact: true }).click();
   await expect(page.locator('#payoff-line')).toContainText('Your Bench 2 has no floor set');
   await page.fill('#payoff-floor', '10');
   await card.getByRole('button', { name: 'Use this floor' }).click();

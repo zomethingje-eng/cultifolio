@@ -109,6 +109,24 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 120,
+    date: '2026-11-25',
+    reader: 'Today lists your spaces, and one Done records a whole bench: what you watered, and what you looked at and left dry.',
+    lines: [
+      'Each space is one row with what it has to look at; open one, tick what you water, and Done records the rest as looked at and left dry.',
+      'A plant left dry is off Today for half its rhythm, at least three days, and a row says how often you have watered it.'
+    ]
+  },
+  {
+    n: 119,
+    date: '2026-11-25',
+    reader: 'An empty My plants offers three ways in, and a new plant is placed in its space with one tap.',
+    lines: [
+      'Add a plant, Photo walk and Import a list on an empty My plants, with nothing to set up first; on a phone the + opens them, and Sow seed.',
+      'A new plant\'s card names your spaces as chips, so one tap puts it there beside its habitat; "Added as" has an Undo, and three small steps follow it.'
+    ]
+  },
+  {
     n: 118,
     date: '2026-11-25',
     reader: 'A species page draws the habitat\'s year as one panel: temperature, rain and light on one month axis, with a table of the figures.',

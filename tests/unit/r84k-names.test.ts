@@ -96,11 +96,11 @@ describe('the import files and says the same', () => {
 
 describe('the add form\'s toast (A16)', () => {
   it('says "added" alone when every line was written', () => {
-    expect(addedWords({ count: 1, firstId: '2026-0004', waterFailed: null })).toBe('2026-0004 added');
+    expect(addedWords({ count: 1, firstId: '2026-0004', waterFailed: null })).toBe('Added as 2026-0004'); // round 119 (MYPLANTS 27 b)
     expect(addedWords({ count: 3, firstId: '2026-0004', waterFailed: null })).toBe('3 plants added');
   });
   it('says the watering line that was not written, and why', () => {
-    expect(addedWords({ count: 1, firstId: '2026-0004', waterFailed: 'The device is out of space.' })).toBe('2026-0004 added, but its last watering was not saved (The device is out of space). Record it on its page.');
+    expect(addedWords({ count: 1, firstId: '2026-0004', waterFailed: 'The device is out of space.' })).toBe('Added as 2026-0004, but its last watering was not saved (The device is out of space). Record it on its page.');
     expect(addedWords({ count: 2, firstId: '2026-0004', waterFailed: '' })).toBe("2 plants added, but their last watering was not saved. Record it on each plant's page.");
   });
 });

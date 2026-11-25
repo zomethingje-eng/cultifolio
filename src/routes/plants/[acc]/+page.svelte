@@ -60,6 +60,7 @@
   import Lineage from '$lib/ui/grow/Lineage.svelte';
   import PlantRef from '$lib/ui/grow/PlantRef.svelte';
   import AddedPayoff from '$lib/ui/grow/AddedPayoff.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
   import { MOTHER_HOW, MOTHER_HOW_LABEL } from '$lib/db/types';
   import { linkId } from '$lib/db/lineage';
@@ -464,19 +465,21 @@
   // One date style on the page, the log's: the card said "4 Oct 2026" over a log of "2026-10-15" (round sixty; the grower review, 16).
   const fmtDate = (d: string | null | undefined) => d ?? '';
   // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when one line is left.
+  // Round 119 (MYPLANTS 27 b): three small steps in a row, Placed, Photograph, First measurement, each marked once done,
+  // shown on a growing plant until all three are. The site is not a step on a plant (round fifty-eight).
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
-    const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
-    if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a space', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
-    if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); } });
-    if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
-    // The site is not a step on a plant: it is set once, in Settings, and the habitat block says so in one line while it is not (round fifty-eight; the grower review).
-    return rows.length >= 2 ? rows : [];
+    const rows: { k: string; t: string; done: boolean; go: () => void }[] = [
+      { k: 'place', t: 'Placed', done: !!collection.placeOf(a.locationId), go: () => { moveTo = null; moving = true; } },
+      { k: 'photo', t: 'Photograph', done: photos.length > 0, go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); } },
+      { k: 'measure', t: 'First measurement', done: !!lastMeasure, go: () => { moreActs = true; quick('measure'); } }
+    ];
+    return rows.every((r) => r.done) ? [] : rows;
   });
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');
   let logOpen = $state(false);
   /** The toast after a log line: "Watering recorded", not "Watered recorded" (round twenty-two, 21). */
-  const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded', 'Set fruit': 'Fruit set recorded', 'Set seed': 'Seed set recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
+  const recordedText = (label: string) => ({ Watered: 'Watering recorded', 'Looked at, left dry': 'Recorded: looked at, left dry', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded', 'Set fruit': 'Fruit set recorded', 'Set seed': 'Seed set recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
   /** Water is one tap: a watering today, with an Undo for a few seconds; a watering with a date or a note goes through Log (round forty-nine, 3). */
   let wateringNow = $state(false);
   async function waterNow() {
@@ -876,6 +879,15 @@
     await collection.putWith('accession', a.id, { taxonKey: refKey }, [], collection.sharedWith(a.id, { taxonKey: refKey })); // every plant of the accession (round eighty-seven, t1)
     toast.show(`This plant now records GBIF key ${refKey}.`);
   }
+  // Round 119 (MYPLANTS 27 c): the example's plants were set out with keys the reference has since moved from (the sample's
+  // Welwitschia opened on this notice). In the example only, the reference's key is taken as the button would take it,
+  // without the notice; a grower's own plant still asks.
+  let exampleKeyed = false;
+  $effect(() => {
+    if (!PAGE_IN_DEMO || !keyDiffers || exampleKeyed) return;
+    exampleKeyed = true;
+    void collection.putWith('accession', a!.id, { taxonKey: refKey }, [], collection.sharedWith(a!.id, { taxonKey: refKey })).catch(() => (exampleKeyed = false));
+  });
   /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
   const sharedWith = $derived(a && collection.ready ? collection.sharesNumber('accession', a.id) : []);
   let renumbering = $state(false);
@@ -910,7 +922,7 @@
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}.{#if collection.lastWriteError !== CLOSED_WORDS}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div><!-- the example closed in another tab is not a full phone (round sixty-nine; triage-68 X9; S-C5) -->
 {/if}
-{#if a && keyDiffers}
+{#if a && keyDiffers && !PAGE_IN_DEMO}
   <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
 {/if}
 {#if a && dossier && noGbif(dossier) && a.taxonKey != null}
@@ -1175,12 +1187,8 @@
 
   <Parked kind="accession" id={id} />
   {#if setup.length}
-    <div class="cult setup">
-      <div class="sum">Set it up <span class="hint">what makes this page useful</span></div>
-      <div class="setupbody">
-        <!-- The first unfinished step is the one to take; the rest are listed, not pressed (round twenty, design) -->
-        {#each setup as st, i (st.k)}<button class="setuprow" class:next={i === 0} class:later={i > 0} type="button" onclick={st.go}><span class="n">{i + 1}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
-      </div>
+    <div class="setup" role="group" aria-label="Set it up" id="setup-steps">
+      {#each setup as st (st.k)}<button class="setuprow" class:done={st.done} type="button" aria-disabled={st.done} aria-label={st.done ? `${st.t}, done` : undefined} onclick={() => { if (!st.done) st.go(); }}>{#if st.done}<span class="tick" aria-hidden="true">✓</span>{/if}<span class="t">{st.t}</span></button>{/each}
     </div>
   {/if}
 
@@ -1460,34 +1468,13 @@
   /* The deaccession's line on its own row above the removal's (round eighty-seven, t1). */
   .deaccrow { flex-basis: 100%; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
-  .setup { margin-top: 14px; }
-  .setup .setupbody { display: grid; }
-  .setuprow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 17px; border: 0; border-top: 1px solid var(--rule); background: none; font: inherit; color: inherit; cursor: pointer; min-height: 48px; width: 100%; }
-  .setuprow:first-child { border-top: 0; }
-  .setuprow:hover { background: var(--sunk); }
-  .setuprow .n { font-family: var(--ui); font-variant-numeric: var(--figs); font-size: var(--fs-sm); color: var(--ink3); }
-  .setuprow .t { font-weight: 600; font-size: var(--fs-md); color: var(--accent); }
-  .setuprow .w { font-size: var(--fs-sm); color: var(--ink3); }
-  .setuprow.next { padding-top: 14px; padding-bottom: 14px; }
-  .setuprow.next .t { font-size: var(--fs-base); }
-  .setuprow.later .t { font-weight: 500; color: var(--ink2); font-size: var(--fs-md); }
-  .setuprow.later { padding-top: 9px; padding-bottom: 9px; }
+  .setup { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; } /* wraps at 320 px with 200% text (r62ba N10) */
+  .setuprow { flex: 1 1 7.5em; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: max(48px, var(--tap)); padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--sunk); color: var(--ink2); font: inherit; font-size: var(--fs-sm); text-align: center; cursor: pointer; }
+  .setuprow:hover { border-color: var(--ink3); }
+  .setuprow.done { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: transparent; color: var(--accent); font-weight: 600; cursor: default; }
   .quickbar .more { color: var(--ink2); }
   .confirmrow { display: inline-flex; gap: 6px; }
-  /* On a phone the checklist is one row of steps, scrolled sideways, the next step set in the accent: four stacked rows
-     stood between the name and the plant's first figures on the first screen (round fifty, 4). */
-  @media (max-width: 640px) {
-    .setup .sum .hint { display: none; }
-    .setup .setupbody { display: flex; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 12px 12px; }
-    .setup .setupbody::-webkit-scrollbar { display: none; }
-    /* Steps in a row of plain words, a thin rule between them, the next one in the accent: no chips (DESIGN-87; round
-       eighty-seven's stage-3 integration). */
-    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: var(--tap); padding: 6px 12px; border: 0; border-left: 1px solid var(--rule); border-radius: 0; background: none; white-space: nowrap; }
-    .setuprow:first-child { border-left: 0; padding-left: 0; }
-    .setuprow .n { font-size: var(--fs-xs); }
-    .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: var(--fs-md); }
-    .setuprow .w { display: none; }
-  }
+  /* Round 119 (MYPLANTS 27 b): the three steps are one row at every width; the sideways-scrolled list of round fifty is gone. */
   /* Under a finger every control here is the tap token: the setup steps, the inline links, the entry's ×, the menu and its items (round sixty; the accessibility review, 6). */
   .setuprow { min-height: max(48px, var(--tap)); }
   .factgrid :global(a.tap), .factgrid :global(button.tap), .whybody :global(a.tap) { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 2px; margin: 0 -2px; vertical-align: middle; }

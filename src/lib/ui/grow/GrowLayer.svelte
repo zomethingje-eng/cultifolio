@@ -43,7 +43,9 @@
   // Said once the navigation has settled, and marked as said only then: shown on the add page as the plant page was
   // loading, it was put away with that navigation and never said again (round sixty-one; the harness review, 18).
   $effect(() => {
-    if (answer === null || navigating.to) return;
+    // Round 119 (MYPLANTS 27 b): not over a toast that offers something, such as the first plant's "Added as · Undo",
+    // which it replaced at once on a new device; said when that one has gone.
+    if (answer === null || navigating.to || toast.action) return;
     const ok = answer;
     answer = null;
     // A refusal asks for a backup only where no line on the page does, and only while there is neither a backup nor sync

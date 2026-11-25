@@ -70,10 +70,11 @@ test('r63fv 2: the menu\'s "See the example collection" from a half-typed plant 
 });
 
 test('r63fv 3: the Places tab tapped with the add form open keeps the form, not the example (R1, 8)', async ({ page }) => {
-  // By My plants' first step, a move inside the app: a full load of /places#add stops at the page's own replaceState
-  // (reported to its owner; R1's fixer V, "Needs from others").
-  await page.goto('/plants'); await ready(page);
-  await page.locator('.firststeps a[href="/places#add"]').click();
+  // By the top bar's "Add a space" on My spaces, a move inside the app: a full load of /places#add stops at the page's own
+  // replaceState (reported to its owner; R1's fixer V, "Needs from others"). Round 119: My plants' steps, the way in
+  // before, are gone.
+  await page.goto('/places'); await ready(page);
+  await page.locator('#topbar a.addbtn').click();
   await expect(page.locator('#loc-name')).toBeVisible();
   await page.fill('#loc-name', 'Greenhouse');
   // My spaces is in the menu since round eighty-seven (DESIGN-87): opened from there, as a phone reader now does.

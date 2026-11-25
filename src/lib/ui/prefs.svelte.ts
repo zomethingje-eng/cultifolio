@@ -8,6 +8,7 @@
 import { browser } from '$app/environment';
 import { units } from '$lib/ui/units.svelte';
 import { readSetting, writeSetting } from '$lib/ui/stored';
+import { PAGE_IN_DEMO } from '$lib/db/demo';
 
 const KEY = 'cultifolio.prefs';
 interface Prefs {
@@ -63,9 +64,12 @@ class PrefStore {
   get lengthUnitsFollow(): boolean {
     return this.current.lengthUnits == null;
   }
-  /** True only once loaded and switched on: before the store loads, no request goes out. */
+  /**
+   * True only once loaded and switched on: before the store loads, no request goes out. In the example collection it is on
+   * (round 119; MYPLANTS 27 c): its plants have no photographs of their own, and nothing in it is the visitor's.
+   */
   get referencePhotos(): boolean {
-    return this.loaded && this.current.referencePhotos;
+    return this.loaded && (this.current.referencePhotos || PAGE_IN_DEMO);
   }
 }
 

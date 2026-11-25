@@ -115,7 +115,7 @@ test('r87s3 3: the tracker pages in the look: no shadows, corners of 4 px at mos
   await page.goto('/plants/2025-0003'); await ready(page);
   await expect(page.locator('.idcard .pills .pill')).toContainText('not watered for');
   await page.goto('/today'); await ready(page);
-  const box = page.locator('.chip.tick .tickbox').first();
+  const box = page.locator('.look .tickbox').first(); // round 120: a row's tick on the open space
   const bb = (await box.boundingBox())!;
   const tap = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap')));
   expect(Math.min(bb.width, bb.height)).toBeGreaterThanOrEqual(tap); // the tap token still: 44 px under a finger

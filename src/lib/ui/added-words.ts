@@ -4,7 +4,8 @@
  * plant whose watering line was never written. The plants stand; the toast says the line did not, and why.
  */
 export function addedWords(o: { count: number; firstId: string; waterFailed: string | null }): string {
-  const added = o.count > 1 ? `${o.count} plants added` : `${o.firstId} added`;
+  // One plant: "Added as 2026-0013", the same kind of notice as "Watering recorded · Undo" (round 119; MYPLANTS 27 b).
+  const added = o.count > 1 ? `${o.count} plants added` : `Added as ${o.firstId}`;
   if (o.waterFailed == null) return added;
   const why = o.waterFailed.trim().replace(/[.\s]+$/, '');
   const its = o.count > 1 ? 'their' : 'its';

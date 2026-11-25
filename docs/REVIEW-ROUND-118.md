@@ -9,8 +9,8 @@ Commons photograph copy held the project's lock, and copied into the project bet
   - three charts on one month axis: temperature (days, nights dashed, the 10th to 90th bands, the cold floor dotted where
     the extremes are on file), rain (bars, the span as whiskers), light (the open sky's DLI with its band);
   - four thin rows on fixed scales, so two pages compare by eye: day length 0 to 24 h, RH 40 to 75%, VPD 0 to 2 kPa,
-    wind 0 to 6 m/s. The scales are the reference's 1st and 99th percentiles over a sample of 3,000 pages' months
-    (RH 43 to 72, VPD 0.11 to 1.82, wind 0.9 to 5.9), rounded out; a month outside is drawn at the edge and the table
+    wind 0 to 6 m/s. The scales are the reference's 1st and 99th percentiles over a sample of 2,463
+    pages' months (RH 43 to 72, VPD 0.11 to 1.82, wind 0.9 to 5.9), rounded out; a month outside is drawn at the edge and the table
     holds its figure;
   - this month shaded on every chart, its figure beside each chart's name ("now 22 / 14 °C");
   - Chart | Table. The table is the charts' text: twelve rows, each median with its 10th to 90th span where the span
@@ -47,4 +47,11 @@ Commons photograph copy held the project's lock, and copied into the project bet
 
 ## Gate and deploy
 
-(Written at the gate.)
+- svelte-check 0 errors in 1,898 files; hybrids made again before the gate, 518 as before.
+- The app gate, WebKit and Firefox at one worker each: the first two runs passed every test but one, which passed on its
+  retry (r83a 2, then r83a 1, Firefox): the test's client-side visit to the species page, through its data route, ran past
+  Playwright's default 5 s under four engines at once (2.5 s alone; 9 of 9 alone). Its wait is 15 s. The third run: 6,549
+  unit tests, 2,962 browser tests, every test first time in every engine.
+- Committed as d5db1c0 and pushed on 24 November 2026 at 23:55 UTC. The first `node scripts/deploy.mjs` stopped at its
+  unit tests (r85m, which walks the shipped trees, past its 20 s once); the second deployed, live check 24 of 24, at
+  00:05 UTC on 25 November. The daily run followed at 00:06.

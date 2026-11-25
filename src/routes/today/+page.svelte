@@ -11,6 +11,7 @@
   import { site, readerLat } from '$lib/ui/site.svelte';
   import { plantHref } from '$lib/db/links';
   import PlantName from '$lib/ui/PlantName.svelte';
+  import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import HeldNote from '$lib/ui/HeldNote.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { rhythmWords, restWords, dayWords, addedWords, type Rhythm } from '$lib/ui/today-words';
@@ -201,6 +202,8 @@
   };
   const isResting = (a: Accession) => restRule(a) != null;
   const byNo = (a: Accession, b: Accession) => accNo(a).localeCompare(accNo(b)); // the order of the labels on the bench
+  /** The places with work: a stop listed only for a dry-month rule, a watering dated ahead or a done row is not one (round fifty-nine). */
+  const hasWork = (s: Stop) => !!(s.overdue.length || s.unknown.length || s.resting.length || s.unseen.length);
   /** The places as a walk through the tree, each with what needs doing there; a place with nothing to do is not a stop, unless it was watered from here just now. Plants with no place come last. */
   const stops = $derived.by(() => {
     if (!collection.ready) return [] as Stop[];
@@ -231,19 +234,18 @@
       const ownRest = new Map<string, Accession[]>();
       for (const a of here) { if (collection.placeDry(a)) continue; const r = collection.resting(a); if (!r) continue; const why = restReason(r); (ownRest.get(why) ?? ownRest.set(why, []).get(why)!).push(a); }
       const rests = [...ownRest].map(([why, plants]) => ({ why, plants }));
-      if (dry.length || unseen.length || ahead.length || watered || keptDry || rests.length) out.push({ key, place, depth, overdue, unknown, ahead, resting, restRain: resting.filter((a) => restRule(a) === 'rain'), restCool: resting.filter((a) => restRule(a) === 'cool'), unseen, keptDry, ownRest: rests, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
+      if (here.length || watered) out.push({ key, place, depth, overdue, unknown, ahead, resting, restRain: resting.filter((a) => restRule(a) === 'rain'), restCool: resting.filter((a) => restRule(a) === 'cool'), unseen, keptDry, ownRest: rests, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
     };
     const walk = (parent: string | null, depth: number) => {
       for (const l of collection.children(parent)) { stop(l, depth); walk(l.id, depth + 1); }
     };
     walk(null, 0);
     stop(null, 0);
-    return out;
+    // Round 120 (MYPLANTS 28): the spaces with something to look at first, in walking order; the rest after, in walking order.
+    return [...out.filter((x) => hasWork(x) || x.watered), ...out.filter((x) => !hasWork(x) && !x.watered)];
   });
   /** Plants that need something, each counted once whatever it needs (round fifty-four, 4); a watering dated ahead is not a need. */
   const todo = $derived(new Set(stops.flatMap((s) => [...s.overdue, ...s.unknown, ...s.resting, ...s.unseen].map((a) => a.id))).size);
-  /** The places with work: a stop listed only for a dry-month rule, a watering dated ahead or a done row is not one (round fifty-nine). */
-  const hasWork = (s: Stop) => !!(s.overdue.length || s.unknown.length || s.resting.length || s.unseen.length);
   const workPlaces = $derived(stops.filter((s) => s.place && hasWork(s)).length);
   const workNoPlace = $derived(stops.some((s) => !s.place && hasWork(s)));
   const across = $derived(workPlaces ? `across ${workPlaces} ${workPlaces === 1 ? 'space' : 'spaces'}${workNoPlace ? ' and among the plants with no space' : ''}` : workNoPlace ? 'among the plants with no space' : '');
@@ -251,6 +253,84 @@
   const days = (a: Accession) => { const w = collection.lastWatered(a.id); return daysBetween(w ?? collection.madeOn('accession', a.id) ?? a.acquired ?? today, today); };
   /** Plants a grower unticked on a stop: left out of its Water button (round fifty-eight; the grower review). Per page visit. */
   let skipped = $state(new Set<string>());
+  /**
+   * Round 120 (MYPLANTS 28): a space's plants to look at, one list. A plant past its rhythm, or with no watering recorded,
+   * opens ticked; one listed only for a look (its habitat's dry season, or unseen) opens unticked: today's "water only if
+   * you want to" in one list. A tick is a watering; no tick is "looked at, left dry".
+   */
+  type Look = { a: Accession; why: 'past' | 'none' | 'rain' | 'cool' | 'unseen'; tick: boolean };
+  const looks = (s: Stop): Look[] => [
+    ...s.overdue.map((a) => ({ a, why: 'past' as const, tick: true })),
+    ...s.unknown.map((a) => ({ a, why: 'none' as const, tick: true })),
+    ...s.restRain.map((a) => ({ a, why: 'rain' as const, tick: false })),
+    ...s.restCool.map((a) => ({ a, why: 'cool' as const, tick: false })),
+    ...s.unseen.map((a) => ({ a, why: 'unseen' as const, tick: false }))
+  ];
+  /** The grower's own ticks, over each plant's default, for this visit. */
+  let ticks = $state(new Map<string, boolean>());
+  const isTicked = (l: Look) => ticks.get(l.a.id) ?? l.tick;
+  const setTick = (id: string, on: boolean) => { const n = new Map(ticks); n.set(id, on); ticks = n; };
+  /** "Done · 1 watered, 1 left dry": the words follow the ticks. */
+  const doneWords = (ls: Look[]) => { const w = ls.filter(isTicked).length, d = ls.length - w; return [w ? `${w} watered` : '', d ? `${d} left dry` : ''].filter(Boolean).join(', '); };
+  /** Why a plant is listed, in a grower's words; "You have watered it about every N days" where the log holds three gaps. */
+  const reasonOf = (l: Look): string => {
+    const base = l.why === 'past' ? `${rhythmWords([rhythmOf(l.a)])}: ${dayWords(days(l.a))} since its last watering.`
+      : l.why === 'none' ? `No watering recorded: ${addedWords(days(l.a))}.`
+      : l.why === 'rain' || l.why === 'cool' ? `${restWords(l.why, units.current)}. It is listed for a look, not for water.`
+      : collection.unseenWhy(l.a.id) === 'missed' ? `Missed at the audit of ${collection.missedAt(l.a.id)}.` : `Not seen since ${collection.lastSeen(l.a.id)}, ninety days and more since this space's audit.`;
+    const gap = collection.wateringGap(l.a.id);
+    return gap ? `${base} You have watered it about every ${gap} days.` : base;
+  };
+  const shortWhy = (l: Look) => (l.why === 'past' ? 'past its rhythm' : l.why === 'none' ? 'no watering recorded' : l.why === 'unseen' ? (collection.unseenWhy(l.a.id) === 'missed' ? 'missed at audit' : 'not seen lately') : 'habitat dry season');
+  /** The pill: what is to look at, else when the next plant here comes due, else nothing due. */
+  const WEEKDAY = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'UTC' });
+  const pillOf = (s: Stop): string => {
+    const n = looks(s).length;
+    if (n) return `${n} to look at`;
+    let best: number | null = null;
+    for (const a of growing) {
+      if ((s.place ? collection.placeOf(a.locationId ?? '') !== s.place.id : a.locationId && collection.location(a.locationId)) || collection.keptDry(a) || collection.wateringAhead(a.id)) continue;
+      const dry = collection.leftDry(a);
+      const left = Math.max(collection.rhythm(a) - collection.careDays(a), dry ? dry.days - daysBetween(dry.d, today) : 0);
+      if (left > 0 && (best == null || left < best)) best = left;
+    }
+    if (best == null) return 'nothing due';
+    if (best === 1) return 'next due tomorrow';
+    if (best <= 6) { const [y, m, d] = today.split('-').map(Number); return `next due ${WEEKDAY.format(new Date(Date.UTC(y, m - 1, d + best)))}`; }
+    return `next due in ${best} days`;
+  };
+  /** The one space open: the first with something to look at, until the grower opens another. */
+  let openKey = $state<string | null | undefined>(undefined);
+  const firstOpen = $derived(stops.find((x) => looks(x).length && !x.watered)?.key ?? null);
+  const isOpen = (s: Stop) => (openKey === undefined ? firstOpen : openKey) === s.key;
+  const toggleOpen = (s: Stop) => { openKey = isOpen(s) ? null : s.key; };
+  /** Reasons opened, by plant. */
+  let whyOpen = $state(new Set<string>());
+  const toggleWhy = (id: string) => { const n = new Set(whyOpen); if (n.has(id)) n.delete(id); else n.add(id); whyOpen = n; };
+  /**
+   * Done records the space: a watering on each ticked plant, a "looked at, left dry" on each unticked one, dated today, in
+   * one write. The space closes to one line with Undo, and the next space with something to look at opens.
+   */
+  async function doneHere(s: Stop) {
+    const ls = looks(s);
+    if (watering || !ls.length || !sheetsSettled) return;
+    watering = s.key;
+    try {
+      const d = localDate();
+      if (day.current !== d) day.current = d;
+      const from = `from Today: ${s.place ? s.place.name : 'plants with no space'}`;
+      const ids = await collection.addEventsIds(ls.map((l) => ({ acc: l.a.id, d, t: (isTicked(l) ? 'water' : 'dry') as 'water' | 'dry', note: from })));
+      wateredHere.add(s.key, ids, ls.map((l) => ({ id: l.a.id, no: accNo(l.a), name: plantLabel(l.a), ...(isTicked(l) ? {} : { dry: true }) })), 0);
+      const words = doneWords(ls);
+      const i = stops.findIndex((x) => x.key === s.key);
+      openKey = [...stops.slice(i + 1), ...stops.slice(0, i)].find((x) => looks(x).length && !wateredHere.get(x.key))?.key ?? null;
+      await tick();
+      document.querySelector<HTMLElement>(openKey ? `#stop-${CSS.escape(openKey)} .spacehead` : `#stop-${CSS.escape(s.key)} .row.done button`)?.focus();
+      toast.show(`Done: ${words}.`);
+    } finally {
+      watering = null;
+    }
+  }
   const toggleSkip = (id: string) => { const n = new Set(skipped); if (n.has(id)) n.delete(id); else n.add(id); skipped = n; };
   const ticked = (s: Stop) => [...s.overdue, ...s.unknown].filter((a) => !skipped.has(a.id));
   const tickedOf = (list: Accession[]) => list.filter((a) => !skipped.has(a.id));
@@ -314,13 +394,14 @@
     try {
       await collection.removeEvents(w.ids);
       wateredHere.take(key);
-      toast.show(`Undone: ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
+      openKey = key; // round 120: the space opens again, its ticks as they were
+      toast.show(`Undone: ${w.ids.length} ${w.plants.some((p) => p.dry) ? 'line' : 'watering line'}${w.ids.length === 1 ? '' : 's'} removed.`);
       // The Undo went with its row: focus goes to the stop's Water button, back for the plants, else a resting row's,
       // else the stop's heading, never to the page body. Each in turn: one querySelector over the list returned the
       // first in page order, which was always the heading (round sixty; the outside review's A35).
       await tick();
       const stopEl = document.getElementById(`stop-${key}`);
-      for (const sel of ['.head button.water:not(:disabled)', 'button.restwater:not(:disabled)', 'h3 a', 'h3']) {
+      for (const sel of ['button.doneall', '.spacehead', 'h3']) {
         const to = stopEl?.querySelector<HTMLElement>(sel);
         if (to) { to.focus(); break; }
       }
@@ -359,7 +440,7 @@
   const openRow = async (k: string) => {
     const n = new Set(opened); n.add(k); opened = n;
     await tick();
-    const chip = document.querySelector(`[data-row="${CSS.escape(k)}"]`)?.querySelectorAll(':scope > .chip')[CHIPS] as HTMLElement | undefined;
+    const chip = document.querySelector(`[data-row="${CSS.escape(k)}"]`)?.querySelectorAll(':scope > .chip, :scope > .look')[CHIPS] as HTMLElement | undefined; // a look row since round 120
     (chip?.matches('a') ? chip : chip?.querySelector<HTMLElement>('input, a'))?.focus();
   };
   const firstOf = <T,>(list: T[], k: string): T[] => (opened.has(k) || list.length <= CHIPS ? list : list.slice(0, CHIPS));
@@ -368,13 +449,22 @@
 <!-- Each plant a chip with its full name (cultivar or cross) and a tick box inside a finger-sized label of its own,
      apart from the link: the 20 px box sat 6 px from the plant link, and a tap just off it opened the plant (round
      sixty; the grower review, 7; the accessibility review, 6; the outside review's A38). -->
+{#snippet notes(s: Stop)}
+{#if s.keptDry}
+  <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its space\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
+{/if}
+{#each s.ownRest as r, ri (r.why)}
+  <p class="row resting ownrest" data-row="{s.key}-r{ri}"><span class="lab">Resting, not counted as due: {r.why}.</span> {#each firstOf(r.plants, `${s.key}-r${ri}`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.wateringWords(a)}</span></a>{/each}{@render more(r.plants, `${s.key}-r${ri}`, false)}</p>
+{/each}
+{#if s.ahead.length}
+  <p class="row ahead" data-row="{s.key}-a"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each firstOf(s.ahead, `${s.key}-a`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}{@render more(s.ahead, `${s.key}-a`, false)}</p>
+{/if}
+{/snippet}
+
 {#snippet more(list: unknown[], k: string, ticks: boolean)}
   {#if list.length > CHIPS && !opened.has(k)}<button class="linkish morechips" type="button" onclick={() => void openRow(k)}>Show {list.length - CHIPS} more{ticks ? ' (ticked)' : ''}</button>{/if}
 {/snippet}
 
-{#snippet chip(a: Accession, fact: string)}
-  <span class="chip tick" class:off={skipped.has(a.id)}><label class="tickbox" for="w-{a.id}"><input type="checkbox" id="w-{a.id}" checked={!skipped.has(a.id)} onchange={() => toggleSkip(a.id)} aria-label="Water {accNo(a)} {plantLabel(a)}" /></label><a href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{fact}</span></a></span>
-{/snippet}
 
 <svelte:head><title>Today · Cultifolio</title></svelte:head>
 
@@ -397,7 +487,7 @@
       <!-- Today with no plants is one step to adding one (round 107; the first hand-off's round 7): the button, not a line of
            instructions. -->
       <ExampleOffer><div class="emptybox" id="today-empty"><p class="muted" style="margin: 0 0 10px">No growing plants yet.</p><a class="btn pri" id="today-add" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>{collection.accessions.length ? 'Add a plant' : 'Add your first plant'}</a></div></ExampleOffer>
-    {:else if !stops.length}
+    {:else if !stops.length}<!-- every growing plant is under a stop since round 120, so this is not reached with a plant -->
       <!-- What is true: no record meets the checks; not that every plant was watered. The outcome first, the rule one tap away (round sixty; the grower review, §3). -->
       <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
       {#if firstWeeks}
@@ -405,68 +495,69 @@
         <p class="small muted" id="first-weeks">No watering is recorded yet, so each plant is counted from the day it was added. Once a plant's rhythm passes, it is listed here under its space with a Water button, and so is a plant missed at an audit. To start the count sooner, press Water on a plant's page, or give "Last watered" when you add plants.</p>
       {/if}
     {:else}
-      <p class="small muted">{#if todo}{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something {across}.{:else}Nothing past its rhythm or unseen; the spaces below have a note for today.{/if}</p>
-      <ol class="stops">
+      <!-- Round 120 (MYPLANTS 28): spaces, not a list of plants. One line of how many have something to look at; each space
+           one row in walking order, those to look at first; the one open shows its plants with a tick each and one Done. -->
+      <p class="small" id="today-count">{#if workPlaces || workNoPlace}<b>{workPlaces + (workNoPlace ? 1 : 0)} {workPlaces + (workNoPlace ? 1 : 0) === 1 ? 'space' : 'spaces'} to look at</b>, in your walking order.{:else}Nothing to look at; your spaces, in your walking order.{/if}</p>
+      <ol class="stops spaces">
         {#each stops as s (s.key)}
-          {@const n = ticked(s).length}
-          {@const total = s.overdue.length + s.unknown.length}
-          <li class="stop" id="stop-{s.key}" style="--depth: {s.depth}{s.watered?.height ? `; min-height: ${s.watered.height}px` : ''}">
+          {@const ls = looks(s)}
+          {@const open = isOpen(s) && !!ls.length && !s.watered}
+          <li class="stop" class:quiet={!ls.length && !s.watered} class:open id="stop-{s.key}" style="--depth: {s.depth}">
             <div class="head">
-              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No space{/if}<span class="sr">,</span> <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
-              <!-- Water while something is ticked; with nothing ticked, words, not a disabled "Water 0 of 3"; and the done mark only once nothing ticked is left anywhere on the stop (round fifty-eight; round sixty). -->
-              {#if total && n}
-                <!-- While the sheets are read again, the reason is said beside the button, not only on hover (round sixty-one; the accessibility review, 13). -->
-                {#if !sheetsSettled}<span class="nonetick small muted" id="why-{s.key}">{sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets first…'}</span>{/if}
-                <button class="btn small water" type="button" onclick={() => waterHere(s, ticked(s))} aria-disabled={!!watering || !sheetsSettled} aria-describedby={!sheetsSettled ? `why-${s.key}` : undefined} title="One watering line on each plant ticked, dated today; Undo on the stop takes them back">Water {n === total ? n : `${n} of ${total}`} here</button>
-              {:else if s.watered && !tickedLeft(s) && (!total || headWatered(s))}
-                <span class="btn small water donemark" aria-hidden="true">Watered ✓</span>
-              {:else if total}
-                <span class="nonetick small muted">None ticked</span>
-              {/if}
+              <h3 tabindex="-1"><button type="button" class="spacehead" aria-expanded={open} aria-controls="body-{s.key}" onclick={() => toggleOpen(s)} disabled={!ls.length || !!s.watered}>
+                <span class="sname">{s.place ? s.place.name : 'No space'}</span><span class="sr">,</span>
+                <span class="swhere muted small">{#if s.place?.parentId && collection.location(s.place.parentId)}{collection.location(s.place.parentId)?.name} · {/if}{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span>
+                <span class="spacestate" class:has={!!ls.length}>{s.watered ? 'done' : pillOf(s)}</span>
+              </button></h3>
+              {#if s.place}<a class="spacelink small" href="/places/{s.place.id}" aria-label="{s.place.name}: its page">›</a>{/if}
             </div>
-            {#if restUnread(s)}
-              <!-- Drawn with the stops, after the first read's hold, so nothing moves once they are shown; one line a stop, not one a plant (round sixty-two; rule 2, A6). -->
-              <p class="row restnc"><NotChecked what="Resting months" why={`${sheetsClause[0].toUpperCase()}${sheetsClause.slice(1)}, so no plant here is set apart for its habitat's rest.`} /><span>: {sheetsClause}. Every plant past its rhythm is listed.</span> <button class="linkish" type="button" onclick={checkAgain} aria-disabled={!sheetsSettled || sheetsWait > 0}>{againWords(sheetsWhy, nowMs)}</button></p>
-            {/if}
             {#if s.watered}
-              <!-- The plants just watered stay on the stop, so it keeps its height and the next stop does not move under the finger; the Undo is here and only here. -->
-              <div class="row done" data-row="{s.key}-d"><span class="lab">Watered just now · <button class="linkish" type="button" onclick={() => undoHere(s.key)} aria-disabled={undoing === s.key}>Undo</button></span> {#each firstOf(s.watered.plants, `${s.key}-d`) as p (p.id)}{@const pr = collection.accession(p.id)}<a class="chip" href={pr ? plantHref(pr) : `/plants/${p.id}`}><b>{p.no}</b> {#if p.name}<i>{p.name}</i>{/if} <span class="muted">✓</span></a>{/each}{@render more(s.watered.plants, `${s.key}-d`, false)}</div>
+              {@const wn = s.watered.plants.filter((p) => !p.dry).length}
+              {@const dn = s.watered.plants.length - wn}
+              <!-- After Done the space is one line with its Undo; the Undo is here and only here. -->
+              <div class="row done" data-row="{s.key}-d"><span class="lab">Done · {[wn ? `${wn} watered` : '', dn ? `${dn} left dry` : ''].filter(Boolean).join(', ')} · <button class="linkish" type="button" onclick={() => undoHere(s.key)} aria-disabled={undoing === s.key}>Undo</button></span></div>
             {/if}
-            {#if s.overdue.length}
-              <div class="row warn" data-row="{s.key}-o"><span class="lab">{rhythmWords(s.overdue.map(rhythmOf))}{total > 1 ? '; untick any to leave it out' : ''}</span> {#each firstOf(s.overdue, `${s.key}-o`) as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each}{@render more(s.overdue, `${s.key}-o`, true)}</div>
-            {/if}
-            {#if s.unknown.length}
-              <div class="row unknown" data-row="{s.key}-u"><span class="lab">No watering recorded</span> {#each firstOf(s.unknown, `${s.key}-u`) as a (a.id)}{@render chip(a, addedWords(days(a)))}{/each}{@render more(s.unknown, `${s.key}-u`, true)}</div>
-            {/if}
-            {#if s.keptDry}
-              <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its space\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
-            {/if}
-            {#each s.ownRest as r, ri (r.why)}
-              <!-- Resting by the plant's own season: listed, never offered a Water button (round eighty-seven, t3; plan F7). -->
-              <p class="row resting ownrest" data-row="{s.key}-r{ri}"><span class="lab">Resting, not counted as due: {r.why}.</span> {#each firstOf(r.plants, `${s.key}-r${ri}`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.wateringWords(a)}</span></a>{/each}{@render more(r.plants, `${s.key}-r${ri}`, false)}</p>
-            {/each}
-            {#if s.ahead.length}
-              <p class="row ahead" data-row="{s.key}-a"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each firstOf(s.ahead, `${s.key}-a`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}{@render more(s.ahead, `${s.key}-a`, false)}</p>
-            {/if}
-            <!-- Worded by the rule that applied, in a grower's words, and ticked like the rows above: the button waters what is ticked; with nothing ticked, words, not a disabled "Water these 0" (round fifty-nine; round sixty). -->
-            {#each [{ list: s.restRain, rule: 'rain' as const }, { list: s.restCool, rule: 'cool' as const }] as g (g.rule)}
-              {#if g.list.length}
-                {@const k = tickedOf(g.list).length}
-                <div class="row resting" data-row="{s.key}-{g.rule}"><span class="lab">{restWords(g.rule, units.current)}{g.list.length > 1 ? '; untick any to leave it out' : ''}</span> {#each firstOf(g.list, `${s.key}-${g.rule}`) as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each}{@render more(g.list, `${s.key}-${g.rule}`, true)} {#if k}<button class="btn small water restwater" type="button" onclick={() => waterHere(s, tickedOf(g.list))} aria-disabled={!!watering}>{waterWords(k)}</button>{:else}<span class="nonetick small muted">None ticked</span>{/if}</div>
-              {/if}
-            {/each}
-            {#if s.unseen.length}
-              <p class="row warn" data-row="{s.key}-s"><span class="lab">Missed at the last audit, or not seen for ninety days since this space's audit</span> {#each firstOf(s.unseen, `${s.key}-s`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}{@render more(s.unseen, `${s.key}-s`, false)}</p>
+            {#if !ls.length && !s.watered && (s.keptDry || s.ownRest.length || s.ahead.length)}<div class="notes">{@render notes(s)}</div>{/if}
+            {#if open}
+              <div class="body" id="body-{s.key}">
+                {#if restUnread(s)}
+                  <p class="row restnc"><NotChecked what="Resting months" why={`${sheetsClause[0].toUpperCase()}${sheetsClause.slice(1)}, so no plant here is set apart for its habitat's rest.`} /><span>: {sheetsClause}. Every plant past its rhythm is listed.</span> <button class="linkish" type="button" onclick={checkAgain} aria-disabled={!sheetsSettled || sheetsWait > 0}>{againWords(sheetsWhy, nowMs)}</button></p>
+                {/if}
+                <ul class="looks" data-row="{s.key}-l">
+                  {#each firstOf(ls, `${s.key}-l`) as l (l.a.id)}
+                    {@const cover = collection.cover(l.a.id)}
+                    <li class="look" class:ticked={isTicked(l)}>
+                      <label class="tickbox" for="w-{l.a.id}"><input type="checkbox" id="w-{l.a.id}" checked={isTicked(l)} onchange={(e) => setTick(l.a.id, (e.currentTarget as HTMLInputElement).checked)} aria-label="Water {accNo(l.a)} {plantLabel(l.a)}" /></label>
+                      <button type="button" class="lookrow" aria-expanded={whyOpen.has(l.a.id)} aria-controls="why-{l.a.id}" onclick={() => toggleWhy(l.a.id)}>
+                        {#if cover}<span class="th"><PhotoImg id={cover.id} alt="" loading="lazy" /></span>{/if}
+                        <span class="lname"><b>{accNo(l.a)}</b> <i><PlantName plant={l.a} /></i><span class="lwhy small muted">{shortWhy(l)}</span></span>
+                        <span class="ldays" class:due={l.why === 'past'}>{collection.lastWatered(l.a.id) ? dayWords(days(l.a)) : '–'}</span>
+                      </button>
+                      {#if whyOpen.has(l.a.id)}<p class="why small" id="why-{l.a.id}">{reasonOf(l)} <a href={plantHref(l.a)}>Its page</a></p>{/if}
+                    </li>
+                  {/each}
+                </ul>
+                {@render more(ls, `${s.key}-l`, true)}
+                {@render notes(s)}
+                {#if !sheetsSettled}<p class="nonetick small muted" id="why-{s.key}">{sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets first…'}</p>{/if}
+                <button class="btn pri water doneall" type="button" onclick={() => doneHere(s)} aria-disabled={!!watering || !sheetsSettled} aria-describedby={!sheetsSettled ? `why-${s.key}` : undefined} title="A watering on each ticked plant and a looked-at, left-dry entry on each unticked one, dated today; Undo on the space takes them back">Done · {doneWords(ls)}</button>
+              </div>
             {/if}
           </li>
         {/each}
       </ol>
+      {#if !todo}
+        <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
+        {#if firstWeeks}
+          <p class="small muted" id="first-weeks">No watering is recorded yet, so each plant is counted from the day it was added. Once a plant's rhythm passes, its space shows it here to look at, with a tick and Done, and so does a plant missed at an audit. To start the count sooner, press Water on a plant's page, or give "Last watered" when you add plants.</p>
+        {/if}
+      {/if}
     {/if}
     {#if collection.ready && growing.length && sheetsOnce}
       <!-- The method, one tap away rather than before the first plant (round sixty; the grower review, §3). -->
       <details class="why howdecides" id="how-today">
         <summary>How Today decides</summary>
-        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its space or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A space's dry months keep its plants off the list, and so do a plant's own rest months, once you set or confirm its growing season on its page; it is listed as resting, with why, and no Water button. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its space's audit, is listed too. Spaces come in the order they are kept, spaces inside after their parent.</p>
+        <p class="small muted">A plant is listed when it is past its watering rhythm: {DUE_DAYS} days unless its space or the plant sets another. A plant with no watering recorded is counted from the day its record was made, and said so. A space's dry months keep its plants off the list, and so do a plant's own rest months, once you set or confirm its growing season on its page; it is listed as resting, with why, and no Water button. A species whose habitat is in its dry season now, by the rain rule of its species sheet, is listed apart, to water only if you want to; under {ruleRain(120, units.current)} of rain a year the sheet reads the habitat's year by temperature instead, and a plant is listed apart in its habitat's warmer six months. A plant missed at an audit, or not seen for ninety days since its space's audit, is listed too. Spaces come in the order they are kept, spaces inside after their parent, those with something to look at first. A plant past its rhythm opens ticked; one listed only for a look opens unticked. Done records a watering on each ticked plant and "looked at, left dry" on each unticked one. Left dry, a plant is off this list for half its rhythm, and at least three days; it does not change "since watered". "You have watered it about every N days" is the middle of its last waterings' gaps, up to six, said with three or more; it changes nothing here.</p>
       </details>
     {/if}
   </section>
@@ -475,7 +566,8 @@
        they were pushed off the screen by the stops, a shift of 0.15 on a phone (round sixty-one; the accessibility review, 5). -->
   <!-- Nor while the page is on its way into the example, or the example is being set out: the empty page's sections would be drawn and gone (round sixty-three, V2). -->
   {#if collection.ready && (!growing.length || sheetsOnce) && !example.entering && !(example.seeding && !growing.length)}
-  <section id="frost" aria-labelledby="frost-h">
+  <!-- Round 120 (MYPLANTS 28): frost first when the watch has something to say (the grid's order). -->
+  <section id="frost" aria-labelledby="frost-h" class:first={!!data && data.risk.level !== 'none'}>
     <div class="secrule"><h2 id="frost-h">Frost watch</h2><div class="line"></div></div>
     {#if !site.current && site.loaded}
       <!-- One tap from here, as the front page's line offers: in the sample Settings is shut, and "Set your site in Settings" led nowhere (round sixty-two; the grower review, 11); so in the sample the link is not offered (the verification review's words 7). -->
@@ -545,6 +637,10 @@
   #rest:not(:has(> :global(:not(.secrule)))) { display: none; }
   /* One column that may shrink to the screen: an auto column took the width of its widest line at 200% text and the page scrolled sideways (round fifty-nine). */
   .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  #water { order: 2; }
+  #frost { order: 3; }
+  #frost.first { order: 1; }
+  #rest { order: 4; }
   section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
   section.waiting { min-height: 80vh; align-content: start; }
   /* The night's risk as a line with a rule in its colour, not a tinted box (DESIGN-87; round eighty-seven's stage-3
@@ -582,31 +678,20 @@
   .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 18px 0 0; padding: 4px 0; min-height: var(--tap); max-width: calc(100% - 18px); border: 0; border-radius: 0; background: none; color: var(--ink); text-decoration: none; vertical-align: middle; font-variant-numeric: tabular-nums lining-nums; }
   a.chip:hover { text-decoration: underline; }
   .chip i { color: var(--ink2); }
-  .chip.tick a { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 0.3em; min-width: 0; }
   .chip b, .chip .muted { white-space: nowrap; }
   /* Room for the italic's overhang inside the clipped box: "Lithops lesliei" drew as "Lithops leslie" with its last letter cut (round sixty-seven; triage-66 P6, S-F13). */
   .chip i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; min-width: 0; padding-inline-end: 0.15em; }
   /* A done chip's parts wrap inside it, as a ticked chip's do: at 320 px with 200% text "Conophytum minimum ✓" pushed the page 4 px sideways (round sixty-two; the accessibility review, 9). */
-  .row.done a.chip { display: inline-flex; flex-wrap: wrap; column-gap: 0.3em; row-gap: 0; padding: 4px 0; } /* a chip, not the row's plain link (`.row > a`), which drew it inline and let the name run past the screen */
   .restnc { border-left-color: var(--warm); }
   .restnc .linkish { min-height: var(--tap); margin-left: 4px; color: var(--accent); }
-  .chip.tick { padding-left: 0; }
-  .chip.tick a { color: inherit; text-decoration: none; min-height: var(--tap); }
-  .chip.tick a:hover { text-decoration: underline; }
-  .chip.tick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
   /* The box's own target, a finger wide and tall, apart from the plant link (round sixty; the accessibility review, 6). */
-  .chip.tick .tickbox { display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); margin: -4px 0 -4px -10px; cursor: pointer; }
   .nonetick { margin-left: 6px; font-size: var(--fs-sm); }
-  .head .nonetick { margin-left: 0; }
   .howdecides { margin-top: 6px; }
   .howdecides p { margin: 4px 0 0; }
   .nights.strip > summary { font-weight: 400; color: var(--ink2); }
   .risk.none { padding: 0; }
   .nights.strip .unchecked { color: var(--warm-ink); font-weight: 600; }
-  .chip.off { opacity: 0.55; }
-  .chip.off b { text-decoration: line-through; }
   .donemark { cursor: default; background: none; color: var(--accent); }
-  .row .btn { margin-left: 6px; vertical-align: middle; }
   .row.done { border-left-color: var(--accent); }
   .row.done .lab { color: var(--accent); font-weight: 600; }
   .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
@@ -621,5 +706,44 @@
     #water > .secrule { margin-top: 0; }
     .stop { padding: 8px 0 8px calc(var(--depth) * 8px); }
     .row { font-size: var(--fs-md); }
+  }
+  /* Round 120 (MYPLANTS 28): each space one row, its pill and a chevron; the open one shows its plants, a tick each, and Done. */
+  .spaces .stop { border: 1px solid var(--rule); border-radius: var(--r); padding: 0; background: var(--bg); }
+  .spaces .stop.open { border-color: var(--ink); }
+  .spaces .stop.quiet .sname { font-weight: 400; color: var(--ink2); }
+  .spaces .head { padding: 0; }
+  .spaces h3 { flex: 1 1 auto; }
+  .spacehead { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'n p' 'w p'; align-items: center; gap: 0 10px; width: 100%; min-height: 56px; padding: 10px 14px; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+  .spacehead:disabled { cursor: default; opacity: 1; }
+  .spacehead .sname { grid-area: n; font-weight: 600; }
+  .spacehead .swhere { grid-area: w; font-weight: 400; }
+  /* The state in words, not in a box (DESIGN-87; r87s3 3): what is to look at in the warm ink, the rest muted. */
+  .spacehead .spacestate { grid-area: p; font-size: var(--fs-sm); font-weight: 500; color: var(--ink3); white-space: nowrap; }
+  .spacehead .spacestate.has { color: #9a5b12; font-weight: 600; }
+  .spacelink { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); margin-right: 4px; color: var(--ink3); text-decoration: none; font-size: 1.3em; }
+  .spaces .row.done { margin: 0 14px 10px; }
+  .body { border-top: 1px solid var(--rule); padding: 0 14px 14px; }
+  .looks { list-style: none; margin: 0; padding: 0; }
+  .look { display: grid; grid-template-columns: var(--tap) minmax(0, 1fr); align-items: center; border-bottom: 1px solid var(--rule2); }
+  .look .tickbox { display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); cursor: pointer; }
+  .look .tickbox input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
+  .lookrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 56px; padding: 6px 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+  .lookrow .th { width: 44px; height: 44px; border-radius: var(--r-sm); overflow: hidden; }
+  .lookrow .th :global(img) { width: 100%; height: 100%; object-fit: cover; }
+  .lookrow:not(:has(.th)) { grid-template-columns: minmax(0, 1fr) auto; }
+  .lname { display: grid; min-width: 0; }
+  .lname i { overflow-wrap: anywhere; }
+  .ldays { font-variant-numeric: tabular-nums; color: var(--ink2); }
+  .ldays.due { color: #9a5b12; font-weight: 600; }
+  .look .why { grid-column: 2; margin: 0 0 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--sunk); }
+  .notes { padding: 0 14px 8px; }
+  .doneall { width: 100%; margin-top: 12px; min-height: 48px; }
+  @media (min-width: 1024px) {
+    /* On a desktop the spaces are a list at the left and the open space fills the right. */
+    .spaces { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); align-items: start; }
+    .spaces .stop { grid-column: 1; }
+    .spaces .stop.open { display: contents; }
+    .spaces .stop.open > .head { grid-column: 1; border: 1px solid var(--ink); border-radius: var(--r); }
+    .spaces .stop.open > .body { grid-column: 2; grid-row: 1 / span 40; border: 1px solid var(--rule); border-radius: var(--r); padding-top: 4px; }
   }
 </style>

@@ -6,6 +6,7 @@
  */
 import { SvelteMap } from 'svelte/reactivity';
 import { localDate, madeOn, daysBetween } from '$core/dates';
+import { dryHold, wateringGap } from '$core/watering';
 import { today as day } from '$lib/ui/day.svelte';
 
 /** Three weeks: the Due chip's "21+ days" and Today's "three weeks or more" both mean this many days, inclusive (round twenty-five, 2). */
@@ -1693,7 +1694,25 @@ class Collection {
   }
   /** Growing plants not watered, or not recorded as watered, for their rhythm (`rhythm`, 21 days unless the grower set one) or more, outside a month their place is kept dry. Derived once per change and per day, not scanned on every read: Today, the chip and the list each read it per render (round fifty-two, 5). */
   // A plant whose watering is dated ahead of today is not due: one reading of it on every surface (round fifty-five, 5; the first reviewer's finding 5).
-  private dueList = $derived.by(() => { void this.eventsByAcc; void day.current; return this.accessions.filter((a) => a.status === 'growing' && !this.keptDry(a) && this.careDays(a) >= this.rhythm(a) && !this.wateringAhead(a.id)); });
+  private dueList = $derived.by(() => { void this.eventsByAcc; void day.current; return this.accessions.filter((a) => a.status === 'growing' && !this.keptDry(a) && this.careDays(a) >= this.rhythm(a) && !this.wateringAhead(a.id) && !this.leftDry(a)); });
+  /**
+   * A "looked at, left dry" still in force (round 120; MYPLANTS 28): the latest such entry dated today or earlier and after
+   * the last watering, fewer days ago than half the rhythm in force (at least three). Its date and the day it lapses; null
+   * when none holds. It keeps the plant off Today; "since watered" is unchanged.
+   */
+  leftDry(a: Accession): { d: string; days: number } | null {
+    const today = localDate();
+    const w = this.lastWatered(a.id);
+    const e = this.events(a.id).find((x) => x.t === 'dry' && x.d <= today);
+    if (!e || (w && e.d < w)) return null;
+    const hold = dryHold(this.rhythm(a));
+    return daysBetween(e.d, today) < hold ? { d: e.d, days: hold } : null;
+  }
+  /** "You have watered it about every N days": the median of its last waterings' gaps, with three gaps or more (round 120). */
+  wateringGap(acc: string): number | null {
+    const today = localDate();
+    return wateringGap(this.events(acc).filter((e) => e.t === 'water' && e.d <= today).map((e) => e.d));
+  }
   /**
    * How often a plant is watered, in days, by the grower's own rule (round fifty-eight; the grower review): the plant's own
    * rhythm, else its place's, inherited down the tree, else 21. A fact about the grower's rhythm, not advice.

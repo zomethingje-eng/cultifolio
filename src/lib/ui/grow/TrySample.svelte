@@ -9,16 +9,16 @@
    */
   import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { enterExample, notEnteredWords, SHOW_EXAMPLE, EXAMPLE_APART, type NotEntered } from './example.svelte';
-  let { note = true, to = '/plants' }: { note?: boolean; to?: string } = $props();
+  let { note = true, to = '/plants', quiet = false }: { note?: boolean; to?: string; quiet?: boolean } = $props();
   let demo = $state(false);
   let refused = $state<NotEntered | null>(null);
   $effect(() => { demo = PAGE_IN_DEMO; }); // the page's collection, not the tab's flag of the moment (round sixty-seven; triage-66 V3)
 </script>
 
 {#if !demo}
-  <p class="trysample">
-    <button class="btn pri" type="button" id="try-sample" onclick={() => { const r = enterExample(to); refused = r === true ? null : r; }}>{SHOW_EXAMPLE}</button>
-    {#if note}<span class="muted" id="try-sample-apart">{EXAMPLE_APART}</span>{/if}
+  <p class="trysample" class:quiet>
+    <button class={quiet ? 'linkish' : 'btn pri'} type="button" id="try-sample" onclick={() => { const r = enterExample(to); refused = r === true ? null : r; }}>{SHOW_EXAMPLE}</button>
+    {#if note && !quiet}<span class="muted" id="try-sample-apart">{EXAMPLE_APART}</span>{/if}
   </p>
   {#if refused}<p class="small" role="status">{notEnteredWords(refused)}</p>{/if}
 {/if}
@@ -27,4 +27,5 @@
   .trysample { margin: 0; display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; font-size: var(--fs-md); }
   .trysample .btn { min-height: var(--tap); white-space: normal; max-width: 100%; height: auto; text-align: start; } /* wraps at 200% text on a 320 px screen (round sixty) */
   .muted { color: var(--ink3); }
+  .quiet .linkish { min-height: var(--tap); font-size: var(--fs-md); font-weight: 600; }
 </style>

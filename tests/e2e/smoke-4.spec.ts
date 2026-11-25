@@ -95,19 +95,19 @@ test('round sixty: watering by keyboard keeps focus on the button, the toast\'s 
   await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'No space' });
-  const head = stop.locator('.head').getByRole('button', { name: /^Water/ });
+  const head = stop.getByRole('button', { name: /^Done · / }); // round 120: the space's Done
   await expect(head).toBeEnabled();
   await head.focus();
   await page.keyboard.press('Enter');
-  await expect(stop.locator('.row.done')).toContainText('Watered just now');
+  await expect(stop.locator('.row.done')).toContainText('Done · ');
   await stop.locator('.row.done').getByRole('button', { name: 'Undo' }).focus();
   await page.keyboard.press('Enter');
   await expect(stop.locator('.row.done')).toHaveCount(0);
-  await expect(stop.locator('.head button.water')).toBeFocused();
+  await expect(stop.locator('button.doneall')).toBeFocused();
   await C.close();
 });
 
-test('round sixty: Today with nothing ticked says so, never "Water these 0"; the done mark is said only when nothing ticked is left (the grower review, 4)', async ({ browser }) => {
+test('round sixty, as round 120 has it: Today with nothing ticked records every plant as looked at and left dry; the tick is a finger\'s target (the grower review, 4)', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block' });
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
@@ -117,13 +117,11 @@ test('round sixty: Today with nothing ticked says so, never "Water these 0"; the
   await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'No space' });
-  await expect(stop.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
-  for (const box of await stop.locator('.chip.tick input').all()) await box.uncheck();
-  await expect(stop.locator('.head')).toContainText('None ticked');
-  await expect(stop.locator('.head').getByRole('button')).toHaveCount(0);
-  await expect(stop.locator('.donemark')).toHaveCount(0);
-  // the tick box is a finger's target of its own, apart from the plant link
-  const tick = await stop.locator('.chip.tick .tickbox').first().boundingBox();
+  await expect(stop.getByRole('button', { name: 'Done · 2 watered' })).toBeEnabled();
+  for (const box of await stop.locator('.look input').all()) await box.uncheck();
+  await expect(stop.getByRole('button', { name: 'Done · 2 left dry' })).toBeEnabled();
+  // the tick box is a finger's target of its own, apart from the row that opens the reason
+  const tick = await stop.locator('.look .tickbox').first().boundingBox();
   expect(tick!.height).toBeGreaterThanOrEqual(36);
   expect(tick!.width).toBeGreaterThanOrEqual(36);
   await C.close();
@@ -317,7 +315,7 @@ test('round sixty: "Save and add another" keeps the last watering, and its toast
   await page.locator('details.moredetails > summary').click();
   await page.fill('#f-watered', localDay(-3));
   await page.getByRole('button', { name: 'Save and add another' }).click();
-  await expect(page.locator('.toast')).toContainText('added');
+  await expect(page.locator('.toast')).toContainText('Added as'); // round 119: "Added as 2026-0001"
   await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toBeVisible(); // mid-batch, Undo, not Open: Open left the form behind
   const toastBox = (await page.locator('.toast').boundingBox())!;
   const another = (await page.getByRole('button', { name: 'Save and add another' }).boundingBox())!;

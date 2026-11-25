@@ -122,7 +122,7 @@ test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the exa
   const asked = () => page.evaluate(() => (window as unknown as { __asked: number }).__asked);
   await page.goto('/plants');
   await ready(page);
-  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible(); // the collection has opened, empty
+  await expect(page.locator('#first-ways') /* round 119 */).toBeVisible(); // the collection has opened, empty
   expect(await asked()).toBe(0);
   // The example, for a visitor: its plants are not theirs to keep.
   await page.goto('/plants');

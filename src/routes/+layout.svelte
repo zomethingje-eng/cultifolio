@@ -16,7 +16,7 @@
   import { frost } from '$lib/ui/frost.svelte';
   import { onVaultNotice, vaultWritesInFlight, whenVaultIdle } from '$lib/db/vault';
   import { onTakeOver, onArrival } from '$lib/ui/take-over';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, goto } from '$app/navigation';
   import { browser, version } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
@@ -243,6 +243,26 @@
     : page.url.pathname.startsWith('/propagation') ? { href: '/propagation/new', path: '/propagation/new', label: 'Start a propagation batch', word: 'Start' }
     : { href: '/plants/new', path: '/plants/new', label: 'Add a plant', word: 'Add' }
   );
+  // Round 119 (MYPLANTS 27 a): on a phone the plant section's "+" opens the ways in (add, photo walk, import, sow seed),
+  // loaded when first opened so no page carries them unasked. Without scripts, and from 901 px, it is the add form's link.
+  type WayRowsT = typeof import('$lib/ui/grow/WayRows.svelte').default;
+  let addWays = $state<{ C: WayRowsT; ways: readonly import('$lib/ui/grow/ways').Way[] } | null>(null);
+  let addOpen = $state(false);
+  let addEl = $state<HTMLElement>();
+  async function onAdd(e: MouseEvent) {
+    if (addLeavesExample(e, adds.href)) return;
+    if (adds.path !== '/plants/new' || !matchMedia('(max-width: 900px)').matches) return;
+    e.preventDefault();
+    if (!addWays) {
+      try {
+        const [m, w] = await Promise.all([import('$lib/ui/grow/WayRows.svelte'), import('$lib/ui/grow/ways')]);
+        addWays = { C: m.default, ways: w.WAYS };
+      } catch { void goto(adds.href); return; } // the module not reached: the add form, as from 901 px
+    }
+    addOpen = true;
+    requestAnimationFrame(() => addEl?.querySelector<HTMLElement>('a')?.focus());
+  }
+  function closeAdd(back = true) { addOpen = false; if (back) document.querySelector<HTMLElement>('#topbar a.addbtn')?.focus(); }
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   // Focus moved by keyboard is scrolled clear of the sticky and fixed bars (WCAG 2.4.11; round fifty-nine).
   onMount(() => keepFocusClear());
@@ -541,8 +561,15 @@
        It adds what the section is about, and says which (round fifty-eight; the grower review). -->
   <!-- In the example it leads out of it first, to the same form in the grower's own collection: a first plant added there
        was the example's, and deleted with it (round sixty-seven; triage-66 V1). -->
-  {#if page.url.pathname !== adds.path}<a class="iconbtn addbtn" href={adds.href} title={adds.label} aria-label={adds.label} onclick={(e) => addLeavesExample(e, adds.href)}><span aria-hidden="true">+</span><span class="iw" aria-hidden="true">{adds.word}</span></a>{/if}
+  {#if page.url.pathname !== adds.path}<a class="iconbtn addbtn" href={adds.href} title={adds.label} aria-label={adds.label} aria-haspopup={adds.path === '/plants/new' ? 'dialog' : undefined} aria-expanded={adds.path === '/plants/new' ? addOpen : undefined} onclick={onAdd}><span aria-hidden="true">+</span><span class="iw" aria-hidden="true">{adds.word}</span></a>{/if}
 </header>
+{#if addOpen && addWays}
+  <div class="scrim" onclick={() => closeAdd()} aria-hidden="true"></div>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div id="addways" role="dialog" aria-label="Add" tabindex="-1" bind:this={addEl} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeAdd(); } }}>
+    <addWays.C ways={addWays.ways} compact onpick={() => closeAdd(false)} />
+  </div>
+{/if}
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -739,6 +766,7 @@
   .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: max(40px, var(--tap)); min-height: max(40px, var(--tap)); display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
+  #addways { position: fixed; z-index: 65; top: 57px; right: max(12px, env(safe-area-inset-right)); width: min(320px, calc(100vw - 24px)); background: var(--bg); border: 1px solid var(--ink); border-radius: var(--r); padding: 10px; }
   /* The menu: a list of links under a rule, at the bar's right on a desktop; the phone's opens from the left edge. */
   #menu { position: fixed; z-index: 65; top: 57px; right: max(12px, env(safe-area-inset-right)); width: 240px; background: var(--bg); border: 1px solid var(--ink); border-radius: var(--r); padding: 6px 0; display: flex; flex-direction: column; }
   /* No taller than the window, and scrolled by a finger on it, not the page under it (round eighty-one; the phone review's 6). */

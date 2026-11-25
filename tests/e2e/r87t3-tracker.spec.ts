@@ -37,8 +37,9 @@ test('r87t3 2.1: a plant resting this month by its own season is listed as resti
   await expect(rest.locator('.chip')).toContainText('2026-0001');
   await expect(rest.getByRole('button')).toHaveCount(0);
   // the plant beside it, with no season, is due as before
-  await expect(stop.getByRole('button', { name: 'Water 1 here' })).toBeVisible();
-  await expect(stop.locator('.row.unknown .chip')).toContainText('2026-0002');
+  await expect(stop.getByRole('button', { name: 'Done · 1 watered' })).toBeVisible(); // round 120 (MYPLANTS 28): one Done records the space
+  await expect(stop.locator('.look')).toHaveCount(1);
+  await expect(stop.locator('.look')).toContainText('2026-0002');
   await page.locator('#how-today summary').click();
   await expect(page.locator('#how-today')).toContainText("a plant's own rest months");
 });

@@ -287,11 +287,11 @@ test('r61a 12: a place filter by address, select mode from it, and a search that
   await expect(page.locator('.selrow')).toHaveCount(3);
 });
 
-test('r61a a11y 2: after Today\'s "Water N here" focus is on the stop\'s Undo, not the page', async ({ page }) => {
+test('r61a a11y 2: after Today\'s Done focus is on the space\'s Undo, not the page', async ({ page }) => {
   // Welwitschia only: the fixture's Copiapoa cinerea rests now by its sheet, and is listed apart
   await seeded(page, plants(2, ['gh', 'Greenhouse'], 1, 'Welwitschia mirabilis'), '/today');
   const stop = page.locator('#water .stop', { hasText: 'Greenhouse' });
-  const btn = stop.getByRole('button', { name: 'Water 2 here' });
+  const btn = stop.getByRole('button', { name: 'Done · 2 watered' }); // round 120 (MYPLANTS 28): one Done records the space
   await expect(btn).toHaveAttribute('aria-disabled', 'false');
   await btn.focus();
   await page.keyboard.press('Enter');
@@ -328,14 +328,14 @@ test('r61a a11y-perf 8: under 480 px tall the select bar does not stick over the
   expect(await page.locator('.selbar').evaluate((el) => getComputedStyle(el).position)).toBe('static');
 });
 
-test('r61a a11y-perf 15: a stop with more than 50 plants draws 50 chips and says how many more, and shows them on asking', async ({ page }) => {
+test('r61a a11y-perf 15: a space with more than 50 plants draws 50 rows and says how many more, and shows them on asking', async ({ page }) => {
   test.setTimeout(120_000);
   await seeded(page, plants(60, ['gh', 'Greenhouse'], 1, 'Welwitschia mirabilis'), '/today');
   const stop = page.locator('#water .stop', { hasText: 'Greenhouse' });
-  await expect(stop.getByRole('button', { name: 'Water 60 here' })).toBeVisible({ timeout: 60_000 });
-  await expect(stop.locator('.chip.tick')).toHaveCount(50);
+  await expect(stop.getByRole('button', { name: 'Done · 60 watered' })).toBeVisible({ timeout: 60_000 }); // round 120 (MYPLANTS 28): one Done records the space
+  await expect(stop.locator('.look')).toHaveCount(50);
   await stop.getByRole('button', { name: /^Show 10 more/ }).click();
-  await expect(stop.locator('.chip.tick')).toHaveCount(60);
+  await expect(stop.locator('.look')).toHaveCount(60);
 });
 
 test('r61a G11: Today\'s photograph count and the list its line opens agree', async ({ page }) => {

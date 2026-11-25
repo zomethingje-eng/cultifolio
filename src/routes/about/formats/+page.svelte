@@ -157,7 +157,7 @@
   <h3 id="f-event">event</h3>
   <ul class="rules">
     <li><code>acc</code>: a record id, as above. <code>d</code>: YYYY-MM-DD; a plant's acquire line carries its date as read, so YYYY-MM or YYYY after an import.</li>
-    <li><code>t</code> (acquire, repot, water, feed, treat, prune, flower, pollinate, fruit, seed, graft, measure, move, note, death, propagate, audit, germinate, potup, loss), and as the type needs: <code>note</code>, <code>cause</code>, <code>used</code>, and <code>followUp</code> in days.</li>
+    <li><code>t</code> (acquire, repot, water, dry, feed, treat, prune, flower, pollinate, fruit, seed, graft, measure, move, note, death, propagate, audit, germinate, potup, loss), and as the type needs: <code>note</code>, <code>cause</code>, <code>used</code>, and <code>followUp</code> in days.</li>
     <li><code>measures</code>: an object of named finite numbers: diam, h, spread, caudex and, on a repot line, pot, in millimetres whatever the display. Heads and leaves are counts.</li>
     <li><code>n</code>: a count: seedlings up so far, plants potted, plants lost. <code>plants</code>: on a potup line, the ids of the plants it made, so the line names them by their current numbers.</li>
     <li><code>pollen</code>: on a pollinate line, the pollen parent's record id. The line's own plant is the seed parent, so the line is a cross, dated by its <code>d</code>, and the seed lot a batch can be sown from.</li>
@@ -736,7 +736,7 @@ device.json          the exporting device's settings { site: { lat, lon, name? }
     <li>A full date (2017-08-14) is written as it is. A spreadsheet takes it for a date and shows it in its own short form (14/08/2017 in Excel set to British English). A sheet saved again from the spreadsheet carries that form, which the import reads, asking once which way round a date like 09/03/2024 is.</li>
     <li>A date kept as a month (2017-08) is one of the shapes above, so it shows as written, not as Aug-17.</li>
     <li>In LibreOffice, tick "Evaluate formulas" when opening the sheet, or those cells show as <code>="…"</code>.</li>
-    <li>A plant's lineage is in the sheets by plant number. <code>plants.csv</code> has "taken from" and "taken as", which the import reads back. <code>events.csv</code> has a cross's pollen parent and a graft's scion and stock plants. <code>batches.csv</code> has the cross a batch was sown from, seed parent first, and a graft batch's stock plant.</li>
+    <li>A plant's lineage is in the sheets by plant number. <code>plants.csv</code> has "taken from" and "taken as", which the import reads back. <code>events.csv</code> writes a looked-at, left-dry entry as "Looked at, left dry" in its type column, with no new column. It has a cross's pollen parent and a graft's scion and stock plants. <code>batches.csv</code> has the cross a batch was sown from, seed parent first, and a graft batch's stock plant.</li>
     <li>A linked plant this file holds no record of is written by its record id.</li>
     <li>A species page's year panel offers its table as CSV, <code>&lt;the species&gt;-months.csv</code>, made in your browser from the page's figures: a first line naming the species and the source, then a row per month (your month, the habitat's, each figure with its 10th and 90th percentile, light, humidity, VPD, wind and day length).</li>
   </ul>

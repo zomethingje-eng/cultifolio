@@ -319,7 +319,8 @@
       }
       saved = true;
       if (wanted > 1) toast.show(addedWords({ count: wanted, firstId, waterFailed }), waterFailed ? 12000 : 8000, labelsFor);
-      else toast.show(addedWords({ count: 1, firstId, waterFailed }), waterFailed ? 12000 : undefined);
+      // One plant: Undo, as the watering's toast offers it; undone, the plant is removed and the list opens (round 119; MYPLANTS 27 b).
+      else toast.show(addedWords({ count: 1, firstId, waterFailed }), waterFailed ? 12000 : 8000, { label: 'Undo', run: () => { void collection.remove('accession', recs[0].id).then(() => { toast.show(`Undone: ${firstId} removed; its number stays reserved.`); return goto('/plants'); }); } });
       // Awaited, so the form stays busy until it has left (round eighty-five; review-c C3).
       // One plant opens its page with the payoff card (round 107): in the router's state, so a reload or its address alone does not.
       await goto(wanted > 1 ? '/plants' : plantHref(recs[0]), wanted > 1 ? {} : { state: { added: true } }); // by identity while another plant shares the number (round sixty)

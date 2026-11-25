@@ -366,7 +366,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants');
   await ready(page);
-  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
+  await expect(page.locator('#first-ways') /* round 119: the three ways in, where "Nothing here yet" stood */).toBeVisible();
   await page.click('#try-sample');
   await expect(page.locator('.demobar')).toContainText('An example collection, so you can see what this page does. Nothing added here is kept: leaving deletes it.') // round sixty-three, V2; round sixty-seven, triage-66 V1
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
@@ -386,7 +386,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   await page.goto('/plants');
   await ready(page);
-  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
+  await expect(page.locator('#first-ways') /* round 119: the three ways in, where "Nothing here yet" stood */).toBeVisible();
   await expect(page.locator('.demobar')).toBeHidden(); // drawn on every page, shown only in the sample (round sixty-one)
   // again: a fresh sample, since leaving deleted the last one
   await page.click('#try-sample');
@@ -430,7 +430,7 @@ test('r60 13: on an iPhone in Safari, no card and no install bar ask for the Hom
   const page = await ctx.newPage();
   await page.goto('/plants');
   await ready(page);
-  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
+  await expect(page.locator('#first-ways') /* round 119: the three ways in, where "Nothing here yet" stood */).toBeVisible();
   await expect(page.locator('#ios-first')).toHaveCount(0);
   await expect(page.locator('.install')).toHaveCount(0);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');

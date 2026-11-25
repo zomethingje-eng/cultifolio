@@ -132,7 +132,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.today .line', { hasText: '1 of 1 plants past their watering rhythm' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
   await page.locator('.today .line', { hasText: 'past their watering rhythm' }).click();
   await expect(page).toHaveURL(/\/today#water$/);
-  await expect(page.locator('#water .stop .row.warn a, #water .stop .row.resting a')).toHaveCount(1); // a Copiapoa in October is in its habitat's dry season by the sheet: its own row (round fifty-four, 4)
+  await expect(page.locator('#water .stop .look')).toHaveCount(1); // round 120: one list of plants to look at // a Copiapoa in October is in its habitat's dry season by the sheet: its own row (round fifty-four, 4)
   await expect(page.locator('#water .stop h3')).toContainText('No space');
   await page.goto('/plants?show=due');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -1136,17 +1136,17 @@ test('round forty-one: a batch gets a label from its own page, with the sowing l
   await expect(page.locator('.sheets .label', { hasText: no }).locator('.src').first()).toContainText('20 seeds');
 });
 
-test('round forty-one, as round fifty-eight has it: the site is a first-visit step on the empty plants list, not a step on every plant; a plant with no place offers "Give it a place"', async ({ page }) => {
-  await page.goto('/plants');
-  const steps = page.locator('.firststeps');
-  await expect(steps.locator('a', { hasText: 'Your location for the frost watch' })).toHaveAttribute('href', '/settings#site');
+test('round forty-one, as round 119 has it: the site is asked on Today, not on the empty plants list nor on every plant; a plant with no place offers "Give it a place"', async ({ page }) => {
+  await page.goto('/plants'); await ready(page);
+  await expect(page.locator('#first-ways')).toBeVisible();
+  await expect(page.locator('#first-ways a[href="/settings#site"]')).toHaveCount(0); // round 119 (MYPLANTS 27 a): no setup first
   await expect(page.locator('#plants-sort')).toHaveCount(0); // no sort menu over nothing
   await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await addPlant(page);
   const setup = page.locator('.setup');
-  await expect(setup.locator('.setuprow', { hasText: 'Give it a space' })).toBeVisible();
+  await expect(setup.locator('.setuprow', { hasText: 'Placed' })).toBeVisible(); // round 119: three small steps, Placed first
   await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
 });
 
@@ -1573,12 +1573,16 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'Bench' });
   await expect(stop).toHaveCount(1);
-  await expect(stop.locator('.row.warn').first()).toContainText('Past its 21-day rhythm (the default)'); // the figure in use, and where it comes from (round sixty; the grower review, 5)
-  await expect(stop.locator('.row.warn').first()).toContainText(second);
-  await expect(stop.locator('.row.warn').first()).toContainText('25 d');
-  await expect(stop.locator('.row.unknown')).toContainText('No watering recorded');
-  await expect(stop.locator('.row.unknown')).toContainText('added 25 d ago, no watering yet');
-  await expect(stop.locator('.row.unknown')).not.toContainText(second);
+  // Round 120 (MYPLANTS 28): one list; each row opens its reason, with the figure in use and where it comes from (round sixty; the grower review, 5)
+  const past = stop.locator('.look', { hasText: second });
+  await expect(past).toContainText('past its rhythm');
+  await expect(past).toContainText('25 d');
+  await past.locator('.lookrow').click();
+  await expect(past.locator('.why')).toContainText('Past its 21-day rhythm (the default)');
+  const none = stop.locator('.look', { hasText: 'no watering recorded' });
+  await expect(none).not.toContainText(second);
+  await none.locator('.lookrow').click();
+  await expect(none.locator('.why')).toContainText('added 25 d ago, no watering yet');
   // the front page's line says the two apart
   await page.goto('/');
   await expect(page.locator('.today .line', { hasText: '1 of 2 plants past their watering rhythm, and 1 with no watering recorded yet' })).toBeVisible();
@@ -1593,17 +1597,14 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('#frost .risk')).toContainText('Frost forecast: -2.0 °C');
   await expect(page.locator('#frost tr.frost')).toHaveCount(1);
   // Water here: one line per plant on the stop, dated today (the shifted today); the stop stays where it was, marked, with its own Undo (round fifty-four, 4)
-  await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' }).click();
-  await expect(page.locator('.toast')).toContainText('Watered 2.'); // short: the stop says what and offers Undo (round fifty-eight)
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done')).toContainText('Watered just now');
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done a')).toHaveCount(2); // the watered plants stay on the stop, so it keeps its height (round fifty-five, 5)
-  await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toHaveCount(0); // the toast has no Undo of its own: it sits where the next stop's button was
-  await expect(page.locator('#nothing')).toHaveCount(0);
-  // the header's button is a mark now, not an Undo: a second tap where Water was does nothing (round fifty-eight)
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.head .donemark')).toContainText('Watered');
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.head').getByRole('button')).toHaveCount(0);
+  // Done: one line per plant, dated today (the shifted today); the space is one line with its own Undo (round 120)
+  await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Done · 2 watered' }).click();
+  await expect(page.locator('.toast')).toContainText('Done: 2 watered.');
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done')).toContainText('Done · 2 watered');
+  await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toHaveCount(0); // the toast has no Undo of its own
+  await expect(page.locator('#nothing')).toContainText('All caught up.'); // with none left, the page says so (MYPLANTS 28)
   await page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done').getByRole('button', { name: 'Undo' }).click();
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' })).toBeVisible();
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Done · 2 watered' })).toBeVisible();
   // the old address
   await page.goto('/frost');
   await expect(page).toHaveURL(/\/today$/);
@@ -1661,8 +1662,8 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await expect(stop).toHaveCount(1);
   await page.evaluate(() => { (globalThis as { __shift?: number }).__shift = 26 * 86_400_000; }); // past midnight, by the clock; the day store notices within a minute, the tap reads it then
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await stop.getByRole('button', { name: /^Water 2 here$/ }).click();
-  await expect(stop.locator('.row.done a')).toHaveCount(2);
+  await stop.getByRole('button', { name: 'Done · 2 watered' }).click();
+  await expect(stop.locator('.row.done')).toContainText('Done · 2 watered'); // round 120
   const d = new Date(Date.now() + 26 * 86_400_000);
   const expectDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   await page.goto(`/plants/${second}`);
@@ -1681,11 +1682,11 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await page.evaluate((h) => localStorage.setItem('__shift', String(50 * 86_400_000 - h * 3_600_000)), back);
   await page.goto('/today');
   await expect(page.locator('#water .stop .row.ahead')).toContainText(aheadDay);
-  await expect(page.locator('#water .stop .row.unknown')).toHaveCount(0);
+  await expect(page.locator('#water .stop .look', { hasText: second })).toHaveCount(0); // round 120: the plant watered ahead is not listed to look at
   await C.close();
 });
 
-test('round fifty-five: a watered stop keeps its height and the next stop does not move under the finger; the Undo survives a trip to another tab (5)', async ({ browser }) => {
+test('round fifty-five, as round 120 has it: Done on one space opens the next; the Undo survives a trip to another tab (5)', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
@@ -1707,25 +1708,19 @@ test('round fifty-five: a watered stop keeps its height and the next stop does n
   await page.goto('/today');
   const a = page.locator('#water .stop', { hasText: 'Bench A' });
   const b = page.locator('#water .stop', { hasText: 'Bench B' });
-  await expect(b.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
-  // both stops on screen, B's button clear of the tab bar, as a grower would hold the page
-  await page.evaluate(() => { const el = document.querySelectorAll('#water .stop')[1] as HTMLElement; scrollTo(0, el.getBoundingClientRect().top + scrollY - 420); });
-  const before = await b.boundingBox();
-  await a.getByRole('button', { name: 'Water 3 here' }).click();
-  await expect(a.locator('.row.done a')).toHaveCount(3);
-  const after = await b.boundingBox();
-  expect(Math.abs(after!.y - before!.y)).toBeLessThan(24); // the stop below stays where the finger expects it
-  // what is under where B's button was is B's button, not the toast's Undo
-  const box = await b.getByRole('button', { name: 'Water 2 here' }).boundingBox();
-  const hit = await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.closest('button')?.textContent?.trim() ?? el?.tagName; }, [box!.x + box!.width / 2, box!.y + box!.height / 2]);
-  expect(hit).toBe('Water 2 here');
-  // to My plants and back: the mark and its Undo are still there (scrolled up first: the tab bar steps aside on a scroll down, round fifty-eight)
+  await expect(a.locator('.spacehead')).toHaveAttribute('aria-expanded', 'true');
+  await expect(b.locator('.spacehead')).toHaveAttribute('aria-expanded', 'false');
+  await a.getByRole('button', { name: 'Done · 3 watered' }).click();
+  await expect(a.locator('.row.done')).toContainText('Done · 3 watered');
+  await expect(b.locator('.spacehead')).toHaveAttribute('aria-expanded', 'true');
+  await expect(b.getByRole('button', { name: 'Done · 2 watered' })).toBeVisible();
+  // to My plants and back: the line and its Undo are still there
   await page.mouse.wheel(0, -200);
   await page.locator('#tabbar a', { hasText: 'My plants' }).click();
   await page.locator('#tabbar a', { hasText: 'Today' }).click();
-  await expect(a.locator('.row.done')).toContainText('Watered just now');
+  await expect(a.locator('.row.done')).toContainText('Done · 3 watered');
   await a.getByRole('button', { name: 'Undo' }).click();
-  await expect(a.getByRole('button', { name: 'Water 3 here' })).toBeVisible();
+  await expect(a.getByRole('button', { name: 'Done · 3 watered' })).toBeVisible();
   await C.close();
 });
 
@@ -1781,17 +1776,13 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   await page.evaluate(() => localStorage.setItem('__shift', String(8 * 86_400_000)));
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'Weekly bench' });
-  await expect(stop.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
-  await expect(stop.locator('.chip.tick')).toHaveCount(2);
-  await expect(stop.locator('.chip.tick').first()).toContainText('Refusia testii'); // named, not a number alone
-  await stop.locator('.chip.tick input').first().uncheck();
-  await stop.getByRole('button', { name: 'Water 1 of 2 here' }).click();
-  await expect(stop.locator('.row.done .chip')).toHaveCount(1);
-  // round fifty-nine, 3: with nothing left ticked the head shows the done mark, not a disabled "Water 0 of 1"; the plant left out stays, with its tick
-  await expect(stop.locator('.head .donemark')).toContainText('Watered');
-  await expect(stop.locator('.head').getByRole('button')).toHaveCount(0);
-  await expect(stop.locator('.row.warn .chip.tick, .row.unknown .chip.tick')).toHaveCount(1);
-  // round fifty-nine, 6: an Undo by keyboard leaves focus on the stop, not on the page body
+  await expect(stop.getByRole('button', { name: 'Done · 2 watered' })).toBeEnabled(); // round 120
+  await expect(stop.locator('.look')).toHaveCount(2);
+  await expect(stop.locator('.look').first()).toContainText('Refusia testii'); // named, not a number alone
+  await stop.locator('.look input').first().uncheck();
+  await stop.getByRole('button', { name: 'Done · 1 watered, 1 left dry' }).click();
+  await expect(stop.locator('.row.done')).toContainText('Done · 1 watered, 1 left dry');
+  // round fifty-nine, 6: an Undo by keyboard leaves focus on the space, not on the page body
   await stop.locator('.row.done').getByRole('button', { name: 'Undo' }).focus();
   await page.keyboard.press('Enter');
   await expect(stop.locator('.row.done')).toHaveCount(0);
@@ -1804,7 +1795,7 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   await expect(page.locator('.months')).toHaveCount(0); // saved: the form closed, so leaving cannot cancel the write
   await page.goto('/today');
   await expect(stop.locator('.row.resting', { hasText: 'Kept dry this month' })).toContainText('2 plants');
-  await expect(stop.getByRole('button', { name: /^Water/ })).toHaveCount(0);
+  await expect(stop.getByRole('button', { name: /^Done/ })).toHaveCount(0);
   await C.close();
 });
 

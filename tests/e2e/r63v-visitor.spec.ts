@@ -232,16 +232,15 @@ test('r63v V2: with the tab\'s storage refused, an empty Today shows its own emp
   await ctx.close();
 });
 
-test('r63v V2: My plants keeps its own empty page and offers the example first', async ({ page }) => {
+test('r63v V2: My plants keeps its own empty page, its three ways in first and the example a quiet link', async ({ page }) => {
   await page.goto('/plants'); await ready(page);
-  await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
+  await expect(page.locator('#first-ways')).toBeVisible(); // round 119 (MYPLANTS 27 a): three ways in, where "Nothing here yet" and its steps stood
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
-  await expect(page.locator('#try-sample')).toHaveText('Show the example collection'); // round seventy-four's words, with its one sentence
-  await expect(page.locator('#try-sample-apart')).toHaveText('A sample kept apart from your own collection, which you can close at any time.');
-  await expect(page.locator('.firststeps a[href="/places#add"]')).toHaveCount(1);
-  // The first step adds a place: the add form, not the example.
-  await page.locator('.firststeps a[href="/places#add"]').click();
-  await expect(page.locator('#loc-name')).toBeVisible();
+  await expect(page.locator('#try-sample')).toHaveText('Show the example collection'); // round seventy-four's words
+  await expect(page.locator('#first-ways a.way')).toHaveText([/Add a plant/, /Photo walk/, /Import a list/]);
+  // The first way adds a plant: the add form, not the example.
+  await page.locator('#first-ways a.way').first().click();
+  await expect(page.locator('#species-name')).toBeVisible();
   await goneQuiet(page); // a negative, read once the page has gone quiet (helpers/settled.ts): the example does not open by itself
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
 });

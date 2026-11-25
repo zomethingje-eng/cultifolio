@@ -97,7 +97,7 @@ for (const how of ['aborted', 'answering 503'] as const) {
     // or 403, and a 503 that says why "could not be read just now" (round sixty-nine; triage-68 W6, R46-7: round
     // sixty-seven read every 5xx as a refusal).
     await expect(stop.locator('.restnc')).toContainText(NOT_CHECKED);
-    await expect(stop.getByRole('button', { name: 'Water 4 here' })).toBeVisible();
+    await expect(stop.getByRole('button', { name: 'Done · 4 watered' })).toBeVisible(); // round 120 (MYPLANTS 28): one Done records the space
     const before = asked;
     expect(before).toBeGreaterThan(0);
     refuse = false;
@@ -262,7 +262,7 @@ test('r62a P3: on a desktop the select bar sits at the window\'s foot, not a tab
 
 /* ---- Today (a11y 5, A37, A40) ---- */
 
-test('r62a a11y-perf 61-4: Today\'s "Show N more" moves focus to the first chip it draws', async ({ page }) => {
+test('r62a a11y-perf 61-4: Today\'s "Show N more" moves focus to the first row it draws', async ({ page }) => {
   test.setTimeout(120_000);
   await seeded(page, plants(60, ['gh', 'Greenhouse'], 1, 'Haworthia cooperi'), '/today');
   const more = page.locator('.morechips').first();
@@ -271,27 +271,20 @@ test('r62a a11y-perf 61-4: Today\'s "Show N more" moves focus to the first chip 
   await expect(page.locator('#w-ap51')).toBeFocused();
 });
 
-test('r62a A40: Today\'s done row, pruned while focus is on its Undo, leaves focus on the stop\'s heading, or the section\'s', async ({ page }) => {
+test('r62a A40: Today\'s done row, pruned while focus is on its Undo, leaves focus on the space\'s heading, or the section\'s', async ({ page }) => {
   test.setTimeout(90_000);
   // From today's noon, not from now: two jumps of eleven minutes taken within twenty-two minutes of midnight crossed into
-  // the next day, Today was drawn again for it, and focus went with the old rows (round sixty-nine: it failed every time
-  // here at ten to midnight UTC, on this round's engine and the deployed one alike, and passed with this at the same hour).
+  // the next day, Today was drawn again for it, and focus went with the old rows (round sixty-nine).
   const noon = new Date(); noon.setHours(12, 0, 0, 0);
   await page.clock.install({ time: noon });
   await seeded(page, plants(3, ['gh', 'Greenhouse'], 1, 'Haworthia cooperi'), '/today');
   const stop = page.locator('li.stop', { hasText: 'Greenhouse' });
-  await stop.locator('#w-ap3').uncheck({ timeout: 30_000 }); // one left to water: the stop stays when its done row goes
-  await stop.getByRole('button', { name: 'Water 2 of 3 here' }).click();
+  // Round 120 (MYPLANTS 28): Done records the space, one plant left dry; the space is one line with its Undo.
+  await stop.locator('#w-ap3').uncheck({ timeout: 30_000 });
+  await stop.getByRole('button', { name: 'Done · 2 watered, 1 left dry' }).click();
   await expect(stop.locator('.row.done button')).toBeFocused();
   await page.clock.fastForward('11:00');
   await expect(stop.locator('.row.done')).toHaveCount(0);
-  await expect(stop.locator('h3')).toBeFocused();
-  // Now the last plant: its done row is the stop's only content, and both go together.
-  await stop.locator('#w-ap3').check();
-  await stop.getByRole('button', { name: 'Water 1 here' }).click();
-  await expect(page.locator('.row.done button')).toBeFocused();
-  await page.clock.fastForward('11:00');
-  await expect(page.locator('.row.done')).toHaveCount(0);
   expect(await page.evaluate(() => !!document.activeElement?.matches('#water-h, li.stop h3'))).toBe(true);
 });
 
@@ -299,7 +292,7 @@ test('r62a a11y P3: Today\'s done-row chips wrap at 320 px with 200% text; nothi
   test.setTimeout(150_000);
   await withTextSize(baseURL, { width: 320, height: 700 }, 32, async (page) => {
     await seeded(page, plants(2, ['gh', 'Greenhouse'], 1, 'Conophytum minimum'), '/today');
-    await page.locator('li.stop').getByRole('button', { name: /^Water 2 here/ }).click({ timeout: 30_000 });
+    await page.locator('li.stop').getByRole('button', { name: /^Done · 2 watered/ }).click({ timeout: 30_000 }); // round 120 (MYPLANTS 28): one Done records the space
     await expect(page.locator('.row.done')).toBeVisible();
     const [s, c] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
     expect(s).toBeLessThanOrEqual(c);
