@@ -167,8 +167,11 @@ const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; sear
   // (1091, 1294, 1308, 1449) and, with rounds 115 and 116's, 86 at 1024 (1135, 1327, 1341, 1482).
   // Round 117's lines wrap a line more at 1280 (1113, 1316, 1330, 1471); 1024 is unchanged.
   // Round 118's lines wrap a line less: 1091, 1294, 1308, 1449 at 1280; 1114, 1305, 1319, 1461 at 1024 (Chromium, 24 November).
-  '1280': { stripTop: 1091, stripBottom: 1294, searchTop: 1308, rowTop: 1449, tile: [172, 193] },
-  '1024': { stripTop: 1114, stripBottom: 1305, searchTop: 1319, rowTop: 1461, tile: [155, 182] }
+  // Rounds 119 to 122's lines, round 122's shortened so no engine wraps one more than another (its first gate: Chromium
+  // 1135 at 1024, WebKit and Firefox 1114): 1047, 1251, 1265, 1406 at 1280 in all three; at 1024 1092, 1284 to 1286,
+  // 1298 to 1300, 1439 to 1441 (25 November), the middle taken.
+  '1280': { stripTop: 1047, stripBottom: 1251, searchTop: 1265, rowTop: 1406, tile: [172, 193] },
+  '1024': { stripTop: 1092, stripBottom: 1285, searchTop: 1299, rowTop: 1440, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put

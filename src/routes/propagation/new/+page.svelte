@@ -134,7 +134,7 @@
   const nextNo = $derived(collection.ready ? collection.nextSowingNumber(Number(sown.slice(0, 4)) || undefined) : '…');
 
   $effect(() => {
-    setCrumb([{ label: 'Propagation', href: '/propagation' }, { label: 'New batch' }]);
+    setCrumb([{ label: 'Batches', href: '/propagation' }, { label: 'New batch' }]);
     return () => setCrumb([]);
   });
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */

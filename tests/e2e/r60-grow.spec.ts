@@ -237,9 +237,7 @@ test('r60 5: Select ticks plants, then Water with Undo, Move with Undo, Print la
   await expect(page.locator('.toast')).toContainText('Undone: 2 watering lines removed.');
   // Move to a place, then Undo
   await page.click('#sel-move');
-  const v = await page.locator('#sel-loc option', { hasText: 'Bench S' }).getAttribute('value');
-  await page.selectOption('#sel-loc', v!);
-  await page.getByRole('button', { name: 'Move 2', exact: true }).click();
+  await page.locator('#sel-sheet button', { hasText: 'Bench S' }).click(); // round 122: one tap on the sheet
   await expect(page.locator('.toast')).toContainText('2 moved to Bench S.');
   await expect(page.locator('.selrow .where')).toHaveCount(2);
   await page.locator('.toast .undo').click();

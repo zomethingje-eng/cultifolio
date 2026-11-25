@@ -10,9 +10,11 @@ import { localDate } from '$core/dates';
 import type { Accession } from '$lib/db/types';
 import { saveFile } from './save';
 
-export async function plantsSheet(): Promise<string> {
+/** The plants sheet; `only` holds it to those plants (round 121: My plants' table, "CSV of these N"). */
+export async function plantsSheet(only?: Set<string>): Promise<string> {
   const { state } = materialise(await collection.exportChanges());
-  return plantsCsv(live<Accession & Record_>(state, 'accession'), state);
+  const accs = live<Accession & Record_>(state, 'accession');
+  return plantsCsv(only ? accs.filter((a) => only.has(a.id)) : accs, state);
 }
 
 export async function downloadPlantsSheet(): Promise<void> {

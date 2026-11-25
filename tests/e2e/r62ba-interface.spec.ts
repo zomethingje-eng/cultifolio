@@ -146,8 +146,7 @@ test('r62ba grower 3: Move\'s Undo, and its "Undone" toast, on a short list do n
   await seeded(page, rows, '/plants?select=1');
   await page.locator('.selrow input').first().check();
   await page.locator('#sel-move').click();
-  await page.selectOption('#sel-loc', 'cf');
-  await page.locator('#sel-move-go').click();
+  await page.locator('#sel-sheet button', { hasText: 'Cold frame' }).click(); // round 122: one tap on the sheet
   await page.locator('.toast .undo').waitFor({ timeout: 15_000 });
   const overlap = () => page.evaluate(() => {
     const t = document.querySelector('.toast')!.getBoundingClientRect();

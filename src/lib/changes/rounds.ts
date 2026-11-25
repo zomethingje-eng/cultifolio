@@ -109,6 +109,24 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 122,
+    date: '2026-11-25',
+    reader: 'Your spaces keep the order you walk them in, and moving plants is one tap.',
+    lines: [
+      'A handle on each space sets your walking order, and Today follows it.',
+      'Ticked plants move with one tap on a list of your spaces, and one Undo.'
+    ]
+  },
+  {
+    n: 121,
+    date: '2026-11-25',
+    reader: 'My plants, Spaces and Batches are one home, and your plants can be seen as photographs, rows or a table.',
+    lines: [
+      'One switch heads My plants, Spaces and Batches; each space with plants is one tap, and "To look at" is what Due was.',
+      'Photographs, rows or a table, kept on this device; the table groups by space with a Watered for each, and gives the rows as CSV.'
+    ]
+  },
+  {
     n: 120,
     date: '2026-11-25',
     reader: 'Today lists your spaces, and one Done records a whole bench: what you watered, and what you looked at and left dry.',

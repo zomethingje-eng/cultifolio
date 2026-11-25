@@ -34,7 +34,7 @@ const BARE: Record<string, number> = {
   'src/lib/ui/grow/ExampleAddLine.svelte': 1, // the same form name, as a prop's type
   'src/routes/species/[slug]/+page.svelte': 2, // the same value, set, and read under the chart (round 106: the year strip's hemisphere line moved here)
   'src/routes/places/+page.svelte': 2, // takeDraft('place') and ExampleAddLine what="place"
-  'src/routes/plants/+page.svelte': 6, // the sort order `place` and the address's `place=` parameter
+  'src/routes/plants/+page.svelte': 5, // the sort order `place` and the address's `place=` parameter (round 121: the space select gave way to the chips)
   'src/routes/plants/[acc]/+page.svelte': 3, // the first steps' row key and the idcard's class
   'src/lib/server/sync.ts': 5, // the sync fault kind `place`, counted per day (FAULTS)
   'src/lib/dossier/build.ts': 1, // round eighty-four (G, A6f): the climate's reason, "4 in-range records at 2 places", geographic
@@ -114,16 +114,16 @@ describe('round seventy-four: a grower\'s greenhouse, bench or windowsill is a "
   it('every allowed use is still there, so the list says what the pages say', () => {
     expect(ALLOWED.filter(([, re]) => !used.has(re)).map(([k, re]) => `${k}: ${re.source}`)).toEqual([]);
   });
-  it('the menu, the bar\'s trail and the page say "My spaces", at the same addresses', () => {
+  it('the menu, the bar\'s trail and the page say "Spaces" (round 121, MYPLANTS 29 decision 1; "My spaces" before), at the same addresses', () => {
     const layout = readFileSync('src/routes/+layout.svelte', 'utf8');
     // The menu and the top bar's trail (its section's name). Round eighty-seven (DESIGN-87, the owner's look): the tab bar and
     // the top bar hold Reference, My plants, Today and About (and More, the menu); My spaces is in the menu, so two, not three.
     // Round 105: a list page has no crumb (the first hand-off's round 3), so the section names it read are gone: the menu's one.
-    expect(layout.match(/\{ href: '\/places', label: 'My spaces'/g)).toHaveLength(1);
+    expect(layout.match(/\{ href: '\/places', label: 'Spaces'/g)).toHaveLength(1);
     expect(layout).not.toMatch(/label: 'Places'/);
     const list = readFileSync('src/routes/places/+page.svelte', 'utf8');
-    expect(list).toContain('<title>My spaces · Cultifolio</title>');
-    expect(list).toContain('<PageHead compact title="My spaces"');
+    expect(list).toContain('<title>Spaces · Cultifolio</title>');
+    expect(list).toContain('<PageHead compact title="Spaces"');
     // the addresses printed labels and bookmarks point at are kept, the old /benches with them
     expect(readFileSync('src/hooks.server.ts', 'utf8')).toMatch(/benches/);
     expect(readdirSync('src/routes/places')).toContain('[id]');

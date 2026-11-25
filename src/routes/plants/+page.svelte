@@ -1,4 +1,6 @@
 <script lang="ts">
+  import CollectionSwitch from '$lib/ui/grow/CollectionSwitch.svelte';
+  import { readSetting, writeSetting } from '$lib/ui/stored';
   import { iosInBrowser } from '$lib/ui/grow/ios';
   import { keepSheet, storageWords } from '$lib/ui/grow/keep-sheet.svelte';
   import { imgUrl } from '$core/img';
@@ -182,6 +184,52 @@
     walk(null);
     return out;
   });
+  /**
+   * The space chips (round 121; MYPLANTS 29): every space with growing plants of its own, in walking order, with their
+   * count; a parent holding none of its own is not a chip, unless the list is held to it now.
+   */
+  const spaceChips = $derived.by(() => {
+    const own = new Map<string, number>();
+    for (const a of collection.accessions) if (a.status === 'growing' && a.locationId) { const k = collection.placeOf(a.locationId); if (k) own.set(k, (own.get(k) ?? 0) + 1); }
+    const inside = (id: string) => { const sub = new Set(collection.subtree(id)); return collection.accessions.filter((a) => a.status === 'growing' && !!a.locationId && sub.has(collection.placeOf(a.locationId) ?? '')).length; };
+    return placeList.filter((p) => own.has(p.id) || p.id === place).map((p) => ({ id: p.id, name: collection.location(p.id)?.name ?? p.label, n: own.get(p.id) ?? inside(p.id) }));
+  });
+  /**
+   * Three views of the same list (round 121; MYPLANTS 29): photographs as a grid, today's rows, and a table. The choice is
+   * remembered on this device (`cultifolio.plantsView`). Rows until the grower chooses: the grid and the table are offered,
+   * and the hand-off's defaults (a phone on the grid, a desktop on the table) wait for a round that moves the list's tests.
+   */
+  type View = 'grid' | 'rows' | 'table';
+  let view = $state<View>('rows');
+  onMount(() => { const v = readSetting('cultifolio.plantsView', 'device'); if (v === 'grid' || v === 'table' || v === 'rows') view = v; });
+  const setView = (v: View) => { view = v; writeSetting('cultifolio.plantsView', 'device', v); };
+  /** The table under "All", grouped by space in walking order, plants with no space last. */
+  const groups = $derived.by(() => {
+    const by = new Map<string, Accession[]>();
+    for (const a of shown) { const k = a.locationId ? (collection.placeOf(a.locationId) ?? '') : ''; (by.get(k) ?? by.set(k, []).get(k)!).push(a); }
+    const order = [...placeList.map((p) => p.id), ''];
+    return order.filter((k) => by.has(k)).map((k) => ({ id: k, name: k ? collection.locationName(k) : 'No space', plants: by.get(k)! }));
+  });
+  /** "Watered" on a group: one line on each growing plant of that space shown here, dated today, with Undo. */
+  let wateringGroup = $state('');
+  async function waterGroup(g: { id: string; name: string; plants: Accession[] }) {
+    if (wateringGroup) return;
+    const ps = g.plants.filter((a) => a.status === 'growing' && collection.lastWatered(a.id) !== localDate());
+    if (!ps.length) { toast.show(`Every growing plant on ${g.name} is already recorded as watered today.`); return; }
+    wateringGroup = g.id || 'none';
+    try {
+      const ids = await collection.addEventsIds(ps.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: `from My plants: ${g.name}` })));
+      toast.show(`${g.name}: ${ids.length} watered.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents(ids).then(() => toast.show('Undone: the watering lines removed.')); } });
+    } finally { wateringGroup = ''; }
+  }
+  /** The table's headings sort it, by the list's own orders. */
+  const sortBy = (k: Sort) => { sort = k; };
+  /** CSV of the rows shown, in plants.csv's columns, made in the browser (round 121). */
+  async function csvShown() {
+    const { plantsSheet } = await import('$lib/export/sheet');
+    const { saveFile } = await import('$lib/export/save');
+    saveFile(new Blob([await plantsSheet(new Set(list.map((a) => a.id)))], { type: 'text/csv;charset=utf-8' }), `cultifolio-plants-${localDate()}.csv`);
+  }
   /** "Search the words instead": the grower asked for every plant that mentions it, not the place. Per search. */
   let wordsOnly = $state(false);
   $effect(() => { void q; wordsOnly = false; });
@@ -251,6 +299,8 @@
   <a class="btn pri wideonly" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>
   <PlantsMenu />
 </PageHead>
+<CollectionSwitch /><!-- round 121 (MYPLANTS 29): one home, Plants, Spaces, Batches -->
+
 
 <!-- With the list, not before it: drawn as the collection opened, the search and the chips pushed "Opening your
      collection…" down under the reader for the moment the page waits for its notices (round eighty-four; P2). -->
@@ -260,17 +310,30 @@
   {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By space</option></select>{/if}
   <!-- One place and what is inside it; the address carries it, so a place page can link here (round sixty-one; the grower
        review, 7). Offered with the "By space" order, or while a space is chosen, so the phone's first screen keeps its one row. -->
-  {#if collection.locations.length && (place || (!few && sort === 'place'))}<select id="plants-place" class="sortsel placesel" aria-label="Space" bind:value={place}><option value="">All spaces</option>{#each placeList as p (p.id)}<option value={p.id}>{p.label}</option>{/each}</select>{/if}
   {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
   <!-- "Due" by each plant's rhythm, which a place or the plant may set: the chip no longer says 21 days for all (round fifty-eight; the grower review). -->
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   {#if !few}<ToggleGroup chips class="showrow" style="margin: 0" label="Which plants" bind:value={show} options={[
     { value: 'growing', label: 'Growing', n: collection.accessions.filter((a) => a.status === 'growing').length },
-    { value: 'due', label: 'Due', n: dueN, title: 'Past its watering rhythm: 21 days unless its space or the plant sets another' },
+    { value: 'due', label: 'To look at', n: dueN, title: 'Past its watering rhythm: 21 days unless its space or the plant sets another' },
     ...(noPhotoN || show === 'nophoto' ? [{ value: 'nophoto' as const, label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants kept six months or more and not photographed in the last year' }] : []),
     { value: 'all', label: 'All', n: collection.accessions.length }
   ]} />{/if}
 </div>
+{#if opened && collection.accessions.length}
+<div class="listbar">
+{#if !few && spaceChips.length}
+  <!-- Round 121 (MYPLANTS 29): a chip for each space holding plants of its own, in walking order, one tap each; "All" first. -->
+  <div class="spacechips" role="group" aria-label="Spaces">
+    <button type="button" class="chipbtn" aria-pressed={!place} onclick={() => (place = '')}>All <span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
+    {#each spaceChips as c (c.id)}<button type="button" class="chipbtn" aria-pressed={place === c.id} onclick={() => (place = place === c.id ? '' : c.id)}>{c.name} <span class="n">{c.n}</span></button>{/each}
+  </div>
+{/if}
+  <div class="viewsw" role="group" aria-label="View">
+  {#each [{ v: 'grid', t: 'Photographs' }, { v: 'rows', t: 'Rows' }, { v: 'table', t: 'Table' }] as o (o.v)}<button type="button" aria-pressed={view === o.v} aria-label={o.t} title={o.t} onclick={() => setView(o.v as View)}><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">{#if o.v === 'grid'}<rect x="3" y="3" width="6" height="6" /><rect x="11" y="3" width="6" height="6" /><rect x="3" y="11" width="6" height="6" /><rect x="11" y="11" width="6" height="6" />{:else if o.v === 'rows'}<path d="M3 5h14M3 10h14M3 15h14" />{:else}<rect x="3" y="4" width="14" height="12" /><path d="M3 8h14M8 8v8" />{/if}</svg></button>{/each}
+</div>
+</div>
+{/if}
 {/if}
 
 <HeldNote />
@@ -325,6 +388,45 @@
   {#if !list.length}
   <div class="emptybox"><p class="muted">No plants match.</p></div>
   {:else}
+  {#if view === 'grid'}
+  <!-- Round 121: the photographs, each tile its plant's own, else the reference's marked "ref", else its initials. -->
+  <ul class="pgrid">
+    {#each shown as a (a.id)}
+      {@const th = thumbs.get(speciesSlug(a.taxonName))}
+      {@const own = collection.cover(a.id)}
+      {@const w = sinceWater(a.id)}
+      <li><a class="ptile" href={plantHref(a)}>
+        <span class="pim">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={imgUrl(th)} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /><span class="refmark" title="The reference's photograph of the species, not of this plant">ref<span class="sr"> photo</span></span>{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>
+        <span class="pnm"><PlantName plant={a} /></span>
+        <span class="pwh small muted">{a.locationId && collection.location(a.locationId) ? collection.location(a.locationId)?.name : 'No space'}{a.status === 'growing' ? ` · ${w == null ? 'no watering yet' : `${w} d`}` : ''}</span>
+        {#if a.status === 'growing' && collection.isDue(a)}<span class="pst">look</span>{:else if a.status === 'growing' && collection.resting(a)}<span class="pst">resting</span>{/if}
+      </a></li>
+    {/each}
+  </ul>
+  {:else if view === 'table'}
+  <!-- Round 121: the table, grouped by space under All, each group with its "Watered"; a heading sorts it. -->
+  <p class="small tablecsv"><button class="linkish" type="button" onclick={csvShown}>CSV of these {list.length}</button></p>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div class="scroll-x" tabindex="0" role="region" aria-label="Your plants as a table">
+  <table class="ptable">
+    <thead><tr>
+      <th scope="col" aria-sort={sort === 'number' ? 'descending' : 'none'}><button class="linkish" type="button" onclick={() => sortBy('number')}>Number</button></th>
+      <th scope="col" aria-sort={sort === 'name' ? 'ascending' : 'none'}><button class="linkish" type="button" onclick={() => sortBy('name')}>Name</button></th>
+      <th scope="col">Came</th>
+      <th scope="col" aria-sort={sort === 'watered' ? 'descending' : 'none'}><button class="linkish" type="button" onclick={() => sortBy('watered')}>Since water</button></th>
+    </tr></thead>
+    {#each place ? [{ id: place, name: collection.locationName(place), plants: shown }] : groups as g (g.id)}
+      <tbody>
+        {#if !place}<tr class="grp"><th scope="rowgroup" colspan="4"><span>{g.name}</span> <span class="muted small">{g.plants.length}</span> <button class="linkish small" type="button" onclick={() => waterGroup(g)} aria-disabled={!!wateringGroup}>Watered</button></th></tr>{/if}
+        {#each g.plants as a (a.id)}
+          {@const w = sinceWater(a.id)}
+          <tr><td class="mono"><a href={plantHref(a)}>{accNo(a)}</a></td><td><PlantName plant={a} /></td><td class="small">{a.acquired ?? ''}{a.sourceFrom ? ` · ${a.sourceFrom}` : ''}</td><td class="num" class:due={collection.isDue(a)}>{a.status !== 'growing' ? '' : w == null ? '–' : `${w} d`}</td></tr>
+        {/each}
+      </tbody>
+    {/each}
+  </table>
+  </div>
+  {:else}
   <div class="rows" class:nopic={!anyPic}>
     {#each shown as a (a.id)}
       {@const w = sinceWater(a.id)}
@@ -349,6 +451,7 @@
       </div>
     {/each}
   </div>
+  {/if}
   {#if shown.length < list.length}<div class="more" bind:this={moreEl}><button class="btn small" type="button" onclick={() => (limit += PAGE)}>More ({list.length - shown.length} further down)</button></div>{/if}
   <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
   {/if}
@@ -368,7 +471,6 @@
   .backupnudge a { display: inline-block; padding: 12px 2px; margin: -12px 0; }
   @media print { .backupnudge { display: none !important; } } /* a printed page carries the page, not advice about backups (round sixty-one; the triage, decision 4) */
   .more { display: flex; justify-content: center; padding: 10px 0; }
-  .placesel { max-width: 100%; text-overflow: ellipsis; }
   /* In running text, each of them: the finger's height is the theme's invisible margin, not a taller line (round eighty-four; P8). */
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
   .sortsel { border: 1px solid var(--field-edge); background: var(--card); border-radius: var(--r); padding: 8px 10px; min-height: var(--tap); font: inherit; font-size: var(--fs-md); color: var(--ink); } /* an edge at 3:1: --rule was 1.17:1 (round fifty-nine) */
@@ -402,7 +504,6 @@
     .plantstools > a.btn.small { flex: none; order: 3; } /* the labels link does not squeeze the search box (round fifty-two, 6) */
     /* As wide as its longest option, up to the row, and onto a line of its own before it is cut: at 200% text a 44% cap showed "Newe" (round sixty-one; the accessibility review, 7). */
     .plantstools .sortsel { flex: 0 1 9.5em; min-width: min(9.5em, 100%); max-width: 100%; }
-    .plantstools .placesel { flex: 1 1 auto; min-width: 0; }
     /* :global, since the row is the toggle group's own markup (round fifty-eight; the accessibility review). */
     .plantstools :global(.showrow) { flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -16px !important; padding: 2px 16px; }
     .plantstools :global(.showrow::-webkit-scrollbar) { display: none; }
@@ -428,4 +529,29 @@
   /* A reference photograph in the list is marked as one (round 119; MYPLANTS 27 c). */
   .im { position: relative; }
   .refmark { position: absolute; right: 2px; bottom: 2px; padding: 0 4px; border-radius: 4px; background: rgb(0 0 0 / 0.55); color: #fff; font-size: 10px; line-height: 14px; }
+  .listbar { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+  .spacechips { display: flex; flex: 1 1 auto; min-width: 0; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .listbar .viewsw { margin-left: auto; }
+  .spacechips::-webkit-scrollbar { display: none; }
+  .spacechips .chipbtn { flex: none; white-space: nowrap; }
+  .spacechips .n { color: var(--ink3); font-variant-numeric: tabular-nums; margin-left: 2px; }
+  .viewsw { display: inline-flex; flex: none; border: 1px solid var(--field-edge); border-radius: var(--r-sm); overflow: hidden; }
+  .viewsw button { display: grid; place-items: center; width: var(--tap); min-height: var(--tap); border: 0; background: none; color: var(--ink3); cursor: pointer; }
+  .viewsw button[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
+  .pgrid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 10px; }
+  .ptile { display: grid; gap: 2px; color: inherit; text-decoration: none; }
+  .ptile:hover .pnm { text-decoration: underline; }
+  .pim { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: var(--r-sm); overflow: hidden; background: var(--sunk); }
+  .pim :global(img) { width: 100%; height: 100%; object-fit: cover; }
+  .pim .ini { font-size: var(--fs-xl, 1.6rem); color: var(--ink3); }
+  .pnm { margin-top: 4px; overflow-wrap: anywhere; }
+  .pst { justify-self: start; font-size: var(--fs-xs); color: #9a5b12; font-weight: 600; }
+  .ptable { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
+  .ptable th, .ptable td { text-align: start; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule2); vertical-align: baseline; }
+  .ptable thead th { font-size: var(--fs-sm); color: var(--ink3); font-weight: 600; }
+  .ptable .grp th { padding-top: 16px; font-weight: 600; border-bottom-color: var(--rule); }
+  .ptable .grp .linkish { margin-left: 8px; }
+  .ptable .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ptable .num.due { color: #9a5b12; font-weight: 600; }
+  .tablecsv { margin: 0 0 6px; }
 </style>

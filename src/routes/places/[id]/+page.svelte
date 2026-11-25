@@ -44,7 +44,7 @@
   const cond = $derived(collection.conditions(id));
   const today = () => localDate(); // read when the action runs, not when the page loaded (round twenty-four, 2)
   $effect(() => {
-    if (loc) setCrumb([{ label: 'My spaces', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
+    if (loc) setCrumb([{ label: 'Spaces', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
     return () => setCrumb([]);
   });
   const dli = $derived(cond.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);

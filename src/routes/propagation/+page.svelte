@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionSwitch from '$lib/ui/grow/CollectionSwitch.svelte';
   import { plural } from '$core/words';
   import { onMount } from 'svelte';
   import { accNo, sowNo } from '$lib/db/types';
@@ -35,11 +36,13 @@
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
 
-<svelte:head><title>Propagation · Cultifolio</title></svelte:head>
+<svelte:head><title>Batches · Cultifolio</title></svelte:head>
 
-<PageHead compact title="Propagation" sub="Seed, cuttings, offsets and divisions, a batch each, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
+<PageHead compact title="Batches" sub="Seed, cuttings, offsets and divisions, a batch each, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
   <a class="btn pri" href="/propagation/new" onclick={(e) => addLeavesExample(e, '/propagation/new')}>New batch</a>
 </PageHead>
+<CollectionSwitch /><!-- round 121 (MYPLANTS 29): one home, Plants, Spaces, Batches -->
+
 
 {#if !collection.ready}
   <Opening />

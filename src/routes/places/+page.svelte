@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CollectionSwitch from '$lib/ui/grow/CollectionSwitch.svelte';
   import { plural } from '$core/words';
   import { onMount } from 'svelte';
   import { replaceState, beforeNavigate } from '$app/navigation';
@@ -19,6 +20,8 @@
   import { addLeavesExample } from '$lib/ui/grow/example.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { takeDraft, withoutKept, ownPlaceNamed, str, oneOf, type Draft } from '$lib/ui/grow/keep-draft';
+  import PhotoImg from '$lib/ui/PhotoImg.svelte';
+  import { reorder, sortWrites } from '$core/walk-order';
   onMount(() => collection.load());
   let adding = $state(false);
   // The top bar's "+" on this section lands on /places#add: the form opens with its first field focused, and the hash is
@@ -103,6 +106,56 @@
     toast.show(`${accNo(a)} moved to ${collection.locationName(to)}.`, 8000, { label: 'Undo', run: () => { void undo(); } });
   }
   const kindLabel = (k?: LocationKind | null) => LOCATION_KINDS.find((x) => x.k === k)?.label ?? '';
+  /** Round 122 (MYPLANTS 29): three of a space's own plants' photographs, and what is to look at there, in words. */
+  const covers = (id: string) => collection.plantsAt(id, false).map((a) => collection.cover(a.id)).filter((c): c is NonNullable<typeof c> => !!c).slice(0, 3);
+  const lookN = (id: string) => collection.plantsAt(id, false).filter((a) => a.status === 'growing' && collection.isDue(a)).length;
+  /**
+   * The walking order (round 122): a handle on each space moves it among its siblings, by dragging or by the arrow keys,
+   * and writes each sibling's `sort` (1, 2, 3 …) where it changed. Today, the chips and the pickers follow it.
+   */
+  const sibsOf = (l: Location) => collection.children(l.parentId && collection.location(l.parentId) ? l.parentId : null);
+  let moving = $state(false);
+  async function moveTo(l: Location, to: number) {
+    const sibs = sibsOf(l);
+    const from = sibs.findIndex((x) => x.id === l.id);
+    if (from < 0 || to === from || to < 0 || to >= sibs.length || moving) return;
+    moving = true;
+    try {
+      for (const w of sortWrites(reorder(sibs, from, to))) await collection.put('location', w.id, { sort: w.sort });
+      say = `${l.name}: ${to + 1} of ${sibs.length} in walking order.`;
+    } catch { say = `Not saved: ${(collection.lastWriteError ?? 'the browser refused the write').replace(/\.$/, '')}.`; }
+    finally { moving = false; }
+    setTimeout(() => document.getElementById(`h-${l.id}`)?.focus(), 0);
+  }
+  let say = $state('');
+  function onKey(e: KeyboardEvent, l: Location) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const i = sibsOf(l).findIndex((x) => x.id === l.id);
+    void moveTo(l, i + (e.key === 'ArrowUp' ? -1 : 1));
+  }
+  /** Dragging by the handle: the sibling row the pointer is over when it lets go is where the space goes. */
+  let dragging = $state<string | null>(null);
+  let dropAt = $state<number | null>(null);
+  function onDown(e: PointerEvent, l: Location) {
+    if (e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging = l.id;
+    dropAt = sibsOf(l).findIndex((x) => x.id === l.id);
+  }
+  function onMove(e: PointerEvent, l: Location) {
+    if (dragging !== l.id) return;
+    const sibs = sibsOf(l);
+    let at = 0;
+    for (const [i, x] of sibs.entries()) { const r = document.getElementById(`row-${x.id}`)?.getBoundingClientRect(); if (r && e.clientY > r.top + r.height / 2) at = i; }
+    dropAt = at;
+  }
+  function onUp(l: Location) {
+    if (dragging !== l.id) return;
+    const to = dropAt;
+    dragging = null; dropAt = null;
+    if (to != null) void moveTo(l, to);
+  }
 
   /** The place just added, said under the form while it stays open for the next. */
   let addedMsg = $state('');
@@ -133,12 +186,14 @@
   }
 </script>
 
-<svelte:head><title>My spaces · Cultifolio</title></svelte:head>
+<svelte:head><title>Spaces · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
-<PageHead compact title="My spaces" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a space apply to everything inside it." count="{rows.length} space{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} with no space` : ''}">
+<PageHead compact title="Spaces" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a space apply to everything inside it." count="{rows.length} space{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} with no space` : ''}">
   <button class="btn pri" onclick={(e) => { if (!addLeavesExample(e, '/places#add')) adding = !adding; }}>New space</button>
 </PageHead>
+<CollectionSwitch /><!-- round 121 (MYPLANTS 29): one home, Plants, Spaces, Batches -->
+
 
 {#if adding}
   <ExampleAddLine what="place" draft={draftOf} hold={(on) => (leavingWith = on)} />
@@ -152,6 +207,7 @@
     </select></label>
     <span class="addbtns"><button class="btn pri" type="submit" id="loc-add" disabled={!name.trim()}>Add</button><button class="btn" type="submit" id="loc-another" disabled={!name.trim()} title="Add this space and keep the form open for the next, inside the same space and of the same kind">Add another</button></span>
     {#if kindMsg}<span class="bad small full" id="loc-kind-bad">{kindMsg}</span>{/if}
+    <p class="small full muted" id="loc-inherits">It takes the temperature, watering and dry months of the space it is inside until you give it its own.</p>
     <p class="small full addedmsg" role="status" id="loc-added">{addedMsg}</p>
   </form>
 {/if}
@@ -162,14 +218,20 @@
   {#if !rows.length}
     <ExampleOffer><div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No spaces yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div></ExampleOffer>
   {:else}
+    <p class="small muted" id="walk-say" role="status">{say || 'In your walking order. Move a space by its handle: Today and the plant list follow.'}</p>
     <div class="tree">
       {#each rows as r (r.loc.id)}
         <!-- Two lines, the name and then its kind and count: three columns on one line squeezed the name on a phone (round fifty-eight; the grower review). -->
-        <a class="row card" href="/places/{r.loc.id}" style="--d:{r.depth}">
+        <div class="rowwrap" id="row-{r.loc.id}" style="--d:{r.depth}" class:dragging={dragging === r.loc.id}>
+        <button type="button" class="handle" id="h-{r.loc.id}" aria-label="Walking order of {r.loc.name}: up and down arrows move it" aria-describedby="walk-say" onkeydown={(e) => onKey(e, r.loc)} onpointerdown={(e) => onDown(e, r.loc)} onpointermove={(e) => onMove(e, r.loc)} onpointerup={() => onUp(r.loc)} onpointercancel={() => { dragging = null; dropAt = null; }}><svg viewBox="0 0 12 18" width="10" height="16" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.4" /><circle cx="9" cy="3" r="1.4" /><circle cx="3" cy="9" r="1.4" /><circle cx="9" cy="9" r="1.4" /><circle cx="3" cy="15" r="1.4" /><circle cx="9" cy="15" r="1.4" /></g></svg></button>
+        <a class="row card" href="/places/{r.loc.id}">
+          {#if covers(r.loc.id).length}<span class="thumbs" aria-hidden="true">{#each covers(r.loc.id) as c (c.id)}<span class="th"><PhotoImg id={c.id} alt="" loading="lazy" /></span>{/each}</span>{/if}
           <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)}{' '}<span class="faint">· needs a home: two devices moved spaces into each other; move this one where it belongs</span>{/if}</span>
           <!-- The separator is a box with its own margins, not spaces at a span's edge, which the row's layout dropped ("Greenhouse·0 plants"); the comma is for a screen reader (round fifty-nine). -->
           <span class="line2"><span class="sr">{', '}</span>{#if kindLabel(r.loc.type)}<span class="faint kind">{kindLabel(r.loc.type)}</span><span class="faint dot" aria-hidden="true">·</span><span class="sr">{', '}</span>{/if}<span class="n mono">{plural(r.deepN, 'plant')}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span></span>
+          {#if lookN(r.loc.id)}<span class="spacestate">{lookN(r.loc.id)} to look at</span>{/if}
         </a>
+        </div>
       {/each}
     </div>
   {/if}
@@ -195,7 +257,18 @@
   .form input, .form select { font: inherit; font-size: var(--fs-md); padding: 8px 11px; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .tree { display: grid; gap: 0.35rem; margin-top: 0.8rem; }
   /* Two lines of about 56px; a long name wraps between words, never inside one (round fifty-eight; the grower review). */
-  .row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; align-content: center; padding: 0.45rem 0.9rem; padding-left: calc(0.9rem + min(var(--d), 4) * 1.4rem); color: inherit; min-height: 56px; }
+  .rowwrap { display: grid; grid-template-columns: var(--tap) minmax(0, 1fr); align-items: stretch; padding-left: calc(min(var(--d), 4) * 1.4rem); }
+  .rowwrap.dragging .row { outline: 2px solid var(--accent); }
+  .handle { display: grid; place-items: center; border: 0; background: none; color: var(--ink3); cursor: grab; touch-action: none; }
+  .handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: row; gap: 2px; align-content: center; padding: 0.45rem 0.9rem; color: inherit; min-height: 56px; position: relative; }
+  .row:has(.thumbs) { grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; }
+  .row:has(.thumbs) .thumbs { grid-row: 1 / span 2; }
+  .thumbs { display: flex; align-self: center; }
+  .thumbs .th { width: 30px; height: 30px; border-radius: var(--r-sm); overflow: hidden; border: 2px solid var(--bg); margin-left: -8px; background: var(--sunk); }
+  .thumbs .th:first-child { margin-left: 0; }
+  .thumbs .th :global(img) { width: 100%; height: 100%; object-fit: cover; }
+  .spacestate { font-size: var(--fs-sm); color: #9a5b12; font-weight: 600; }
   .line2 { display: flex; flex-wrap: wrap; align-items: baseline; line-height: 1.3; }
   .line2 .dot { margin: 0 0.45em; }
   .row:hover { text-decoration: none; box-shadow: var(--sh2); color: inherit; }

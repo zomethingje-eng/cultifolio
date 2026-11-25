@@ -71,4 +71,12 @@ as docs/PLAN-RECORD-FORMAT.md set it out. Built in the clone on 24 November 2026
 
 ## Gate and deploy
 
-(Written at the gate.)
+- Gated with round 119 (the clone's Chromium suite first: four faults fixed there, and four in its unit suite).
+  svelte-check 0 errors in 1,903 files; the hybrid table made again after the day's growth, 523.
+- The app gate, WebKit and Firefox at one worker each: the first run failed r87s3 3 once (the look: Today's new state label
+  and the card's space chips in boxes with round corners); the second failed it in Firefox twice (the label kept the theme's
+  `pill` class, whose fill reached it) and r87t3 2.4 once in WebKit (the report's link, 11.8 s, then 2.6 s on its retry).
+  The label is `spacestate` now, the chips 3 px corners. The third run: 6,560 unit tests, 2,994 browser tests, every test
+  first time in every engine.
+- Committed as aa450b2 with round 119 and pushed on 25 November 2026. The first `node scripts/deploy.mjs` stopped
+  at one unit test; the second deployed, live check 24 of 24.

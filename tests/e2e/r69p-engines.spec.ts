@@ -20,6 +20,9 @@ async function leadLines(p: Page) {
 }
 
 test('r69p P4: at 390 px the front page\'s lead is as many lines in a narrow face, a wide one and the fallback faces alike (IND-13)', async ({ browser, baseURL }) => {
+  // Four contexts, each loading the front page: 30 s ran out once under four engines at once (rounds 121 and 122's gate,
+  // passing on its retry; 8.6 s in Firefox the same run).
+  test.setTimeout(60_000);
   const lines: Record<string, number> = {};
   for (const face of ['web', 'narrow', 'wide', 'fallback'] as const) {
     const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, locale: 'en-GB', serviceWorkers: 'block' });

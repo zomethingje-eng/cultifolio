@@ -86,7 +86,7 @@
   let thumbFailed = $state(false);
   $effect(() => {
     if (s) {
-      setCrumb([{ label: 'Propagation', href: '/propagation' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
+      setCrumb([{ label: 'Batches', href: '/propagation' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
       entriesFor([speciesSlug(s.taxonName)]).then((m) => (idx = m?.get(speciesSlug(s.taxonName))));
     }
     return () => setCrumb([]);

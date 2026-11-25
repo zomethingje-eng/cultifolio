@@ -203,23 +203,17 @@ test('r61a harness 3: a first flowering stays visible on Today when Today itself
   await expect(page.locator('#rest-h')).toBeVisible();
 });
 
-test('r61a 9: Move starts with no place chosen, focus goes to the picker and back to "Move to a place", and Tab reaches Undo', async ({ page }) => {
+test('r61a 9: Move opens a sheet of spaces, focus on its first, one tap moves, focus back to "Move to a space", and Tab reaches Undo', async ({ page }) => {
   await seeded(page, [...plants(2), ['location', 'b2', 'name', 'Bench 2'], ['location', 'b2', 'type', 'bench']]);
   await page.locator('#select-toggle').click();
   await page.locator('.selrow input').first().check();
   await page.locator('#sel-move').focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#sel-loc')).toBeFocused();
-  expect(await page.locator('#sel-loc').inputValue()).toBe('');
-  const go = page.locator('#sel-move-go');
-  await expect(go).toHaveAttribute('aria-disabled', 'true');
-  await go.focus();
-  await page.keyboard.press('Enter'); // nothing chosen: nothing moves, and the reason is said
-  await expect(page.locator('.selbar')).toContainText('Choose a space first');
+  // Round 122 (MYPLANTS 29, screen 9): a sheet of spaces, one tap each; nothing moves until one is pressed.
+  const b2 = page.locator('#sel-sheet button', { hasText: 'Bench 2' });
+  await expect(page.locator('#sel-sheet button').first()).toBeFocused();
   await expect(page.locator('.toast')).toBeHidden();
-  await page.selectOption('#sel-loc', 'b2');
-  await expect(go).not.toHaveAttribute('aria-disabled', 'true');
-  await go.focus();
+  await b2.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.toast')).toContainText('1 moved to Bench 2.');
   await expect(page.locator('#sel-move')).toBeFocused();
@@ -230,8 +224,7 @@ test('r61a 9: Move starts with no place chosen, focus goes to the picker and bac
   await expect(page.locator('#sel-move')).toBeFocused();
   // "No space" is a choice of its own
   await page.locator('#sel-move').click();
-  await page.selectOption('#sel-loc', 'none');
-  await page.locator('#sel-move-go').click();
+  await page.locator('#sel-sheet button', { hasText: 'No space' }).click();
   await expect(page.locator('.toast')).toContainText('1 moved to no space.');
 });
 
@@ -269,7 +262,7 @@ test('r61a 12: a place filter by address, select mode from it, and a search that
   await seeded(page, rows, '/plants?place=b2&select=1');
   await expect(page.locator('#select-toggle')).toHaveText('Done selecting');
   await expect(page.locator('.selrow')).toHaveCount(2);
-  await expect(page.locator('#plants-place')).toHaveValue('b2');
+  await expect(page.locator('.spacechips [aria-pressed="true"]')).toHaveText(/^Bench 2/); // round 121: the space chips, where the select was
   await expect(page).toHaveURL(/\/plants\?place=b2$/);
   // the parent place lists what is inside it too
   await page.goto('/plants?place=gh'); await ready(page);

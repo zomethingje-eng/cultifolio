@@ -91,7 +91,9 @@ test('r80u offline 2: the install fetches what offline use needs, not the share 
   // margin of two.
   // Rounds 111 to 116 add the modules a page of the collection draws (the suggestions' groups, the keep sheet's rule, the
   // header's sentences and figures): WebKit 188 on their gate (Chromium 128, Firefox 91), so 192, the margin kept.
-  expect(files.length, report).toBeLessThan(192);
+  // Rounds 119 to 122 add the ways in, Today's spaces, the switch, the views and the walking order: WebKit 193 on their
+  // gate, so 198, the margin kept.
+  expect(files.length, report).toBeLessThan(198);
   await ctx.close();
 });
 
@@ -112,7 +114,7 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
   // owner's second predeploy; Safari has no idle callback and waited two seconds, so the region was not kept).
   await expect.poll(() => page.evaluate(async (us) => (await Promise.all(us.map((u) => caches.match(u)))).filter((r) => !r).length, maps), { timeout: 10_000 }).toBe(0);
   net.cut();
-  const pages: Array<[string, RegExp]> = [['/plants', /plants/i], [`/plants/${acc}`, /Copiapoa cinerea/], ['/plants/new', /Add a plant/], ['/places', /space/i], ['/propagation', /Propagation/], ['/propagation/new', /./], ['/today', /Today/], ['/labels', /Labels/], ['/backup', /Backup/i], ['/settings', /Settings/], ['/', /Species/], ['/species/copiapoa-cinerea', /Copiapoa cinerea/]];
+  const pages: Array<[string, RegExp]> = [['/plants', /plants/i], [`/plants/${acc}`, /Copiapoa cinerea/], ['/plants/new', /Add a plant/], ['/places', /space/i], ['/propagation', /Batches/], ['/propagation/new', /./], ['/today', /Today/], ['/labels', /Labels/], ['/backup', /Backup/i], ['/settings', /Settings/], ['/', /Species/], ['/species/copiapoa-cinerea', /Copiapoa cinerea/]];
   for (const [to, h] of pages) {
     await page.goto(to);
     await ready(page);
@@ -128,7 +130,7 @@ test('r80u offline 3: after the smaller install, with the network gone, every pa
   page.on('pageerror', (e) => { if (browserName === 'webkit' && e.message === 'Response served by service worker is an error') return; errors.push(e.message); });
   await page.addInitScript(() => { const w = window as unknown as { __unhandled: string[] }; w.__unhandled = []; addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => w.__unhandled.push(String(ev.reason?.message ?? ev.reason))); });
   await page.goto('/plants'); await ready(page);
-  for (const [to, h] of [['/today', /Today/], ['/propagation', /Propagation/], ['/places', /space/i], ['/plants', /plants/i]] as Array<[string, RegExp]>) {
+  for (const [to, h] of [['/today', /Today/], ['/propagation', /Batches/], ['/places', /space/i], ['/plants', /plants/i]] as Array<[string, RegExp]>) {
     // My spaces and Propagation from the menu (the tab bar's More) since round eighty-seven (DESIGN-87); the others by the bars.
     if (to === '/propagation' || to === '/places') { await page.getByRole('button', { name: 'Menu' }).click(); await page.locator(`#menu a[href="${to}"]`).click(); }
     else await page.locator(`a[href="${to}"]:visible`).first().click();

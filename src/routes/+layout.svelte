@@ -55,8 +55,8 @@
   const menu = [
     { href: '/', label: 'Reference' },
     { href: '/plants', label: 'My plants' },
-    { href: '/places', label: 'My spaces' },
-    { href: '/propagation', label: 'Propagation' },
+    { href: '/places', label: 'Spaces' }, // round 121 (MYPLANTS 29, the owner's decision 1): headings and menus say Spaces
+    { href: '/propagation', label: 'Batches' },
     { href: '/today', label: 'Today' },
     null,
     { href: '/compare', label: 'Compare species' },

@@ -124,7 +124,17 @@
     if (busy) return;
     if (!chosen.length) { toast.show('Nothing is ticked.'); return; }
     moveTo = ''; moveWhy = ''; moving = true;
-    await focusNext('#sel-loc');
+    await focusNext('#sel-sheet button:not([aria-disabled="true"]), .sheetfoot a');
+  }
+  /**
+   * Round 122 (MYPLANTS 29, screen 9): the move is a sheet of spaces, one tap each, in walking order. The space every ticked
+   * plant is in now is shown and cannot be chosen; "No space" and "+ New space" close it.
+   */
+  const here = $derived.by(() => { const ks = new Set(chosen.map((a) => (a.locationId && collection.location(a.locationId) ? collection.placeOf(a.locationId) : null) ?? 'none')); return ks.size === 1 ? [...ks][0] : null; });
+  async function moveOne(to: string) {
+    if (busy || to === here) return;
+    moveTo = to;
+    await move();
   }
   async function closeMove() {
     moving = false; moveWhy = '';
@@ -132,7 +142,7 @@
   }
   async function move() {
     if (busy || !chosen.length) return;
-    if (!moveTo) { moveWhy = 'Choose a space first, or "No space".'; await focusNext('#sel-loc'); return; }
+    if (!moveTo) { moveWhy = 'Choose a space first, or "No space".'; await focusNext('#sel-sheet button'); return; }
     busy = true;
     try {
       const to = moveTo === 'none' ? null : moveTo;
@@ -208,14 +218,15 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="selbar" role="group" aria-label="For the ticked plants" data-cover="bottom" bind:this={barEl} onkeydown={onBarKey}>
     {#if moving}
-      <div class="moveto">
-        <label class="movelab" for="sel-loc">Move to</label>
-        <select id="sel-loc" bind:value={moveTo} onchange={() => (moveWhy = '')} aria-describedby={moveWhy ? 'sel-move-why' : undefined}>
-          <option value="" disabled>Choose a space…</option>
-          <option value="none">No space</option>
-          {#each places as p (p.id)}<option value={p.id}>{p.label}</option>{/each}
-        </select>
-        <button class="btn pri" type="button" id="sel-move-go" onclick={move} aria-disabled={busy || !chosen.length || !moveTo}>Move {chosen.length}</button><button class="btn" type="button" onclick={closeMove}>Cancel</button>
+      <div class="moveto" role="group" aria-labelledby="sel-sheet-h">
+        <p class="movelab" id="sel-sheet-h">Move {chosen.length} {chosen.length === 1 ? 'plant' : 'plants'} to</p>
+        <ul class="sheet" id="sel-sheet">
+          {#each places as p (p.id)}
+            <li><button type="button" aria-disabled={busy || p.id === here} onclick={() => moveOne(p.id)}><span class="nm">{p.label}</span><span class="small muted">{p.id === here ? 'where they are now' : `${collection.plantsAt(p.id, false).length} ${collection.plantsAt(p.id, false).length === 1 ? 'plant' : 'plants'}`}</span></button></li>
+          {/each}
+          <li><button type="button" aria-disabled={busy || here === 'none'} onclick={() => moveOne('none')}><span class="nm">No space</span>{#if here === 'none'}<span class="small muted">where they are now</span>{/if}</button></li>
+        </ul>
+        <p class="sheetfoot"><a href="/places#add">+ New space</a><button class="btn" type="button" onclick={closeMove}>Cancel</button></p>
         {#if moveWhy}<span class="small why" id="sel-move-why">{moveWhy}</span>{/if}
       </div>
     {:else if confirmArchive}
@@ -244,8 +255,7 @@
   .moveto { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; min-width: 0; }
   /* The picker shrinks to the bar and its options' words wrap no further than the screen: at 320 px with 200% text it was
      440 px wide and the page scrolled sideways (round sixty-one; the accessibility review, 7). */
-  .moveto select { flex: 1 1 12rem; min-width: 0; max-width: 100%; min-height: var(--tap); padding: 0.5em 0.8em; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); font: inherit; }
-  .movelab { font-weight: 600; }
+  .movelab { font-weight: 600; margin: 0; width: 100%; }
   .why { flex-basis: 100%; color: var(--bad); }
   .selbar [aria-disabled='true'] { opacity: 0.55; cursor: default; }
   @media (max-width: 700px) { .selbar { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tab-h, 57px) + 8px); } }
@@ -260,4 +270,10 @@
   :global(body.grow-selecting #main .rows), :global(body.grow-selecting #main .more) { display: none; }
   /* Round eighty-seven, stage-3 integration (DESIGN-87: data looks like data, no chips): a number as plain figures. */
   .accno { background: none; padding: 0; border-radius: 0; font-variant-numeric: tabular-nums lining-nums; }
+  .sheet { list-style: none; margin: 6px 0; padding: 0; max-height: min(50vh, 420px); overflow-y: auto; width: 100%; }
+  .sheet button { display: grid; width: 100%; min-height: 48px; padding: 6px 4px; border: 0; border-bottom: 1px solid var(--rule2); background: none; color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+  .sheet button:hover { background: var(--sunk); }
+  .sheet button[aria-disabled='true'] { color: var(--ink3); cursor: default; }
+  .sheet .nm { font-weight: 600; }
+  .sheetfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 0; width: 100%; }
 </style>

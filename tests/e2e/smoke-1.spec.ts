@@ -44,13 +44,13 @@ test('the menu behind the mark reaches every place from any page', async ({ page
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#menu');
   await expect(menu).toBeVisible();
-  for (const l of ['Reference', 'My plants', 'My spaces', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'About', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
+  for (const l of ['Reference', 'My plants', 'Spaces', 'Batches', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'About', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
   await expect(menu.locator('a.on')).toHaveText('Reference'); // "Reference" since round eighty-seven (DESIGN-87)
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
   await page.getByRole('button', { name: 'Menu' }).click();
-  await menu.getByRole('link', { name: 'My spaces' }).click();
+  await menu.getByRole('link', { name: 'Spaces', exact: true }).click(); // round 121
   await expect(page).toHaveURL(/\/places$/);
   await expect(page.locator('#menu')).toHaveCount(0); // closed by the navigation
 });

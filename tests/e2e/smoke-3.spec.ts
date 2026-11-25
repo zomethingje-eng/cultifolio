@@ -261,7 +261,7 @@ test('a visitor sees the same places in the top bar and the phone\'s tab bar, an
   await page.setViewportSize({ width: 1280, height: 800 });
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
-  await expect(page.locator('#menu').getByRole('link', { name: 'My spaces', exact: true })).toBeVisible();
+  await expect(page.locator('#menu').getByRole('link', { name: 'Spaces', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   // the species page says what it is, once, under the name
   await page.goto('/species/copiapoa-cinerea');

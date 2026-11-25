@@ -117,8 +117,8 @@ test('r87 look 6: the tab bar is Reference, My plants, Today and More, and More 
   await expect(more).toHaveAccessibleName('More menu');
   await more.click();
   await expect(page.locator('#menu')).toBeVisible();
-  await expect(page.locator('#menu a[href="/places"]')).toHaveText('My spaces');
-  await expect(page.locator('#menu a[href="/propagation"]')).toHaveText('Propagation');
+  await expect(page.locator('#menu a[href="/places"]')).toHaveText('Spaces'); // round 121
+  await expect(page.locator('#menu a[href="/propagation"]')).toHaveText('Batches');
   await page.keyboard.press('Escape');
   await expect(page.locator('#menu')).toHaveCount(0);
   await expect(more).toBeFocused();

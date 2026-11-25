@@ -212,9 +212,9 @@ test('r62a A40: Escape closes the Move panel and the Archive question, with focu
   await page.locator('#select-toggle').click();
   await page.locator('.selrow input').first().check();
   await page.locator('#sel-move').focus(); await page.keyboard.press('Enter');
-  await expect(page.locator('#sel-loc')).toBeFocused();
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.moveto'))).toBe(true); // round 122: the sheet of spaces (no space to choose here: its + New space)
   await page.keyboard.press('Escape');
-  await expect(page.locator('#sel-loc')).toHaveCount(0);
+  await expect(page.locator('#sel-sheet')).toHaveCount(0);
   await expect(page.locator('#sel-move')).toBeFocused();
   await page.locator('#sel-archive').focus(); await page.keyboard.press('Enter');
   await expect(page.locator('#sel-archive-keep')).toBeFocused();
@@ -229,8 +229,7 @@ test('r62a grower 10: a Move that empties a place-filtered list keeps select mod
   await expect(page.locator('#select-toggle')).toHaveText('Done selecting');
   await page.getByRole('button', { name: 'Tick all 2' }).click();
   await page.locator('#sel-move').click();
-  await page.locator('#sel-loc').selectOption({ label: 'Bench 3' });
-  await page.locator('#sel-move-go').click();
+  await page.locator('#sel-sheet button', { hasText: 'Bench 3' }).click();
   await expect(page.locator('.toast [role=status]')).toContainText('2 moved to Bench 3');
   await expect(page.locator('#main')).toContainText('No plants match.');
   await expect(page.locator('#select-toggle')).toHaveText('Done selecting');
