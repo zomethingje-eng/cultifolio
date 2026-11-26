@@ -44,4 +44,12 @@ and the move sheet are round 122.
 
 ## Gate and deploy
 
-(Written at the gate.)
+- Gated with round 122. svelte-check 0 errors in 1,908 files; the hybrid table made again, 523 as before.
+- The app gate, five runs. The first: r76p strip 2 in Firefox and WebKit (the strip measured in Chromium alone, which
+  wrapped round 122's longer line once more at 1024 px; the lines shortened, the three engines within 2 px) and r80u
+  offline 2 in WebKit (193 files against 192; 198 now). The second, third and fourth each failed on one or two different
+  timeouts that passed on their retries (r62bg 1, r69p P4, now 60 s, r83a 2 and smoke-1's photographs), none in a file
+  these rounds touch. The fifth, with Chromium at two workers as well as WebKit and Firefox at one: 6,568 unit tests,
+  3,018 browser tests, every test first time in every engine (the commit message says 6,567: the count is 6,568).
+- Committed as 589c330 with round 122 and pushed on 25 November 2026. The first `node scripts/deploy.mjs` stopped at
+  one unit test (search-api's rate limit, a timing test); the second deployed, live check 24 of 24.

@@ -109,6 +109,24 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 124,
+    date: '2026-11-26',
+    reader: 'A plant\'s page says whether its name is as received, checked by you, or verified by someone.',
+    lines: [
+      'Set a plant\'s name as checked by you, with the day and what against, or verified by someone, with their name.',
+      'The plants sheet has a column for what you checked it against, and the import reads it back.'
+    ]
+  },
+  {
+    n: 123,
+    date: '2026-11-25',
+    reader: 'A space\'s page is two buttons and its three conditions, and a space has a label of its own.',
+    lines: [
+      'A space shows the temperature, the days between waterings and the dry months as figures, with Watered and Add a plant here; the rest is in its menu.',
+      'A label for a space opens its page from one scan, and the audit says when it was last done.'
+    ]
+  },
+  {
     n: 122,
     date: '2026-11-25',
     reader: 'Your spaces keep the order you walk them in, and moving plants is one tap.',

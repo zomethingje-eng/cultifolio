@@ -129,6 +129,7 @@ test('r62a sheets (grower 3): the front page\'s line says the resting months wer
 
 test('r62a grower 4: "Select these" followed inside the app opens My plants in select mode', async ({ page }) => {
   await seeded(page, [...plants(2, ['b1', 'Bench 1']), ...plants(1, ['b2', 'Bench 2'], 3)], '/places/b1');
+  await page.locator('#space-menu-btn').click(); // round 123: behind the space's "···" menu
   await page.locator('#select-these').click(); // in the app, as a grower taps it
   await expect(page).toHaveURL(/\/plants\?place=b1/);
   await expect(page.locator('#select-toggle')).toHaveText('Done selecting');

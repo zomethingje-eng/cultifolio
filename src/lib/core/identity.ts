@@ -241,7 +241,7 @@ export function splitItemNumber(no: string | null | undefined): { base: string; 
  * split off takes them as they stand. Place, status, notes, the cover, the watering rhythm, the price and the deaccession
  * are each plant's own.
  */
-export const SHARED_FIELDS = ['taxonName', 'taxonKey', 'cultivar', 'nameKind', 'parentage', 'nameAsReceived', 'fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'sowingId', 'olderOf', 'olderKind', 'olderKindOf', 'provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'exChain', 'clone', 'idHistory'] as const;
+export const SHARED_FIELDS = ['taxonName', 'taxonKey', 'cultivar', 'nameKind', 'parentage', 'nameAsReceived', 'fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'sowingId', 'olderOf', 'olderKind', 'olderKindOf', 'provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'idAgainst', 'exChain', 'clone', 'idHistory'] as const;
 export const pickShared = (fields: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.entries(fields).filter(([k]) => (SHARED_FIELDS as readonly string[]).includes(k)));
 
 /* ---------------------------------------------------------------- reading a record ---------------------------------------------------------------- */
@@ -388,6 +388,8 @@ export interface Identity {
   idLevel: IdLevel | null;
   idBy: string | null;
   idOn: string | null;
+  /** What a check by the grower was made against (round 123's MYPLANTS 31; a plain text field, as idBy is). */
+  idAgainst: string | null;
   exChain: string[];
   clone: string | null;
   idHistory: EarlierName[];
@@ -409,6 +411,7 @@ export function identityOf(a: Record<string, unknown>): Identity {
     collector: textOf(a.collector),
     collected: isPartialDate(a.collected) ? a.collected : null,
     idLevel: oneOf(a.idLevel, ID_LEVELS),
+    idAgainst: textOf(a.idAgainst),
     idBy: textOf(a.idBy),
     idOn: isPartialDate(a.idOn) ? a.idOn : null,
     exChain: exChainOf(a.exChain),
@@ -426,7 +429,7 @@ export function identityOf(a: Record<string, unknown>): Identity {
  * have no ITF2 field and are named in words. Dates in ITF2 columns are in ITF2's syntax (YYYYMMDD, YYYYMM, YYYY); the
  * others are YYYY-MM-DD as the rest of the sheet.
  */
-export const SHEET_COLUMNS = ['item of', 'accsta', 'no longer held', 'no longer held on', 'no longer held note', 'prot', 'prohis', 'cnam', 'cid', 'field code', 'cdat', 'idql', 'rkql', 'vlev', 'vnam', 'vdat', 'vhist', 'ex', 'clone'] as const;
+export const SHEET_COLUMNS = ['item of', 'accsta', 'no longer held', 'no longer held on', 'no longer held note', 'prot', 'prohis', 'cnam', 'cid', 'field code', 'cdat', 'idql', 'rkql', 'vlev', 'vnam', 'vdat', 'checked against', 'vhist', 'ex', 'clone'] as const;
 export function sheetCells(a: Record<string, unknown> & { taxonName: string }, baseNumber: string | null): Array<string | null> {
   const x = identityOf(a);
   const q = idqlOf(a.taxonName);
@@ -450,6 +453,7 @@ export function sheetCells(a: Record<string, unknown> & { taxonName: string }, b
     x.idLevel,
     x.idLevel && x.idLevel !== 'U' && x.idLevel !== '0' ? x.idBy : null, // ITF2 D.2: no verifier for U or 0
     x.idLevel && x.idLevel !== 'U' && x.idLevel !== '0' ? itf2Date(x.idOn) : null,
+    x.idLevel === '1' ? x.idAgainst : null, // round 124: what a check by the grower was made against; ITF2 has no field
     x.idHistory.length ? vhistText(x.idHistory) : null,
     x.exChain.length ? exChainText(x.exChain) : null,
     x.clone
@@ -457,9 +461,9 @@ export function sheetCells(a: Record<string, unknown> & { taxonName: string }, b
 }
 
 /** The fields an import may fill from these columns, as stored. */
-export type IdentFields = Partial<{ provType: ProvType; propHistory: PropHistory; collector: string; collected: string; idLevel: IdLevel; idBy: string; idOn: string; idHistory: EarlierName[]; exChain: string[]; clone: string; deacc: DeaccReason; deaccOn: string; deaccNote: string }>;
+export type IdentFields = Partial<{ provType: ProvType; propHistory: PropHistory; collector: string; collected: string; idLevel: IdLevel; idBy: string; idOn: string; idAgainst: string; idHistory: EarlierName[]; exChain: string[]; clone: string; deacc: DeaccReason; deaccOn: string; deaccNote: string }>;
 /** The sheet's text for each, by the import's field name. */
-export type IdentCells = Partial<Record<'provType' | 'propHistory' | 'collector' | 'collected' | 'idLevel' | 'idBy' | 'idOn' | 'idHistory' | 'exChain' | 'clone' | 'deacc' | 'deaccOn' | 'deaccNote', string>>;
+export type IdentCells = Partial<Record<'provType' | 'propHistory' | 'collector' | 'collected' | 'idLevel' | 'idBy' | 'idOn' | 'idAgainst' | 'idHistory' | 'exChain' | 'clone' | 'deacc' | 'deaccOn' | 'deaccNote', string>>;
 /**
  * A sheet line's cells for these fields, read (round eighty-seven): each value checked as the forms check it. A value
  * that cannot be read is left out and said, and its text goes in the notes (`kept`), as the import does with every
@@ -484,7 +488,7 @@ export function readIdentCells(c: IdentCells, provenance: unknown): { fields: Id
   else { if (pt) fields.provType = pt; if (ph) fields.propHistory = ph; }
   const lv = word('idLevel', ID_LEVELS, 'Verification level');
   if (lv) fields.idLevel = lv;
-  for (const [k, label] of [['collector', 'Collector'], ['idBy', 'Identified by'], ['clone', 'Clone']] as const) {
+  for (const [k, label] of [['collector', 'Collector'], ['idBy', 'Identified by'], ['idAgainst', 'Checked against'], ['clone', 'Clone']] as const) {
     const v = t(k);
     if (!v) continue;
     if (v.length > (k === 'clone' ? 80 : TEXT_MAX)) bad(label, v, 'is too long to keep in its field');
@@ -515,4 +519,29 @@ export function readIdentCells(c: IdentCells, provenance: unknown): { fields: Id
   const note = (c.deaccNote ?? '').trim();
   if (note) fields.deaccNote = note.slice(0, NOTE_MAX);
   return { fields, problems, kept };
+}
+
+/* ------------------------------------------------------- the name's state (MYPLANTS 31) ------------------------------------------------------- */
+
+/**
+ * A plant's name in the grower's three words (round 124; MYPLANTS 31, BGCI's "Taxonomic Verification"), read from the
+ * ITF2 fields round eighty-seven keeps, so nothing is stored twice:
+ * - as received: no verification level, or U ("not known whether it was checked"), or 0;
+ * - checked by me: level 1, "compared with other named plants", with its day and what it was checked against;
+ * - verified by someone: level 2, 3 or 4, with their name and its day.
+ * It is a record the grower makes; the site infers nothing from it.
+ */
+export type IdState = 'received' | 'checked' | 'verified';
+export function idStateOf(i: { idLevel: IdLevel | null; idBy: string | null; idOn: string | null; idAgainst: string | null }): { state: IdState; words: string } {
+  if (i.idLevel === '2' || i.idLevel === '3' || i.idLevel === '4') {
+    return { state: 'verified', words: `Verified${i.idBy ? ` by ${i.idBy}` : ''}${i.idOn ? `, ${i.idOn}` : ''}` };
+  }
+  if (i.idLevel === '1') return { state: 'checked', words: `Checked by you${i.idOn ? `, ${i.idOn}` : ''}${i.idAgainst ? `, against ${i.idAgainst}` : ''}` };
+  return { state: 'received', words: 'As received' };
+}
+/** The fields a state writes: the level, the day, and who or what; the others cleared, so the three never mix. */
+export function idStateFields(state: IdState, on: string | null, who: string | null): Record<string, string | null> {
+  if (state === 'checked') return { idLevel: '1', idOn: on, idAgainst: who, idBy: null };
+  if (state === 'verified') return { idLevel: '2', idOn: on, idBy: who, idAgainst: null };
+  return { idLevel: 'U', idOn: null, idBy: null, idAgainst: null };
 }

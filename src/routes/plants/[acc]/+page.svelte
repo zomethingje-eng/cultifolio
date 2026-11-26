@@ -55,7 +55,7 @@
   import PhotoTimeline from '$lib/ui/grow/PhotoTimeline.svelte'; // round sixty, agent F: the photo strip; by its own path, not the barrel (round sixty-one; a11y 3)
   import ForeignLabel from '$lib/ui/grow/ForeignLabel.svelte'; // a stranger's label
   // Round eighty-seven (t1): items, deaccession, ITF2 provenance, field numbers and identification ($core/identity).
-  import { identityOf, bcssHref, idqlOf, exChainText, readExChain, readPartialDate, withEarlierName, itf2Problem, DEACC_REASONS, DEACC_LABEL, PROV_TYPES, PROV_TYPE_LABEL, PROP_HISTORIES, PROP_HISTORY_LABEL, ID_LEVELS, ID_LEVEL_LABEL, QUALIFIER_MEANS, NOTE_MAX, type DeaccReason, type ProvType, type PropHistory } from '$core/identity';
+  import { identityOf, idStateOf, idStateFields, type IdState, bcssHref, idqlOf, exChainText, readExChain, readPartialDate, withEarlierName, itf2Problem, DEACC_REASONS, DEACC_LABEL, PROV_TYPES, PROV_TYPE_LABEL, PROP_HISTORIES, PROP_HISTORY_LABEL, ID_LEVELS, ID_LEVEL_LABEL, QUALIFIER_MEANS, NOTE_MAX, type DeaccReason, type ProvType, type PropHistory } from '$core/identity';
   // Round eighty-seven, F4: the plant's parents and offspring, the plant chosen as a cross's pollen parent or a graft's parts.
   import Lineage from '$lib/ui/grow/Lineage.svelte';
   import PlantRef from '$lib/ui/grow/PlantRef.svelte';
@@ -158,6 +158,33 @@
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   /** The plant's identity and provenance fields, each read and checked ($core/identity; round eighty-seven, t1). */
   const ident = $derived(a ? identityOf(a as unknown as Record<string, unknown>) : null);
+  /**
+   * The name's state (round 124; MYPLANTS 31): as received, checked by me (with its day and what against), or verified by
+   * someone (their name and the day), read from and written to the ITF2 fields (`idStateOf`, `idStateFields`), for every
+   * plant of the accession. A record the grower makes; the site infers nothing from it.
+   */
+  const idNow = $derived(ident ? idStateOf(ident) : null);
+  let idOpen = $state(false);
+  let idForm = $state<{ state: IdState; on: string; who: string }>({ state: 'received', on: '', who: '' });
+  let idMsg = $state('');
+  function openId() {
+    if (!ident || !idNow) return;
+    idForm = { state: idNow.state, on: ident.idOn ?? localDate(), who: (idNow.state === 'checked' ? ident.idAgainst : idNow.state === 'verified' ? ident.idBy : '') ?? '' };
+    idMsg = ''; idOpen = true;
+    void focusNext('#id-form input[type=radio]:checked');
+  }
+  async function saveId() {
+    if (!a) return;
+    const on = idForm.on.trim() ? readPartialDate(idForm.on.trim()) : null;
+    if (idForm.state !== 'received' && idForm.on.trim() && !on) { idMsg = 'Give the day as 2026-11-26, a month as 2026-11, or a year.'; return; }
+    if (idForm.state === 'verified' && !idForm.who.trim()) { idMsg = 'Say who verified it.'; return; }
+    const fields = idStateFields(idForm.state, idForm.state === 'received' ? null : (on ?? localDate()), idForm.who.trim().slice(0, 200) || null);
+    try {
+      await collection.putWith('accession', a.id, fields, [], collection.sharedWith(a.id, fields));
+      idOpen = false;
+      toast.show(`The name is now: ${idStateOf(identityOf({ ...(a as unknown as Record<string, unknown>), ...fields })).words.toLowerCase()}.`);
+    } catch { idMsg = `Not saved: ${(collection.lastWriteError ?? 'the browser refused the write').replace(/\.$/, '')}.`; }
+  }
   /** Its earlier names, with those its rename lines record and its history does not (a rename on round eighty-six; review M2). */
   const earlier = $derived(a ? collection.earlierNames(a.id).list : []);
   /** The plant that holds the accession's bare number, and the accession's live plants (F1). */
@@ -1319,6 +1346,27 @@
 
   <Lineage plant={a} />
 
+  <!-- Round 124 (MYPLANTS 31): the name's state, a record the grower makes. -->
+  {#if idNow}
+  <div class="secrule" id="identity"><h2>Identity</h2><div class="line"></div></div>
+  <p class="idline"><span id="id-state">{idNow.words}</span>{#if !idOpen}{' '}<button class="linkish" type="button" id="id-change" onclick={openId}>Change</button>{/if}</p>
+  {#if idOpen}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="cult idform" id="id-form" onsubmit={(e) => { e.preventDefault(); void saveId(); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); idOpen = false; void focusNext('#id-change'); } }}>
+      <fieldset><legend>The name {a.taxonName} is</legend>
+        <label><input type="radio" name="idstate" value="received" bind:group={idForm.state} /> As received</label>
+        <label><input type="radio" name="idstate" value="checked" bind:group={idForm.state} /> Checked by me</label>
+        <label><input type="radio" name="idstate" value="verified" bind:group={idForm.state} /> Verified by someone</label>
+      </fieldset>
+      {#if idForm.state !== 'received'}
+        <label class="fl"><span class="eyebrow">On</span><input id="id-on" type="text" inputmode="numeric" bind:value={idForm.on} placeholder="2026-11-26" /></label>
+        <label class="fl"><span class="eyebrow">{idForm.state === 'checked' ? 'Against what (a key, a book, a named plant)' : 'By whom'}</span><input id="id-who" type="text" bind:value={idForm.who} /></label>
+      {/if}
+      {#if idMsg}<p class="refuse" role="alert" id="id-msg">{idMsg}</p>{/if}
+      <div class="actions"><button class="btn" type="button" onclick={() => { idOpen = false; void focusNext('#id-change'); }}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+    </form>
+  {/if}
+  {/if}
   <div class="secrule"><h2>Provenance</h2><div class="line"></div></div>
   {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && (a.provenance ?? 'unknown') === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid' && !a.price && !a.sourceRef && !ident?.provType && !ident?.propHistory && !ident?.collector && !ident?.collected && !ident?.exChain.length && !ident?.clone && !ident?.idLevel && !ident?.idBy && !earlier.length && !qualifier && accPlants.length < 2}
     <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
@@ -1500,4 +1548,8 @@
   /* The photograph fills the 260 px box on a phone: the theme's `.hero img { max-height: 150px }`, a species page's rule, made
      it a 150 px slice over a 110 px band of black (round eighty; the phone review's 4). */
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; max-height: none; } .hero .spthumb { max-height: none; } :global(.ptl) + .idcard { margin-top: 10px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: var(--fs-2xl); } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
+  .idline { margin: 0 0 12px; }
+  .idform { display: grid; gap: 10px; padding: 12px 15px; margin: 0 0 14px; }
+  .idform fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .idform fieldset label { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); }
 </style>

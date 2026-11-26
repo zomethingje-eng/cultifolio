@@ -83,6 +83,7 @@ test.describe('without the service worker', () => {
     await page.selectOption('#loc-kind', 'outdoor');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await page.locator('.tree .row', { hasText: 'Held frame' }).click();
+    await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's menu
     await page.getByRole('button', { name: 'Edit' }).click();
     await page.selectOption('#e-indoor', 'no');
     await page.fill('#e-lat', '51.50');

@@ -170,6 +170,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   expect((await a11yScan(page)).unlabeled).toEqual([]);
   await page.goto('/places');
   await page.locator('a.row').first().click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   const mu = await page.evaluate(() => { const l = [...document.querySelectorAll<HTMLElement>('form label > span')].find((s) => /mol/.test(s.textContent ?? ''))!; const glyph = l.querySelector('span')!; return { text: l.textContent, transform: getComputedStyle(glyph).textTransform }; });
   expect(mu.text).toBe('µmol/m²/s of light');
@@ -480,6 +481,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.locator('.tree .row', { hasText: 'Back step' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.selectOption('#e-indoor', 'no');
   await page.fill('#e-lat', '40.38');
@@ -509,6 +511,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.selectOption('#e-indoor', 'no');
   await page.fill('#e-lat', '40.38');
@@ -522,10 +525,12 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await expect(page.locator('.pill', { hasText: 'reaches the floor' })).toBeVisible();
   await expect(page.locator('.pill', { hasText: 'floor 10.0 °C' })).toBeVisible();
   // a floor the coldest night reaches exactly counts (round thirteen, 11); a floor of 2.5 prints as 2.5, not 3
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '8');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText("reaches this space's 8.0 °C floor");
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '2.5');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -536,6 +541,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   days = frosty;
   await page.evaluate(() => sessionStorage.clear());
   await page.reload();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '-5');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -556,6 +562,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await page.evaluate(() => sessionStorage.clear()); // the forecast kept in this browser for an hour, so the old point is asked again
   const oldAnswer = page.waitForResponse((r) => r.url().includes('/api/forecast') && new URL(r.url()).searchParams.get('lat') === '40.38');
   await page.reload();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-lat', '40.39'); // the new place answers at once; the old one's slow answer must not overwrite it
   await page.getByRole('button', { name: 'Save' }).click();

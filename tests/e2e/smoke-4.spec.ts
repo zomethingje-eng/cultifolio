@@ -248,6 +248,7 @@ test('round sixty: the place form refuses a floor that is not a temperature, and
   await page.selectOption('#loc-kind', 'bench');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.locator('.tree a', { hasText: 'Floor bench' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.fill('#e-floor', 'abc');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

@@ -719,6 +719,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   // Date.now() is held still from here; timers run.
   await page.clock.setFixedTime(Date.now());
   await page.goto(`/places/${frame}`);
+  await page.locator('#space-menu-btn').click(); // round 123: behind the space's "···" menu
   await page.getByRole('button', { name: 'Remove space' }).click();
   await page.getByRole('button', { name: 'Yes, remove' }).click();
   await expect(page.locator('.toast')).toContainText('1 plant moved up to Porch');
@@ -1304,6 +1305,7 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
   }
   await page.goto('/places');
   await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: behind the space's "···" menu
   await page.getByRole('button', { name: 'Move plants here' }).click();
   await page.fill('.movein .searchbar', 'welw');
   await expect(page.locator('.moverows label.row')).toHaveCount(1);
@@ -1397,8 +1399,8 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   await expect(page.locator('.hero.band')).toHaveCount(0);
   await expect(page.locator('.idcard .pills')).toHaveCount(0);
   await expect(page.locator('.idcard .vern')).toContainText('Room · 2 growing plants');
-  await expect(page.locator('.quickbar.words .btn', { hasText: 'Edit' })).toBeVisible();
-  await expect(page.locator('.quickbar .btn.pri')).toHaveText('Water all 2');
+  await expect(page.locator('#space-menu .btn', { hasText: 'Edit' })).toHaveCount(1); // round 123: in the "···" menu
+  await expect(page.locator('.quickbar .btn.pri')).toHaveText('Watered Porch');
   await expect(page.locator('.empty')).toContainText('and coordinates for frost watch');
   fs = await firstScreen(page);
   const placeRows = page.locator('.rows .accrow');
@@ -1480,6 +1482,7 @@ test('round fifty-one: a move into a place has an Undo that puts the plant back 
   const acc = page.url().split('/').pop()!;
   await page.goto('/places');
   await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: behind the space's "···" menu
   await page.getByRole('button', { name: 'Move plants here' }).click();
   await page.locator('.moverows label.row input').check();
   await page.getByRole('button', { name: /^Move 1$/ }).click();
@@ -1814,6 +1817,7 @@ test('round fifty-nine: the top bar\'s + opens the new-place form on every tap; 
   await page.selectOption('#loc-kind', 'bench');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.locator('.tree a', { hasText: 'Test bench' }).click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.fill('#e-waterdays', 'abc');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

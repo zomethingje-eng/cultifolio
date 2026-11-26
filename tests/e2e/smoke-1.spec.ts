@@ -181,13 +181,13 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.goto('/places');
   await page.locator('.tree .row', { hasText: 'Laundry room' }).click();
   await expect(page.getByText('1 growing plant')).toBeVisible();
-  await page.getByRole('button', { name: /Water all 1/ }).click();
+  await page.getByRole('button', { name: 'Watered Laundry room' }).click(); // round 123: "Watered <space>"
   await expect(page.locator('.toast')).toContainText('Watered 1 plant.');
   // one tap back: Undo removes exactly the lines it wrote, then Water all again for the rest of the test (round twenty-six, 5)
   await page.locator('.toast .undo').click();
   await expect(page.locator('.toast')).toContainText('Undone');
   await expect(page.locator('.card', { hasText: 'Last watered' })).toHaveCount(0);
-  await page.getByRole('button', { name: /Water all 1/ }).click();
+  await page.getByRole('button', { name: 'Watered Laundry room' }).click(); // round 123: "Watered <space>"
   await expect(page.locator('.toast')).toContainText('Watered 1 plant.');
   // audit: tick it present
   await page.getByRole('button', { name: 'Audit' }).click();

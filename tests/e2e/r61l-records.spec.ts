@@ -53,7 +53,8 @@ test('a place\'s edit form does not follow the link into a place inside it (reco
   await page.goto('/plants'); await ready(page);
   await inject(page, [['location', 'g', 'name', 'Greenhouse'], ['location', 'b1', 'name', 'Bench 1'], ['location', 'b1', 'parentId', 'g']], Date.now() - 3_600_000);
   await page.goto('/places/g'); await ready(page);
-  await page.locator('button', { hasText: /^Edit$/ }).first().click();
+  await page.locator('#space-menu-btn').click(); // round 123: Edit is in the space's "···" menu
+  await page.locator('#space-menu button', { hasText: /^Edit$/ }).click();
   await page.fill('#e-name', 'Glasshouse');
   await page.locator('a.azrow.inside', { hasText: 'Bench 1' }).click();
   await expect(page).toHaveURL(/\/places\/b1$/);

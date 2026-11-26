@@ -11,7 +11,7 @@ import { OWN_HEADS, RESTATED_HEADS } from '$lib/backup/plant-columns';
  * columns, named as ITF2 names them where it has a field (prot, prohis, cnam, cdat, vlev, vnam, vdat, vhist), and a
  * garden's or a grower's sheet that names them in words.
  */
-export const IDENT_FIELDS = ['provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'idHistory', 'exChain', 'clone', 'deacc', 'deaccOn', 'deaccNote'] as const;
+export const IDENT_FIELDS = ['provType', 'propHistory', 'collector', 'collected', 'idLevel', 'idBy', 'idOn', 'idAgainst', 'idHistory', 'exChain', 'clone', 'deacc', 'deaccOn', 'deaccNote'] as const;
 export type IdentField = (typeof IDENT_FIELDS)[number];
 
 /**
@@ -48,6 +48,7 @@ export const FIELD_LABEL: Record<Field, string> = {
   idLevel: 'Identification level (ITF2 vlev)',
   idBy: 'Identified by (ITF2 vnam)',
   idOn: 'Identified on (ITF2 vdat)',
+  idAgainst: 'Checked against',
   idHistory: 'Earlier names (ITF2 vhist)',
   exChain: 'Earlier holders (ex)',
   clone: 'Clone',
@@ -85,6 +86,7 @@ const HEADS: Record<Field, string[]> = {
   idLevel: ['vlev', 'verificationlevel', 'identificationlevel', 'idlevel'],
   idBy: ['vnam', 'verifier', 'verifiersname', 'identifiedby', 'determinedby', 'idby'],
   idOn: ['vdat', 'verificationdate', 'identifiedon', 'dateidentified', 'determinedon'],
+  idAgainst: ['checkedagainst', 'idagainst'],
   idHistory: ['vhist', 'verificationhistory', 'earliernames'],
   exChain: ['ex', 'exchain', 'earlierholders'],
   clone: ['clone', 'clonename'],

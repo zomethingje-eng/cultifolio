@@ -159,7 +159,7 @@ describe('r87t1 7: the sheet\'s columns, read back', () => {
   it('each column a cell, ITF2\'s dates in its syntax, the verifier only for a level above 0', () => {
     const a = { taxonName: 'Mammillaria cf. bombycina', status: 'archived', deacc: 'given', deaccOn: '2026-05-01', deaccNote: 'to the club', provenance: 'f1', fieldNumber: 'SB 829', collector: 'Brack, S.', collected: '1985-11', idLevel: '2', idBy: 'Hunt, D.', idOn: '2019-03-07', exChain: ['Devon', 'Mesa Garden'], clone: 'A', itemOf: 'r1' };
     const cells = Object.fromEntries(SHEET_COLUMNS.map((c, i) => [c, sheetCells(a, '2026-0012')[i]]));
-    expect(cells).toEqual({ 'item of': '2026-0012', accsta: 'T', 'no longer held': 'given away', 'no longer held on': '2026-05-01', 'no longer held note': 'to the club', prot: 'W', prohis: 'S', cnam: 'Brack, S.', cid: '829', 'field code': 'SB', cdat: '198511', idql: 'cf.', rkql: 'S', vlev: '2', vnam: 'Hunt, D.', vdat: '20190307', vhist: null, ex: 'ex Devon, ex Mesa Garden', clone: 'A' });
+    expect(cells).toEqual({ 'item of': '2026-0012', accsta: 'T', 'no longer held': 'given away', 'no longer held on': '2026-05-01', 'no longer held note': 'to the club', prot: 'W', prohis: 'S', cnam: 'Brack, S.', cid: '829', 'field code': 'SB', cdat: '198511', idql: 'cf.', rkql: 'S', vlev: '2', vnam: 'Hunt, D.', vdat: '20190307', 'checked against': null, vhist: null, ex: 'ex Devon, ex Mesa Garden', clone: 'A' });
     expect(sheetCells({ ...a, idLevel: '0' }, null)[SHEET_COLUMNS.indexOf('vnam')]).toBeNull();
   });
   it('read back as the forms read them; what cannot be read said and kept in the notes', () => {

@@ -349,6 +349,8 @@
   const alertsSeen = $derived(alertsRead(forecast?.alertsStatus));
 
   let confirmRemove = $state(false);
+  /** The space's "···" menu (round 123; MYPLANTS 30): Feed all, Move plants here, Start a batch here, Labels, Select, Edit, Remove. */
+  let menuOpen = $state(false);
   async function remove() {
     const r = await collection.removeLocation(id);
     const parts = [r.plants ? `${r.plants} plant${r.plants === 1 ? '' : 's'}` : '', r.batches ? `${r.batches} batch${r.batches === 1 ? '' : 'es'}` : '', r.places ? `${r.places} space${r.places === 1 ? '' : 's'}` : ''].filter(Boolean);
@@ -360,7 +362,8 @@
 {#snippet ago(n: number | null)}{#if n == null}–{:else if n === 0}today{:else}{n}<span class="u">{' d ago'}</span>{/if}{/snippet}
 
 <svelte:head><title>{loc?.name ?? 'Space'} · Cultifolio</title></svelte:head>
-<svelte:window onbeforeunload={guardUnload} />
+<!-- Escape closes the space's menu wherever focus is: in Safari a click does not focus the button (round 123's WebKit gate). -->
+<svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (menuOpen && e.key === 'Escape') { e.preventDefault(); menuOpen = false; document.getElementById('space-menu-btn')?.focus(); } }} />
 
 {#if !collection.ready}
   <Opening />
@@ -419,25 +422,22 @@
     </form>
   {/if}
 
-  <!-- What is done to the plants here leads; what is done to the place is a quieter row of words beneath it (round fifty, 4). -->
+  <!-- Round 123 (MYPLANTS 30): two buttons, "Watered <space>" and "Add a plant here"; the rest behind the "···" menu. -->
   <div class="quickbar">
-    {#if deep.length}
-      <!-- aria-disabled while it saves, so keyboard focus stays on the button (round sixty; the accessibility review, 1). -->
-      <button class="btn pri" onclick={() => waterAll('water')} aria-disabled={!!busy}>Water all {deep.length}</button>
-      <button class="btn" onclick={() => waterAll('feed')} aria-disabled={!!busy}>Feed all</button>
-      <button class="btn" id="audit-start" onclick={startAudit} disabled={auditing}>Audit</button>
-      <!-- The plants here, in My plants' select mode, for what this row does not do (move, archive, labels): the list's own place filter (round sixty-one; decision 12, the grower review). -->
-      <a class="btn" id="select-these" href="/plants?place={encodeURIComponent(id)}&select=1">Select these</a>
-    {:else}
-      <a class="btn pri" href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>
-    {/if}
+    {#if deep.length}<button class="btn pri" id="water-space" onclick={() => waterAll('water')} aria-disabled={!!busy}>Watered {loc.name}</button>{/if}
+    <a class="btn" class:pri={!deep.length} href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>
+    <span class="grow"></span>
+    <button class="btn dots" type="button" id="space-menu-btn" aria-expanded={menuOpen} aria-controls="space-menu" onclick={() => (menuOpen = !menuOpen)}><span aria-hidden="true">···</span><span class="sr">More for {loc.name}</span></button>
   </div>
-  <div class="quickbar words">
-    {#if deep.length}<a class="btn" href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>{/if}
-    {#if movable.length}<button class="btn" type="button" onclick={startMove} disabled={movingIn}>Move plants here</button>{/if}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="spacemenu" id="space-menu" role="group" aria-label="More for {loc.name}" hidden={!menuOpen} onkeydown={(e) => { if (e.key === 'Escape') { menuOpen = false; document.getElementById('space-menu-btn')?.focus(); } }}>
+    {#if deep.length}<button class="btn" type="button" onclick={() => { menuOpen = false; void waterAll('feed'); }} aria-disabled={!!busy}>Feed all</button>{/if}
+    {#if movable.length}<button class="btn" type="button" onclick={() => { menuOpen = false; startMove(); }} disabled={movingIn}>Move plants here</button>{/if}
     <a class="btn" href="/propagation/new?loc={id}" onclick={(e) => addLeavesExample(e, `/propagation/new?loc=${id}`)}>Start a batch here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
-    <button class="btn" type="button" onclick={startEdit}>Edit</button>
+    {#if deep.length}<a class="btn" id="select-these" href="/plants?place={encodeURIComponent(id)}&select=1">Select</a>{/if}
+    <button class="btn" type="button" onclick={() => { menuOpen = false; startEdit(); }}>Edit</button>
+    <button class="btn danger" type="button" onclick={() => { menuOpen = false; confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove space</button>
   </div>
 
   {#if movingIn}
@@ -460,12 +460,18 @@
   {#if nothingRecorded}
     <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button>{#if !watchable && cond.indoor !== true}, and coordinates for frost watch{/if}.</p>
   {:else}
-  {#if cond.floorC != null || dli != null || lastWater || lastAudit}
+  <!-- Round 123 (MYPLANTS 30): the three conditions as figures, each "from <space>" when inherited; one set nowhere is not shown. -->
+  {#if cond.floorC != null || cond.waterDays != null || cond.dryMonths?.length}
+  <div class="conds" id="space-conds">
+    {#if cond.floorC != null}<div class="cond"><b>{tempN(cond.floorC, units.current, 1)} {tempUnit(units.current)}</b><span>{cond.floorHeld ? 'held at' : 'bottoms out at'}</span>{#if cond.from.floorC && cond.from.floorC !== loc.name}<span class="muted">from {cond.from.floorC}</span>{/if}</div>{/if}
+    {#if cond.waterDays != null}<div class="cond"><b>{cond.waterDays} days</b><span>between waterings</span>{#if cond.from.waterDays && cond.from.waterDays !== loc.name}<span class="muted">from {cond.from.waterDays}</span>{/if}</div>{/if}
+    {#if cond.dryMonths?.length}<div class="cond"><b>{monthRuns(cond.dryMonths)}</b><span>kept dry</span>{#if cond.from.dryMonths && cond.from.dryMonths !== loc.name}<span class="muted">from {cond.from.dryMonths}</span>{/if}</div>{/if}
+  </div>
+  {/if}
+  {#if dli != null || lastWater}
   <div class="cards">
-    {#if cond.floorC != null}<div class="card"><div class="lab">{cond.floorHeld ? 'Held at' : 'Floor'}</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.lightHours == null ? ' (assumed; no hours set)' : ''}${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
     {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{@render ago(daysSince(lastWater))}</div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 && !watering.never ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} with no watering recorded` : ''}${dueHere ? `; ${dueHere} due` : ''}` : 'nothing recorded'}</div></div>{/if}
-    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{@render ago(daysSince(lastAudit))}</div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}
   </div>
   {/if}
   {/if}
@@ -540,25 +546,27 @@
     {/if}
   {/if}
 
+  <!-- Round 123 (MYPLANTS 30): two rows under the plants, a label for the space, and the audit with when it was last done. -->
+  {#if !auditing}
+  <ul class="spacerows">
+    <li><a href="/labels?space={encodeURIComponent(id)}" id="space-label"><span class="t">A label for this space</span><span class="small muted">its code opens this page; one scan for a bench, as a plant's label is one for a pot</span></a></li>
+    {#if deep.length}<li><button type="button" id="audit-start" onclick={startAudit}><span class="t">Audit</span><span class="small muted">tick what you can see · {lastAudit ? `last done ${lastAudit}` : 'never audited'}</span></button></li>{/if}
+  </ul>
+  {/if}
+  {#if confirmRemove}
+  <!-- Asked from the menu's Remove space (round 123). -->
   <div class="dangerrow">
     <span>Removing a space keeps every plant's records: its plants, batches and spaces move up to {parentName ?? 'the top level'}, and each plant's log gets a line saying so.</span>
-    {#if confirmRemove}
-      <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => (confirmRemove = false)}>Keep</button></span>
-    {:else}
-      <button class="btn danger small" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove space</button>
-    {/if}
+    <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => { confirmRemove = false; document.getElementById('space-menu-btn')?.focus(); }}>Keep</button></span>
   </div>
+  {/if}
 {/if}
 
 <style>
   .dangerrow { margin: 46px 0 10px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .idcard.flat { margin-top: 14px; }
-  .quickbar.words { margin-top: -6px; gap: 2px 14px; }
-  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); min-width: var(--tap); justify-content: center; color: var(--accent); font-weight: 600; } /* "Edit" was 26 px wide (round sixty; the accessibility review, 6) */
   .rules { margin: 4px 0 2px; font-size: var(--fs-md); font-weight: 600; color: var(--ink2); }
-  .quickbar.words .btn:hover { text-decoration: underline; }
-  .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
   .movein { margin-top: 12px; }
   .movein .body { padding: 10px 14px 14px; font-family: var(--ui); font-size: var(--fs-md); white-space: normal; } /* a form, not a note: not the notes' serif (round fifty-two, 6) */
@@ -599,4 +607,12 @@
   @media (max-width: 520px) { .form { grid-template-columns: minmax(0, 1fr) !important; } }
   .months legend { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); padding: 0; margin-bottom: 4px; }
   .mo { display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); min-width: var(--tap); font-size: var(--fs-md); }
+  .spacemenu { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; padding: 10px; border: 1px solid var(--rule); border-radius: var(--r); }
+  .spacemenu[hidden] { display: none; }
+  .conds { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 14px 0; }
+  .cond { display: grid; gap: 1px; padding: 10px 12px; border-radius: var(--r); background: var(--sunk); font-size: var(--fs-sm); }
+  .cond b { font-size: var(--fs-lg, 1.15rem); color: var(--ink); }
+  .spacerows { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+  .spacerows li > * { display: grid; width: 100%; min-height: 56px; padding: 8px 0; border: 0; border-bottom: 1px solid var(--rule); background: none; color: inherit; font: inherit; text-align: start; text-decoration: none; cursor: pointer; }
+  .spacerows .t { font-weight: 600; }
 </style>

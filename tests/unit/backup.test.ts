@@ -159,8 +159,8 @@ describe('plants.csv', () => {
     // Round eighty-seven (plan F11): every field a column, from one table ($lib/backup/plant-columns), the record's identity
     // still last: the earlier fields, t1's identity and provenance (ITF2's names where it has a field), t2's "taken from"
     // and "taken as", t3's growing season, photographs and papers.
-    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes,GBIF key,water every (days),older name of,item of,accsta,no longer held,no longer held on,no longer held note,prot,prohis,cnam,cid,field code,cdat,idql,rkql,vlev,vnam,vdat,vhist,ex,clone,taken from,taken as,growing season,rest months,season from,photographs,papers,id');
-    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered",,,,,C,,,,,,,,,,,,,,,,,,,,,,,1,,2026-0001'); // accsta C; one photograph on file for it
+    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes,GBIF key,water every (days),older name of,item of,accsta,no longer held,no longer held on,no longer held note,prot,prohis,cnam,cid,field code,cdat,idql,rkql,vlev,vnam,vdat,checked against,vhist,ex,clone,taken from,taken as,growing season,rest months,season from,photographs,papers,id');
+    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered",,,,,C,,,,,,,,,,,,,,,,,,,,,,,,1,,2026-0001'); // accsta C; one photograph on file for it
   });
   it('a plant under an incomplete or removed place is filed under the nearest whole place above it, as the app shows it (round thirty-seven, R2-1)', () => {
     // L3 has only a parent (its name sits in a batch set aside); L4 is removed. The app walks past both to Bench 2.
@@ -179,7 +179,7 @@ describe('plants.csv', () => {
     const more = [...log, c(30, 'accession', '2026-0001', 'notes', '-5 °C on the sill, =SUM(A1) is not a note'), c(31, 'accession', '2026-0001', 'sourceRef', 'KK 1462'), c(32, 'accession', '2026-0001', 'nameAsReceived', '@handle')];
     const { state } = materialise(more);
     const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
-    expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\"") + ',,,,,C,,,,,,,,,,,,,,,,,,,,,,,1,,2026-0001'); // the earlier fields, t1's identity columns (accsta C, nothing else stated), t2's lineage, t3's season and one photograph (round eighty-seven)
+    expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\"") + ',,,,,C,,,,,,,,,,,,,,,,,,,,,,,,1,,2026-0001'); // the earlier fields, t1's identity columns (accsta C, nothing else stated), t2's lineage, t3's season and one photograph (round eighty-seven)
   });
 });
 

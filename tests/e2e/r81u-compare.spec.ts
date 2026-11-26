@@ -66,7 +66,7 @@ test("r81u compare 3: on a phone the toast after Water all stands above the tray
   await page.goto('/places/gh'); await ready(page);
   // Since round eighty-four (P4) the pill is on the species pages only: a space has none for the toast to meet.
   await expect(page.locator('.cmppill')).toHaveCount(0);
-  await page.getByRole('button', { name: /^Water all/ }).first().click();
+  await page.getByRole('button', { name: /^Watered / }).first().click(); // round 123: "Watered <space>"
   const toast = page.locator('.toast:not(.quiet)');
   await expect(toast).toContainText(/Watered/);
   const t = await box(page, '.toast:not(.quiet)');

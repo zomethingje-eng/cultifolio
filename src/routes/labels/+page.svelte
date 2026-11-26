@@ -83,6 +83,15 @@
   /** Numbers in the link that name more than one plant: picked by nobody, said under the head. */
   let ambiguous = $state<string[]>([]);
   let qrs = $state<Record<string, string>>({});
+  /** The space whose own label this page prints (round 123), and its code. */
+  let spaceId = $state<string | null>(null);
+  let spaceQr = $state('');
+  const spaceLoc = $derived(spaceId ? collection.location(spaceId) : undefined);
+  $effect(() => {
+    if (!spaceId) return;
+    const url = `${location.origin}/places/${encodeURIComponent(spaceId)}`;
+    void QRCode.toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' }).then((svg: string) => (spaceQr = svg));
+  });
   const qrInflight = new Set<string>();
   /** What the codes held were made for: a sheet (s), or a tape's bare code at error correction L (12 mm) or M (wider). */
   let qrTape = 's';
@@ -94,6 +103,9 @@
     const acc = page.url.searchParams.get('acc');
     const batch = page.url.searchParams.get('batch');
     const loc = page.url.searchParams.get('loc');
+    // Round 123 (MYPLANTS 30): ?space=<id> is the space's own label, alone: its name and a code that opens its page.
+    const sp = page.url.searchParams.get('space');
+    if (sp && collection.location(sp)) { spaceId = sp; chosen = new Set(); return; }
     if (rememberedPicks) {
       // The plants picked on this very page before a reload, as they were: "Print 0 labels" after a reload lost a
       // filtered pick (round sixty-two; the grower review, 11). This tab's only, kept with the address it was made at,
@@ -324,7 +336,7 @@
         <label class="check"><input id="lb-big" type="checkbox" bind:checked={bigNo} /> Large number</label>
         <label class="check"><input id="lb-backup" type="checkbox" bind:checked={backupLabel} /> A backup label each (the number alone)</label>
         <span class="grow"></span>
-        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${labelCount} ${labelCount === 1 ? 'label' : 'labels'}`}</button>
+        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={(!picked.length && !spaceLoc) || pending}>{#if spaceLoc}Print the label for {spaceLoc.name}{:else}{pending ? 'Reading the reference…' : `Print ${labelCount} ${labelCount === 1 ? 'label' : 'labels'}`}{/if}</button>
       </div>
       {#if withCare && stillPending.length}
         <p class="small muted" role="status">{stillPending.length === 1 ? 'One care line' : `${stillPending.length} care lines`} {stillPending.length === 1 ? 'says' : 'say'} "climate pending": the reference has not built that species' climate yet.</p>
@@ -395,8 +407,18 @@
 
 <!-- The preview scrolls sideways on a narrow screen: reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
 {#if collection.ready}
+{#if spaceLoc}<p class="small muted noprint" id="space-label-help">A label for {spaceLoc.name}: its code opens this space's page, one scan for the whole bench. On an iPhone or iPad a scanned code opens Safari, as a plant's does, so the page finds the space where the collection is in Safari, or synced into it.</p>{/if}
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div class="sheets" class:tape={isTape(sheet)} class:t12={sheetK === 'tape12'} class:bigno={bigNo} tabindex="0" role="region" aria-label="Label sheets as they will print" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}{isTape(sheet) ? `; --pad: ${sheet.pad}mm; --bw: ${sheet.bw}mm` : ''}">
+  {#if spaceLoc}
+    <!-- The space's own label, in the chosen sheet's first cell (round 123): its name, where it sits, and a code to its page. -->
+    <div class="page" class:tiny id="space-label-page">
+      <div class="label spacelabel" style="left: var(--left); top: var(--top)">
+        {#if sheet.qr}<div class="qr" aria-hidden="true">{@html spaceQr}</div>{/if}
+        <div class="txt"><div class="no">{spaceLoc.name}</div>{#if collection.locationName(spaceLoc.id) !== spaceLoc.name}<div class="src">{collection.locationName(spaceLoc.id)}</div>{/if}</div>
+      </div>
+    </div>
+  {:else}
   {#each pages as cellsOnPage, pi}
     <div class="page" class:tiny class:bk={isTape(sheet) && cellsOnPage[0]?.backup}>
       {#each cellsOnPage as c, i}
@@ -422,6 +444,7 @@
       {/each}
     </div>
   {/each}
+  {/if}
 </div>
 {/if}
 
@@ -466,7 +489,7 @@
   .sci { font-family: var(--serif); font-size: 9.5pt; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sci .cv { font-style: normal; font-weight: 500; }
   .care.unchecked { font-style: italic; color: #666; }
-  @media print { .care.unchecked { display: none; } } /* on paper the line is simply blank: a label lives in a pot for years, and the notice belongs on the screen, not in the pot */
+  @media print { .care.unchecked { display: none; } .noprint { display: none; } } /* on paper the line is simply blank: a label lives in a pot for years, and the notice belongs on the screen, not in the pot */
   .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; overflow: hidden; line-height: 1.2; max-height: 2.4em; }
   /* Two lines' room whether the line holds one or two, or is still asked: its arrival never moves the number and the name (round eighty-seven, t3; W12). */
   .care { height: 2.4em; }
