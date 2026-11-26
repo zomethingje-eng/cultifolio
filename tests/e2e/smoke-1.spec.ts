@@ -83,6 +83,7 @@ test('the plant card\'s menu works from the keyboard: arrows move, Tab closes it
   await page.keyboard.press('Tab');
   await expect(page.locator('#card-menu')).toHaveCount(0); // Tab leaves and closes; nothing is left open over the verbs
   await page.locator('.idcard .cardmenu > button').click();
+  await page.keyboard.press('ArrowDown'); // round 125: Move… first, then Edit
   await page.keyboard.press('Enter'); // Edit
   await expect(page.locator('#ed-name')).toBeFocused();
 });
@@ -137,9 +138,8 @@ test('add a plant, record an event, survive a reload', async ({ page }) => {
   await expect(page).toHaveURL(/\/plants\/\d{4}-0001$/);
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
   await expect(page.locator('.fnchip', { hasText: 'KK 1462' })).toBeVisible();
-  await page.locator('.quickbar .more').click(); // four verbs at rest, the rest on request
-  await expect(page.locator('#verb-feed')).toBeFocused(); // focus lands on the first revealed verb, whatever is shown before it (round twenty-one, 14)
-  await page.getByRole('button', { name: 'Treat' }).click();
+  await page.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await page.locator('#ev-kinds input[value="treat"]').check();
   await page.fill('#ev-used', 'Safari 20SG drench');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Treated' })).toContainText('Safari 20SG drench');
@@ -310,7 +310,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('#f-loc option:checked')).toHaveText('East sill');
   // move it from the quickbar: a new place made inline, the move on the timeline, the bench sees it
   await page.goto(`/plants/${acc}`);
-  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.getByRole('button', { name: 'New…' }).click();
   await page.fill('#mv-loc-new-name', 'Cold frame');
   await page.selectOption('#mv-loc-new-kind', 'coldframe');
@@ -421,7 +421,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   await page.getByRole('button', { name: 'Record…', exact: true }).click();
-  await page.selectOption('#ev-type', 'water');
+  await page.locator('#ev-kinds input[value="water"]').check(); // round 125
   await page.fill('#ev-note', 'first drink');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   const jpeg = await page.screenshot({ type: 'jpeg', quality: 70 });
@@ -662,7 +662,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await expect(a).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = a.url().split('/').pop()!;
   await a.getByRole('button', { name: 'Record…', exact: true }).click();
-  await a.selectOption('#ev-type', 'water');
+  await a.locator('#ev-kinds input[value="water"]').check(); // round 125
   await a.fill('#ev-note', 'from device A');
   await a.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(a.locator('.tlrow', { hasText: 'from device A' })).toBeVisible(); // Record awaits the write; the test waits for the row before moving on (round fourteen, B1)
@@ -702,8 +702,8 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await expect(b.locator('.phgrid .ph')).toHaveCount(1);
 
   // B edits: a feed and a note; A picks them up.
-  await b.locator('.quickbar .more').click();
-  await b.getByRole('button', { name: 'Feed', exact: true }).click();
+  await b.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await b.locator('#ev-kinds input[value="feed"]').check();
   await b.fill('#ev-note', 'from device B');
   await b.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(b.locator('.tlrow', { hasText: 'from device B' })).toBeVisible();
@@ -789,13 +789,13 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await B.setOffline(true);
   await expect(b.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 20000 }); // the offline page renders from the vault; under load that takes longer than the default wait
   await b.getByRole('button', { name: 'Record…', exact: true }).click();
-  await b.selectOption('#ev-type', 'water');
+  await b.locator('#ev-kinds input[value="water"]').check(); // round 125
   await b.fill('#ev-note', 'B, offline, first');
   await b.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(b.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
   await a.goto(`/plants/${acc}`);
-  await a.locator('.quickbar .more').click();
-  await a.getByRole('button', { name: 'Feed', exact: true }).click();
+  await a.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await a.locator('#ev-kinds input[value="feed"]').check();
   await a.fill('#ev-note', 'A, online, second');
   await a.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(a.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible();

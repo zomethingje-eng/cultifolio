@@ -135,7 +135,7 @@
     [...events.map((e) => ({ k: 'e' as const, d: lineDates.get(e.id) ?? e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
   );
   // The log shows its latest five lines, the rest one tap away: on a phone the photographs and the habitat follow it (round fifty-eight; the grower review).
-  const LOG_FIRST = 5;
+  const LOG_FIRST = 3; // round 125 (MYPLANTS 31): the latest three, then All N
   let allLog = $state(false);
   const shownTimeline = $derived(allLog || timeline.length <= LOG_FIRST ? timeline : timeline.slice(0, LOG_FIRST));
   /* ---- lengths ---- */
@@ -451,7 +451,6 @@
   const firstMeasure = $derived([...events].reverse().find((e) => e.t === 'measure' && e.measures));
   const sizeKey = $derived(lastMeasure ? (['diam', 'h', 'caudex', 'spread', 'heads', 'leaves'].find((k) => lastMeasure.measures?.[k] != null) ?? null) : null);
   const growth = $derived(sizeKey && lastMeasure && firstMeasure && firstMeasure !== lastMeasure && firstMeasure.measures?.[sizeKey] != null ? lastMeasure.measures![sizeKey] - firstMeasure.measures![sizeKey] : null);
-  let moreActs = $state(false);
   // The id card's one primary action is the species page; editing, the label and propagation are behind "More", which
   // closes on a choice, Escape, or a tap outside (improvements, 7).
   let cardMenu = $state(false);
@@ -499,7 +498,7 @@
     const rows: { k: string; t: string; done: boolean; go: () => void }[] = [
       { k: 'place', t: 'Placed', done: !!collection.placeOf(a.locationId), go: () => { moveTo = null; moving = true; } },
       { k: 'photo', t: 'Photograph', done: photos.length > 0, go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); } },
-      { k: 'measure', t: 'First measurement', done: !!lastMeasure, go: () => { moreActs = true; quick('measure'); } }
+      { k: 'measure', t: 'First measurement', done: !!lastMeasure, go: () => quick('measure') }
     ];
     return rows.every((r) => r.done) ? [] : rows;
   });
@@ -1077,7 +1076,9 @@
         <button class="btn dots" type="button" bind:this={cardMenuBtn} aria-haspopup="menu" aria-expanded={cardMenu} aria-controls="card-menu" aria-label="More for this plant: edit, label, propagate" title="Edit, label, propagate" onclick={() => (cardMenu = !cardMenu)}>···</button>
         {#if cardMenu}
           <div class="menu" id="card-menu" role="menu" tabindex="-1" aria-label="More for this plant" use:autofocusFirst onkeydown={menuKeys} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null) && e.relatedTarget !== cardMenuBtn) closeCardMenu(); }}>
+            {#if a.status !== 'dead'}<button role="menuitem" type="button" id="menu-move" onclick={() => { closeCardMenu(); moveTo = a.locationId ?? null; moving = true; }}>Move…</button>{/if}
             <button role="menuitem" type="button" onclick={() => { closeCardMenu(); startEdit(); }}>Edit</button>
+            {#if a.status === 'growing'}<button role="menuitem" type="button" id="menu-archive" title="Takes the plant off the growing list; it can be marked growing again" onclick={() => { closeCardMenu(); confirmArchive = true; void focusNext('#status-toggle'); }}>Archive…</button>{/if}
             <a role="menuitem" href="/labels?acc={a.id}" onclick={() => closeCardMenu()}>Label</a>
             {#if a.status === 'growing'}<button role="menuitem" type="button" onclick={() => { closeCardMenu(); quick('death'); }}>Died…</button>{/if}
             {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
@@ -1133,21 +1134,8 @@
     {#if heroRoom}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>Photo</button>{/if}
     <!-- "Record…", not "Log": it records any event, and "Log" read as "show the log" (round sixty; the grower review, 16). -->
     <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Record…</button>
-    {#if a.status !== 'dead'}<button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>{/if}<!-- a dead plant is not moved, nor watered (round fifty-eight; the grower review) -->
-    {#if moreActs}
-      {#if a.status === 'archived'}<button class="btn" onclick={() => quick('water')}>Water</button>{/if}
-      <button class="btn" id="verb-feed" onclick={() => quick('feed')}>Feed</button>
-      <button class="btn" onclick={() => quick('repot')}>Repot</button>
-      <button class="btn" onclick={() => quick('measure')}>Measure</button>
-      <button class="btn" onclick={() => quick('treat')}>Treat</button>
-      <button class="btn" onclick={() => quick('flower')}>Flower</button>
-      <!-- Fruit and seed set, dated as flowering is (round eighty-seven, F8). -->
-      <button class="btn" onclick={() => quick('fruit')}>Fruit</button>
-      <button class="btn" onclick={() => quick('seed')}>Seed</button>
-      {#if a.status === 'growing'}{#if confirmArchive}<span class="confirmrow"><button class="btn" id="status-toggle" onclick={() => { confirmArchive = false; setStatus('archived'); }}>Yes, archive</button><button class="btn" type="button" onclick={() => (confirmArchive = false)}>Keep</button></span>{:else}<button class="btn" id="status-toggle" onclick={() => { confirmArchive = true; void focusNext('#status-toggle'); }} title="Takes the plant off the growing list; it can be marked growing again">Archive</button>{/if}{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
-    {:else}
-      <button class="btn more" type="button" aria-expanded="false" aria-label="More" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
-    {/if}
+    <!-- Round 125 (MYPLANTS 31): Water and Record… lead; Move, Edit, Label and the rest are in the "···" menu, the kinds in Record…'s grid. -->
+    {#if a.status === 'growing'}{#if confirmArchive}<span class="confirmrow"><button class="btn" id="status-toggle" onclick={() => { confirmArchive = false; setStatus('archived'); }}>Yes, archive</button><button class="btn" type="button" onclick={() => (confirmArchive = false)}>Keep</button></span>{/if}{:else if a.status === 'archived'}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
   </div>
 
   {#if moving && a.status !== 'dead'}
@@ -1181,9 +1169,10 @@
       <div class="fields">
         <!-- Each field with a visible name: the placeholders were the only ones, and went as soon as a word was typed (round fifty-eight; the accessibility review). -->
         <div class="row">
-          <label class="fl"><span class="eyebrow">What to record</span><select id="ev-type" bind:value={et}>
-            {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label]}<option value={k}>{label}</option>{/each}
-          </select></label>
+          <!-- Round 125 (MYPLANTS 31): the kinds as a grid, one tap each, then the date and a note; the "More ▾" row is gone. -->
+          <fieldset class="evkinds" id="ev-kinds"><legend class="eyebrow">What to record</legend>
+            {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label] (k)}<label class="evk" class:on={et === k}><input type="radio" name="evkind" value={k} bind:group={et} />{label}</label>{/each}
+          </fieldset>
           <label class="fl"><span class="eyebrow">Date</span><input id="ev-date" type="date" bind:value={ed} oninput={() => (evmsg = '')} aria-invalid={!!evmsg} aria-describedby={evmsg ? 'ev-bad' : undefined} /></label>
         </div>
         {#if evmsg}<p class="refuse" role="alert" id="ev-bad">{evmsg}</p>{/if}
@@ -1222,8 +1211,9 @@
   <!-- The plant's own figures under the actions; then the log, the photographs, and the habitat comparison folded at the foot: on a phone the climate cards stood between the verbs and the log (round fifty-eight; the grower review). -->
   {#if (a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))) || events.some((e) => e.t === 'audit') || lastMeasure}
   <div class="cards">
-    {#if a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater === 0 ? 'today' : (sinceWater ?? '–')}{#if sinceWater}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
+    {#if a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater === 0 ? 'today' : (sinceWater ?? '–')}{#if sinceWater}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}{#if collection.wateringGap(id)}<span class="avg" id="water-avg"> · you average {collection.wateringGap(id)} d</span>{/if}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
+    {#if !lastMeasure && a.status === 'growing'}<div class="card measureit"><div class="lab">Size</div><button class="linkish" type="button" id="measure-it" onclick={() => quick('measure')}>Measure it</button></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lenN(lastMeasure.measures![sizeKey]) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lu : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? len(growth) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
   </div>
   {/if}
@@ -1520,7 +1510,6 @@
   .setuprow { flex: 1 1 7.5em; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: max(48px, var(--tap)); padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--sunk); color: var(--ink2); font: inherit; font-size: var(--fs-sm); text-align: center; cursor: pointer; }
   .setuprow:hover { border-color: var(--ink3); }
   .setuprow.done { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: transparent; color: var(--accent); font-weight: 600; cursor: default; }
-  .quickbar .more { color: var(--ink2); }
   .confirmrow { display: inline-flex; gap: 6px; }
   /* Round 119 (MYPLANTS 27 b): the three steps are one row at every width; the sideways-scrolled list of round fifty is gone. */
   /* Under a finger every control here is the tap token: the setup steps, the inline links, the entry's ×, the menu and its items (round sixty; the accessibility review, 6). */
@@ -1552,4 +1541,10 @@
   .idform { display: grid; gap: 10px; padding: 12px 15px; margin: 0 0 14px; }
   .idform fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
   .idform fieldset label { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); }
+  .evkinds { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; flex: 1 1 100%; }
+  .evkinds legend { margin-bottom: 4px; }
+  .evk { display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 0 10px; border: 1px solid var(--rule); border-radius: var(--r-sm); cursor: pointer; font-size: var(--fs-sm); }
+  .evk.on { border-color: var(--ink); font-weight: 600; }
+  .evk input { margin: 0; accent-color: var(--accent); }
+  .measureit { display: grid; align-content: start; gap: 4px; }
 </style>

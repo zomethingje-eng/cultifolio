@@ -185,8 +185,8 @@ test('r61a harness 3: a first flowering stays visible on Today when Today itself
   await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
-  await page.locator('.quickbar .more').click();
-  await page.locator('.quickbar').getByRole('button', { name: 'Flower', exact: true }).click();
+  await page.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await page.locator('#ev-kinds input[value="flower"]').check();
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Flowered' })).toHaveCount(1);
   await page.goto('/today');

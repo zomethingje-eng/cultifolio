@@ -125,7 +125,7 @@ test('r66y 5: the plants picked on Labels come back after a reload that no pageh
 test('r66y 6: Move with a new place named and "Add place" not pressed makes the place and moves the plant there; the panel no longer closes on nothing (smoke 306, Chromium)', async ({ page }) => {
   await twoPlants(page);
   await page.goto('/plants/r66a'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.getByRole('button', { name: 'New…' }).click();
   await page.fill('#mv-loc-new-name', 'Cold frame');
   await page.selectOption('#mv-loc-new-kind', 'coldframe');

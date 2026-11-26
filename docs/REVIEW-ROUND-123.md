@@ -38,4 +38,11 @@ rounds 121 and 122's gate ran in the project.
 
 ## Gate and deploy
 
-(Written at the gate.)
+- The first gate found Escape not closing the space's menu in WebKit, where a click does not focus the button; Escape now
+  closes it from anywhere. The second was stopped at 00:28 UTC on a load flake in an untouched test (r62l-plant, WebKit,
+  passing on its retry) so the daily run could start.
+- Gated with round 124 after the daily run of 26 November. svelte-check 0 errors in 1,910 files; the hybrid table made
+  again, 541. The app gate with Chromium at two workers, WebKit and Firefox at one: 6,574 unit tests, 3,039 browser
+  tests, every test first time in every engine.
+- Committed as 7ab8194 with round 124 and pushed on 26 November 2026. The first `node scripts/deploy.mjs` stopped at
+  two component tests (a module not loaded in time); the second deployed, live check 24 of 24.

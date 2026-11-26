@@ -71,8 +71,8 @@ test('r63u U4: a grower\'s pages say what they show (chips, Today, the labels, t
   const live = page.locator('.toastregion [role="status"][aria-live="polite"]');
   await expect(live).toBeAttached();
   await expect(live).toHaveText('');
-  await page.locator('.quickbar .more').waitFor();
-  await expect(page.locator('.quickbar .more')).toHaveAccessibleName('More');
+  // Round 125: the "More" row is gone; the plant's menu button is named by its words, not its dots.
+  await expect(page.locator('.idcard .cardmenu > button')).toHaveAccessibleName(/^More for /);
   await page.getByRole('button', { name: 'Water', exact: true }).first().click();
   await expect(live).toHaveText(/Watering recorded/);
 });

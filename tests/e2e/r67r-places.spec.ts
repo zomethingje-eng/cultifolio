@@ -70,7 +70,7 @@ test('R11: Move pressed twice while the new place is written moves once (E place
   await onePlant(page);
   await slowIdb(page, 600);
   await page.goto('/plants/rP1'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).first().click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.locator('.picker button:has-text("New…")').first().click();
   await page.fill('#mv-loc-new-name', 'Shelf X');
   const move = page.locator('.actions button.pri:has-text("Move")');
@@ -107,7 +107,7 @@ test('R11: Move pressed twice to a place that is here writes one move (E places 
   await inject(page, [['location', 'lZ', 'name', 'Shelf X'], ['location', 'lZ', 'type', 'shelf']], Date.now() - 80_000_000, 'abcdefabcdef0001');
   await slowIdb(page, 600);
   await page.goto('/plants/rP1'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).first().click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.selectOption('#mv-loc', { label: 'Shelf X' });
   const move = page.locator('.actions button.pri:has-text("Move")');
   await move.click();
@@ -125,7 +125,7 @@ test('R12: Move settles only its own picker: the Edit form\'s unsaved new place 
   await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   await page.locator('.editform .picker button:has-text("New…")').click();
   await page.fill('#ed-loc-new-name', 'Unsaved edit shelf');
-  await page.getByRole('button', { name: 'Move', exact: true }).first().click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.locator('#mv-loc').locator('xpath=..').locator('button:has-text("New…")').click();
   await page.fill('#mv-loc-new-name', 'Move destination');
   await page.locator('.actions button.pri:has-text("Move")').click();
@@ -138,7 +138,7 @@ test('R12: a place that cannot be made says why in the picker, with no unhandled
   test.setTimeout(90_000);
   await onePlant(page);
   await page.goto('/plants/rP1'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).first().click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await page.locator('.picker button:has-text("New…")').first().click();
   await page.fill('#mv-loc-new-name', 'Shelf X');
   await page.evaluate(() => {

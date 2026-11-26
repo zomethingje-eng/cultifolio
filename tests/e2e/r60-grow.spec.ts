@@ -287,8 +287,8 @@ test('r60 7: a first flowering and a first photograph are each a line on Today',
   await ready(page);
   await addPlant(page);
   const no = page.url().split('/').pop()!;
-  await page.locator('.quickbar .more').click();
-  await page.locator('.quickbar').getByRole('button', { name: 'Flower', exact: true }).click();
+  await page.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await page.locator('#ev-kinds input[value="flower"]').check();
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Flowered' })).toHaveCount(1);
   await page.goto('/today');

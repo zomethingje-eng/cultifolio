@@ -39,4 +39,8 @@ follow in rounds of their own. Built in the clone on 26 November 2026 during the
 
 ## Gate and deploy
 
-(Written at the gate.)
+- Gated with round 123 after the daily run of 26 November. svelte-check 0 errors in 1,910 files; the hybrid table made
+  again, 541. The app gate with Chromium at two workers, WebKit and Firefox at one: 6,574 unit tests, 3,039 browser
+  tests, every test first time in every engine.
+- Committed as 7ab8194 with round 123 and pushed on 26 November 2026. The first `node scripts/deploy.mjs` stopped at
+  two component tests (a module not loaded in time); the second deployed, live check 24 of 24.

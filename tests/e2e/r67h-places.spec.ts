@@ -92,7 +92,7 @@ test('r67h places 1: "Add place" pressed twice while the place is being written 
   await plantAndBatch(page);
   await slowWrites(page, 800);
   await page.goto('/plants/2026-0001'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await nameNew(page, 'mv-loc', 'Shelf twice');
   const add = page.getByRole('button', { name: 'Add space' });
   await add.click();
@@ -106,7 +106,7 @@ test('r67h places 2: Move pressed while "Add place" is still writing moves the p
   await plantAndBatch(page);
   await slowWrites(page, 800);
   await page.goto('/plants/2026-0001'); await ready(page);
-  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await nameNew(page, 'mv-loc', 'Shelf race');
   await page.getByRole('button', { name: 'Add space' }).click();
   await page.locator('.actions button.pri', { hasText: 'Move' }).click(); // the place's write has not completed
@@ -183,7 +183,7 @@ test("r67h places 7: Move settles Move's picker alone, not the open Edit form's 
   await page.goto('/plants/2026-0001'); await ready(page);
   await cardMenu(page, 'Edit');
   await nameNew(page, 'ed-loc', 'Unsaved edit shelf');
-  await page.getByRole('button', { name: 'Move', exact: true }).first().click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125: Move is in the plant's menu
   await nameNew(page, 'mv-loc', 'Move destination');
   await page.locator('.actions button.pri', { hasText: 'Move' }).click();
   await expect(page.locator('.idcard .place', { hasText: 'Move destination' })).toBeVisible();

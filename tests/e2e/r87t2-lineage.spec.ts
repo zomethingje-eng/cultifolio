@@ -34,7 +34,7 @@ test('a cross recorded, sown and potted up: the plant keeps its species name, th
   await seed(page, [...plant('rA', `${Y}-0101`, 'Ariocarpus retusus'), ...plant('rB', `${Y}-0102`, 'Ariocarpus trigonus')]);
   await page.goto(`/plants/${Y}-0101`); await ready(page);
   await page.getByRole('button', { name: 'Record…' }).click();
-  await page.locator('#ev-type').selectOption('pollinate');
+  await page.locator('#ev-kinds input[value="pollinate"]').check(); // round 125
   await page.locator('#ev-date').fill(localDay(-30));
   await page.locator('#ev-pollen').selectOption({ label: `${Y}-0102 · Ariocarpus trigonus` });
   await page.locator('.evform').getByRole('button', { name: 'Record', exact: true }).click();

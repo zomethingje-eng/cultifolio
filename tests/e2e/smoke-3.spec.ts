@@ -115,7 +115,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(today).toHaveCount(0);
   await page.locator('.accrow').first().click();
   await page.locator('.quickbar .btn', { hasText: /^Record…$/ }).click(); // a dated watering goes through Log; Water is one tap for today (round forty-nine, 3)
-  await page.selectOption('#ev-type', 'water');
+  await page.locator('#ev-kinds input[value="water"]').check(); // round 125
   // exactly twenty-one days: the default watering rhythm's boundary, which the list and Today both include (round twenty-five, 2; round fifty-eight)
   const d = new Date(); d.setDate(d.getDate() - 21);
   const threeWeeks = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -139,7 +139,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
   await page.locator('.accrow').first().click();
   await page.locator('.quickbar .btn', { hasText: /^Record…$/ }).click();
-  await page.selectOption('#ev-type', 'water');
+  await page.locator('#ev-kinds input[value="water"]').check(); // round 125
   await page.fill('#ev-date', '2099-01-01');
   await page.locator('.evform button[type=submit]').click();
   await expect(page.locator('#ev-bad')).toContainText('2099-01-01 is in the future');
@@ -708,7 +708,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible(); // the write is on screen before the page is left
   await page.goto(`/plants/${acc}`);
-  await page.locator('.quickbar .btn', { hasText: /^Move$/ }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-move').click(); // round 125
   const frame = await page.locator('#mv-loc option', { hasText: 'Cold frame' }).getAttribute('value');
   await page.selectOption('#mv-loc', frame!);
   await page.locator('.evform .btn.pri', { hasText: 'Move' }).click();
@@ -1109,8 +1109,8 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await ready(page);
   await page.getByRole('button', { name: /°F and inches/ }).click();
   await page.goto(`/plants/${year()}-0001`);
-  await page.locator('.quickbar .more').click();
-  await page.getByRole('button', { name: 'Measure', exact: true }).click();
+  await page.getByRole('button', { name: 'Record…' }).click(); // round 125: the kinds are Record…'s grid
+  await page.locator('#ev-kinds input[value="measure"]').check();
   await expect(page.locator('.measures label').first()).toContainText('(in)');
   await page.locator('.measures input').first().fill('2');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
@@ -1278,11 +1278,10 @@ test('round forty-nine: Water is one tap with an Undo, on the plant page and on 
   await expect(page.locator('a.accrow .fig', { hasText: 'no watering recorded' })).toBeVisible();
   // Archive asks; Keep leaves the plant growing
   await page.goto(`/plants/${acc}`);
-  await page.locator('.quickbar .more').click();
-  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-archive').click(); // round 125: in the plant's menu
   await page.getByRole('button', { name: 'Keep' }).click();
   await expect(page.locator('.tlrow', { hasText: 'Archived' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-archive').click();
   await page.getByRole('button', { name: 'Yes, archive' }).click();
   await expect(page.locator('.tlrow', { hasText: 'Archived' })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Mark growing' })).toBeVisible();

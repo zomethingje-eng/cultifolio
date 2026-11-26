@@ -148,7 +148,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
     // the grower's, not the moment between (round 102: WebKit once read it then, with no H1 drawn).
     if (r === '/') await expect(page.locator('h1')).toHaveText('Species');
     if (r === '/places') await page.getByRole('button', { name: 'New space' }).click();
-    if (r === `/plants/${acc}`) { await page.locator('.quickbar .more').click(); await page.getByRole('button', { name: 'Measure', exact: true }).click(); await more(page, 'Edit'); await page.getByRole('button', { name: 'Move', exact: true }).click(); }
+    if (r === `/plants/${acc}`) { await page.getByRole('button', { name: 'Record…' }).click(); await page.locator('#ev-kinds input[value="measure"]').check(); await more(page, 'Edit'); await more(page, 'Move…'); } // round 125
     if (r === '/sync') await page.getByRole('button', { name: 'I have a key' }).click();
     const s = await a11yScan(page);
     if (s.jumps.length) findings.push(`${r}: heading jumps ${s.jumps.join(' ')}`);
