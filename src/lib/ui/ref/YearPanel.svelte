@@ -9,6 +9,9 @@
   import { tempN, tempUnit, rain, rainUnit, type Units } from '$core/units';
   import { dayLengths } from '$climate/day-length';
   import { yearHalves } from '$climate/year-halves';
+  import { site as siteStore } from '$lib/ui/site.svelte';
+  import { siteClimate, type SiteMonth } from '$climate/site-climate';
+  import { outdoorsLines, CLOSING } from '$climate/lens-outdoors';
   type M = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number; vpdKpa?: number; windMs?: number };
   type YearRead = { grow: string; fog: boolean; frozen: boolean; growMonths: number[] } | null;
   let { months, p10, p90, lat, shift = 0, floorC = null, units, year = null, dossierKey, name, src }: {
@@ -30,6 +33,31 @@
   const col = (f: (m: M) => number | undefined, set: M[]) => Array.from({ length: 12 }, (_, k) => f(set[hm(k)]));
   const T = (c: number) => Number(tempN(c, units, 1));
   const tu = $derived(tempUnit(units));
+
+  /**
+   * The lens (round 126; SPECIES 20): "Compare with" sets the reader's place over the habitat's figures. This round draws
+   * Outdoors: the reader's site, from Settings, its months from the site's own climate tiles (CHELSA V2.1 1981–2010, the
+   * same grid as the habitat's; only the one-degree square is asked of this site). The months are held on the reader's.
+   */
+  let lens = $state<'none' | 'outdoors'>('none');
+  let siteData = $state<SiteMonth[] | 'sea' | 'unreached' | 'loading' | null>(null);
+  let siteTry = $state(0);
+  $effect(() => {
+    void siteTry;
+    if (lens !== 'outdoors' || !siteStore.current) { siteData = null; return; }
+    const { lat: sLat, lon: sLon } = siteStore.current;
+    let gone = false;
+    siteData = 'loading';
+    void siteClimate(sLat, sLon).then((r) => { if (!gone) siteData = r; });
+    return () => { gone = true; };
+  });
+  $effect(() => { if (lens === 'outdoors') mine = true; });
+  const sm = $derived(Array.isArray(siteData) ? siteData : null);
+  const sDay = $derived(sm ? sm.map((m) => T(m.tmax)) : null), sNight = $derived(sm ? sm.map((m) => T(m.tmin)) : null);
+  const sRain = $derived(sm ? sm.map((m) => m.precipMm) : null);
+  const sDays = $derived(sm && siteStore.current ? dayLengths(siteStore.current.lat) : null);
+  const coldBelow = $derived(sm && floorC != null ? sm.map((m) => m.tmin < floorC!) : null);
+  const lensLines = $derived(sm && siteStore.current ? outdoorsLines({ site: sm, siteLat: siteStore.current.lat, habitat: months, habitatLat: lat, floorC, temp: (c) => `${tempN(c, units, 1)} ${tempUnit(units)}`, mm: (n) => rain(n, units) }) : []);
 
   const W = 600, L = 46, R = 8;
   const x = (k: number) => L + ((k + 0.5) * (W - L - R)) / 12;
@@ -56,10 +84,11 @@
   const tDay = $derived(col((m) => T(m.tmax), months)), tNight = $derived(col((m) => T(m.tmin), months));
   const tDay10 = $derived(col((m) => T(m.tmax), p10)), tDay90 = $derived(col((m) => T(m.tmax), p90));
   const tN10 = $derived(col((m) => T(m.tmin), p10)), tN90 = $derived(col((m) => T(m.tmin), p90));
-  const tSc = $derived(scale([...tDay90, ...tN10, ...(floorC != null ? [T(floorC)] : [])] as number[], units === 'us' ? 10 : 5));
+  const tSc = $derived(scale([...tDay90, ...tN10, ...(floorC != null ? [T(floorC)] : []), ...(sDay ?? []), ...(sNight ?? [])] as number[], units === 'us' ? 10 : 5));
   // Rain: bars of the median, a whisker for the spread; the axis from zero.
   const rMm = $derived(col((m) => m.precipMm, months)), r10 = $derived(col((m) => m.precipMm, p10)), r90 = $derived(col((m) => m.precipMm, p90));
-  const rSc = $derived(scale(r90 as number[], (Math.max(...(r90 as number[])) > 200 ? 100 : Math.max(...(r90 as number[])) > 60 ? 20 : 10), true));
+  const rTop = $derived(Math.max(...(r90 as number[]), ...(sRain ?? [])));
+  const rSc = $derived(scale([...(r90 as number[]), ...(sRain ?? [])], rTop > 200 ? 100 : rTop > 60 ? 20 : 10, true));
   // Light: DLI with its band.
   const hasDli = $derived(months.every((m) => m.dli != null));
   const lDli = $derived(col((m) => m.dli, months)), l10 = $derived(col((m) => m.dli, p10)), l90 = $derived(col((m) => m.dli, p90));
@@ -111,14 +140,35 @@
       <button type="button" aria-pressed={view === 'chart'} onclick={() => (view = 'chart')}>Chart</button>
       <button type="button" aria-pressed={view === 'table'} onclick={() => (view = 'table')}>Table</button>
     </div>
+    <div class="yps" role="group" aria-label="Compare with" id="lens-row">
+      <span class="small muted lenslab">Compare with</span>
+      <button type="button" aria-pressed={lens === 'none'} onclick={() => (lens = 'none')}>Nothing</button>
+      <button type="button" aria-pressed={lens === 'outdoors'} onclick={() => (lens = 'outdoors')}>Outdoors</button>
+    </div>
     {#if shift}
       <div class="yps" role="group" aria-label="Whose months">
         <button type="button" aria-pressed={mine} onclick={() => (mine = true)}>My months</button>
-        <button type="button" aria-pressed={!mine} onclick={() => (mine = false)}>Its months</button>
+        <button type="button" aria-pressed={!mine} aria-disabled={lens !== 'none'} title={lens !== 'none' ? 'Held on your months while comparing: the year at your site is in your months' : undefined} onclick={() => { if (lens === 'none') mine = false; }}>Its months</button>
       </div>
     {/if}
   </div>
 
+  {#if lens === 'outdoors'}
+    <div class="lenscard" id="lens-card" role="status">
+      {#if !siteStore.current}
+        <p>Set your site in <a href="/settings#site">Settings</a> to compare.</p>
+      {:else if siteData === 'loading' || siteData == null}
+        <p class="muted">Reading your site's climate…</p>
+      {:else if siteData === 'sea'}
+        <p>Your site's cell holds no land climate in the grid (it reads as sea), so there is nothing to set beside the habitat's.</p>
+      {:else if siteData === 'unreached'}
+        <p>Your site's climate was not reached just now, so nothing is compared. <button type="button" class="linkish" onclick={() => siteTry++}>Try again</button></p>
+      {:else}
+        {#each lensLines as l (l.k)}<p id="lens-{l.k}">{l.text}</p>{/each}
+        <p class="small muted">{CLOSING} Your site's figures: CHELSA V2.1, 1981–2010, the 0.05° cell holding your site{siteStore.current.name ? ` (${siteStore.current.name})` : ''}, drawn dashed; only the one-degree square around it was asked of this site.</p>
+      {/if}
+    </div>
+  {/if}
   {#if view === 'chart'}
     <div class="charts" aria-hidden="true">
       <svg viewBox="0 0 {W} 30" class="axis">
@@ -134,12 +184,15 @@
         <path d={path(tDay, tSc, 130)} class="linew" />
         <path d={path(tNight, tSc, 130)} class="linec dashed" />
         {#if floorC != null}<line x1={L} x2={W - R} y1={y(T(floorC), tSc, 130)} y2={y(T(floorC), tSc, 130)} class="floor" />{/if}
+        {#if sDay && sNight}<path d={path(sDay, tSc, 130)} class="sitew" /><path d={path(sNight, tSc, 130)} class="sitec" />{/if}
+        {#if coldBelow}{#each coldBelow as b, k (k)}{#if b}<rect x={x(k) - cw * 0.4} y="124" width={cw * 0.8} height="5" class="belowfloor" />{/if}{/each}{/if}
       </svg>
       <p class="chartname">Rain, {rainUnit(units)} <span class="nowfig">now {rain(rMm[now] ?? 0, units)} ({rain(r10[now] ?? 0, units)}–{rain(r90[now] ?? 0, units)})</span></p>
       <svg viewBox="0 0 {W} 100">
         <rect x={x(now) - cw / 2} y="0" width={cw} height="100" class="nowcol" />
         {#each rSc.ticks as t (t)}<line x1={L} x2={W - R} y1={y(t, rSc, 100)} y2={y(t, rSc, 100)} class="grid" /><text x={L - 6} y={y(t, rSc, 100) + 4} text-anchor="end">{units === 'us' ? (t / 25.4).toFixed(1) : t}</text>{/each}
         {#each rMm as v, k (k)}<rect x={x(k) - cw * 0.3} width={cw * 0.6} y={y(v ?? 0, rSc, 100)} height={Math.max(0, y(0, rSc, 100) - y(v ?? 0, rSc, 100))} class="barc" /><line x1={x(k)} x2={x(k)} y1={y(r90[k] ?? 0, rSc, 100)} y2={y(r10[k] ?? 0, rSc, 100)} class="whisk" />{/each}
+        {#if sRain}{#each sRain as v, k (k)}<line x1={x(k) - cw * 0.38} x2={x(k) + cw * 0.38} y1={y(v, rSc, 100)} y2={y(v, rSc, 100)} class="siterain" />{/each}{/if}
       </svg>
       {#if lSc}
         <p class="chartname">Light, DLI under open sky <span class="nowfig">now {fmt(lDli[now], 0)} ({fmt(l10[now], 0)}–{fmt(l90[now], 0)})</span></p>
@@ -156,6 +209,7 @@
           <rect x={x(now) - cw / 2} y="0" width={cw} height="38" class="nowcol" />
           {#if r.lo && r.hi}<path d={band(r.lo.map((v) => clamp(v!, r.span)), r.hi.map((v) => clamp(v!, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="bandc" />{/if}
           <path d={path(r.v.map((v) => clamp(v!, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="linec" />
+          {#if r.k === 'day' && sDays}<path d={path(sDays.map((v) => clamp(v, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="sitec" />{/if}
         </svg>
       {/each}
     </div>
@@ -187,7 +241,7 @@
   .yp { margin: 8px 0 14px; }
   .yphead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; justify-content: space-between; }
   h3 { margin: 0; font-size: var(--fs-base); }
-  .yps { display: inline-flex; gap: 4px; }
+  .yps { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
   .yps button { min-height: var(--tap); padding: 0 10px; border: 1px solid var(--rule); background: none; color: var(--ink2); font: inherit; font-size: var(--fs-sm); border-radius: var(--r-sm); cursor: pointer; }
   .yps button[aria-pressed='true'] { border-color: var(--ink); color: var(--ink); font-weight: 600; }
   .charts svg { display: block; width: 100%; height: auto; }
@@ -217,4 +271,12 @@
   .halves p { margin: 4px 0; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+  /* The lens (round 126): the reader's place dashed in the ink, the habitat's lines as before; months below the floor marked. */
+  .sitew, .sitec { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-dasharray: 6 3; }
+  .sitec { stroke-dasharray: 2 3; }
+  .siterain { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 4 2; }
+  .belowfloor { fill: #4a6fa5; }
+  .lenslab { align-self: center; margin-right: 2px; }
+  .lenscard { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r); }
+  .lenscard p { margin: 0 0 6px; }
 </style>

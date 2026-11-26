@@ -33,4 +33,11 @@ comparison card and the one-line folds wait for SPECIES 20's lens, which the com
 
 ## Gate and deploy
 
-(Written at the gate.)
+- svelte-check 0 errors in 1,911 files. The app gate, Chromium at two workers, WebKit and Firefox at one, three runs: the
+  first found r125b 2's press on "Measure it" meeting the figures row as it was drawn again (Firefox, once; the test now
+  presses until the form opens, 12 of 12 in three engines); the second stopped at its unit tests on r85q-behaviour 2, a
+  component harness test that cannot load its stub module under the full suite's load (3 of 3 alone; it failed a deploy
+  today too, and the harness wants a look); the third: 6,577 unit tests, 3,047 browser tests, every test first time in
+  every engine.
+- Committed as b1760eb and pushed on 26 November 2026; `node scripts/deploy.mjs` deployed on its first try, live check 24
+  of 24.

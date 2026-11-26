@@ -109,6 +109,15 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 126,
+    date: '2026-11-26',
+    reader: 'A species page can set your own site\'s climate beside its habitat\'s, month by month.',
+    lines: [
+      'Compare with Outdoors draws your site\'s days, nights, rain and day length dashed over the habitat\'s, from the same climate data.',
+      'Its card names your figure and the habitat\'s in each line, and only the one-degree square around your site is asked of the site.'
+    ]
+  },
+  {
     n: 125,
     date: '2026-11-26',
     reader: 'A plant\'s page leads with Water and Record…, and Record… is a grid of what you can record.',

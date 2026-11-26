@@ -175,7 +175,8 @@ const DESKTOP_BASE: Record<string, { stripTop: number; stripBottom: number; sear
   // Round 125's lines: 1047 to 1048, 1251, 1265, 1406 at 1280; 1049, 1240 to 1242, 1254 to 1256, 1396 to 1398 at 1024, in
   // all three engines (26 November), the middle taken.
   '1280': { stripTop: 1047, stripBottom: 1251, searchTop: 1265, rowTop: 1406, tile: [172, 193] },
-  '1024': { stripTop: 1049, stripBottom: 1241, searchTop: 1255, rowTop: 1397, tile: [155, 182] }
+  // Round 126's lines: 1024 as at round 122 (1092, 1284 to 1286, 1298 to 1300, 1439 to 1441 in all three engines), 1280 unchanged.
+  '1024': { stripTop: 1092, stripBottom: 1285, searchTop: 1299, rowTop: 1440, tile: [155, 182] }
 };
 
 // Named for what it holds since round eighty-seven's review fix (S7): the desktop's strip is where round eighty-seven put
