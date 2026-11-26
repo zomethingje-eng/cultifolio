@@ -49,4 +49,12 @@ spaces, follow, and the plant page's comparison card (MYPLANTS 31) is this lens 
 
 ## Gate and deploy
 
-(Written at the gate.)
+- In the clone, the whole Chromium suite found the new "Compare with" row 30 px past a 320 px screen at 200% text on the
+  species page (r62ba N10, r67h 3): the panel's control rows now wrap (101 of 101 in four engines after).
+- The tiles uploaded to `cultifolio/climate/v1` with rclone and checked one way: 26,151 matching files.
+- svelte-check 0 errors in 1,917 files (after `svelte-kit sync` made the new route's types). The app gate, Chromium at two
+  workers, WebKit and Firefox at one, two runs: the first found two tests that passed on their retry (r62l-plant clock 3
+  in WebKit, as in round 123's gate; smoke-1's bench path in Firefox at its 30 s limit); the second: 6,588 unit tests,
+  3,055 browser tests, every test first time in every engine.
+- Committed as 1486d7c and pushed on 26 November 2026; `node scripts/deploy.mjs` deployed version 84282bf9 on its first
+  try, live check 24 of 24. The live route: `?sq=51,-1` 200 (8,058 bytes, gzip), `?sq=0,-160` 404, `?sq=x` 400.

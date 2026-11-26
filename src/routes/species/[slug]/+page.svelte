@@ -942,7 +942,7 @@
     {#if coarse}<p class="notice small" id="coarse-records">{coarseSentence(coarse, d.climate.records)} <a class="help" href="/about/how#coarse">The rule</a>.</p>{/if}<!-- round 108 -->
     {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few, kewArea)} <a class="help" href="/about/how#few">The rule</a>.</p>{/if}<!-- linked to its rule, as the other notices are (round eighty-six; review P's P11) -->
     <!-- Round 118 (SPECIES 19): the year panel, three charts and four thin rows on one month axis, Chart | Table, the halves. -->
-    <YearPanel months={d.climate.months} p10={d.climate.p10} p90={d.climate.p90} lat={d.climate.at.lat} shift={myShift} floorC={d.climate.extremes?.minP01 ?? null} units={u} year={sheet.year ?? null} dossierKey={d.key} name={d.name.scientific} src={`CHELSA V2.1, 1981–2010; ${d.climate.cells} ${coarse ? 'areas' : 'cells'}`} />
+    <YearPanel months={d.climate.months} p10={d.climate.p10} p90={d.climate.p90} lat={d.climate.at.lat} shift={myShift} floorC={d.climate.extremes?.minP01 ?? null} units={u} year={sheet.year ?? null} dossierKey={d.key} name={d.name.scientific} src={`CHELSA V2.1, 1981–2010; ${d.climate.cells} ${coarse ? 'areas' : 'cells'}`} plants={mine} />
     <details class="figures" id="one-chart-fold">
       <summary>The year as one chart</summary>
     <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ areas: !!coarse, months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->

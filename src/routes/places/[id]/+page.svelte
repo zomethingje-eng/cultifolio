@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { luxToPpfd } from '$climate/lens-spaces';
   import Parked from '$lib/ui/Parked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { getForecast, forecastRefusal } from '$lib/weather/client';
@@ -59,6 +60,8 @@
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
+  /** The light field's unit as typed (round 127): lux is turned to µmol/m²/s on save; what is stored is always µmol/m²/s. */
+  let lightIn = $state<'umol' | 'lux'>('umol');
   let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; floorHeld: 'held' | 'bottoms'; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; waterDays: string; dryMonths: number[] | null; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', floorHeld: 'bottoms', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', waterDays: '', dryMonths: null, notes: '' });
   /** Places this one could sit inside: everything but itself and what is under it. */
   const homes = $derived.by(() => {
@@ -67,6 +70,7 @@
   });
   function startEdit() {
     if (!loc) return;
+    lightIn = 'umol';
     f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM == null ? '' : (altFt ? Math.round(loc.altM / FT) : loc.altM).toString(), waterDays: loc.waterDays?.toString() ?? '', dryMonths: loc.dryMonths ? [...loc.dryMonths] : null, notes: loc.notes ?? '' };
     fOpen = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
     bad = {};
@@ -116,7 +120,10 @@
     if (!isNum(floor)) out.floorC = `${said(f.floorC)} is not a temperature; type a figure such as ${us ? '41' : '5'}, or leave it blank.`;
     else if (floor != null && (us ? floor < -58 || floor > 122 : floor < -50 || floor > 50)) out.floorC = `${said(f.floorC)} is outside ${us ? '−58 to 122 °F' : '−50 to 50 °C'}, the range a floor can be.`;
     const ppfd = num(f.ppfd);
-    if (!isNum(ppfd)) out.ppfd = `${said(f.ppfd)} is not a number; light is in µmol/m²/s, such as 300.`;
+    if (lightIn === 'lux') {
+      if (!isNum(ppfd)) out.ppfd = `${said(f.ppfd)} is not a number; a reading in lux is such as 16000.`;
+      else if (ppfd != null && (ppfd < 0 || ppfd > 160000)) out.ppfd = `${said(f.ppfd)} is outside 0 to 160,000 lux; full sun is about 100,000.`;
+    } else if (!isNum(ppfd)) out.ppfd = `${said(f.ppfd)} is not a number; light is in µmol/m²/s, such as 300.`;
     else if (ppfd != null && (ppfd < 0 || ppfd > 3000)) out.ppfd = `${said(f.ppfd)} is outside 0 to 3000 µmol/m²/s; full sun is about 2000.`;
     const hours = num(f.lightHours);
     if (!isNum(hours)) out.lightHours = `${said(f.lightHours)} is not a number of hours.`;
@@ -158,7 +165,7 @@
     // "Bottoms out" is the unset reading too: a place that never said is not given `floorHeld: false` by an unrelated edit (round forty-nine, 2; round thirty-five, R1-6).
     // The place's fields and its new parent are one commit: a page closed between the two left a place edited but not moved (round fifty-one, 3).
     const moving = (f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id);
-    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: alt, waterDays: num(f.waterDays), dryMonths: f.dryMonths ? [...f.dryMonths].sort((x, y) => x - y) : null, notes: f.notes.trim() || null };
+    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: (() => { const v = num(f.ppfd); return v == null || lightIn !== 'lux' ? v : luxToPpfd(v); })(), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: alt, waterDays: num(f.waterDays), dryMonths: f.dryMonths ? [...f.dryMonths].sort((x, y) => x - y) : null, notes: f.notes.trim() || null };
     const asOpened = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
     const touched = new Set(Object.keys(asOpened).filter((k) => (asOpened as Record<string, unknown>)[k] !== fOpen[k]));
     const byForm: Record<string, string[]> = { name: ['name'], kind: ['type'], indoor: ['indoor'], floorC: ['floorC', 'floorHeld'], floorHeld: ['floorHeld', 'floorC'], ppfd: ['ppfd'], lightHours: ['lightHours'], lat: ['lat'], lon: ['lon'], altM: ['altM'], waterDays: ['waterDays'], dryMonths: ['dryMonths'], notes: ['notes'] };
@@ -404,7 +411,9 @@
       <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="the coldest it gets" oninput={() => clearBad('floorC')} aria-invalid={!!bad.floorC} aria-describedby={bad.floorC ? 'e-floor-bad' : undefined} />{#if bad.floorC}<span class="bad small" id="e-floor-bad">{bad.floorC}</span>{/if}</label>
       <!-- A set-point and a bottoming-out figure read oppositely on a cold night: outside reaching a set-point is the heater's job; reaching a bottoming-out figure is the plants' (round forty, own). -->
       <label><span>That floor is</span><select id="e-floorkind" bind:value={f.floorHeld}><option value="bottoms">what it bottoms out at (unheated)</option><option value="held">held by a heater (its set-point)</option></select></label>
-      <label><span><span style="text-transform: none">µ</span>mol/m²/s of light</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} oninput={() => clearBad('ppfd')} aria-invalid={!!bad.ppfd} aria-describedby={bad.ppfd ? 'e-ppfd-bad' : undefined} />{#if bad.ppfd}<span class="bad small" id="e-ppfd-bad">{bad.ppfd}</span>{/if}</label>
+      <label><span>{#if lightIn === 'lux'}Light in lux{:else}<span style="text-transform: none">µ</span>mol/m²/s of light{/if}</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} oninput={() => clearBad('ppfd')} aria-invalid={!!bad.ppfd} aria-describedby={bad.ppfd ? 'e-ppfd-bad' : 'e-ppfd-in'} />{#if bad.ppfd}<span class="bad small" id="e-ppfd-bad">{bad.ppfd}</span>{/if}</label>
+      <!-- A light meter's reading in lux, turned to µmol/m²/s as it is saved (round 127; SPECIES 20): × 0.0185, Apogee Instruments' factor for sunlight, daylight through glass taken as sunlight. -->
+      <label><span>Light typed in</span><select id="e-ppfd-unit" bind:value={lightIn} onchange={() => clearBad('ppfd')}><option value="umol">µmol/m²/s</option><option value="lux">lux (saved as µmol/m²/s × 0.0185)</option></select><span class="small muted" id="e-ppfd-in">{lightIn === 'lux' ? "A reading in lux is saved as µmol/m²/s: × 0.0185, Apogee Instruments' factor for sunlight, daylight through glass taken as sunlight." : ''}</span></label>
       <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} oninput={() => clearBad('lightHours')} aria-invalid={!!bad.lightHours} aria-describedby={bad.lightHours ? 'e-hours-bad' : undefined} />{#if bad.lightHours}<span class="bad small" id="e-hours-bad">{bad.lightHours}</span>{/if}</label>
       <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} oninput={() => clearBad('lat', 'lon')} aria-invalid={!!bad.lat} aria-describedby={bad.lat ? 'e-lat-bad' : undefined} />{#if bad.lat}<span class="bad small" id="e-lat-bad">{bad.lat}</span>{/if}</label>
       <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} oninput={() => clearBad('lon', 'lat')} aria-invalid={!!bad.lon} aria-describedby={bad.lon ? 'e-lon-bad' : undefined} />{#if bad.lon}<span class="bad small" id="e-lon-bad">{bad.lon}</span>{/if}</label>
