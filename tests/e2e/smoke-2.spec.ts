@@ -291,7 +291,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
   await page.locator('.tlrow', { hasText: 'Watered' }).getByRole('button', { name: 'Remove?' }).click();
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-remove').click(); // round 131: Remove is in the plant's menu
   await expect(page).toHaveURL(new RegExp(`/plants/${acc}$`));
   await page.getByRole('button', { name: `Yes, remove ${acc}` }).click();
   await expect(page).toHaveURL(/\/plants$/);
@@ -300,7 +300,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await page.locator('.toast .undo').click();
   await expect(page).toHaveURL(new RegExp(`/plants/${acc}$`));
   await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
-  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-remove').click(); // round 131: Remove is in the plant's menu
   await page.getByRole('button', { name: `Yes, remove ${acc}` }).click();
   await expect(page).toHaveURL(/\/plants$/);
   await page.goto(`/plants/${acc}`);

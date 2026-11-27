@@ -16,49 +16,8 @@ const climate = { status: 'ok', cells: 11, months, p10: lo, p90: hi, extremes: {
 // Round 103: a word with a tip (Term) is read as its word, its button and empty tip taking no space.
 const text = (html: string) => html.replace(/<!--[^]*?-->/g, '').replace(/<span class="term[^"]*"[^>]*><button[^>]*>([^<]*)<\/button><span class="tip[^"]*"[^>]*><\/span><\/span>/g, '$1').replace(/<[^>]+>/g, ' ').replace(/&rsquo;/g, '’').replace(/\s+/g, ' ');
 
-describe('atHomeRows', () => {
-  it('winter nights, summer days, grow light for 14 h, humidity: each with its arithmetic', async () => {
-    const { atHomeRows, ppfdOf } = await import('$lib/ui/ref/at-home');
-    const rows = atHomeRows(climate, 'metric')!;
-    expect(rows.map((r) => r.k)).toEqual(['Winter nights', 'Summer days', 'Grow light, 14 h a day', 'Humidity']);
-    // The coldest month is the one whose median low is lowest: July (index 6, 8 °C), 7 to 9 across the cells.
-    expect(rows[0]).toMatchObject({ v: '7–9 °C', how: 'the July mean nightly low, 10th to 90th percentile across the 11 cells of the range, median 8.0 °C (CHELSA V2.1, 1981–2010); its coldest night on record was -0.7 °C (NASA POWER, daily lows over 44 years at the typical spot)' });
-    expect(rows[1]).toMatchObject({ v: '29–31 °C', how: expect.stringMatching(/^the July mean daily high/) });
-    const dli = Math.round((months.reduce((a, m) => a + m.dli, 0) / 12) * 10) / 10;
-    expect(rows[2].v).toBe(`${Math.round(ppfdOf(dli, 14))} µmol/m²/s`);
-    expect(rows[2].how).toContain(`${dli.toFixed(1)} mol/m²/day`);
-    expect(rows[2].how).toMatch(/× 1,000,000 ÷ \(14 × 3,600\)$/);
-    expect(rows[3]).toMatchObject({ v: '40–51%', figure: true });
-    // 31 mol/m²/day over 14 h: 31e6 ÷ 50,400 = 615.1
-    expect(Math.round(ppfdOf(31, 14))).toBe(615);
-    expect(atHomeRows(climate, 'metric', 12)![2].k).toBe('Grow light, 12 h a day');
-    expect(atHomeRows(climate, 'metric', 16)![2].v).toBe(`${Math.round(ppfdOf(dli, 16))} µmol/m²/s`);
-  });
-  it('no humidity in the figures: the row says none is worked out; no record low: said so; the reader’s units', async () => {
-    const { atHomeRows } = await import('$lib/ui/ref/at-home');
-    const dry = { ...climate, extremes: null, months: months.map(({ rh: _, ...m }) => m) };
-    const rows = atHomeRows(dry, 'us')!;
-    expect(rows[3]).toEqual({ k: 'Humidity', v: 'none worked out', how: 'the habitat figures hold no humidity, so none is worked out', figure: false });
-    expect(rows[0].how).toMatch(/; no record low is shown for this page$/);
-    expect(rows[0].v).toBe('45–48 °F');
-  });
-  it('nothing without a habitat climate', async () => {
-    const { atHomeRows } = await import('$lib/ui/ref/at-home');
-    expect(atHomeRows({ status: 'none' }, 'metric')).toBeNull();
-    expect(atHomeRows(null, 'metric')).toBeNull();
-  });
-});
-
+// atHomeRows and AtHome went into the year panel's lens in round 129 (SPECIES 20; $climate/lens-spaces, r127a).
 describe('the sections rendered', () => {
-  it('AtHome: the head, the rows, the hours choice and the owner’s note', async () => {
-    const AtHome = (await import('$lib/ui/ref/AtHome.svelte')).default;
-    const t = text(render(AtHome, { props: { climate, units: 'metric' } as never }).body);
-    expect(t).toContain('At home, aim for (worked out from the figures above)');
-    expect(t).toContain('Grow light, 14 h a day');
-    expect(t).toMatch(/12 h 14 h 16 h/);
-    expect(t).toContain('A starting point worked out from where it grows wild, not tested in cultivation. The light is the open sky’s; a plant among rocks or shrubs gets less.');
-    expect(render(AtHome, { props: { climate: { status: 'pending' }, units: 'metric' } as never }).body.replace(/<!--[^]*?-->/g, '').trim()).toBe('');
-  });
   it('Hardiness: the zone with its years and arithmetic, the band, and that it is the habitat’s', async () => {
     const Hardiness = (await import('$lib/ui/ref/Hardiness.svelte')).default;
     const hardiness = { usda: { years: 43, from: 1981, to: 2024, meanC: -3, meanF: 26.6, zone: '9b' }, rhs: { lowC: -4, band: 'H3', years: 44 }, src: 'NASA POWER (MERRA-2) daily 1981–2024, cell -33.50_18.750' };

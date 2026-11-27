@@ -43,7 +43,7 @@ const ratios = (page: Page, sels: string[]) => page.evaluate((sels) => {
 }, sels);
 
 const PAGES: Array<{ path: string; sels: string[]; open?: (p: Page) => Promise<void> }> = [
-  { path: '/species/copiapoa-cinerea', sels: ['section#climate-class h2', 'section#climate-class td', 'section#climate-class .note', 'section#at-home h2', 'section#at-home td.how', 'section#at-home .hours', 'section#at-home .hours button', 'section#at-home .note', 'section#hardiness td.how', 'section#hardiness h2'] },
+  { path: '/species/copiapoa-cinerea', sels: ['section#climate-class h2', 'section#climate-class td', 'section#climate-class .note', 'section#hardiness td.how', 'section#hardiness h2'] },
   { path: '/browse?view=list', sels: ['.bv .rail', '.bv .rail .sec', '.bv .rail .note', '.bv .opener', '.bv .tip button', 'table.list td', 'table.list thead th', '.bv .tools', '.bv .foot'] },
   { path: '/browse?view=map', sels: ['.bv .legend', '.bv .foot'] },
   { path: '/region/chile-north', sels: ['section.lens', 'section.lens .sec', '.bv .count'] },

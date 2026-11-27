@@ -3999,3 +3999,1003 @@
 2479307	Seseli rupicola	Woronow	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-26	3629622
 442632	Setaria poiretiana	(Schult.) Kunth	Poaceae	inat 2 + gbif 0; queued, added 2026-11-26	5289708
 3330718	Shawia crebra	(E.K.Cameron & Heenan) Saldivia & Nicol	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-26	-
+3095666	Shawia erubescens	(Sieber ex Spreng.) Sch.Bip.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2593937	Shorea obtusa	Wall. ex Blume	Dipterocarpaceae	inat 2 + gbif 0; queued, added 2026-11-27	4096555
+2914999	Sicyos mawhai	I.Telford & P.Sebastian	Cucurbitaceae	inat 2 + gbif 0; queued, added 2026-11-27	8341388
+2489800	Sicyos microphyllus	Kunth	Cucurbitaceae	inat 2 + gbif 0; queued, added 2026-11-27	2874626
+2595938	Sida glomerata	Cav.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	5406736
+191205	Sideritis discolor	Webb ex Bolle	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	8117625
+191271	Sideritis gomeraea	de Noé ex Bolle	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7307750
+191418	Sideritis lacaitae	Font Quer	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3890404
+191427	Sideritis laxespicata	(Degen & Debeaux) Socorro, I.Tarrega & Zafra	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3890332
+192077	Sideroxylon persimile	(Hemsl.) T.D.Penn.	Sapotaceae	inat 2 + gbif 0; queued, added 2026-11-27	2886860
+348468	Sideroxylon polynesicum	(Hillebr.) Smedmark & Anderb.	Sapotaceae	inat 2 + gbif 0; queued, added 2026-11-27	2886976
+192104	Sideroxylon reclinatum	Michx.	Sapotaceae	inat 2 + gbif 0; queued, added 2026-11-27	2886836
+192212	Sievekingia reichenbachiana	Rolfe	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2806917
+2901905	Sigesbeckia pubescens	(Makino) Makino	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	6063463
+2485647	Silene amoena	L.	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	7267443
+2488287	Silene csereii	Baumg.	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5384782
+2488237	Silene diclinis	(Lag.) M.Laínz	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5584003
+2488326	Silene ermenekensis	Vural & Kit Tan	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5588241
+2485598	Silene fuscata	Link ex Brot.	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5587867
+2488704	Silene lanceolata	A.Gray	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5384826
+2487725	Silene sytnikii	Krytzka, Novosad & Protop.	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5588195
+2487498	Silene yanoei	Makino	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	5587146
+3120812	Silphium wasiotense	Medley	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3092580
+2580446	Simarouba versicolor	A.St.-Hil.	Simaroubaceae	inat 2 + gbif 0; queued, added 2026-11-27	7329580
+3122660	Simsia sanguinea	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5402148
+443026	Sinobambusa henryi	(McClure) C.D.Chu & C.S.Chao	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4110679
+2475992	Sinojohnstonia chekiangensis	(Migo) W.T.Wang ex Z.Ying Zhang	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4058197
+2588494	Siparuna echinata	(Kunth) A.DC.	Siparunaceae	inat 2 + gbif 0; queued, added 2026-11-27	3782969
+356644	Siphocampylus foliosus	Griseb.	Campanulaceae	inat 2 + gbif 0; queued, added 2026-11-27	3168405
+2474685	Sisymbrium volgense	M.Bieb. ex E.Fourn.	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3046744
+324827	Sisyrinchium brasiliense	(Ravenna) Ravenna	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296245
+325215	Sisyrinchium langloisii	Greene	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296091
+325098	Sisyrinchium platense	I.M.Johnst.	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296254
+288491	Smilax corbularia	Kunth	Smilacaceae	inat 2 + gbif 0; queued, added 2026-11-27	5295395
+289299	Smilax melastomifolia	Sm.	Smilacaceae	inat 2 + gbif 0; queued, added 2026-11-27	5295260
+289346	Smilax moranensis	M.Martens & Galeotti	Smilacaceae	inat 2 + gbif 0; queued, added 2026-11-27	5295142
+289069	Smilax walteri	Pursh	Smilacaceae	inat 2 + gbif 0; queued, added 2026-11-27	5295687
+192603	Sobralia allenii	L.O.Williams	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797446
+192656	Sobralia fenzliana	Rchb.f.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797558
+192667	Sobralia helleri	A.D.Hawkes	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797527
+192679	Sobralia lancea	Garay	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797499
+192701	Sobralia mucronata	Ames & C.Schweinf.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797512
+2579601	Solandra nizandensis	Matuda	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	5581244
+3031572	Solanum brevicaule	Bitter	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	3799794
+3031573	Solanum brevifolium	Humb. & Bonpl. ex Dunal	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931099
+3031605	Solanum campechiense	L.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931405
+3031720	Solanum corifolium	F.Muell.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930300
+3031791	Solanum diploconos	(Mart.) Bohs	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930890
+3031797	Solanum diversiflorum	F.Muell.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2929130
+3031844	Solanum evolvulifolium	Greenm.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930055
+3031854	Solanum falciforme	Farruggia	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	8104212
+3034452	Solanum guineense	L.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930068
+3031984	Solanum humboldtianum	Granados-Tochoy & S.Knapp	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2929315
+3032160	Solanum maglia	Schltdl.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931694
+3032255	Solanum nemophilum	F.Muell.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931185
+3032327	Solanum palitans	C.V.Morton	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2929494
+3032355	Solanum pectinatum	Dunal	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931046
+3032469	Solanum refractum	Hook. & Arn.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930018
+3032530	Solanum sandwicense	Hook. & Arn.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2931620
+3032586	Solanum sibundoyense	(Bohs) Bohs	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2930041
+3033815	Solanum tectum	Pers.	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2932720
+3032758	Solanum umtuma	Voronts. & S.Knapp	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	6711753
+3032797	Solanum vestissimum	Dunal	Solanaceae	inat 2 + gbif 0; queued, added 2026-11-27	2932030
+2476021	Solenanthus dubius	Fisch. & C.A.Mey.	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4068292
+2476008	Solenanthus reverchonii	Degen	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4068176
+3096654	Solenogyne dominii	L.G.Adams	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3098324
+3101294	Solidago arenicola	B.R.Keener & Kral	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	7831753
+3101319	Solidago auriculata	Shuttlew. ex S.F.Blake	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5388917
+3101272	Solidago confinis	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5388992
+3225494	Sonchus latifolius	(Lowe) R.Jardim & M.Seq.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	10501172
+3062630	Sonchus maritimus	L.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3105703
+3062655	Sonchus micranthus	(Bertero ex Decne.) S.C.Kim & Mejías	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	9252959
+3022120	Sonerila cantonensis	Stapf	Melastomataceae	inat 2 + gbif 0; queued, added 2026-11-27	3858329
+3246792	Sorbus splendens	Grimshaw & C.R.Sanders	Rosaceae	inat 2 + gbif 0; queued, added 2026-11-27	10786249
+309864	Sowerbaea juncea	Andrews	Asparagaceae	inat 2 + gbif 0; queued, added 2026-11-27	2771073
+266176	Sparganium subglobosum	Morong	Typhaceae	inat 2 + gbif 0; queued, added 2026-11-27	2702424
+472360	Specklinia pfavii	(Rchb.f.) Pupulin & Karremans	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	7913948
+266588	Specklinia subpicta	(Schltr.) F.Barros	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2835785
+2915816	Spermolepis lateriflora	G.L.Nesom	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-27	8119880
+2480305	Sphaerocoryne affinis	(Teijsm. & Binn.) Ridl.	Annonaceae	inat 2 + gbif 0; queued, added 2026-11-27	5407003
+3158698	Sphaeropteris horrida	(Liebm.) R.M.Tryon	Cyatheaceae	inat 2 + gbif 0; queued, added 2026-11-27	5529701
+3122149	Sphagneticola brachycarpa	(Baker) Pruski	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3116875
+2596462	Sphedamnocarpus pruriens	(A.Juss.) Szyszył.	Malpighiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7285369
+194056	Sphenodesme floribunda	Chun & F.C.How	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3886510
+2596797	Sphenostylis angustifolia	Sond.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2977771
+2597972	Spigelia gentianoides	Chapm. ex A.DC.	Loganiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5414392
+2597979	Spigelia loganioides	(Torr. & A.Gray) A.DC.	Loganiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5414393
+3123880	Spilanthes urens	Jacq.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3092873
+443915	Spinifex longifolius	R.Br.	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4153038
+2904276	Spiraea tatakaensis	I.S.Chen	Rosaceae	inat 2 + gbif 0; queued, added 2026-11-27	8170921
+2583739	Spiraeanthemum pubescens	Pamp.	Cunoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	3613545
+194389	Spiranthes magnicamporum	Sheviak	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2805431
+194565	Spiranthes tuberosa	Raf.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2805477
+443936	Spodiopogon cotulifer	(Thunb.) Hack.	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4152816
+497635	Sporobolus × townsendii	(H.Groves & J.Groves) P.M.Peterson & Saarela	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	9393876
+444127	Sporobolus contractus	Hitchc.	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	2704787
+444186	Sporobolus fertilis	(Steud.) Clayton	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4150275
+444423	Sporobolus pyramidatus	(Lam.) Hitchc.	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	2704755
+2599936	Spyridium obovatum	(Hook.) Benth.	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	7274000
+266691	Staberoha cernua	(L.f.) T.Durand & Schinz	Restionaceae	inat 2 + gbif 0; queued, added 2026-11-27	2706913
+194808	Stachys arrecta	L.H.Bailey	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3885396
+194868	Stachys bolusii	Skan	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3884791
+497800	Stachys caroliniana	J.B.Nelson & D.A.Rayner	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	8936317
+194935	Stachys circinata	L'Hér.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3884228
+195690	Stachys sublobata	Skan	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3903082
+195775	Stachys viticina	Boiss.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3902273
+195908	Stachytarpheta × intercedens	Danser	Verbenaceae	inat 2 + gbif 0; queued, added 2026-11-27	2925453
+195828	Stachytarpheta brasiliensis	Moldenke	Verbenaceae	inat 2 + gbif 0; queued, added 2026-11-27	4085112
+196128	Stanhopea maculosa	Knowles & Westc.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2801525
+461825	Stanhopea nicaraguensis	G.Gerlach	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	6314842
+196149	Stanhopea pseudoradiosa	Jenny & R.Gonzalez	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2801590
+196177	Stanhopea xytriophora	Rchb.f.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2801671
+2475586	Stanleya albescens	M.E.Jones	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	5373721
+517517	Stauntonia decora	(Dunn) C.Y.Wu	Lardizabalaceae	inat 2 + gbif 0; queued, added 2026-11-27	4191687
+517552	Stauntonia purpurea	Y.C.Liu & F.Y.Lu	Lardizabalaceae	inat 2 + gbif 0; queued, added 2026-11-27	4191593
+444586	Steinchisma laxum	(Sw.) Zuloaga	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4933007
+196316	Stelis aprica	Lindl.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	5309172
+274382	Stelis gunningiana	(Barb.Rodr.) M.H.J.van der Meer	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	5309730
+2585570	Stemodia maritima	L.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3171747
+197041	Stenia bismarckii	Dodson & D.E.Benn.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	5307813
+2600844	Stenocarpus cryptocarpus	Foreman & B.Hyland	Proteaceae	inat 2 + gbif 0; queued, added 2026-11-27	3995477
+2485933	Stenocereus kerberi	(K.Schum.) A.C.Gibson & K.E.Horak	Cactaceae	inat 2 + gbif 0; queued, added 2026-11-27	3960549
+197164	Stenogyne calaminthoides	A.Gray	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2927425
+197170	Stenogyne campanulata	Weller & Sakai	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2927448
+288094	Stenomesson flavum	(Ruiz & Pav.) Herb.	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2859412
+339004	Stenotyla picta	(Rchb.f.) Dressler	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2794663
+2579944	Sterculia ampla	Baker f.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	8389612
+2579939	Sterculia appendiculata	K.Schum.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	7757053
+2579970	Sterculia oblonga	Mast.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	5545938
+2580039	Sterculia quinqueloba	(Garcke) K.Schum.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	7804270
+2580991	Sterculia speciosa	K.Schum.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	5547455
+2580999	Sterculia stipulata	Korth.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	7350571
+2580958	Sterculia tantraensis	Morat	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	7964360
+318189	Stereospermum chelonoides	(L.f.) DC.	Bignoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	4092354
+197713	Steveniella satyrioides	(Spreng.) Schltr.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	8899823
+3130222	Stevia satureiifolia	(Lam.) Cav.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2897568	Stewartia acutisepala	P.L.Chiu & G.R.Zhong	Theaceae	inat 2 + gbif 0; queued, added 2026-11-27	5528365
+2589354	Sticherus urceolatus	M.Garrett & Kantvilas	Gleicheniaceae	inat 2 + gbif 0; queued, added 2026-11-27	3790092
+2596332	Stigmaphyllon paralias	A.Juss.	Malpighiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3983031
+197798	Stilbe albiflora	E.Mey.	Stilbaceae	inat 2 + gbif 0; queued, added 2026-11-27	5544577
+197815	Stilbe vestita	P.J.Bergius	Stilbaceae	inat 2 + gbif 0; queued, added 2026-11-27	5544590
+197981	Stillingia spinulosa	Torr.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3055140
+445945	Stipagrostis ciliata	(Desf.) De Winter	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4130677
+3330190	Stoebe anomala	(Schltr. ex Levyns) N.G.Bergh	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3088291	Stoebe muirii	Levyns	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3090852
+2477269	Stoeberia arborea	van Jaarsv.	Aizoaceae	inat 2 + gbif 0; queued, added 2026-11-27	3706232
+3225362	Stoeberia giftbergensis	(L.Bolus) van Jaarsv.	Aizoaceae	inat 2 + gbif 0; queued, added 2026-11-27	10488943
+2477278	Stomatium villetii	L.Bolus	Aizoaceae	inat 2 + gbif 0; queued, added 2026-11-27	3705797
+2475030	Streptanthus flavescens	Hook.	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3042066
+2475069	Streptanthus petiolaris	A.Gray	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3041553
+2475250	Streptanthus tortuosus	Kellogg	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3041559
+2588828	Streptocarpus parviflorus	Hook.f.	Gesneriaceae	inat 2 + gbif 0; queued, added 2026-11-27	6365464
+2923670	Streptothamnus moorei	F.Muell.	Berberidopsidaceae	inat 2 + gbif 0; queued, added 2026-11-27	7693673
+2587352	Striga elegans	Benth.	Orobanchaceae	inat 2 + gbif 0; queued, added 2026-11-27	3729419
+2932637	Strobilanthes affinis	(Griff.) Terao ex J.R.I.Wood & J.R.Bennett	Acanthaceae	inat 2 + gbif 0; queued, added 2026-11-27	7486344
+2478358	Strobilanthes ciliata	Nees	Acanthaceae	inat 2 + gbif 0; queued, added 2026-11-27	7645544
+2477011	Strobilanthes integrifolia	(Dalzell) Kuntze	Acanthaceae	inat 2 + gbif 0; queued, added 2026-11-27	3780316
+267362	Stromanthe schottiana	(Körn.) Eichler	Marantaceae	inat 2 + gbif 0; queued, added 2026-11-27	2761256
+3296138	Strombocarpa palmeri	(S.Watson) C.E.Hughes & G.P.Lewis	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2602307	Strombosia javanica	Blume	Olacaceae	inat 2 + gbif 0; queued, added 2026-11-27	7464970
+2602321	Strombosia scheffleri	Engl.	Olacaceae	inat 2 + gbif 0; queued, added 2026-11-27	3685528
+2594826	Struthiola striata	Lam.	Thymelaeaceae	inat 2 + gbif 0; queued, added 2026-11-27	8344436
+2597803	Strychnos cocculoides	Baker	Loganiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5645506
+2595082	Strychnos usambarensis	Gilg ex Engl.	Loganiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5645098
+2581233	Stylidium petiolare	Sond.	Stylidiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7334897
+2581096	Stylidium recurvum	Graham	Stylidiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7334933
+479830	Stylisma patens	(Desr.) Myint	Convolvulaceae	inat 2 + gbif 0; queued, added 2026-11-27	2928458
+2592773	Styphelia viridis	Andrews	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	7288584
+2580535	Styrax leprosus	Hook. & Arn.	Styracaceae	inat 2 + gbif 0; queued, added 2026-11-27	7402951
+2593019	Sulla flexuosa	(L.) Medik.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5612962
+2598742	Swartzia langsdorffii	Raddi	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5351887
+2491383	Swartzia oblata	R.S.Cowan	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5351989
+2598776	Swartzia polyphylla	DC.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5351880
+2590525	Swertia bifolia	Batalin	Gentianaceae	inat 2 + gbif 0; queued, added 2026-11-27	7270553
+198800	Syagrus × costae	Glassman	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293914
+198810	Syagrus glaucescens	Glaz. ex Becc.	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293887
+198817	Syagrus hoehnei	Burret	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293824
+198818	Syagrus inajai	(Spruce) Becc.	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293904
+461411	Syagrus lorenzoniorum	Noblick & Lorenzi	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	6316908
+198835	Syagrus pseudococos	(Raddi) Glassman	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293837
+2485232	Symphoricarpos sinensis	Rehder	Caprifoliaceae	inat 2 + gbif 0; queued, added 2026-11-27	7964366
+3103858	Symphyotrichum bahamense	(Britton) G.L.Nesom	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3103242	Symphyotrichum bracteolatum	(Nutt.) G.L.Nesom	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3151784
+3103203	Symphyotrichum depauperatum	(Fernald) G.L.Nesom	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3151450
+3103398	Symphyotrichum hendersonii	(Fernald) G.L.Nesom	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3151676
+3103906	Symphyotrichum tenuifolium	(L.) G.L.Nesom	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3151547
+2475607	Symphytum × mosquense	S.R.Majorov & D.D.Sokoloff	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4067152
+2475961	Symphytum brachycalyx	Boiss.	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4067559
+2475629	Symphytum ibiricum	Steven	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	8210199
+2578435	Symplocos mucronata	Bonpl.	Symplocaceae	inat 2 + gbif 0; queued, added 2026-11-27	3644145
+2578738	Symplocos pubescens	Klotzsch ex Benth.	Symplocaceae	inat 2 + gbif 0; queued, added 2026-11-27	7318906
+2578651	Symplocos stawellii	F.Muell.	Symplocaceae	inat 2 + gbif 0; queued, added 2026-11-27	7318828
+198985	Syncarpia verecunda	A.R.Bean	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3185946
+348599	Syncolostemon petiolatus	(M.Ashby) D.F.Otieno	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3900157
+2591911	Syndiclis marlipoensis	H.W.Li	Lauraceae	inat 2 + gbif 0; queued, added 2026-11-27	4177562
+199058	Syngonium peliocladum	Schott	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3043540	Synurus deltoides	(Aiton) Nakai	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3150727
+324785	Syringodea longituba	(Klatt) Kuntze	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296561
+199260	Syzygium balsameum	(Wight) Wall. ex Walp.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182255
+526751	Syzygium baudouinii	(Brongn. & Gris) N.Snow, Byng & J.W.Dawson	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	9261065
+199329	Syzygium bungadinnia	(F.M.Bailey) B.Hyland	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182947
+199462	Syzygium corynanthum	(F.Muell.) L.A.S.Johnson	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184255
+199637	Syzygium glomeratum	(Lam.) DC.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184109
+199750	Syzygium johnsonii	(F.Muell.) B.Hyland	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183263
+199785	Syzygium kuranda	(F.M.Bailey) B.Hyland	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182109
+199804	Syzygium lanceolatum	(Lam.) Wight & Arn.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184294
+199836	Syzygium leucoxylon	Korth.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183234
+199882	Syzygium malabaricum	(Bedd.) Gamble	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184565
+339209	Syzygium maraca	Craven & Biffin	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184622
+217013	Syzygium monospermum	Craven	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183298
+199957	Syzygium mundagam	(Bourd.) Chithra	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182159
+199983	Syzygium neurocalyx	(A.Gray) Christoph.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3184083
+200005	Syzygium oblancilimbum	H.T.Chang & R.H.Miao	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183303
+200006	Syzygium oblatum	(Roxb.) Wall. ex A.M.Cowan & Cowan	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183251
+200015	Syzygium occidentale	(Bourd.) Gandhi	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182937
+200123	Syzygium polycephalum	(Miq.) Merr. & L.M.Perry	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3182214
+200420	Syzygium toninense	(Baker f.) J.W.Dawson	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3183676
+318707	Tabebuia cassinoides	(Lam.) DC.	Bignoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	4094621
+318685	Tabebuia maxonii	Urb.	Bignoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	4092839
+200574	Tabernaemontana arborea	Rose	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	3618940
+200602	Tabernaemontana bufalina	Lour.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	3618589
+200634	Tabernaemontana coffeoides	Bojer ex A.DC.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	3618255
+200756	Tabernaemontana laeta	Mart.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	7316790
+267834	Tacca cristata	Jack	Dioscoreaceae	inat 2 + gbif 0; queued, added 2026-11-27	2755859
+201007	Taccarum caudatum	Rusby	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	2867468
+3119187	Tagetes elliptica	Sm.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3088563
+3237595	Tagetes imbricata	Schiavinato & Adr.Bartoli	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	10711262
+3119205	Tagetes mandonii	Sch.Bip. ex Klatt	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	4235376
+2514051	Talisia hexaphylla	Vahl	Sapindaceae	inat 2 + gbif 0; queued, added 2026-11-27	7265159
+3110267	Tanacetum tanacetoides	(DC.) Tzvelev	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3118481
+3111781	Tanacetum vahlii	DC.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3118549
+320997	Tanaecium selloi	(Spreng.) L.G.Lohmann	Bignoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	7887546
+2916961	Taraxacum campylodes	G.E.Haglund	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5394016
+3319838	Taraxacum erythroboreale	Efimov	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3059999	Taraxacum norvegicum	(Dahlst.) Dahlst.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5394149
+3060186	Taraxacum pieninicum	Pawł.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5696370
+201870	Tarenna odorata	(Roxb.) B.L.Rob.	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2896107
+201934	Tarenna stellulata	(Hook.f.) Ridl.	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2896182
+2519034	Tasmannia stipitata	(Vickery) A.C.Sm.	Winteraceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2445717	Tauschia hartwegii	(A.Gray) J.F.Macbr.	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5371834
+3153082	Tectaria dissecta	(G.Forst.) Lellinger	Polypodiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7229062
+3153131	Tectaria kusukusensis	(Hayata) Lellinger	Polypodiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7577341
+3153221	Tectaria simonsii	(Baker) Ching	Polypodiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7900835
+3153244	Tectaria sulitii	Copel.	Polypodiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7737565
+202135	Telipogon hausmannianus	Rchb.f.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2790836
+459607	Telipogon williamsii	P.Ortiz	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	5950918
+2513566	Telopea aspera	Crisp & P.H.Weston	Proteaceae	inat 2 + gbif 0; queued, added 2026-11-27	3999443
+2444439	Templetonia stenophylla	(F.Muell.) J.M.Black	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5360132
+3078230	Tephroseris subscaposa	(Kom.) Czerep.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3131092
+2444620	Tephrosia angustissima	Shuttlew. ex Chapm.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5341946
+2445012	Tephrosia noctiflora	Bojer ex Baker	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5342209
+2445023	Tephrosia nubica	(Boiss.) Baker	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5342029
+2445059	Tephrosia onobrychoides	Nutt.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5342284
+2431081	Terminalia acuminata	(Allemão) Eichler	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	9810717
+2431506	Terminalia arenicola	Byrnes	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3699636
+2431453	Terminalia brachystemma	Welw. ex Hiern	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	7327085
+2431099	Terminalia carolinensis	Kaneh.	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3189392
+3016455	Terminalia coronata	(Stapf) Gere & Boatwr.	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	9338927
+2434349	Terminalia ferdinandiana	Exell	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3699413
+3016445	Terminalia hylodendron	(Mildbr.) Gere & Boatwr.	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	9303152
+2434424	Terminalia mameluco	Pickel	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3699917
+2434352	Terminalia oblongata	F.Muell.	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	7327099
+2434047	Terminalia procera	Roxb.	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3698538
+2434175	Terminalia valverdeae	A.H.Gentry	Combretaceae	inat 2 + gbif 0; queued, added 2026-11-27	3698938
+2434896	Tetracera billardierei	Martelli	Dilleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2433806	Tetracera nordtiana	F.Muell.	Dilleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	7416533
+2437895	Tetracme recurvata	Bunge	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	5377805
+202346	Tetracoccus dioicus	Parry	Picrodendraceae	inat 2 + gbif 0; queued, added 2026-11-27	5380908
+374414	Tetradenia galpinii	(N.E.Br.) Phillipson & C.F.Steyn	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5609448
+267998	Tetradenia kaokoensis	van Jaarsv. & A.E.van Wyk	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5609426
+3078719	Tetradymia glabrata	Torr. & A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3119994
+3078724	Tetradymia stenolepis	Greene	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3119988
+446324	Tetrarrhena juncea	R.Br.	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4126912
+2937137	Tetrastigma lanyuense	C.E.Chang	Vitaceae	inat 2 + gbif 0; queued, added 2026-11-27	8329266
+2519072	Tetratheca labillardierei	Joy Thomps.	Elaeocarpaceae	inat 2 + gbif 0; queued, added 2026-11-27	7815115
+2519062	Tetratheca pilosa	Labill.	Elaeocarpaceae	inat 2 + gbif 0; queued, added 2026-11-27	7951949
+202688	Teucrium balearicum	(Coss. ex Pau) Castrov. & Bayon	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3898421
+202894	Teucrium eriocephalum	Willk.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7308545
+374395	Teucrium francoi	M.Seq., Capelo, J.C.Costa & R.Jardim	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3896751
+202930	Teucrium freynii	E.Rev. ex Willk.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3896744
+202970	Teucrium haenseleri	Boiss.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3896438
+203057	Teucrium lusitanicum	Schreb.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	8085091
+203347	Teucrium rixanense	Ruíz Torre & Ruíz Cast.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3893559
+203494	Teucrium webbianum	Boiss.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3892431
+268171	Thamnochortus bachmannii	Mast.	Restionaceae	inat 2 + gbif 0; queued, added 2026-11-27	2707792
+268193	Thamnochortus fraternus	Pillans	Restionaceae	inat 2 + gbif 0; queued, added 2026-11-27	2707777
+465995	Thelymitra pallidifructus	R.J.Bates	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	8127652
+203798	Thelymitra pauciflora	R.Br.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2814026
+203829	Thelymitra variegata	(Lindl.) F.Muell.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	7603493
+3171886	Thelypteris aspera	(C.Presl) K.Iwats.	Aspleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3172476	Thelypteris cyatheoides	(Kaulf.) Fosberg	Aspleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3169748	Thelypteris erubescens	(Wall. ex Hook.) Ching	Aspleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3168274	Thelypteris nipponica	(Franch. & Sav.) Ching	Aspleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3170383	Thelypteris sclerophylla	(Poepp. ex Spreng.) C.V.Morton	Aspleniaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+446400	Themeda caudata	(Nees ex Hook. & Arn.) A.Camus	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4121144
+446458	Themeda quadrivalvis	(L.) Kuntze	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	2703469
+2517422	Theophrasta jussieui	Lindl.	Primulaceae	inat 2 + gbif 0; queued, added 2026-11-27	3585531
+2514349	Thesium ramosum	Hayne	Santalaceae	inat 2 + gbif 0; queued, added 2026-11-27	7460783
+2434609	Thladiantha punctata	Hayata	Cucurbitaceae	inat 2 + gbif 0; queued, added 2026-11-27	3622440
+2520220	Thomasia discolor	Steud.	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	8288725
+2520218	Thomasia foliosa	J.Gay	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	8366294
+2520256	Thomasia triphylla	(Labill.) J.Gay	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	7680345
+3330988	Thorncroftia coddii	Changwe & K.Balkwill	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2520482	Thouinia villosa	DC.	Sapindaceae	inat 2 + gbif 0; queued, added 2026-11-27	5577935
+204081	Thrixspermum fantasticum	L.O.Williams	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2846705
+204083	Thrixspermum filiforme	(Hook.f.) Kuntze	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2797576
+204195	Thrixspermum saruwatarii	(Hayata) Schltr.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2846707
+204266	Thryptomene hyporhytis	Turcz.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3177561
+3118625	Thymophylla setifolia	Lag.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3144476
+3118793	Thymophylla tephroleuca	(S.F.Blake) Strother	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3144436
+204691	Thymus × dimorphus	Klokov & Des.-Shost.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5607225
+205180	Thymus × oblongifolius	Opiz	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7431272
+204709	Thymus dzevanovskyi	Klokov & Des.-Shost.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5607177
+204806	Thymus granatensis	Boiss.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7307346
+205039	Thymus loscosii	Willk.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7307052
+205191	Thymus orospedanus	Villar	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7664292
+2437425	Thyrocarpus sampsonii	Hance	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4060185
+2431854	Thysanocarpus radians	Benth.	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3051425
+325468	Tigridia augusta	Drapiez	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5297428
+325557	Tigridia multiflora	(Baker) Ravenna	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5297476
+2516991	Tiliacora acuminata	(Lam.) Miers	Menispermaceae	inat 2 + gbif 0; queued, added 2026-11-27	7796912
+269016	Tillandsia × floridana	(L.B.Sm.) H.Luther	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	2695840
+269009	Tillandsia flavobracteata	Matuda	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	2694638
+269095	Tillandsia gymnobotrya	Baker	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	2694514
+269114	Tillandsia heterandra	André	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	2695446
+269204	Tillandsia kegeliana	Mez	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	2695285
+459656	Tillandsia mereliana	Schinini	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	5949849
+2441301	Tirpitzia sinensis	(Hemsl.) Hallier f.	Linaceae	inat 2 + gbif 0; queued, added 2026-11-27	5833715
+3142309	Tmesipteris obliqua	Chinnock	Psilotaceae	inat 2 + gbif 0; queued, added 2026-11-27	3992383
+2520460	Toechima daemelianum	(F.Muell.) Radlk.	Sapindaceae	inat 2 + gbif 0; queued, added 2026-11-27	3786584
+290142	Tofieldia thibetica	Franch.	Tofieldiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2864339
+206964	Tolumnia guibertiana	(A.Rich.) Braem	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	5308187
+446633	Torreyochloa pallida	(Torr.) Church	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	2704462
+3309170	Torreyostellaria jamesiana	(Torr.) Gang Yao, B.Xue & Z.Q.Song	Caryophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2518719	Touchardia latifolia	Gaudich.	Urticaceae	inat 2 + gbif 0; queued, added 2026-11-27	2984457
+318586	Tourrettia lappacea	(L'Hér.) Willd.	Bignoniaceae	inat 2 + gbif 0; queued, added 2026-11-27	4931799
+3104189	Townsendia fendleri	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5401967
+3104195	Townsendia florifera	(Hook.) A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5709223
+207164	Trachycarpus nanus	Becc.	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	2739080
+270212	Tradescantia commelinoides	Schult. & Schult.f.	Commelinaceae	inat 2 + gbif 0; queued, added 2026-11-27	2765122
+270410	Tradescantia pinetorum	Greene	Commelinaceae	inat 2 + gbif 0; queued, added 2026-11-27	2765100
+270458	Tradescantia standleyi	Steyerm.	Commelinaceae	inat 2 + gbif 0; queued, added 2026-11-27	2765215
+207350	Tragia involucrata	L.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3061610
+207424	Tragia nepetifolia	Cav.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3061651
+207561	Tragia volubilis	L.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3061705
+3072960	Tragopogon coelesyriacus	Boiss.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5693363
+3072454	Tragopogon crocifolius	L.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5386974
+2514520	Trautvetteria applanata	Greene	Ranunculaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2519116	Tremandra stelligera	R.Br. ex DC.	Elaeocarpaceae	inat 2 + gbif 0; queued, added 2026-11-27	8144645
+2518765	Tribulus zeyheri	Sond.	Zygophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	7285865
+207799	Tricalysia capensis	(Meisn. ex Hochst.) Sim	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2900518
+207810	Tricalysia coriacea	(Benth.) Hiern	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2900668
+2515009	Trichilia minutiflora	Standl.	Meliaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2515286	Trichilia triacantha	Urb.	Meliaceae	inat 2 + gbif 0; queued, added 2026-11-27	3190495
+2515285	Trichilia trifolia	L.	Meliaceae	inat 2 + gbif 0; queued, added 2026-11-27	7271328
+270651	Trichocentrum × teaboanum	(R.Jiménez, Carnevali & J.L.Tapia) R.Jiménez & Carnevali	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2846513
+3319808	Trichocentrum hians	(Lindl.) Meneguzzo & M.W.Chase	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+208076	Trichocentrum panduratum	C.Schweinf.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2846462
+208091	Trichocentrum stacyi	(Garay) M.W.Chase & N.H.Williams	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2846463
+475349	Trichocentrum yucatanense	(Cetzal & Carnevali) R.Jiménez & Solano	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	8108322
+2437794	Trichodesma africanum	(L.) Sm.	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7441736
+493039	Trichoglottis biglandulosa	(Blume) Kocyan & Schuit.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	9573972
+208178	Trichoglottis latisepala	Ames	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2802161
+208215	Trichoglottis smithii	Carr	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2802110
+447042	Tricholaena teneriffae	(L.f.) Link	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4120647
+3155150	Trichomanes javanicum	Blume	Hymenophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+208391	Trichosalpinx pringlei	(Schltr.) Luer	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2791708
+208500	Trichostema suffrutescens	Kearney	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2926653
+374380	Tricyrtis ravenii	C.I Peng & Tiang	Liliaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2440615	Trifolium albopurpureum	Torr. & A.Gray	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5359360
+2439368	Trifolium carolinianum	Michx.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5359241
+2439373	Trifolium cherleri	L.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5358769
+2439397	Trifolium clypeatum	L.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5359174
+2998949	Trifolium kentuckiense	Chapel & Vincent	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	10752118
+2439090	Trifolium lappaceum	L.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5358913
+2433039	Trifolium polymorphum	Poir.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5359080
+208830	Trigonostemon flavidus	Gagnep.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3063409
+519515	Trimenia moorei	(Oliv.) Philipson	Trimeniaceae	inat 2 + gbif 0; queued, added 2026-11-27	5602692
+325287	Trimezia pardina	Ravenna	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	2749689
+2519965	Triphysaria eriantha	(Benth.) T.I.Chuang & Heckard	Orobanchaceae	inat 2 + gbif 0; queued, added 2026-11-27	3171836
+209013	Triplarina imbricata	(Sm.) A.R.Bean	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3173832
+209057	Trisetella triglochin	(Rchb.f.) Luer	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2802431
+339648	Tritaxis australiensis	S.Moore	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5378264
+290506	Triteleia lugens	Greene	Asparagaceae	inat 2 + gbif 0; queued, added 2026-11-27	5304147
+325624	Tritoniopsis dodii	(G.J.Lewis) G.J.Lewis	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296467
+325280	Tritoniopsis pulchra	(Baker) Goldblatt	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5296453
+2519267	Triumfetta sonderi	Ficalho & Hiern	Malvaceae	inat 2 + gbif 0; queued, added 2026-11-27	4939692
+3038186	Trixis cacalioides	D.Don	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5398960
+2438027	Trocdaris verticillata	(L.) Raf.	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3309307	Troncosoa seriphioides	(A.Gray) N.O'Leary & P.Moroni	Verbenaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+493037	Tulipa intermedia	Tojibaev & J.de Groot	Liliaceae	inat 2 + gbif 0; queued, added 2026-11-27	9271627
+459688	Tulipa lemmersii	Zonn., Peterse & J.de Groot	Liliaceae	inat 2 + gbif 0; queued, added 2026-11-27	7801180
+289950	Tupistra muricata	(Gagnep.) N.Tanaka	Asparagaceae	inat 2 + gbif 0; queued, added 2026-11-27	2771419
+3100080	Turczaninovia fastigiata	(Fisch.) DC.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3094032
+271080	Typhonium jinpingense	Z.L.Wang, H.Li & F.H.Bian	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	2869574
+209607	Uapaca kirkiana	Müll.Arg.	Phyllanthaceae	inat 2 + gbif 0; queued, added 2026-11-27	3079894
+2446730	Ulex canescens	Lange	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2951966
+2872255	Ulex eriocladus	C.Vicioso	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2952003
+2446815	Umbilicus gaditanus	Boiss.	Crassulaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2446628	Umbilicus intermedius	Boiss.	Crassulaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+209796	Uncaria gambir	(W.Hunter) Roxb.	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5338190
+2447287	Uraria campanulata	(Benth.) Gagnep.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2946450
+531857	Urceola laevigata	(Juss.) D.J.Middleton & Livsh.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	9827170
+210967	Urceola tournieri	(Pierre) D.J.Middleton	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	8689790
+531865	Urceolina plicata	(Meerow) Christenh. & Byng	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	11100615
+527096	Urochloa serrata	(Thunb.) Sosef	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	10758810
+449558	Urochloa trichopus	(Hochst.) Stapf	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4149632
+2449877	Urophysa rockii	Ulbr.	Ranunculaceae	inat 2 + gbif 0; queued, added 2026-11-27	3922365
+2448596	Urtica circularis	(Hicken) Sorarú	Urticaceae	inat 2 + gbif 0; queued, added 2026-11-27	5670807
+2449169	Urtica flabellata	Kunth	Urticaceae	inat 2 + gbif 0; queued, added 2026-11-27	5670265
+518257	Utricularia cornigera	Studnicka	Lentibulariaceae	inat 2 + gbif 0; queued, added 2026-11-27	7655456
+518603	Utricularia odorata	Pellegr.	Lentibulariaceae	inat 2 + gbif 0; queued, added 2026-11-27	4088149
+2447909	Uvaria tonkinensis	Finet & Gagnep.	Annonaceae	inat 2 + gbif 0; queued, added 2026-11-27	3157419
+3277254	Vaccinium × brunoense	P.W.Fritsch	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	11177994
+2458369	Vaccinium calycinum	Sm.	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	2882931
+2458754	Vaccinium ciliatum	Thunb.	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	4174632
+2458756	Vaccinium coriaceum	Hook.f.	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	7508580
+2456148	Vaccinium poasanum	Donn.Sm.	Ericaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2471560	Vachellia allenii	(D.H.Janzen) Seigler & Ebinger	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	3795640
+2471565	Vachellia belairioides	(Urb.) Seigler & Ebinger	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	3795617
+2471582	Vachellia bilimekii	(J.F.Macbr.) Seigler & Ebinger	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	3795611
+2999114	Vachellia dyeri	(P.P.Sw. ex Coates Palgr.) Kyal. & Boatwr.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	8266707
+2471615	Vachellia mayana	(Lundell) Seigler & Ebinger	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	3795442
+2999219	Vachellia reficiens	(Wawra & Peyr.) Kyal. & Boatwr.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	8360236
+2999233	Vachellia swazica	(Burtt Davy) Kyal. & Boatwr.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	8000059
+3003664	Vachellia theronii	(P.P.Sw.) Boatwr.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	7892800
+3225784	Valeriana nevadensis	(Boiss.) Christenh. & Byng	Caprifoliaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+474731	Vanda aurantiaca	(Schltr.) L.M.Gardiner	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	8087057
+475366	Vanda barnesii	W.E.Higgins & Motes	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	7756447
+211464	Vanda flabellata	(Rolfe ex Downie) Christenson	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2783134
+211466	Vanda foetida	J.J.Sm.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2783252
+211483	Vanda insignis	Blume ex Lindl.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	10975421
+211695	Vangueria lasiantha	(Sond.) Sond.	Rubiaceae	inat 2 + gbif 0; queued, added 2026-11-27	2917818
+348803	Vanilla shenzhenica	Z.J.Liu & S.C.Chen	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2803324
+3119254	Varilla texana	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3118741
+2455232	Varronia bahamensis	(Urb.) Millsp.	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	2926342
+2455316	Varronia rupicola	(Urb.) Britton	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	2926346
+2455320	Varronia salviifolia	(Juss. ex Poir.) Borhidi	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4059216
+2455295	Varronia serrata	(L.) Borhidi	Boraginaceae	inat 2 + gbif 0; queued, added 2026-11-27	4059124
+2452400	Vatairea heteroptera	(Allemão) Ducke ex Assis-Iglesias	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2965121
+212031	Veitchia filifera	(H.Wendl.) H.E.Moore	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293068
+474708	Veitchia pachyclada	(Burret) C.Lewis & Zona	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	8358199
+212044	Veitchia spiralis	H.Wendl.	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	5293086
+2456027	Vella aspera	Pers.	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	5375681
+3092874	Vellereophyton dealbatum	(Thunb.) Hilliard & B.L.Burtt	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3137074
+2451809	Ventilago denticulata	Willd.	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	7273609
+2451792	Ventilago inaequilateralis	Merr. & Chun	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	3877724
+2451728	Ventilago madraspatana	Gaertn.	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	4928549
+2452924	Vepris bachmannii	(Engl.) Mziray	Rutaceae	inat 2 + gbif 0; queued, added 2026-11-27	3834718
+2454507	Vepris natalensis	(Sond.) Mziray	Rutaceae	inat 2 + gbif 0; queued, added 2026-11-27	3834275
+2455046	Verbascum giganteum	Willk.	Scrophulariaceae	inat 2 + gbif 0; queued, added 2026-11-27	7333092
+2454712	Verbascum hervieri	Degen	Scrophulariaceae	inat 2 + gbif 0; queued, added 2026-11-27	3739125
+2453112	Verbascum songaricum	Schrenk ex Fisch. & C.A.Mey.	Scrophulariaceae	inat 2 + gbif 0; queued, added 2026-11-27	7746894
+3124187	Verbesina hastata	Kellogg ex Curran	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3147856
+3124350	Verbesina olsenii	B.L.Turner	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3147820
+3124390	Verbesina persicifolia	DC.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3147805
+3124478	Verbesina sphaerocephala	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	7338803
+3052238	Vernonanthura nudiflora	(Less.) H.Rob.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3110446
+3052305	Vernonanthura polyanthes	(Spreng.) A.J.Vega & Dematt.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	8245828
+3053576	Vernonia × guadalupensis	A.Heller	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	9133203
+3053353	Vernonia marginata	(Torr.) Raf.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	7407174
+2454079	Veronica biggarii	Cockayne	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3733797
+2453695	Veronica biloba	Schreb. ex L.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3172055
+2462773	Veronica macrocalyx	J.B.Armstr.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7541072
+2463292	Veronica nivea	Lindl.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7922787
+2463307	Veronica opaca	Fr.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3172071
+2463261	Veronica orsiniana	Ten.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7332007
+2605841	Veronica pentasepala	(L.B.Moore) Garn.-Jones	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3728007
+2605850	Veronica rivalis	Garn.-Jones	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	3726845
+2462176	Veronica taurica	Willd.	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7331673
+2461942	Veronica tenuifolia	Asso	Plantaginaceae	inat 2 + gbif 0; queued, added 2026-11-27	7358020
+212857	Verticordia acerosa	Lindl.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	5420131
+212867	Verticordia aurea	A.S.George	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	5420144
+212937	Verticordia forrestii	F.Muell.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	5420196
+212996	Verticordia ovalifolia	Meisn.	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	5420297
+2999146	Vesper montanus	(Torr. & A.Gray) R.L.Hartm. & G.L.Nesom	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-27	8102648
+2456090	Viburnum brevitubum	(P.S.Hsu) P.S.Hsu	Viburnaceae	inat 2 + gbif 0; queued, added 2026-11-27	3857417
+2452532	Vicia acutifolia	Elliott	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2975269
+2452299	Vicia floridana	S.Watson	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2974912
+2453087	Vicia monantha	Retz.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2975416
+2452671	Vicia orientalis	(Boiss.) Bég. & Diratz.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	3972444
+2452728	Vicia ramuliflora	(Maxim.) Ohwi	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2975456
+2905330	Vigna indica	T.M.Dixit, K.V.Bhat & S.R.Yadav	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	8040269
+3126647	Villanova oppositifolia	Lag.	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5386982
+513427	Vincetoxicum auriculatum	(Royle ex Wight) Kuntze	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+513432	Vincetoxicum barbatum	(R.Br.) Kuntze	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5526015
+3320078	Vincetoxicum bungei	(G.Don) Cai F.Zhang & G.W.Hu	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+513464	Vincetoxicum carnosum	(R.Br.) Benth.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5525931
+513531	Vincetoxicum flexuosum	(R.Br.) Kuntze	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5525681
+513532	Vincetoxicum floribundum	(Miq.) Franch. & Sav.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+531909	Vincetoxicum koi	(Merr.) Meve & Liede	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	10947397
+513653	Vincetoxicum macrophyllum	Siebold & Zucc.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5525528
+2459467	Viola × melissifolia	Greene	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331246
+2464119	Viola adenothrix	Hayata	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	7296480
+2463696	Viola chamissoniana	Ging.	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331174
+2463788	Viola cuneata	S.Watson	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331277
+2460644	Viola iwagawae	Makino	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5930204
+2460372	Viola lactiflora	Nakai	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5665327
+2460484	Viola macloskeyi	F.E.Lloyd	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331303
+2459479	Viola maviensis	H.Mann	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331329
+2459305	Viola nuttallii	Pursh	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331211
+2459242	Viola orbiculata	(A.Gray) Geyer ex B.D.Jacks.	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	7539797
+2459794	Viola pratincola	Greene	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331287
+2459730	Viola septemloba	Leconte	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331321
+2461280	Viola villosa	Walter	Violaceae	inat 2 + gbif 0; queued, added 2026-11-27	5331197
+2452065	Virola koschnyi	Warb.	Myristicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3743287
+2451959	Virola sebifera	Aubl.	Myristicaceae	inat 2 + gbif 0; queued, added 2026-11-27	3152846
+213369	Vitex canescens	Kurz	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7374978
+213617	Vitex melicopea	F.Muell.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3904302
+213763	Vitex rufescens	A.Juss.	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7784419
+2460781	Vitis shuttleworthii	House	Vitaceae	inat 2 + gbif 0; queued, added 2026-11-27	5372416
+213958	Voacanga globosa	(Blanco) Merr.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	3615974
+2461164	Vochysia ferruginea	Mart.	Vochysiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7378543
+2461017	Vochysia thyrsoidea	Pohl	Vochysiaceae	inat 2 + gbif 0; queued, added 2026-11-27	7288343
+272006	Vriesea pardalina	Mez	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	5289067
+272085	Vriesea roberto-seidelii	W.Weber	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	5289322
+2999117	Vuralia turcica	(Kit Tan, Vural & Küçük.) Uysal & Ertuğrul	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	10837306
+357311	Wahlenbergia luteola	P.J.Sm.	Campanulaceae	inat 2 + gbif 0; queued, added 2026-11-27	5414033
+2466331	Wallaceodendron celebicum	Koord.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2952871
+493582	Wallaceodoxa raja-ampat	Heatubun & W.J.Baker	Arecaceae	inat 2 + gbif 0; queued, added 2026-11-27	9038366
+2466221	Warea amplexifolia	(Nutt.) Nutt.	Brassicaceae	inat 2 + gbif 0; queued, added 2026-11-27	5375488
+325854	Watsonia vanderspuyae	L.Bolus	Iridaceae	inat 2 + gbif 0; queued, added 2026-11-27	5297742
+214576	Westringia amabilis	B.Boivin	Lamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3901172
+214617	Wetria australiensis	P.I.Forst.	Euphorbiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3072154
+2465179	Whitfordiodendron erianthum	(Benth.) Dunn	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	8522685
+214661	Whyanbeelia terrae-reginae	Airy Shaw & B.Hyland	Picrodendraceae	inat 2 + gbif 0; queued, added 2026-11-27	3075281
+2465337	Wikstroemia australis	Endl.	Thymelaeaceae	inat 2 + gbif 0; queued, added 2026-11-27	5523332
+3126176	Wilkesia hobdyi	H.St.John	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3151340
+272382	Willdenowia incurvata	(Thunb.) H.P.Linder	Restionaceae	inat 2 + gbif 0; queued, added 2026-11-27	2707675
+479855	Wilsonia backhousei	Hook.f.	Convolvulaceae	inat 2 + gbif 0; queued, added 2026-11-27	5549351
+357086	Wimmerella pygmaea	(Thunb.) Serra, M.B.Crespo & Lammers	Campanulaceae	inat 2 + gbif 0; queued, added 2026-11-27	3168919
+527185	Wittmackia caymanensis	(Britton ex L.B.Sm.) Aguirre-Santoro	Bromeliaceae	inat 2 + gbif 0; queued, added 2026-11-27	10807342
+214822	Wolffia borealis	(Engelm.) Landolt	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	5330087
+214823	Wolffia brasiliensis	Wedd.	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	5330080
+214894	Wrightia candollei	S.Vidal	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5535404
+214896	Wrightia coccinea	(Roxb. ex Hornem.) Sims	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	5535400
+348820	Wurmbea punctata	(L.) J.C.Manning & Vinn.	Colchicaceae	inat 2 + gbif 0; queued, added 2026-11-27	5294884
+2467784	Xanthophyllum lanceatum	(Miq.) J.J.Sm.	Polygalaceae	inat 2 + gbif 0; queued, added 2026-11-27	4051497
+493596	Xanthosoma nodosum	Croat & V.Pellet.	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	9397640
+215138	Xanthosoma riedelianum	(Schott) Schott	Araceae	inat 2 + gbif 0; queued, added 2026-11-27	5331024
+215208	Xanthostemon longipes	Guillaumin	Myrtaceae	inat 2 + gbif 0; queued, added 2026-11-27	3180777
+3200729	Xerochrysum bicolor	(Lindl.) R.J.Bayer	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3102860
+2467128	Xiphotheca fruticosa	(L.) A.L.Schutte & B.-E.van Wyk	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5630042
+215416	Xylobium stanhopeifolium	Schltr.	Orchidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2850821
+2467450	Xylomelum salicinum	(Meisn.) A.Cunn. ex Benth.	Proteaceae	inat 2 + gbif 0; queued, added 2026-11-27	8188821
+274654	Xyloolaena richardii	(Baill.) Baill.	Sarcolaenaceae	inat 2 + gbif 0; queued, added 2026-11-27	3783166
+2468125	Xylopia brasiliensis	Spreng.	Annonaceae	inat 2 + gbif 0; queued, added 2026-11-27	3157181
+2468226	Xylopia maccreae	(F.Muell.) L.S.Sm.	Annonaceae	inat 2 + gbif 0; queued, added 2026-11-27	8053009
+3102631	Xylorhiza cognata	(H.M.Hall) T.J.Watson	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	5396068
+273111	Xyris ustulata	L.A.Nilsson	Xyridaceae	inat 2 + gbif 0; queued, added 2026-11-27	2692748
+513972	Xysmalobium involucratum	(E.Mey.) Decne.	Apocynaceae	inat 2 + gbif 0; queued, added 2026-11-27	3572149
+378802	Zamia acuminata	Oerst. ex Dyer	Zamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	9210022
+378807	Zamia amplifolia	Mast.	Zamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5638624
+378797	Zamia chigua	Seem.	Zamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5284183
+459761	Zamia restrepoi	(D.W.Stev.) A.Lindstr.	Zamiaceae	inat 2 + gbif 0; queued, added 2026-11-27	5638668
+2469433	Zanthoxylum ovalifolium	Wight	Rutaceae	inat 2 + gbif 0; queued, added 2026-11-27	7269328
+2470173	Zapoteca aculeata	(Spruce ex Benth.) H.M.Hern.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	2968058
+2470549	Zehneria mucronata	(Blume) Miq.	Cucurbitaceae	inat 2 + gbif 0; queued, added 2026-11-27	3624470
+293158	Zephyranthes caerulea	(Griseb.) Baker	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	2853473
+536251	Zephyranthes estensis	(Ravenna) Nic.García & S.C.Arroyo	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	10986730
+536302	Zephyranthes rubra	(Ravenna) R.S.Oliveira & Dutilh	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	11008313
+549508	Zephyranthes sarae	J.M.Watson & A.R.Flores	Amaryllidaceae	inat 2 + gbif 0; queued, added 2026-11-27	12251689
+2469111	Zieria covenyi	J.A.Armstr.	Rutaceae	inat 2 + gbif 0; queued, added 2026-11-27	5593410
+2897798	Zieria oreocena	J.A.Armstr.	Rutaceae	inat 2 + gbif 0; queued, added 2026-11-27	5593271
+273232	Zingiber capitatum	Roxb.	Zingiberaceae	inat 2 + gbif 0; queued, added 2026-11-27	2757052
+273369	Zingiber oligophyllum	K.Schum.	Zingiberaceae	inat 2 + gbif 0; queued, added 2026-11-27	2757139
+497842	Zingiber singapurense	Škorničk.	Zingiberaceae	inat 2 + gbif 0; queued, added 2026-11-27	9636932
+3124693	Zinnia anomala	A.Gray	Asteraceae	inat 2 + gbif 0; queued, added 2026-11-27	3111794
+2468777	Zizia trifoliata	(Michx.) Fernald	Apiaceae	inat 2 + gbif 0; queued, added 2026-11-27	3034514
+3003692	Ziziphus budhensis	Bhattarai & M.L.Pathak	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	8110304
+2470692	Ziziphus incurva	Roxb.	Rhamnaceae	inat 2 + gbif 0; queued, added 2026-11-27	3876080
+2470315	Zornia latifolia	Sm.	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5355241
+309045	Zostera noltii	Hornem.	Zosteraceae	inat 2 + gbif 0; queued, added 2026-11-27	2863938
+2470247	Zygia brenesii	(Standl.) L.Rico	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5347427
+2470954	Zygia cognata	(Schltdl.) Britton & Rose	Fabaceae	inat 2 + gbif 0; queued, added 2026-11-27	5347399
+450682	Zygochloa paradoxa	(R.Br.) S.T.Blake	Poaceae	inat 2 + gbif 0; queued, added 2026-11-27	4138224
+3225877	Zygophyllum augea	Christenh. & Byng	Zygophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2469632	Zygophyllum coccineum	L.	Zygophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3225870	Zygophyllum indicum	(Burm.f.) Christenh. & Byng	Zygophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+3225864	Zygophyllum laeve	(Standl.) Christenh. & Byng	Zygophyllaceae	inat 2 + gbif 0; queued, added 2026-11-27	-
+2610663	Abutilon guineense	(Schumach.) Baker f. & Exell	Malvaceae	inat 1 + gbif 1; queued, added 2026-11-27	7279347
+2612096	Acacia enterocarpa	R.V.Sm.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2979576
+2613000	Acacia microbotrya	Benth.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2979057
+2613075	Acacia muelleriana	Maiden & R.T.Baker	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2979954
+2613376	Acacia phlebophylla	F.Muell. ex H.B.Will.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2979609
+2613628	Acacia rhetinocarpa	J.M.Black	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2980825
+2613762	Acacia sclerosperma	F.Muell.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2978492
+2938044	Acaena profundeincisa	(Bitter) B.H.Macmill.	Rosaceae	inat 1 + gbif 1; queued, added 2026-11-27	5371088
+2614801	Acantholimon lepturoides	(Jaub. & Spach) Boiss.	Plumbaginaceae	inat 1 + gbif 1; queued, added 2026-11-27	4089301
+2615844	Acer laurinum	Hassk.	Sapindaceae	inat 1 + gbif 1; queued, added 2026-11-27	7907188
+2617323	Achimenes heterophylla	(Mart.) DC.	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	5589769
+217462	Acianthera cogniauxiana	(Schltr.) Pridgeon & M.W.Chase	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2839516
+519742	Acianthera erinacea	(Rchb.f.) A.Doucette	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9530827
+217577	Acianthera pantasmi	(Rchb.f.) Pridgeon & M.W.Chase	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2839819
+1967	Acineta erythroxantha	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5310307
+2618067	Aciphylla traversii	(F.Muell.) Hook.f.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	5538957
+2169	Acokanthera rotundata	(Codd) Kupicha	Apocynaceae	inat 1 + gbif 1; queued, added 2026-11-27	3619502
+2618909	Aconitum kitadakense	Nakai	Ranunculaceae	inat 1 + gbif 1; queued, added 2026-11-27	7277158
+2619734	Aconitum vilmorinianum	Kom.	Ranunculaceae	inat 1 + gbif 1; queued, added 2026-11-27	3930629
+3313475	Acrospelion alpestre	(Host) Barberá & Quintanar	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+2620421	Acrothamnus montanus	(R.Br.) Quinn	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	4010137
+2620729	Actinidia latifolia	(Gardner & Champ.) Merr.	Actinidiaceae	inat 1 + gbif 1; queued, added 2026-11-27	8246677
+519977	Adelonema picturatum	(Linden & André) S.Y.Wong & Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	9237146
+519679	Adelonema speariae	(Bogner & Moffler) S.Y.Wong & Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	9443671
+519776	Adelonema wendlandii	(Schott) S.Y.Wong & Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	9351504
+319317	Adenocalymma acutissimum	Miers	Bignoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4093097
+3039403	Adenocaulon chilense	Less.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3092977
+360436	Adenophora potaninii	Korsh.	Campanulaceae	inat 1 + gbif 1; queued, added 2026-11-27	5409669
+3144405	Adiantum fulvum	Raoul	Pteridaceae	inat 1 + gbif 1; queued, added 2026-11-27	3750021
+3144937	Adiantum patens	Willd.	Pteridaceae	inat 1 + gbif 1; queued, added 2026-11-27	3746675
+3144955	Adiantum platyphyllum	Sw.	Pteridaceae	inat 1 + gbif 1; queued, added 2026-11-27	8197019
+3145049	Adiantum silvaticum	Tindale	Pteridaceae	inat 1 + gbif 1; queued, added 2026-11-27	3748618
+217814	Aechmea araneosa	L.B.Sm.	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2698245
+218080	Aechmea macrochlamys	L.B.Sm.	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2697899
+218267	Aechmea stenosepala	L.B.Sm.	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2698173
+2623487	Aegopodium alpestre	Ledeb.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3634660
+3793	Aerangis brachycarpa	(A.Rich.) T.Durand & Schinz	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2836969
+3854	Aerangis modesta	(Hook.f.) Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2836946
+3904	Aeranthes arachnites	(Thouars) Lindl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5826523
+3988	Aeranthes ramosa	Rolfe	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2836407
+4050	Aerides crassifolia	C.S.P.Parish ex Burb.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811058
+4092	Aerides krabiensis	Seidenf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811066
+2623933	Aeschynanthus pachyanthus	Schltr.	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	3825111
+2624758	Aethionema stylosum	DC.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3051042
+3100002	Afroaster hispidus	(Thunb.) J.C.Manning & Goldblatt	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	8372331
+532102	Afropectinariella doratophylla	(Summerh.) M.Simo & Stévart	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9752495
+2625386	Agapetes odontocera	(Wight) Benth. & Hook.f.	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	7328995
+4445	Agastache breviflora	(A.Gray) Epling	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	2926405
+4449	Agastache cusickii	(Greenm.) A.Heller	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	2926396
+4473	Agastache pallida	(Lindl.) Cory	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	2926398
+4531	Agathis montana	de Laub.	Araucariaceae	inat 1 + gbif 1; queued, added 2026-11-27	2685009
+3127491	Ageratina pichinchensis	(Kunth) R.M.King & H.Rob.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5400249
+4699	Aglaonema philippinense	Engl.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2866351
+388384	Agropyron desertorum	(Fisch. ex Link) Schult.	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2705200
+387742	Agrostis castellana	Boiss. & Reut.	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2706501
+4852	Agrostophyllum callosum	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2802835
+2627641	Alcea digitata	(Boiss.) Alef.	Malvaceae	inat 1 + gbif 1; queued, added 2026-11-27	5617589
+3226041	Alchemilla australis	(Rydb.) Bomble	Rosaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+5732	Alchornea discolor	Poepp.	Euphorbiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3055354
+294736	Aletris spicata	(Thunb.) Franch.	Nartheciaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756112
+3043535	Alfredia acantholepis	Kar. & Kir.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5401109
+3043554	Alfredia nivea	Kar. & Kir.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5401104
+6170	Allamanda nobilis	T.Moore	Apocynaceae	inat 1 + gbif 1; queued, added 2026-11-27	3617929
+3109343	Allardia tridactylites	(Kar. & Kir.) Sch.Bip.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5406270
+295058	Allium aschersonianum	Barbey	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856404
+295151	Allium bolanderi	S.Watson	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856194
+295475	Allium ebusitanum	Font Quer	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856698
+295634	Allium glandulosum	Link & Otto	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856935
+295857	Allium lacunosum	S.Watson	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2857752
+296257	Allium perdulce	S.V.Fraser	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856317
+296346	Allium pseudostrictum	Albov	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856185
+296658	Allium staticiforme	Sm.	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2857013
+296682	Allium stracheyi	Baker	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2856337
+296915	Allium verticillatum	Regel	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2857193
+3277691	Allobriquetia spicata	(Kunth) Bovini	Malvaceae	inat 1 + gbif 1; queued, added 2026-11-27	11187551
+2629335	Allophylus excelsus	(Triana & Planch.) Radlk.	Sapindaceae	inat 1 + gbif 1; queued, added 2026-11-27	5577615
+6698	Alocasia boa	A.Hay	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	5329956
+297029	Aloe albida	(Stapf) Reynolds	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777696
+297043	Aloe ammophila	Reynolds	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777661
+297370	Aloe erythrophylla	Bosser	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778063
+297371	Aloe esculenta	L.C.Leach	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778033
+297378	Aloe falcata	Baker	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777890
+297416	Aloe gilbertii	T.Reynolds ex Sebsebe & Brandham	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778050
+297533	Aloe kilifiensis	Christian	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777368
+297536	Aloe komaggasensis	Kritz. & van Jaarsv.	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778037
+297691	Aloe molederana	Lavranos & Glen	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777951
+297844	Aloe porphyrostachys	Lavranos & Collen.	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777687
+372130	Aloe richaudii	Rebmann	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777915
+297945	Aloe saundersiae	(Reynolds) Reynolds	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777424
+297958	Aloe schomeri	Rauh	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777149
+298065	Aloe tororoana	Reynolds	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2777852
+298143	Aloe vossii	Reynolds	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778106
+298144	Aloe vryheidensis	Groenew.	Asphodelaceae	inat 1 + gbif 1; queued, added 2026-11-27	2778083
+218811	Alpinia haenkei	C.Presl	Zingiberaceae	inat 1 + gbif 1; queued, added 2026-11-27	5302214
+218978	Alpinia polyantha	D.Fang	Zingiberaceae	inat 1 + gbif 1; queued, added 2026-11-27	5302317
+219003	Alpinia rafflesiana	Wall. ex Baker	Zingiberaceae	inat 1 + gbif 1; queued, added 2026-11-27	5302201
+219066	Alpinia stachyodes	Hance	Zingiberaceae	inat 1 + gbif 1; queued, added 2026-11-27	5302239
+3158898	Alsophila cuspidata	(Kunze) D.S.Conant	Cyatheaceae	inat 1 + gbif 1; queued, added 2026-11-27	5529620
+3159468	Alsophila loheri	(Christ) R.M.Tryon	Cyatheaceae	inat 1 + gbif 1; queued, added 2026-11-27	5529755
+298381	Alstroemeria patagonica	Phil.	Alstroemeriaceae	inat 1 + gbif 1; queued, added 2026-11-27	2753690
+298491	Alstroemeria zoellneri	Ehr.Bayer	Alstroemeriaceae	inat 1 + gbif 1; queued, added 2026-11-27	2753643
+2632044	Alyssum cuneifolium	Ten.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3045100
+2632162	Alyssum granatense	Boiss. & Reut.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3045178
+7725	Amasonia campestris	(Aubl.) Moldenke	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	7306869
+382192	Amentotaxus yunnanensis	H.L.Li	Taxaceae	inat 1 + gbif 1; queued, added 2026-11-27	2685185
+2633910	Ammodendron bifolium	(Pall.) Yakovlev	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2971159
+8086	Amorphophallus baumannii	(Engl.) N.E.Br.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2871404
+8186	Amorphophallus kachinensis	Engl. & Gehrm.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2871461
+8193	Amorphophallus koratensis	Gagnep.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2871505
+456257	Amorphophallus laoticus	Hett.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	3604580
+8242	Amorphophallus napalensis	(Wall.) Bogner & Mayo	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2871772
+2634399	Ampelocissus obtusata	(Welw. ex Baker) Planch.	Vitaceae	inat 1 + gbif 1; queued, added 2026-11-27	4053552
+320963	Amphilophium scabriusculum	(Mart. ex DC.) L.G.Lohmann	Bignoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	7803155
+8487	Amydrium humile	Schott	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2870235
+2636192	Anamirta cocculus	(L.) Wight & Arn.	Menispermaceae	inat 1 + gbif 1; queued, added 2026-11-27	3829613
+3088793	Anaphalis contorta	(D.Don) Hook.f.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	4933534
+8731	Anchomanes abbreviatus	Engl.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2870416
+8803	Ancistrorhynchus ovatus	Summerh.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5313953
+524608	Andinia pilosella	(Rchb.f.) Karremans & S.V.Uribe	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	10956593
+2636941	Andira nitida	Mart. ex Benth.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2952178
+2637376	Androsace americana	Wendelbo	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	4008046
+2637408	Androsace brachystegia	Hand.-Mazz.	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	4007729
+3063796	Andryala arenaria	(DC.) Boiss. & Reut.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3105518
+2639239	Angelica roseana	L.F.Hend.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	5371788
+2639363	Angelonia integerrima	Spreng.	Plantaginaceae	inat 1 + gbif 1; queued, added 2026-11-27	3742036
+9319	Angraecum cornigerum	Cordem.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2833413
+9529	Angraecum mauritianum	(Poir.) Frapp.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2833403
+9595	Angraecum pectinatum	Thouars	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2833639
+9827	Ania viridifusca	(Hook.) Tang & F.T.Wang ex Summerh.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5305365
+2641381	Anoplocaryum compressum	Ledeb.	Boraginaceae	inat 1 + gbif 1; queued, added 2026-11-27	4065733
+3089104	Antennaria anaphaloides	Rydb.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5385627
+10766	Anthurium carchiense	Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872248
+10927	Anthurium dolichostachyum	Sodiro	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872992
+10930	Anthurium dominicense	Schott	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2873570
+11011	Anthurium furcatum	Sodiro	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872977
+11080	Anthurium harlingianum	Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2873566
+11161	Anthurium interruptum	Sodiro	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872843
+11411	Anthurium obtusilobum	Schott	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2873511
+11479	Anthurium parvispathum	Hemsl.	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2873644
+11559	Anthurium pseudospectabile	Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872335
+11823	Anthurium trilobum	Linden ex Beer	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872854
+345974	Anthurium vanderknaapii	Croat	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2873258
+11885	Anthurium wagenerianum	K.Koch & C.D.Bouché	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2872900
+3301533	Apocissus oblonga	(Benth.) Jackes & Trias-Blasi	Vitaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+13469	Appendicula hexandra	(J.Koenig) J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5325032
+2644939	Aquilegia pancicii	Degen	Ranunculaceae	inat 1 + gbif 1; queued, added 2026-11-27	3930028
+2645957	Arabis nova	Vill.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	5374841
+13675	Arachnis cathcartii	(Lindl.) J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5305434
+13677	Arachnis clarkei	(Rchb.f.) J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5305432
+2646910	Archeria serpyllifolia	Hook.f.	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	7355548
+2647229	Arctostaphylos hispidula	Howell	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	2882558
+2647280	Arctostaphylos myrtifolia	Parry	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	2882570
+2647284	Arctostaphylos nissenana	Merriam	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	7135269
+2648216	Ardisia maclurei	Merr.	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	5557613
+2648417	Ardisia opegrapha	Oerst.	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	7331129
+2650497	Argemone hispida	A.Gray	Papaveraceae	inat 1 + gbif 1; queued, added 2026-11-27	2888495
+3014008	Aria stankovii	(Juz.) Sennikov & Kurtto	Rosaceae	inat 1 + gbif 1; queued, added 2026-11-27	9377959
+15299	Arisaema calcareum	H.Li	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2867124
+220857	Arisaema lihengianum	J.Murata & S.K.Wu	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	6310217
+2651448	Aristolochia goldieana	Hook.f.	Aristolochiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3589144
+2651733	Aristolochia pallida	Willd.	Aristolochiaceae	inat 1 + gbif 1; queued, added 2026-11-27	7313694
+2651948	Aristolochia tentaculata	O.C.Schmidt	Aristolochiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3588617
+2652979	Arnebia euchroma	(Royle ex Benth.) I.M.Johnst.	Boraginaceae	inat 1 + gbif 1; queued, added 2026-11-27	7295249
+3125533	Arnica parryi	A.Gray	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5406027
+3108907	Artemisia × wurzellii	C.M.James & Stace	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3121656
+3109190	Artemisia pauciflora	Weber ex Stechm.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	8687560
+3109201	Artemisia ramosa	C.Sm. ex Link	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	8284450
+300072	Arthropodium minus	R.Br.	Asparagaceae	inat 1 + gbif 1; queued, added 2026-11-27	2768107
+16223	Arum jacquemontii	Blume	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	5330578
+396738	Arundo plinii	Turra	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	4110556
+2654408	Asarum nipponicum	F.Maek.	Aristolochiaceae	inat 1 + gbif 1; queued, added 2026-11-27	8488340
+275203	Asparagus oligoclonos	Maxim.	Asparagaceae	inat 1 + gbif 1; queued, added 2026-11-27	2768729
+3145742	Asplenium boltonii	Hook. ex Schelpe	Aspleniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4258412
+3145816	Asplenium cuneatiforme	Christ	Aspleniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4258688
+3147413	Asplenium fissum	Kit. ex Willd.	Aspleniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4258666
+2657302	Astragalus albicaulis	DC.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5343329
+2660013	Astragalus incanus	L.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5347181
+2662656	Astragalus schelichowii	Turcz.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5346748
+2663473	Astragalus tridactylicus	A.Gray	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5354808
+17582	Astrocaryum triandrum	Galeano, R.Bernal & F.Kahn	Arecaceae	inat 1 + gbif 1; queued, added 2026-11-27	2738138
+2664404	Asystasia vogeliana	Benth.	Acanthaceae	inat 1 + gbif 1; queued, added 2026-11-27	3774504
+2664426	Atalantia ceylanica	(Arn.) Oliv.	Rutaceae	inat 1 + gbif 1; queued, added 2026-11-27	5593914
+3173131	Athyrium sheareri	(Baker) Ching	Aspleniaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+2665452	Atriplex lindleyi	Moq.	Amaranthaceae	inat 1 + gbif 1; queued, added 2026-11-27	3083793
+2666293	Aulax pallasia	Stapf	Proteaceae	inat 1 + gbif 1; queued, added 2026-11-27	5636468
+2666640	Austrocactus spiniflorus	(Phil.) F.Ritter	Cactaceae	inat 1 + gbif 1; queued, added 2026-11-27	3959832
+18423	Autranella congolensis	(De Wild.) A.Chev.	Sapotaceae	inat 1 + gbif 1; queued, added 2026-11-27	2887566
+2667602	Bacopa crenata	(P.Beauv.) Hepper	Plantaginaceae	inat 1 + gbif 1; queued, added 2026-11-27	3731342
+2667868	Baikiaea insignis	Benth.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2943825
+300121	Baldellia repens	(Lam.) Ooststr.	Alismataceae	inat 1 + gbif 1; queued, added 2026-11-27	2864552
+3121065	Balsamorhiza serrata	A.Nelson & J.F.Macbr.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3137234
+2669295	Banksia violacea	C.A.Gardner	Proteaceae	inat 1 + gbif 1; queued, added 2026-11-27	5637092
+19786	Barbosella dusenii	(A.Samp.) Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2785214
+3036722	Barnadesia aculeata	(Benth.) I.C.Chung	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3105301
+2671868	Bauhinia mombassae	Vatke	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2953238
+361163	Begonia × buimontana	Yamam.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	5833876
+360903	Begonia aequatorialis	L.B.Sm. & B.G.Schub.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4156789
+360963	Begonia annulata	K.Koch	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4158956
+361018	Begonia augustinei	Hemsl.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4158483
+361202	Begonia capanemae	Brade	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4156853
+361659	Begonia fuchsiiflora	(A.DC.) A.I.Baranov & F.A.Barkley	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4158517
+362209	Begonia lyallii	A.DC.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	7303524
+489185	Begonia obdeltata	Gregório & E.L.Jacques	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	7437586
+362514	Begonia oxyloba	Welw. ex Hook.f.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4156666
+362522	Begonia paleata	A.DC.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4159277
+362673	Begonia pleiopetala	A.DC.	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4158045
+468680	Begonia pteridiformis	Phutthai	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	7955077
+363207	Begonia tengchiana	C.I Peng & Y.K.Chen	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4159223
+363219	Begonia thaipingensis	King	Begoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	4930870
+2673847	Berberis grevilleana	Gillies ex Hook. & Arn.	Berberidaceae	inat 1 + gbif 1; queued, added 2026-11-27	3981277
+2674375	Berberis rigidifolia	Kunth	Berberidaceae	inat 1 + gbif 1; queued, added 2026-11-27	7300254
+2674754	Berchemia polyphylla	Wall. ex M.A.Lawson	Rhamnaceae	inat 1 + gbif 1; queued, added 2026-11-27	8142461
+22051	Bifrenaria floribunda	(Schltr.) C.Schweinf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+22070	Bifrenaria leucorrhoda	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	7320524
+22083	Bifrenaria racemosa	(Hook.) Lindl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2796115
+22091	Bifrenaria tetragona	(Lindl.) Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2796077
+221515	Billbergia buchholtzii	Mez	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2693747
+221550	Billbergia eloiseae	Read & L.B.Sm.	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2693883
+221623	Billbergia meyeri	Mez	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2693871
+221708	Billbergia stenopetala	Harms	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2693851
+3021515	Blakea trinervia	L.	Melastomataceae	inat 1 + gbif 1; queued, added 2026-11-27	6634852
+3176213	Blechnum norfolkense	Christenh.	Aspleniaceae	inat 1 + gbif 1; queued, added 2026-11-27	7441907
+3112951	Blumea aromatica	DC.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5395607
+2678390	Boehmeria penduliflora	Wedd. ex D.G.Long	Urticaceae	inat 1 + gbif 1; queued, added 2026-11-27	7769607
+399263	Bonia saxatilis	(L.C.Chia, H.L.Fung & Y.L.Yang) N.H.Xia	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	4137829
+451006	Borinda utilis	(T.P.Yi) Stapleton	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	4137587
+547673	Borinda yulongshanensis	(T.P.Yi) Stapleton	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	12244738
+2679944	Boronia fraseri	Hook.	Rutaceae	inat 1 + gbif 1; queued, added 2026-11-27	3837874
+300943	Borya sphaerocephala	R.Br.	Boryaceae	inat 1 + gbif 1; queued, added 2026-11-27	2860799
+2680380	Bosea amherstiana	(Moq.) Hook.f.	Amaranthaceae	inat 1 + gbif 1; queued, added 2026-11-27	5548263
+2680382	Bosea cypria	Boiss. ex Hook.f.	Amaranthaceae	inat 1 + gbif 1; queued, added 2026-11-27	5548256
+2680474	Bossiaea foliosa	A.Cunn.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2968306
+399371	Bothriochloa saccharoides	(Sw.) Rydb.	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2704103
+501822	Boucerosia umbellata	(Haw.) Wight & Arn.	Apocynaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+2681063	Boykinia richardsonii	(Hook.) Rothr.	Saxifragaceae	inat 1 + gbif 1; queued, added 2026-11-27	7952076
+3198604	Brachanthemum krylovii	Serg.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3098289
+488234	Brachypeza pallida	(Blume) Kocyan & Schuit.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9556036
+3097175	Brachyscome decipiens	Hook.f.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3144567
+3096956	Brachyscome melanocarpa	Sond. & F.Muell.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3144605
+24002	Braemia vittata	(Lindl.) Jenny	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2838490
+2681939	Brasilicereus phaeacanthus	(Gürke) Backeb.	Cactaceae	inat 1 + gbif 1; queued, added 2026-11-27	7281107
+468721	Brassia andina	(Rchb.f.) M.W.Chase	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	8311218
+24256	Brassia cochleata	Knowles & Westc.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5323879
+24305	Brassia pozoi	(Dodson & N.H.Williams) Senghas	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5321832
+3132079	Brickellia incana	A.Gray	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	5388418
+3302202	Brickellia suaveolens	(Fresen.) G.L.Nesom	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	11472668
+400655	Bromus arizonicus	(Shear) Stebbins	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2703732
+400733	Bromus biebersteinii	Roem. & Schult.	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2703752
+24793	Broughtonia lindenii	(Lindl.) Dressler	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5321290
+2684114	Brunfelsia jamaicensis	(Benth.) Griseb.	Solanaceae	inat 1 + gbif 1; queued, added 2026-11-27	3799926
+496264	Buchtienia nitida	(Vell.) Fraga & Meneguzzo	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	8602861
+2685311	Buddleja araucana	Phil.	Scrophulariaceae	inat 1 + gbif 1; queued, added 2026-11-27	4055660
+2685338	Buddleja bullata	Kunth	Scrophulariaceae	inat 1 + gbif 1; queued, added 2026-11-27	4055859
+2685534	Buddleja myriantha	Diels	Scrophulariaceae	inat 1 + gbif 1; queued, added 2026-11-27	7619554
+2685562	Buddleja perfoliata	Kunth	Scrophulariaceae	inat 1 + gbif 1; queued, added 2026-11-27	4055719
+2685613	Buddleja speciosissima	Taub.	Scrophulariaceae	inat 1 + gbif 1; queued, added 2026-11-27	4055611
+489279	Bulbophyllum ayuthayense	J.J.Verm., Schuit. & de Vogel	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9263158
+489283	Bulbophyllum bifurcatoflorens	(Fukuy.) J.J.Verm., Schuit. & de Vogel	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9509430
+25561	Bulbophyllum contortisepalum	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843930
+25573	Bulbophyllum cornutum	(Blume) Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2845118
+25724	Bulbophyllum dissitiflorum	Seidenf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843286
+25775	Bulbophyllum elassoglossum	Siegerist	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844212
+25789	Bulbophyllum elliotii	Rolfe	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	7950320
+25853	Bulbophyllum farreri	(W.W.Sm.) Seidenf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2846296
+25933	Bulbophyllum fritillariiflorum	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844567
+26227	Bulbophyllum josephi	(Kuntze) Summerh.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843165
+26267	Bulbophyllum klabatense	Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2842941
+26435	Bulbophyllum longiscapum	Rolfe	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2845103
+26461	Bulbophyllum lupulinum	Lindl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843288
+26516	Bulbophyllum mandibulare	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2842848
+488205	Bulbophyllum meson	J.J.Verm., Schuit. & de Vogel	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	9373725
+26708	Bulbophyllum nasutum	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2846980
+26758	Bulbophyllum nutans	(Thouars) Thouars	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844166
+26800	Bulbophyllum odoratum	(Blume) Lindl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2842864
+26852	Bulbophyllum ovalifolium	(Blume) Lindl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843300
+26935	Bulbophyllum penduliscapum	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2845231
+26939	Bulbophyllum peninsulare	Seidenf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844375
+27154	Bulbophyllum refractilingue	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844117
+27167	Bulbophyllum repens	Griff.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843365
+27176	Bulbophyllum reticulatum	Bateman ex Hook.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843345
+27290	Bulbophyllum saurocephalum	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2845771
+27367	Bulbophyllum shepherdii	(F.Muell.) Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2845593
+27411	Bulbophyllum spathulatum	(Rolfe ex E.W.Cooper) Seidenf.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2842923
+27522	Bulbophyllum tentaculiferum	Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2843090
+27665	Bulbophyllum unitubum	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2842962
+27763	Bulbophyllum woelfliae	Garay, Senghas & K.Lemcke	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2844693
+27779	Bulbophyllum xylophyllum	C.S.P.Parish & Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	8299646
+2686264	Bunium microcarpum	(Boiss.) Freyn & Bornm.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	6027291
+2686805	Bupleurum komarovianum	Lincz.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3638198
+2686877	Bupleurum longeradiatum	Turcz.	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3637942
+3037845	Burkartia lanigera	(Hook. & Arn.) Crisci	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3099188
+3055808	Cacosmia rugosa	Kunth	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3144906
+2690367	Cakile arctica	Pobed.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3048835
+28925	Caladium picturatum	K.Koch & C.D.Bouché	Araceae	inat 1 + gbif 1; queued, added 2026-11-27	2868346
+403042	Calamagrostis montanensis	(Scribn.) Scribn. ex Vasey	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	2704896
+29771	Calamus oblongus	Reinw. ex Blume	Arecaceae	inat 1 + gbif 1; queued, added 2026-11-27	5293589
+30118	Calanthe ceciliae	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2794975
+546869	Calanthe decora	M.W.Chase, Christenh. & Schuit.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	12223456
+546790	Calanthe lutea	(Ursch & Toill.-Gen. ex Bosser) M.W.Chase, Christenh. & Schuit.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	12183659
+382367	Callitris monticola	J.Garden	Cupressaceae	inat 1 + gbif 1; queued, added 2026-11-27	2684286
+301662	Calochortus coxii	M.R.Godfrey & Callahan	Liliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2750875
+301683	Calochortus fimbriatus	H.P.McDonald	Liliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2750859
+301720	Calochortus lyallii	Baker	Liliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2750807
+301752	Calochortus palmeri	S.Watson	Liliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2750762
+301768	Calochortus purpureus	(Kunth) Baker	Liliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2750771
+2693851	Caltha novae-zelandiae	Hook.f.	Ranunculaceae	inat 1 + gbif 1; queued, added 2026-11-27	6375464
+301842	Camassia howellii	S.Watson	Asparagaceae	inat 1 + gbif 1; queued, added 2026-11-27	2769076
+364111	Campanula bohemica	Hruby	Campanulaceae	inat 1 + gbif 1; queued, added 2026-11-27	5410654
+365205	Campanula macrostachya	Waldst. & Kit. ex Willd.	Campanulaceae	inat 1 + gbif 1; queued, added 2026-11-27	5410451
+462619	Campanulorchis thao	(Gagnep.) S.C.Chen & J.J.Wood	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	6315824
+33382	Campylocentrum schiedei	(Rchb.f.) Benth. ex Hemsl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2820897
+223790	Canistropsis seidelii	(L.B.Sm. & Reitz) Leme	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	2697736
+2698560	Capsicum lanceolatum	(Greenm.) C.V.Morton & Standl.	Solanaceae	inat 1 + gbif 1; queued, added 2026-11-27	8511867
+2699431	Cardamine angulata	Hook.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3045801
+2699582	Cardamine chelidonia	L.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	3045783
+2700266	Cardamine polemonioides	(Rouy) T.Durand & B.D.Jacks.	Brassicaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+225251	Carex camposii	Boiss. & Reut.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2724515
+225698	Carex coriacea	Hamlin	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2727825
+495839	Carex corynoidea	K.A.Ford	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	9469529
+226132	Carex divisa	Huds.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2723410
+226807	Carex fuscula	d'Urv.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2724635
+226839	Carex gaudichaudiana	Kunth	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2723019
+226981	Carex globularis	L.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2724517
+227156	Carex hachijoensis	Akiyama	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2724247
+227763	Carex kermadecensis	Petrie	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2729042
+228991	Carex neurocarpa	Maxim.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2722003
+231196	Carex straminea	Willd. ex Schkuhr	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2724367
+231571	Carex tincta	(Fernald) Fernald	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2722800
+231688	Carex trinervis	Degl.	Cyperaceae	inat 1 + gbif 1; queued, added 2026-11-27	2710421
+2701042	Carmichaelia curta	Petrie	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5348422
+3114546	Carpesium triste	Maxim.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3094832
+2705323	Castilleja scorzonerifolia	Kunth	Orobanchaceae	inat 1 + gbif 1; queued, added 2026-11-27	3735037
+2705366	Castilleja thompsonii	Pennell	Orobanchaceae	inat 1 + gbif 1; queued, added 2026-11-27	3170693
+35473	Catasetum gardneri	Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2804043
+35494	Catasetum incurvum	Klotzsch	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2803862
+35968	Cattleya × isabellae	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5951348
+36156	Cattleya × venosa	Rolfe	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2800952
+35802	Cattleya araguaiensis	Pabst	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2836137
+374632	Cattleya bicalhoi	Van den Berg	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811970
+374650	Cattleya endsfeldzii	(Pabst) Van den Berg	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2812199
+35978	Cattleya kerrii	Brieger & Bicalho	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2800823
+2706205	Cavendishia engleriana	Hoerold	Ericaceae	inat 1 + gbif 1; queued, added 2026-11-27	7328162
+2707062	Cecropia longipes	Pittier	Urticaceae	inat 1 + gbif 1; queued, added 2026-11-27	4013134
+2708521	Celtis vandervoetiana	C.K.Schneid.	Cannabaceae	inat 1 + gbif 1; queued, added 2026-11-27	4159948
+3199439	Centaurea × preissmannii	Hayek	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	4249671
+3047827	Centaurea amblensis	Graells	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3127914
+3047778	Centaurea deusta	Ten.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3129044
+3050116	Centaurea mariana	Nyman	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3127778
+3049127	Centaurea raphanina	Sm.	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	7914874
+2708667	Centaurium favargeri	Zeltner	Gentianaceae	inat 1 + gbif 1; queued, added 2026-11-27	5595078
+2708764	Centaurium scilloides	(L.f.) Samp.	Gentianaceae	inat 1 + gbif 1; queued, added 2026-11-27	8618547
+2709425	Cephalaria squamiflora	(Sieber) Greuter	Caprifoliaceae	inat 1 + gbif 1; queued, added 2026-11-27	7301090
+382800	Ceratozamia norstogii	D.W.Stev.	Zamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	2683642
+343827	Chamaecostus subsessilis	(Nees & Mart.) C.D.Specht & D.W.Stev.	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2757003
+2715099	Chamaecrista pilosa	(L.) Greene	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2950203
+37543	Chamaedorea fragrans	(Ruiz & Pav.) Mart.	Arecaceae	inat 1 + gbif 1; queued, added 2026-11-27	2734483
+2715908	Changium smyrnioides	H.Wolff	Apiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3639987
+2715970	Chasmatophyllum stanleyi	(L.Bolus) H.E.K.Hartmann	Aizoaceae	inat 1 + gbif 1; queued, added 2026-11-27	8690720
+3046516	Cheirolophus tagananensis	(Svent.) Holub	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3097067
+538589	Chengiodendron marginatum	(Champ. ex Benth.) C.B.Shang, X.R.Wang, Yi F.Duan & Yong F.Li	Oleaceae	inat 1 + gbif 1; queued, added 2026-11-27	12256307
+2717624	Chenopodium pallidicaule	Aellen	Amaranthaceae	inat 1 + gbif 1; queued, added 2026-11-27	6447752
+2717769	Chenopodium sanctae-clarae	Johow	Amaranthaceae	inat 1 + gbif 1; queued, added 2026-11-27	8388712
+404643	Chionochloa pallens	Zotov	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	4148816
+2719699	Chorizema diversifolium	A.DC.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2968192
+2720185	Chrysosplenium lanuginosum	Hook.f. & Thomson	Saxifragaceae	inat 1 + gbif 1; queued, added 2026-11-27	7339160
+405377	Chusquea uliginosa	Phil.	Poaceae	inat 1 + gbif 1; queued, added 2026-11-27	4128055
+2720527	Cicendia filiformis	(L.) Delarbre	Gentianaceae	inat 1 + gbif 1; queued, added 2026-11-27	3841406
+2720554	Cicer canariense	A.Santos & G.P.Lewis	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2947371
+2720605	Cicer pinnatifidum	Jaub. & Spach	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	2947331
+3302441	Cipuropsis dubia	(L.B.Sm.) Kessous & A.F.Costa	Bromeliaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+3041728	Cirsium latifolium	Lowe	Asteraceae	inat 1 + gbif 1; queued, added 2026-11-27	3112721
+2723483	Cistus × laxus	Aiton	Cistaceae	inat 1 + gbif 1; queued, added 2026-11-27	8411886
+382947	Citronella paniculata	(Mart.) R.A.Howard	Cardiopteridaceae	inat 1 + gbif 1; queued, added 2026-11-27	3596979
+2724904	Clavija costaricana	Pittier	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	3585540
+2724985	Clavija weberbaueri	Mez	Primulaceae	inat 1 + gbif 1; queued, added 2026-11-27	3585486
+41760	Cleisocentron merrillianum	(Ames) Christenson	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2812992
+41852	Cleisostoma fuerstenbergianum	Kraenzl.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2785738
+2725535	Clematis acerifolia	Maxim.	Ranunculaceae	inat 1 + gbif 1; queued, added 2026-11-27	7277587
+2727278	Cleome droserifolia	(Forssk.) Delile	Cleomaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+3221067	Cleome hispidula	(DC.) Govaerts	Cleomaceae	inat 1 + gbif 1; queued, added 2026-11-27	-
+2727796	Cleyera pachyphylla	Chun ex Hung T.Chang	Pentaphylacaceae	inat 1 + gbif 1; queued, added 2026-11-27	7741415
+302661	Clinanthus variegatus	(Ruiz & Pav.) Meerow	Amaryllidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2854988
+529106	Clinopodium brevifolium	(Wahlenb.) Bräuchler & Hjertson	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	10836902
+43742	Clinostigma samoense	H.Wendl.	Arecaceae	inat 1 + gbif 1; queued, added 2026-11-27	2735375
+2728320	Clusia clusioides	(Griseb.) D'Arcy	Clusiaceae	inat 1 + gbif 1; queued, added 2026-11-27	5421057
+2728389	Clusia flavida	(Benth.) Pipoly	Clusiaceae	inat 1 + gbif 1; queued, added 2026-11-27	5556500
+3273295	Cochemiea angelensis	(R.T.Craig) P.B.Breslin & Majure	Cactaceae	inat 1 + gbif 1; queued, added 2026-11-27	11267528
+367800	Codonopsis deltoidea	Chipp	Campanulaceae	inat 1 + gbif 1; queued, added 2026-11-27	5412894
+495728	Codonorhiza corymbosa	(L.) Goldblatt & J.C.Manning	Iridaceae	inat 1 + gbif 1; queued, added 2026-11-27	9595162
+44852	Coeliopsis hyacinthosma	Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	5307890
+45063	Coelogyne gibbosa	(Blume) Rchb.f.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2838656
+546617	Coelogyne hampelii	(Sulistyo, Gravend., R.Boos & Cootes) M.W.Chase & Schuit.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	12214818
+45078	Coelogyne hirtella	J.J.Sm.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811450
+45165	Coelogyne multiflora	Schltr.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811692
+546676	Coelogyne pangasinanensis	(Ames) M.W.Chase & Schuit.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	12221880
+533514	Coelogyne roseans	(Schltr.) R.Rice	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	11094086
+45265	Coelogyne sanderae	Kraenzl. ex O'Brien	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2811770
+372368	Coffea charrieriana	Stoff. & F.Anthony	Rubiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3848906
+45987	Coleus lanuginosus	Hochst. ex Benth.	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	8424843
+2731178	Collomia debilis	(S.Watson) Greene	Polemoniaceae	inat 1 + gbif 1; queued, added 2026-11-27	2927564
+2731736	Columnea crassicaulis	(Wiehler) L.P.Kvist & L.E.Skog	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	5590662
+2731753	Columnea domingensis	(Urb.) B.D.Morley	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	5590447
+2731848	Columnea lepidocaula	Hanst.	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	5589737
+2731870	Columnea mastersonii	(Wiehler) L.E.Skog & L.P.Kvist	Gesneriaceae	inat 1 + gbif 1; queued, added 2026-11-27	5589546
+46390	Comanthosphace stellipila	(Miq.) S.Moore ex Briq.	Lamiaceae	inat 1 + gbif 1; queued, added 2026-11-27	3882095
+2732383	Combretum alfredi	Hance	Combretaceae	inat 1 + gbif 1; queued, added 2026-11-27	3698669
+234226	Commelina suffruticosa	Blume	Commelinaceae	inat 1 + gbif 1; queued, added 2026-11-27	2764382
+483854	Convolvulus chilensis	Pers.	Convolvulaceae	inat 1 + gbif 1; queued, added 2026-11-27	3680956
+46851	Coprosma montana	Hillebr.	Rubiaceae	inat 1 + gbif 1; queued, added 2026-11-27	2911531
+2736290	Corchoropsis crenata	Siebold & Zucc.	Malvaceae	inat 1 + gbif 1; queued, added 2026-11-27	4261174
+2737375	Cordyla madagascariensis	R.Vig.	Fabaceae	inat 1 + gbif 1; queued, added 2026-11-27	5358327
+47604	Coryanthes albertinae	H.Karst.	Orchidaceae	inat 1 + gbif 1; queued, added 2026-11-27	2795705
+2738648	Corydalis decumbens	(Thunb.) Pers.	Papaveraceae	inat 1 + gbif 1; queued, added 2026-11-27	7314730
+234570	Costus asplundii	(Maas) Maas	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756973
+234609	Costus dinklagei	K.Schum.	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756882
+234633	Costus gabonensis	Koechlin	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756797
+234636	Costus giganteus	Welw. ex Ridl.	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756837
+234678	Costus lima	K.Schum.	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756775
+234729	Costus plicatus	Maas	Costaceae	inat 1 + gbif 1; queued, added 2026-11-27	2756914
+2941156	Cotoneaster × crispii	Exell	Rosaceae	inat 1 + gbif 1; queued, added 2026-11-27	3026036

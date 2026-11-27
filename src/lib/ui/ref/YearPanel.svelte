@@ -17,16 +17,19 @@
   import { site as siteStore } from '$lib/ui/site.svelte';
   import { siteClimate, type SiteMonth } from '$climate/site-climate';
   import { outdoorsLines, CLOSING } from '$climate/lens-outdoors';
-  import { LENS_VIEWS, openingView, viewOfKind, greenhouseLines, windowsillLines, lightsLines, lampTable, lampCell, molADay, GLASS, LAMP_HOURS, isLensView, type LensView } from '$climate/lens-spaces';
+  import { LENS_VIEWS, openingView, viewOfPath, greenhouseLines, windowsillLines, lightsLines, lampTable, lampCell, molADay, GLASS, LAMP_HOURS, isLensView, speciesLines, otherShift, type LensView } from '$climate/lens-spaces';
+  import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import type { Accession, Location } from '$lib/db/types';
   type M = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number; vpdKpa?: number; windMs?: number };
   type YearRead = { grow: string; fog: boolean; frozen: boolean; growMonths: number[] } | null;
-  let { months, p10, p90, lat, shift = 0, floorC = null, units, year = null, dossierKey, name, src, plants = [] }: {
+  let { months, p10, p90, lat, shift = 0, floorC = null, units, year = null, dossierKey, name, src, plants = [], slug = '' }: {
     months: M[]; p10: M[]; p90: M[]; lat: number; shift?: number; floorC?: number | null; units: Units; year?: YearRead; dossierKey: string; name: string; src: string;
     /** The reader's plants of this species (round 127): the view opens on the space of the one written last. */
     plants?: Accession[];
+    /** The page's address name, for the full comparison's link (round 128). */
+    slug?: string;
   } = $props();
 
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -65,7 +68,7 @@
     void siteClimate(c.lat, c.lon).then((r) => { if (Array.isArray(r)) siteRead.set(siteKey(c), r); if (!gone) siteData = r; });
     return () => { gone = true; };
   });
-  $effect(() => { if (lens !== 'none') mine = true; });
+  $effect(() => { if (lens !== 'none' && lens !== 'species') mine = true; });
 
   /**
    * The views that read the reader's spaces (round 127; SPECIES 20): Greenhouse, Windowsill, Under lights. A space's kind
@@ -73,17 +76,18 @@
    * opens: the space of the reader's plant of this species written last; else the view used last on this device
    * (cultifolio.lensView); else Nothing. Nothing about a space leaves the device.
    */
-  const kindAt = (id: string): string | null => { for (const l of collection.locationPath(id).reverse()) if (l.type) return l.type; return null; };
-  type SpaceIn = { l: Location; kind: string | null; c: ReturnType<typeof collection.conditions> };
-  const spaces = $derived<SpaceIn[]>(collection.ready ? collection.locations.map((l) => ({ l, kind: kindAt(l.id), c: collection.conditions(l.id) })) : []);
-  const viewOf = (x: SpaceIn) => viewOfKind(x.kind, x.c.lightHours != null && x.c.ppfd != null ? x.c.lightHours : null);
+  const kindsAt = (id: string): Array<string | null> => collection.locationPath(id).reverse().map((l) => l.type ?? null);
+  type SpaceIn = { l: Location; kinds: Array<string | null>; c: ReturnType<typeof collection.conditions> };
+  const spaces = $derived<SpaceIn[]>(collection.ready ? collection.locations.map((l) => ({ l, kinds: kindsAt(l.id), c: collection.conditions(l.id) })) : []);
+  const lampOf = (x: SpaceIn) => (x.c.lightHours != null && x.c.ppfd != null ? x.c.lightHours : null);
+  const viewOf = (x: SpaceIn) => viewOfPath(x.kinds, lampOf(x));
   const growing = $derived(collection.ready ? plants.filter((a) => a.status === 'growing') : []);
   const plantSpace = (a: Accession) => (a.locationId ? spaces.find((x) => x.l.id === collection.placeOf(a.locationId!)) ?? null : null);
   let opened = false;
   $effect(() => {
     if (opened || !collection.ready) return;
     opened = true;
-    const o = openingView(growing.map((a) => { const sp = plantSpace(a); return { space: sp ? { kind: sp.kind, lampHours: sp.c.lightHours != null && sp.c.ppfd != null ? sp.c.lightHours : null } : null, latest: collection.events(a.id)[0]?.d ?? a.acquired ?? '' }; }), readSetting('cultifolio.lensView', 'device'));
+    const o = openingView(growing.map((a) => { const sp = plantSpace(a); return { space: sp ? { kind: viewOf(sp) === 'lights' ? 'shelf' : (sp.kinds.find((k) => k === 'garden' || k === 'outdoor' || k === 'greenhouse' || k === 'coldframe' || k === 'windowsill') ?? sp.kinds.find((k) => k) ?? null), lampHours: lampOf(sp) } : null, latest: collection.events(a.id)[0]?.d ?? a.acquired ?? '' }; }), readSetting('cultifolio.lensView', 'device'));
     if (o.view === 'outdoors' && !siteStore.current && o.from === 'last') return;
     lens = o.view;
     if (o.from === 'plant') { const sp = plantSpace(growing[o.index]); if (sp) spaceId = sp.l.id; }
@@ -103,6 +107,42 @@
   /** The space's held temperature, drawn solid across Temperature; its light as mol a day across Light. */
   const heldT = $derived(lens === 'greenhouse' && sp?.floorC != null ? T(sp.floorC) : null);
   const spaceMol = $derived((lens === 'windowsill' || lens === 'lights') && sp?.ppfd != null && sp.lightHours != null ? molADay(sp.ppfd, sp.lightHours) : null);
+  /**
+   * Another species (round 128; SPECIES 20): a search with the header search's own answers (the catalogue's /api/search,
+   * the words typed and nothing else), the species picked read from its page's JSON as any visitor's browser reads it.
+   * Its medians are drawn dashed, without bands, each species in its own season: where the typical cells lie in different
+   * hemispheres its months are moved six, and the card says so.
+   */
+  type Other = { name: string; slug: string; months: M[]; floorC: number | null; lat: number };
+  let spQ = $state('');
+  let spHits = $state<Found[]>([]);
+  let spOther = $state<Other | 'loading' | 'none' | 'unreached' | null>(null);
+  $effect(() => {
+    const q = spQ.trim();
+    if (lens !== 'species' || q.length < 2) { spHits = []; return; }
+    let gone = false;
+    const t = setTimeout(() => { void searchCatalogue(q, 8).then((r) => { if (!gone) spHits = Array.isArray(r) ? r.filter((h) => h.key !== dossierKey).slice(0, 8) : []; }); }, 250);
+    return () => { gone = true; clearTimeout(t); };
+  });
+  async function pickOther(h: Found) {
+    spHits = []; spQ = h.name; spOther = 'loading';
+    try {
+      const r = await fetch(`/api/dossier/${h.key}`);
+      if (!r.ok) { spOther = 'unreached'; return; }
+      const j = (await r.json()) as { climate?: { status?: string; months?: M[]; extremes?: { minP01?: number }; at?: { lat?: number } } };
+      const c = j?.climate;
+      spOther = c?.status === 'ok' && Array.isArray(c.months) && c.months.length === 12 ? { name: h.name, slug: h.slug, months: c.months, floorC: c.extremes?.minP01 ?? null, lat: c.at?.lat ?? 0 } : 'none';
+    } catch { spOther = 'unreached'; }
+  }
+  const oth = $derived(lens === 'species' && spOther && typeof spOther === 'object' ? spOther : null);
+  const oS = $derived(oth ? otherShift(lat, oth.lat) : 0);
+  /** The other's month drawn in column k: the same season as this habitat's month there. */
+  const ocol = (f: (m: M) => number | undefined) => (oth ? Array.from({ length: 12 }, (_, k) => f(oth.months[(hm(k) + oS) % 12])) : null);
+  const oDay = $derived(ocol((m) => T(m.tmax))), oNight = $derived(ocol((m) => T(m.tmin)));
+  const oRain = $derived(ocol((m) => m.precipMm)), oDli = $derived(oth && oth.months.every((m) => m.dli != null) ? ocol((m) => m.dli) : null);
+  const oDays = $derived(oth ? (() => { const d = dayLengths(oth.lat); return Array.from({ length: 12 }, (_, k) => d[(hm(k) + oS) % 12]); })() : null);
+  const oRow = (k: string) => (k === 'day' ? oDays : k === 'rh' ? ocol((m) => m.rh) : k === 'vpd' ? ocol((m) => m.vpdKpa) : k === 'wind' ? ocol((m) => m.windMs) : null);
+  const spLines = $derived(oth ? speciesLines({ name, other: oth.name, habitat: months, theirs: oth.months, floorC, theirFloorC: oth.floorC, temp: fmtT, mm: (n) => rain(n, units) }) : []);
   const KIND_WORD: Record<string, string> = { greenhouse: 'a greenhouse or cold frame', windowsill: 'a windowsill (or a room, shelf, bench or tray without a lamp)', lights: 'a room, shelf, bench or tray with a lamp' };
   const sm = $derived(Array.isArray(siteData) ? siteData : null);
   const sDay = $derived(sm ? sm.map((m) => T(m.tmax)) : null), sNight = $derived(sm ? sm.map((m) => T(m.tmin)) : null);
@@ -136,15 +176,15 @@
   const tDay = $derived(col((m) => T(m.tmax), months)), tNight = $derived(col((m) => T(m.tmin), months));
   const tDay10 = $derived(col((m) => T(m.tmax), p10)), tDay90 = $derived(col((m) => T(m.tmax), p90));
   const tN10 = $derived(col((m) => T(m.tmin), p10)), tN90 = $derived(col((m) => T(m.tmin), p90));
-  const tSc = $derived(scale([...tDay90, ...tN10, ...(floorC != null ? [T(floorC)] : []), ...(sDay ?? []), ...(sNight ?? []), ...(heldT != null ? [heldT] : [])] as number[], units === 'us' ? 10 : 5));
+  const tSc = $derived(scale([...tDay90, ...tN10, ...(floorC != null ? [T(floorC)] : []), ...(sDay ?? []), ...(sNight ?? []), ...(heldT != null ? [heldT] : []), ...((oDay ?? []) as number[]), ...((oNight ?? []) as number[])] as number[], units === 'us' ? 10 : 5));
   // Rain: bars of the median, a whisker for the spread; the axis from zero.
   const rMm = $derived(col((m) => m.precipMm, months)), r10 = $derived(col((m) => m.precipMm, p10)), r90 = $derived(col((m) => m.precipMm, p90));
-  const rTop = $derived(Math.max(...(r90 as number[]), ...(sRain ?? [])));
-  const rSc = $derived(scale([...(r90 as number[]), ...(sRain ?? [])], rTop > 200 ? 100 : rTop > 60 ? 20 : 10, true));
+  const rTop = $derived(Math.max(...(r90 as number[]), ...(sRain ?? []), ...((oRain ?? []) as number[])));
+  const rSc = $derived(scale([...(r90 as number[]), ...(sRain ?? []), ...((oRain ?? []) as number[])], rTop > 200 ? 100 : rTop > 60 ? 20 : 10, true));
   // Light: DLI with its band.
   const hasDli = $derived(months.every((m) => m.dli != null));
   const lDli = $derived(col((m) => m.dli, months)), l10 = $derived(col((m) => m.dli, p10)), l90 = $derived(col((m) => m.dli, p90));
-  const lSc = $derived(hasDli ? scale([...(l10 as number[]), ...(l90 as number[]), ...(spaceMol != null ? [spaceMol] : [])], 10, true) : null);
+  const lSc = $derived(hasDli ? scale([...(l10 as number[]), ...(l90 as number[]), ...(spaceMol != null ? [spaceMol] : []), ...((oDli ?? []) as number[])], 10, true) : null);
   // Thin rows on fixed spans.
   const rows = $derived([
     { k: 'day', label: 'Day length', unit: 'h', v: Array.from({ length: 12 }, (_, k) => days[hm(k)]), lo: null as Array<number | undefined> | null, hi: null as Array<number | undefined> | null, span: SPANS.day, d: 1 },
@@ -183,6 +223,8 @@
 </script>
 
 <section class="yp" aria-labelledby="yp-h" id="year-panel">
+  <!-- Where "At home, aim for" was (round 129; SPECIES 20): an address kept, so a link to #at-home lands on the panel. -->
+  <span id="at-home" class="athome-anchor"></span>
   <div class="yphead">
     <div>
       <h3 id="yp-h">The year at the habitat</h3>
@@ -218,6 +260,24 @@
         {#each lensLines as l (l.k)}<p id="lens-{l.k}">{l.text}</p>{/each}
         <p class="small muted">{CLOSING} Your site's figures: CHELSA V2.1, 1981–2010, the 0.05° cell holding your site{siteStore.current.name ? ` (${siteStore.current.name})` : ''}, drawn dashed; only the one-degree square around it was asked of this site.</p>
       {/if}
+    </div>
+  {:else if lens === 'species'}
+    <div class="lenscard" id="lens-card">
+      <label class="small lensspace" for="lens-sp-q">Another species</label>
+      <input id="lens-sp-q" type="search" autocomplete="off" placeholder="A species' name" bind:value={spQ} oninput={() => { if (spOther && typeof spOther === 'object' && spQ !== spOther.name) spOther = null; }} aria-controls="lens-sp-hits" />
+      {#if spHits.length}
+        <ul class="lenshits" id="lens-sp-hits">{#each spHits as h (h.key)}<li><button type="button" class="linkish" onclick={() => pickOther(h)}>{h.name}</button>{#if h.common}<span class="small muted"> · {h.common}</span>{/if}</li>{/each}</ul>
+      {/if}
+      <div role="status">
+        {#if spOther === 'loading'}<p class="muted">Reading its page…</p>
+        {:else if spOther === 'none'}<p>Its page holds no habitat climate, so nothing is compared.</p>
+        {:else if spOther === 'unreached'}<p>Its page was not reached just now, so nothing is compared.</p>
+        {:else if oth}
+          {#if oS}<p class="small muted" id="lens-sp-shift">{oth.name} grows wild in the other hemisphere: its months are moved six, so each is drawn in its own season.</p>{/if}
+          {#each spLines as l (l.k)}<p id="lens-sp-{l.k}">{l.text}</p>{/each}
+          <p class="small muted">{CLOSING} {oth.name}'s medians are drawn dashed, without their bands. <a href="/compare?s={slug},{oth.slug}" id="lens-sp-full">The full comparison</a></p>
+        {:else}<p class="small muted">Type a name to set its habitat's year beside this one.</p>{/if}
+      </div>
     </div>
   {:else if lens !== 'none'}
     <div class="lenscard" id="lens-card" role="status">
@@ -277,6 +337,7 @@
         <path d={path(tNight, tSc, 130)} class="linec dashed" />
         {#if floorC != null}<line x1={L} x2={W - R} y1={y(T(floorC), tSc, 130)} y2={y(T(floorC), tSc, 130)} class="floor" />{/if}
         {#if sDay && sNight}<path d={path(sDay, tSc, 130)} class="sitew" /><path d={path(sNight, tSc, 130)} class="sitec" />{/if}
+        {#if oDay && oNight}<path d={path(oDay, tSc, 130)} class="sitew" /><path d={path(oNight, tSc, 130)} class="sitec" />{/if}
         {#if heldT != null}<line x1={L} x2={W - R} y1={y(heldT, tSc, 130)} y2={y(heldT, tSc, 130)} class="heldline" />{/if}
         {#if coldBelow}{#each coldBelow as b, k (k)}{#if b}<rect x={x(k) - cw * 0.4} y="124" width={cw * 0.8} height="5" class="belowfloor" />{/if}{/each}{/if}
       </svg>
@@ -285,15 +346,17 @@
         <rect x={x(now) - cw / 2} y="0" width={cw} height="100" class="nowcol" />
         {#each rSc.ticks as t (t)}<line x1={L} x2={W - R} y1={y(t, rSc, 100)} y2={y(t, rSc, 100)} class="grid" /><text x={L - 6} y={y(t, rSc, 100) + 4} text-anchor="end">{units === 'us' ? (t / 25.4).toFixed(1) : t}</text>{/each}
         {#each rMm as v, k (k)}<rect x={x(k) - cw * 0.3} width={cw * 0.6} y={y(v ?? 0, rSc, 100)} height={Math.max(0, y(0, rSc, 100) - y(v ?? 0, rSc, 100))} class="barc" /><line x1={x(k)} x2={x(k)} y1={y(r90[k] ?? 0, rSc, 100)} y2={y(r10[k] ?? 0, rSc, 100)} class="whisk" />{/each}
+        {#if oRain}{#each oRain as v, k (k)}{#if v != null}<line x1={x(k) - cw * 0.38} x2={x(k) + cw * 0.38} y1={y(v, rSc, 100)} y2={y(v, rSc, 100)} class="siterain" />{/if}{/each}{/if}
         {#if sRain}{#each sRain as v, k (k)}<line x1={x(k) - cw * 0.38} x2={x(k) + cw * 0.38} y1={y(v, rSc, 100)} y2={y(v, rSc, 100)} class="siterain" />{/each}{/if}
       </svg>
       {#if lSc}
-        <p class="chartname">Light, DLI under open sky <span class="nowfig">now {fmt(lDli[now], 0)} ({fmt(l10[now], 0)}–{fmt(l90[now], 0)})</span></p>
+        <p class="chartname">Light, DLI under open sky <span class="small muted">the year's mean {fmt((lDli as number[]).reduce((t: number, v: number) => t + v, 0) / 12, 1)} mol a day</span> <span class="nowfig">now {fmt(lDli[now], 0)} ({fmt(l10[now], 0)}–{fmt(l90[now], 0)})</span></p>
         <svg viewBox="0 0 {W} 90">
           <rect x={x(now) - cw / 2} y="0" width={cw} height="90" class="nowcol" />
           {#each lSc.ticks as t (t)}<line x1={L} x2={W - R} y1={y(t, lSc, 90)} y2={y(t, lSc, 90)} class="grid" /><text x={L - 6} y={y(t, lSc, 90) + 4} text-anchor="end">{t}</text>{/each}
           <path d={band(l10, l90, lSc, 90)} class="bandw" />
           <path d={path(lDli, lSc, 90)} class="linew" />
+          {#if oDli}<path d={path(oDli, lSc, 90)} class="sitew" />{/if}
           {#if spaceMol != null}<line x1={L} x2={W - R} y1={y(spaceMol, lSc, 90)} y2={y(spaceMol, lSc, 90)} class="heldline" />{/if}
         </svg>
       {/if}
@@ -303,6 +366,7 @@
           <rect x={x(now) - cw / 2} y="0" width={cw} height="38" class="nowcol" />
           {#if r.lo && r.hi}<path d={band(r.lo.map((v) => clamp(v!, r.span)), r.hi.map((v) => clamp(v!, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="bandc" />{/if}
           <path d={path(r.v.map((v) => clamp(v!, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="linec" />
+          {#if oRow(r.k)}<path d={path(oRow(r.k)!.map((v) => clamp(v ?? r.span[0], r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="sitec" />{/if}
           {#if r.k === 'day' && sDays}<path d={path(sDays.map((v) => clamp(v, r.span)), { lo: r.span[0], hi: r.span[1] }, 38)} class="sitec" />{/if}
         </svg>
       {/each}
@@ -373,7 +437,11 @@
   .lenslab { align-self: center; margin-right: 2px; }
   .lenscard { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r); }
   .lenscard p { margin: 0 0 6px; }
+  .athome-anchor { display: block; scroll-margin-top: 64px; }
   .heldline { stroke: var(--ink); stroke-width: 1.8; }
   .lensspace { display: block; margin: 0 0 6px; }
+  #lens-sp-q { width: 100%; max-width: 360px; min-height: var(--tap); font: inherit; }
+  .lenshits { list-style: none; margin: 6px 0; padding: 0; }
+  .lenshits li { min-height: var(--tap); display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
   .lamptable td.mine { font-weight: 700; text-decoration: underline; }
 </style>

@@ -23,13 +23,20 @@ export const SEEDED = 'demoSeeded';
 type Spot = 'b1' | 'b2' | 'win';
 /** [name, reference key or null, cultivar, place, acquired days ago, price, last watered days ago (null: none recorded), own rhythm in days] */
 type P = [string, number | null, string | null, Spot, number, string | null, number | null, number?];
+/**
+ * A plant's number takes the year of its acquired day, N days before today, so a plant moves into the next year's
+ * numbers on the day N days after 1 January, and every number after it in that year moves by one. The tests name the
+ * sample's plants by number, so the days are set where no plant crosses a year between 27 November and 26 December
+ * (round 131: Lithops at 330 days crossed on 27 November, Ariocarpus at 700 would have on 2 December). The lasting fix is
+ * tests that look a plant up by name; until then, a crossing moves the numbers the tests read.
+ */
 export const SAMPLE: P[] = [
   ['Copiapoa cinerea', 5384013, null, 'b1', 620, '24', 4],
   ['Copiapoa humilis', 5384999, null, 'b1', 300, '9.50', 4],
-  ['Ariocarpus retusus', null, null, 'b1', 700, '15', 4],
+  ['Ariocarpus retusus', null, null, 'b1', 725, '15', 4], // 725 and Lithops' 360, not 700 and 330 (round 131): see SAMPLE's note
   ['Astrophytum asterias', null, null, 'b1', 150, '6', 4],
   ['Welwitschia mirabilis', 5411106, null, 'b2', 380, '30', 9, 10],
-  ['Lithops lesliei', null, null, 'b2', 330, '3.50', 16],
+  ['Lithops lesliei', null, null, 'b2', 360, '3.50', 16],
   ['Conophytum minutum', null, null, 'b2', 210, 'a swap', 16, 28],
   ['Haworthia truncata', null, 'Lime Green', 'b2', 180, '14', 16],
   ['Echeveria agavoides', null, null, 'win', 120, '3', 3],

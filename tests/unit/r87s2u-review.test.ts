@@ -131,35 +131,4 @@ describe('7. Species+ waits for the CITES table', () => {
   });
 });
 
-describe('5. At home\'s hours', () => {
-  const FIXTURE = readFileSync('fixtures/dossiers/s/v3/k2735933.json', 'utf8');
-  const corpus = (async (u: string | URL) => {
-    const p = new URL(String(u), 'http://x').pathname;
-    const f = p === '/s/v3/index.json' ? 'fixtures/dossiers/index.json' : p.startsWith('/s/v3/') ? `fixtures/dossiers${p}` : '';
-    if (p === '/s/v3/k2735933.json') return new Response(FIXTURE, { headers: { 'content-type': 'application/json' } });
-    try { return new Response(readFileSync(f), { headers: { 'content-type': 'application/json' } }); } catch { return new Response('{}', { status: 404 }); }
-  }) as typeof fetch;
-  const nothing = (r: Route) => r.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
-  it('the buttons\' edge is the field edge, and a change of hours is said politely', async () => {
-    _forgetIndex();
-    const url = new URL('http://x/species/copiapoa-cinerea');
-    const data = JSON.parse(JSON.stringify(await speciesLoad({ params: { slug: 'copiapoa-cinerea' }, platform: undefined, fetch: corpus, setHeaders: () => {}, cookies: { get: () => undefined }, request: new Request(url), url, getClientAddress: () => '192.0.2.1', locals: {}, isDataRequest: true } as never)));
-    const m = await mount('src/routes/species/[slug]/+page.svelte', { data }, { answer: nothing });
-    try {
-      const sec = m.page.locator('section#at-home');
-      await sec.waitFor();
-      // The theme's two tokens (the mount carries the component alone, not the layout's sheet).
-      await m.page.addStyleTag({ content: ':root { --edge: #949086; --rule: #d9d6cf; }' });
-      const [edge, border] = await sec.locator('.hours button').first().evaluate((b) => [getComputedStyle(document.documentElement).getPropertyValue('--edge').trim(), getComputedStyle(b).borderTopColor]);
-      const rgb = (hex: string) => `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`;
-      expect(border).toBe(rgb(edge)); // 9311e8b: --rule, 1.45:1
-      const live = sec.locator('[aria-live="polite"]');
-      await expect.poll(() => live.count()).toBe(1); // 9311e8b: none
-      expect((await live.textContent())?.trim()).toBe('');
-      await sec.locator('.hours button', { hasText: '16 h' }).click();
-      await expect.poll(async () => (await live.textContent())?.trim()).toMatch(/^Grow light, 16 h a day: [\d,]+ µmol\/m²\/s$/);
-    } finally {
-      await m.close();
-    }
-  }, 240_000);
-});
+// 5. At home's hours: the section went into the year panel's lens in round 129 (Under lights' table), so its test went with it.

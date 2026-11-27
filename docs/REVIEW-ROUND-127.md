@@ -61,4 +61,9 @@ Windowsill and Under lights, and which view the panel opens on. Built in the clo
 
 ## Gate and deploy
 
-(Written at the gate.)
+- svelte-check 0 errors in 1,920 files. The app gate, Chromium at two workers, WebKit and Firefox at one, two runs: the
+  first found r127b 3 leaving the space's page before WebKit had written the save (once; the test now waits for the form
+  to close, 12 of 12 in WebKit and its phone); the second: 6,597 unit tests, 3,066 browser tests, every test first time
+  in every engine.
+- Committed as 9176178 and pushed on 26 November 2026; `node scripts/deploy.mjs` deployed version 37a3aa6d on its first
+  try, live check 24 of 24.

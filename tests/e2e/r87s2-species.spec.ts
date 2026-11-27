@@ -18,7 +18,6 @@ async function noThirdParty(page: Page) { await page.route(/img\.cultifolio\.com
 const SECTIONS: Array<[string, RegExp[]]> = [
   ['section#hardiness', [/USDA zone of the habitat\s*11a/, /39 complete years, 1985–2024/, /H2/, /lowest night in 40 years/, /Lows from fixture/]],
   ['section#climate-class', [/BWk/, /Peel, Finlayson and McMahon \(2007\)/, /Walter–Lieth/, /The months read: fixture: synthetic Atacama-coast normals/]],
-  ['section#at-home', [/Winter nights/, /CHELSA/, /NASA POWER, daily lows over 40 years/, /Grow light, 14 h a day/]],
   ['section#flowering', [/iNaturalist, read 2026-11-09/, /52 observations/]],
   ['#wfo-line', [/WFO Plant List \(2026-06\)/, /accepted/, /World Flora Online, CC0; read 2026-11-09/]],
   // Round ninety (r90g): the fixture's BHL page was found in the title IPNI links the publication to, and the line says so.
@@ -40,18 +39,15 @@ test('r87s2 1: every stage-2 section on the species page, each with its source a
   // Where the page puts them since round 106 (the grower's order): what it is, At home with the cultivation cards, the
   // hardiness, the climate with its class folded under the chart; flowering in "Where it grows wild"; WFO, the publication, Elsewhere and the chromosomes under Names and registers; the risk
   // and CITES under the record's facts.
-  const order = await page.evaluate(() => ['#s-summary', 'section#at-home', '#s-cultivation', 'section#hardiness', '#s-climate', 'section#climate-class', '#s-habitat', 'section#flowering', '#s-registers', '#wfo-line', '#first-published', '#elsewhere', '#chromosome-line', '#s-facts', '#risk-line', '#cites-line'].map((s) => document.querySelector(s)).map((e, i, a) => (i === 0 ? true : !!(a[i - 1]!.compareDocumentPosition(e!) & Node.DOCUMENT_POSITION_FOLLOWING))));
+  const order = await page.evaluate(() => ['#s-summary', '#s-cultivation', 'section#hardiness', '#s-climate', 'section#climate-class', '#s-habitat', 'section#flowering', '#s-registers', '#wfo-line', '#first-published', '#elsewhere', '#chromosome-line', '#s-facts', '#risk-line', '#cites-line'].map((s) => document.querySelector(s)).map((e, i, a) => (i === 0 ? true : !!(a[i - 1]!.compareDocumentPosition(e!) & Node.DOCUMENT_POSITION_FOLLOWING))));
   expect(order.every(Boolean), JSON.stringify(order)).toBe(true);
   // The links IUCN's and Species+'s pages by the ids the page's Wikidata item gives.
   await expect(page.locator('#risk-line a[href="https://www.iucnredlist.org/details/152240/0"]')).toHaveCount(1);
   await expect(page.locator('#cites-line a[href="https://speciesplus.net/#/taxon_concepts/4520"]')).toHaveCount(1);
   await expect(page.locator('#first-published a[href="https://www.biodiversitylibrary.org/page/100001"]')).toHaveCount(1);
-  // At home's hours change only the grow light's row.
-  const light = page.locator('section#at-home tr', { hasText: 'Grow light' });
-  const before = await light.innerText();
-  await page.locator('section#at-home .hours button', { hasText: '12 h' }).click();
-  await expect(light).toContainText('Grow light, 12 h a day');
-  expect(await light.innerText()).not.toBe(before);
+  // Round 129: "At home, aim for" is gone into the year panel's lens; its old address lands on the panel.
+  await expect(page.locator('section#at-home')).toHaveCount(0);
+  await expect(page.locator('#year-panel #at-home')).toHaveCount(1);
 });
 
 test('r87s2 2: the section row lists the new sections, and each tab takes the reader to its section', async ({ page }) => {
@@ -61,9 +57,9 @@ test('r87s2 2: the section row lists the new sections, and each tab takes the re
   // Round 106 (the first hand-off's round 4): the grower's order, and the section names a grower uses.
   await expect(tabs).toHaveText(['What it is', 'At home', 'How cold', 'Climate', 'Where it grows', 'Photographs', 'Related', 'Names']);
   await tabs.filter({ hasText: 'At home' }).click();
-  await expect(page).toHaveURL(/#at-home$/);
+  await expect(page).toHaveURL(/#s-cultivation$/); // round 129: the cultivation cards, "At home, aim for" being in the lens
   await expect(page.locator('nav.tabs a.on')).toHaveText('At home');
-  await expect(page.locator('section#at-home h2')).toBeInViewport();
+  await expect(page.locator('#s-cultivation')).toBeInViewport();
 });
 
 test('r87s2 3: a page whose record holds none of the new fields says "not asked" or "not worked out", never none @phone', async ({ page }) => {
@@ -88,17 +84,15 @@ test('r87s2 4: on a 320 px phone the new sections stack, with no horizontal scro
   await noThirdParty(page);
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
-  for (const sel of ['section#hardiness', 'section#climate-class', 'section#at-home', 'section#flowering', '#elsewhere', '#risk-line', '#cites-line']) {
+  for (const sel of ['section#hardiness', 'section#climate-class', 'section#flowering', '#elsewhere', '#risk-line', '#cites-line']) {
     await page.locator(sel).scrollIntoViewIfNeeded();
     const box = await page.locator(sel).boundingBox();
     expect(box!.x + box!.width, sel).toBeLessThanOrEqual(321);
   }
-  // The tables become stacked rows: label, then the figure, then its arithmetic.
-  expect(await page.locator('section#at-home tr').first().evaluate((tr) => getComputedStyle(tr).display)).toBe('block');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
 
-test('r87s2 5: paper keeps every stage-2 section, without At home\'s buttons', async ({ page }) => {
+test('r87s2 5: paper keeps every stage-2 section, without the tabs', async ({ page }) => {
   await noThirdParty(page);
   await page.goto('/species/copiapoa-cinerea'); await ready(page);
   // A print fires beforeprint, which opens the folds (round 106 folded the climate class); emulateMedia alone does not, and
@@ -106,6 +100,5 @@ test('r87s2 5: paper keeps every stage-2 section, without At home\'s buttons', a
   await page.evaluate(() => dispatchEvent(new Event('beforeprint')));
   await page.emulateMedia({ media: 'print' });
   for (const [sel] of SECTIONS) await expect(page.locator(sel), sel).toBeVisible();
-  await expect(page.locator('section#at-home .hours')).toBeHidden();
   await expect(page.locator('nav.tabs')).toBeHidden(); // round eighty-four's paper, kept
 });

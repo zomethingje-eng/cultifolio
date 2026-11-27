@@ -109,6 +109,42 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 131,
+    date: '2026-11-27',
+    reader: 'A plant page ends with a quiet link, not a red button.',
+    lines: [
+      'Remove is in the plant menu, with No longer held.',
+      'Remove still asks before it removes.'
+    ]
+  },
+  {
+    n: 130,
+    date: '2026-11-27',
+    reader: 'A plant page sets its own space beside the habitat.',
+    lines: [
+      'On its space, against its habitat, open under its figures.',
+      'A bench in a greenhouse is read as under glass.'
+    ]
+  },
+  {
+    n: 129,
+    date: '2026-11-27',
+    reader: 'A species page keeps its home figures in its year panel.',
+    lines: [
+      'At home, aim for is gone into Compare with.',
+      'Its grow light is the last row of Under lights.'
+    ]
+  },
+  {
+    n: 128,
+    date: '2026-11-27',
+    reader: 'A species page can set the habitat of another species beside its own.',
+    lines: [
+      'Compare with Another species draws its year dashed.',
+      'Each is shown in its own season.'
+    ]
+  },
+  {
     n: 127,
     date: '2026-11-27',
     reader: 'A species page can set your greenhouse, sill or lamp beside its habitat.',

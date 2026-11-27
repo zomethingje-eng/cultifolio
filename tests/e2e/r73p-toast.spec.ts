@@ -28,7 +28,7 @@ test('r73p toast 1: on a slow device the removal\'s Undo is shown on the page it
   await page.goto('/plants'); await ready(page);
   await inject(page, plant('r-a', '2026-0001', 'Copiapoa cinerea'), Date.now() - 3_600_000);
   await page.goto('/plants/2026-0001'); await ready(page);
-  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-remove').click(); // round 131: Remove is in the plant's menu
   await page.evaluate(() => { (window as unknown as { __slow: number }).__slow = 800; });
   await page.getByRole('button', { name: 'Yes, remove 2026-0001' }).click();
   await expect(page).toHaveURL(/\/plants$/);
@@ -44,7 +44,7 @@ test('r73p toast 2: a toast raised well before an unrelated navigation still goe
   await page.goto('/plants'); await ready(page);
   await inject(page, [...plant('r-a', '2026-0001', 'Copiapoa cinerea'), ...plant('r-b', '2026-0002', 'Copiapoa humilis')], Date.now() - 3_600_000);
   await page.goto('/plants/2026-0001'); await ready(page);
-  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-remove').click(); // round 131: Remove is in the plant's menu
   await page.getByRole('button', { name: 'Yes, remove 2026-0001' }).click();
   await expect(page).toHaveURL(/\/plants$/);
   await expect(page.locator('.toast')).toContainText('2026-0001 removed.');

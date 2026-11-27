@@ -1,0 +1,235 @@
+{
+ "key": "k2808089",
+ "name": {
+  "scientific": "Fenestraria rhopalophylla",
+  "authorship": "(Schltr. & Diels) N.E.Br.",
+  "rank": "SPECIES",
+  "status": "accepted",
+  "family": "Aizoaceae",
+  "genus": "Fenestraria",
+  "order": "Caryophyllales",
+  "classification": [
+   {
+    "rank": "kingdom",
+    "name": "Plantae",
+    "key": 6
+   },
+   {
+    "rank": "phylum",
+    "name": "Tracheophyta",
+    "key": 7707728
+   },
+   {
+    "rank": "class",
+    "name": "Magnoliopsida",
+    "key": 220
+   },
+   {
+    "rank": "order",
+    "name": "Caryophyllales",
+    "key": 422
+   },
+   {
+    "rank": "family",
+    "name": "Aizoaceae",
+    "key": 6752
+   },
+   {
+    "rank": "genus",
+    "name": "Fenestraria",
+    "key": 7503567
+   }
+  ],
+  "synonyms": [],
+  "vernacular": [
+   {
+    "name": "Windowplant",
+    "lang": "eng",
+    "source": "Catalogue of Life"
+   },
+   {
+    "name": "baby's toes",
+    "lang": "eng",
+    "source": "Catalogue of Life"
+   },
+   {
+    "name": "dedos-de-bebê",
+    "lang": "por",
+    "source": "Flora e Funga do Brasil - Lista Oficial"
+   },
+   {
+    "name": "okienkovka kyjovitá",
+    "lang": "slk",
+    "source": "Catalogue of Life"
+   },
+   {
+    "name": "vitt fönsterblad",
+    "lang": "swe",
+    "source": "GRIN Taxonomy",
+    "sources": 2,
+    "alsoFrom": [
+     "Catalogue of Life"
+    ]
+   }
+  ],
+  "kew": {
+   "entry": "2808089",
+   "synonyms": [
+    "Fenestraria aurantiaca",
+    "Mesembryanthemum rhopalophyllum"
+   ],
+   "acceptedElsewhere": [],
+   "file": "2026-06-04",
+   "accepted": {
+    "name": "Fenestraria rhopalophylla",
+    "authors": "(Schltr. & Diels) N.E.Br.",
+    "rank": "Species",
+    "family": "Aizoaceae"
+   },
+   "by": [
+    [
+     "N.E.Br."
+    ],
+    [
+     "Schltr. & Diels"
+    ]
+   ]
+  },
+  "infra": [
+   "Fenestraria aurantiaca",
+   "Mesembryanthemum rhopalophyllum"
+  ]
+ },
+ "climate": {
+  "status": "ok",
+  "months": [
+   {
+    "tmax": 22,
+    "tmin": 15.8,
+    "tmean": 18.6,
+    "precipMm": 2,
+    "dli": 53.1,
+    "rh": 63,
+    "vpdKpa": 0.78,
+    "windMs": 4.7
+   },
+   {
+    "tmax": 22.3,
+    "tmin": 16.1,
+    "tmean": 18.7,
+    "precipMm": 3,
+    "dli": 48.3,
+    "rh": 63,
+    "vpdKpa": 0.79,
+    "windMs": 4.2
+   },
+   {
+    "tmax": 21.8,
+    "tmin": 15.5,
+    "tmean": 18.2,
+    "precipMm": 3,
+    "dli": 41.3,
+    "rh": 63,
+    "vpdKpa": 0.78,
+    "windMs": 4.1
+   },
+   {
+    "tmax": 21.2,
+    "tmin": 14.3,
+    "tmean": 17.3,
+    "precipMm": 7,
+    "dli": 32.5,
+    "rh": 60,
+    "vpdKpa": 0.77,
+    "windMs": 3.7
+   },
+   {
+    "tmax": 20.2,
+    "tmin": 12.8,
+    "tmean": 16,
+    "precipMm": 6,
+    "dli": 25.5,
+    "rh": 58,
+    "vpdKpa": 0.77,
+    "windMs": 3.7
+   },
+   {
+    "tmax": 18.9,
+    "tmin": 11.2,
+    "tmean": 14.6,
+    "precipMm": 7,
+    "dli": 22.2,
+    "rh": 55,
+    "vpdKpa": 0.75,
+    "windMs": 3.9
+   },
+   {
+    "tmax": 18.5,
+    "tmin": 10.8,
+    "tmean": 14.2,
+    "precipMm": 7,
+    "dli": 23.5,
+    "rh": 55,
+    "vpdKpa": 0.73,
+    "windMs": 4
+   },
+   {
+    "tmax": 18.1,
+    "tmin": 10.6,
+    "tmean": 14,
+    "precipMm": 5,
+    "dli": 29.1,
+    "rh": 58,
+    "vpdKpa": 0.68,
+    "windMs": 4
+   },
+   {
+    "tmax": 18.8,
+    "tmin": 11.5,
+    "tmean": 14.8,
+    "precipMm": 5,
+    "dli": 37.3,
+    "rh": 59,
+    "vpdKpa": 0.68,
+    "windMs": 4.3
+   },
+   {
+    "tmax": 19.5,
+    "tmin": 12.5,
+    "tmean": 15.8,
+    "precipMm": 6,
+    "dli": 45.3,
+    "rh": 61,
+    "vpdKpa": 0.7,
+    "windMs": 4.5
+   },
+   {
+    "tmax": 20.2,
+    "tmin": 13.8,
+    "tmean": 16.8,
+    "precipMm": 3,
+    "dli": 51.6,
+    "rh": 61,
+    "vpdKpa": 0.73,
+    "windMs": 4.6
+   },
+   {
+    "tmax": 21.4,
+    "tmin": 15.2,
+    "tmean": 18,
+    "precipMm": 2,
+    "dli": 53.9,
+    "rh": 63,
+    "vpdKpa": 0.76,
+    "windMs": 4.6
+   }
+  ],
+  "extremes": {
+   "minP01": 5.7
+  },
+  "at": {
+   "lat": -28.575,
+   "lon": 16.575
+  }
+ }
+}

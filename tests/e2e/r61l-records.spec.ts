@@ -121,7 +121,7 @@ test('Undo of a removal, pressed after opening another plant, brings back the re
   await page.goto('/plants'); await ready(page);
   await inject(page, [...plant('r-a', '2026-0001', 'Copiapoa cinerea'), ...plant('r-b', '2026-0002', 'Copiapoa humilis')], Date.now() - 3_600_000);
   await page.goto('/plants/2026-0001'); await ready(page);
-  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.locator('.idcard .cardmenu > button').click(); await page.locator('#menu-remove').click(); // round 131: Remove is in the plant's menu
   await page.getByRole('button', { name: 'Yes, remove 2026-0001' }).click();
   await expect(page).toHaveURL(/\/plants$/);
   await page.locator('a.accrow', { hasText: '2026-0002' }).click();

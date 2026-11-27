@@ -13,13 +13,14 @@
  */
 import type { LocationKind } from '$lib/db/types';
 
-export type LensView = 'none' | 'outdoors' | 'greenhouse' | 'windowsill' | 'lights';
+export type LensView = 'none' | 'outdoors' | 'greenhouse' | 'windowsill' | 'lights' | 'species';
 export const LENS_VIEWS: Array<{ k: LensView; label: string }> = [
   { k: 'none', label: 'Nothing' },
   { k: 'outdoors', label: 'Outdoors' },
   { k: 'greenhouse', label: 'Greenhouse' },
   { k: 'windowsill', label: 'Windowsill' },
-  { k: 'lights', label: 'Under lights' }
+  { k: 'lights', label: 'Under lights' },
+  { k: 'species', label: 'Another species' }
 ];
 export const isLensView = (v: unknown): v is LensView => LENS_VIEWS.some((x) => x.k === v);
 
@@ -122,4 +123,42 @@ export function lampCell(table: NonNullable<ReturnType<typeof lampTable>>, ppfd:
   let best: [number, number] | null = null, gap = Infinity;
   table.rows.forEach((r, i) => { const g = Math.abs(r.cells[c] - ppfd) / r.cells[c]; if (g < gap) { gap = g; best = [i, c]; } });
   return gap <= 0.05 ? best : null;
+}
+
+/**
+ * Another species (round 128; SPECIES 20): two habitats side by side, each in its own season. Where the two typical cells
+ * lie in different hemispheres the other's months are moved six, and the card says so. The lines: the two ranges of
+ * nights, the two cold floors, the two years' rain, the two warmest months' days. Two figures a line, as every view.
+ */
+export const otherShift = (lat: number, otherLat: number): number => ((lat < 0) !== (otherLat < 0) ? 6 : 0);
+export function speciesLines(o: {
+  name: string; other: string; habitat: Array<{ tmax: number; tmin: number; precipMm: number }>; theirs: Array<{ tmax: number; tmin: number; precipMm: number }>;
+  floorC: number | null; theirFloorC: number | null; temp: (c: number) => string; mm: (n: number) => string;
+}): SpaceLine[] {
+  const nights = (h: typeof o.habitat) => `${o.temp(Math.min(...h.map((m) => m.tmin)))} to ${o.temp(Math.max(...h.map((m) => m.tmin)))}`;
+  const out: SpaceLine[] = [{ k: 'nights', text: `Average nights through the year: ${nights(o.theirs)} for ${o.other}; ${nights(o.habitat)} for ${o.name}.` }];
+  if (o.floorC != null && o.theirFloorC != null) out.push({ k: 'floor', text: `Cold floors: ${o.temp(o.theirFloorC)} for ${o.other}; ${o.temp(o.floorC)} for ${o.name}.` });
+  const yr = (h: typeof o.habitat) => o.mm(h.reduce((a, m) => a + m.precipMm, 0));
+  out.push({ k: 'rain', text: `Rain a year: ${yr(o.theirs)} for ${o.other}; ${yr(o.habitat)} for ${o.name}.` });
+  const warm = (h: typeof o.habitat) => o.temp(Math.max(...h.map((m) => m.tmax)));
+  out.push({ k: 'days', text: `The warmest month's average day: ${warm(o.theirs)} for ${o.other}; ${warm(o.habitat)} for ${o.name}.` });
+  return out;
+}
+
+/**
+ * A space's view from its path, the space first, then each above it (round 130): a garden bed, outdoors, a greenhouse, a
+ * cold frame or a windowsill decides by its kind; a room, shelf, bench, tray or other space with its light and hours set
+ * is under lights; without them, the nearest space above it that decides gives its view (a bench in a greenhouse is under
+ * glass), else Windowsill, as the hand-off's table has it for such a space alone.
+ */
+export function viewOfPath(kinds: Array<string | null | undefined>, lampHours: number | null): LensView | null {
+  let holder = false;
+  for (const k of kinds) {
+    if (k === 'garden' || k === 'outdoor' || k === 'greenhouse' || k === 'coldframe' || k === 'windowsill') return viewOfKind(k, null);
+    if (k === 'room' || k === 'shelf' || k === 'bench' || k === 'tray' || k === 'other') {
+      if (lampHours != null && lampHours > 0) return 'lights';
+      holder = true;
+    }
+  }
+  return holder ? 'windowsill' : null;
 }

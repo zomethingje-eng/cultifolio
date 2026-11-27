@@ -43,7 +43,7 @@ export const year = () => localDay(0).slice(0, 4);
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
 export async function more(p: import('@playwright/test').Page, name: string) {
   await p.locator('.idcard .cardmenu > button').click();
-  await p.locator('#card-menu [role=menuitem]', { hasText: name }).click();
+  await p.locator('#card-menu').getByRole('menuitem', { name, exact: true }).click(); // exact: "Move…" is inside "Remove…" (round 131)
 }
 
 /** Click "Sync now" and wait for THAT run to finish: the status card counts finished runs, so the "Synced" that was already on screen is not mistaken for the new one (round thirteen, B2). */

@@ -69,8 +69,6 @@
   // Round eighty-seven, stage 2: each agent's section, mounted where the owner's look puts it (the integration).
   import Hardiness from '$lib/ui/ref/Hardiness.svelte';
   import Koppen from '$lib/ui/ref/Koppen.svelte';
-  import AtHome from '$lib/ui/ref/AtHome.svelte';
-  import { atHomeRows } from '$lib/ui/ref/at-home';
   import Flowering from '$lib/ui/ref/Flowering.svelte';
   import Elsewhere from '$lib/ui/ref/Elsewhere.svelte';
   import Parents from '$lib/ui/ref/Parents.svelte';
@@ -184,7 +182,6 @@
    */
   const extremesShown = $derived(d.climate.status === 'ok' && !!d.climate.extremes);
   const koppenShown = $derived(d.climate.status === 'ok' && d.climate.months.length === 12);
-  const atHomeShown = $derived(!!atHomeRows(d.climate as never, u));
   /**
    * The IUCN Red List's and Species+'s ids for the risk and CITES lines (Wikidata P627 and P2040), from the page's own
    * Wikidata item as the links agent's fill read it (`elsewhere.wikidata`): only an item read for this page's item now, and
@@ -817,7 +814,8 @@
     <!-- In the grower's order (round 106; the first hand-off's round 4): what it is, can I grow it, how to keep it, and
          why to believe it. "At home" is the table where the page has one, else the cultivation cards it heads. -->
     {#if d.summary || refused('wikipedia')}<a href="#s-summary" class:on={active === 's-summary'} onclick={(e) => goTab(e, 's-summary')}>What it is</a>{/if}
-    {#if atHomeShown}<a href="#at-home" class:on={active === 'at-home' || active === 's-cultivation'} onclick={(e) => goTab(e, 'at-home')}>At home</a>{:else}<a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>At home</a>{/if}
+    <!-- Round 129: "At home, aim for" is in the year panel's lens; the tab takes the reader to the cultivation cards. -->
+    <a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>At home</a>
     {#if extremesShown}<a href="#hardiness" class:on={active === 'hardiness'} onclick={(e) => goTab(e, 'hardiness')}>How cold</a>{/if}
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Where it grows</a>
@@ -852,10 +850,6 @@
     <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
   {/if}
 
-  {#if d.climate.status === 'ok'}
-    <!-- "At home, aim for", with its 12, 14 and 16 hour switch; the cultivation cards are folds under it. -->
-    <AtHome climate={d.climate} units={u} />
-  {/if}
   <h2 class="sec" id="s-cultivation">Cultivation</h2>
   <div class="note-slot" data-key={d.key}>
     {#if editingMy}
@@ -942,7 +936,7 @@
     {#if coarse}<p class="notice small" id="coarse-records">{coarseSentence(coarse, d.climate.records)} <a class="help" href="/about/how#coarse">The rule</a>.</p>{/if}<!-- round 108 -->
     {#if few}<p class="notice small" id="few-records">{fewRecordsSentence(few, kewArea)} <a class="help" href="/about/how#few">The rule</a>.</p>{/if}<!-- linked to its rule, as the other notices are (round eighty-six; review P's P11) -->
     <!-- Round 118 (SPECIES 19): the year panel, three charts and four thin rows on one month axis, Chart | Table, the halves. -->
-    <YearPanel months={d.climate.months} p10={d.climate.p10} p90={d.climate.p90} lat={d.climate.at.lat} shift={myShift} floorC={d.climate.extremes?.minP01 ?? null} units={u} year={sheet.year ?? null} dossierKey={d.key} name={d.name.scientific} src={`CHELSA V2.1, 1981–2010; ${d.climate.cells} ${coarse ? 'areas' : 'cells'}`} plants={mine} />
+    <YearPanel months={d.climate.months} p10={d.climate.p10} p90={d.climate.p90} lat={d.climate.at.lat} shift={myShift} floorC={d.climate.extremes?.minP01 ?? null} units={u} year={sheet.year ?? null} dossierKey={d.key} name={d.name.scientific} src={`CHELSA V2.1, 1981–2010; ${d.climate.cells} ${coarse ? 'areas' : 'cells'}`} plants={mine} slug={d.slug} />
     <details class="figures" id="one-chart-fold">
       <summary>The year as one chart</summary>
     <Climograph name={d.name.scientific} south={sheet.year?.south ?? null} shift={myShift} climate={{ areas: !!coarse, months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review; its calendar named, round sixty -->
@@ -1388,7 +1382,7 @@
   .srclines { margin: 0 0 8px; overflow-wrap: anywhere; }
   .conserve { margin-top: 12px; }
   /* The stage-2 sections are reached by the section row as the page's own headings are (round eighty-seven). */
-  :global(section#hardiness), :global(section#climate-class), :global(section#at-home) { scroll-margin-top: 64px; }
+  :global(section#hardiness), :global(section#climate-class) { scroll-margin-top: 64px; }
   /* The phone's one line for the names and classification (round eighty-five; B3, P3): a disclosure a finger can open. */
   .pmore { display: none; }
   @media (max-width: 640px) {
@@ -1447,7 +1441,6 @@
     .top.withhero:has(> .hero.photo.failed) { display: block; }
     .idcard .acts, nav.tabs, .thumbstrip, .notesline, .placeline, :global(.useg), .acc > summary .pm, .pmore { display: none !important; }
     /* At home's hours are the screen's choice; the sheet prints the row for the hours chosen (round eighty-seven, stage 2). */
-    :global(section#at-home .hours) { display: none !important; }
     /* The table whole on the sheet, not cut at a scroll box's edge (W5, A16e); the phone's folded lines as a wide screen shows them. */
     /* The related strips wrap on paper rather than run off the sheet's edge. */
     .relstrip { grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); overflow: visible; }

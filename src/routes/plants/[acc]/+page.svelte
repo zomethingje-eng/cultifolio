@@ -60,6 +60,7 @@
   import Lineage from '$lib/ui/grow/Lineage.svelte';
   import PlantRef from '$lib/ui/grow/PlantRef.svelte';
   import AddedPayoff from '$lib/ui/grow/AddedPayoff.svelte';
+  import CompareCard from '$lib/ui/grow/CompareCard.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
   import PlantChoice from '$lib/ui/grow/PlantChoice.svelte';
   import { MOTHER_HOW, MOTHER_HOW_LABEL } from '$lib/db/types';
@@ -368,6 +369,8 @@
     };
   });
   const cond = $derived(a?.locationId ? collection.conditions(a.locationId) : null);
+  /** The kinds of the plant's space and each above it, the space first (round 130): the lens's view is read from them. */
+  const spaceKinds = $derived(a?.locationId ? collection.locationPath(a.locationId).reverse().map((l) => l.type ?? null) : []);
   /** The payoff card after the add form's save of this one plant (round 107): put away by Close or by leaving. */
   let payoffClosed = $state(false);
   const showPayoff = $derived(page.state.added === true && !payoffClosed);
@@ -1084,6 +1087,9 @@
             {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
             {#if a.status === 'growing'}<button role="menuitem" type="button" onclick={() => { closeCardMenu(); openSplit(); }}>Split off an item…</button>{/if}
             {#if a.status === 'growing'}<a role="menuitem" href="/plants/new?mother={a.id}" onclick={() => closeCardMenu()}>Add an offset or cutting</a>{/if}
+            <!-- Round 131 (MYPLANTS 31, item 8): No longer held and Remove are in the menu; the foot keeps a quiet link. -->
+            {#if !ident?.deacc}<button role="menuitem" type="button" id="menu-deacc" onclick={() => { closeCardMenu(); openDeacc(); }}>No longer held…</button>{/if}
+            <button role="menuitem" type="button" id="menu-remove" onclick={() => { closeCardMenu(); confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove…</button>
           </div>
         {/if}
       </div>
@@ -1218,6 +1224,34 @@
   </div>
   {/if}
 
+  <!-- "On <space>, against its habitat" (round 130; MYPLANTS 31, item 5): the lens for this plant's space, open, under its
+       figures; the fold of rounds fifty-eight to 129 is its "how", with every figure and source it held. -->
+  {#if a.locationId && collection.placeOf(a.locationId) && cond && dossier?.climate.status === 'ok'}
+    <CompareCard months={dossier.climate.months} floorC={dossier.climate.extremes?.minP01 ?? null} lat={dossier.climate.at?.lat ?? null} space={{ id: collection.placeOf(a.locationId)!, name: collection.location(collection.placeOf(a.locationId)!)?.name ?? collection.locationName(a.locationId), kinds: spaceKinds, floorC: cond.floorC, floorHeld: cond.floorHeld, ppfd: cond.ppfd, lightHours: cond.lightHours }} units={u} speciesHref={speciesHref} />
+  {/if}
+  <details class="hab" id="habitat">
+    <summary class="secrule"><h2>{#if compared}How it compares: <SpeciesName name={compared} />'s habitat and this space{:else}How it compares: the habitat and this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
+    <div class="cards">
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier && recordsUnchecked(dossier)}<NotChecked what="Climate" why={NO_GBIF_SENTENCE} />{:else if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : notStated ? 'No species named' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier && recordsUnchecked(dossier)}No season is read: the species page has no habitat climate, for that reason.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : notStated ? 'A cultivar filed under its genus; name its species to compare its habitat.' : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+    </div>
+    {#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}
+      <!-- A species page without a GBIF key (round seventy-nine): nothing to compare this space with, and why. -->
+      <p class="small muted" id="habitat-not-checked">Habitat against this space: not asked. {NO_GBIF_SENTENCE} The habitat figures are read only from them.</p>
+    {/if}
+    {#if habitat && a.locationId}
+    <div class="factgrid hvh">
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
+    </div>
+    <!-- "across the range" and "a typical spot in the range", the glossary's words (round fifty-eight; the accessibility review). -->
+    <details class="why">
+      <summary>What this compares</summary>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across the range, NASA POWER at a typical spot in the range), not measured tolerances of this plant. This space's figures are its own settings, inherited from the spaces above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
+    </details>
+    {/if}
+    {#if !site.current && cond?.lat == null}<p class="small muted siteline">No site is set: set it once in <a href="/settings#site">Settings</a> and the seasons here are read from where you grow.</p>{/if}
+  </details>
+
   <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(timeline.length, 'entry', 'entries')}</span></div>
   {#if !events.length}
     <p class="empty">Nothing recorded yet; each verb above adds a line here.</p>
@@ -1284,28 +1318,6 @@
   <GrowingSeason plant={a} year={habitat?.year ?? null} readerLat={cond?.lat ?? readerLat(collection.locations)} why={seasonWhy} />
   <Attachments acc={a.id} />
 
-  <details class="hab" id="habitat">
-    <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this space{:else}Habitat vs this space{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
-    <div class="cards">
-      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier && recordsUnchecked(dossier)}<NotChecked what="Climate" why={NO_GBIF_SENTENCE} />{:else if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : notStated ? 'No species named' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier && recordsUnchecked(dossier)}No season is read: the species page has no habitat climate, for that reason.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${climateReason(dossier.climate.detail)}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : notStated ? 'A cultivar filed under its genus; name its species to compare its habitat.' : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
-    </div>
-    {#if !habitat && dossier && recordsUnchecked(dossier) && a.locationId}
-      <!-- A species page without a GBIF key (round seventy-nine): nothing to compare this space with, and why. -->
-      <p class="small muted" id="habitat-not-checked">Habitat against this space: not asked. {NO_GBIF_SENTENCE} The habitat figures are read only from them.</p>
-    {/if}
-    {#if habitat && a.locationId}
-    <div class="factgrid hvh">
-      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
-      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a space</button> first.{/if}{/if}</div>{/if}
-    </div>
-    <!-- "across the range" and "a typical spot in the range", the glossary's words (round fifty-eight; the accessibility review). -->
-    <details class="why">
-      <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across the range, NASA POWER at a typical spot in the range), not measured tolerances of this plant. This space's figures are its own settings, inherited from the spaces above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
-    </details>
-    {/if}
-    {#if !site.current && cond?.lat == null}<p class="small muted siteline">No site is set: set it once in <a href="/settings#site">Settings</a> and the seasons here are read from where you grow.</p>{/if}
-  </details>
 
   {#if !a.notes}{@render plantNotes()}{/if}
   <div class="cult">
@@ -1397,11 +1409,14 @@
       </div>
     </form>
   {/if}
-  <div class="dangerrow">
-    {#if !ident?.deacc}<span class="deaccrow"><span class="small muted">Died, given away, lost? Record it as no longer held: the page stays, listed under <a href="/plants/gone">No longer held</a>.</span> <button class="btn" type="button" id="deacc-open" onclick={openDeacc}>No longer held…</button></span>{/if}
-    <span class="small muted">Remove is for a record made by mistake. You can bring it back later from its page; its number stays its own, and its record stays in the change log.</span>
-    {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove this plant</button>{/if}
-  </div>
+  <!-- The foot (round 131): "No longer held…" a quiet link; Remove asked here only once the menu's Remove… is pressed. -->
+  {#if !ident?.deacc}<p class="small quietfoot"><button class="linkish" type="button" id="deacc-open" onclick={openDeacc}>No longer held…</button> <span class="muted">Died, given away, lost? The page stays, listed under <a href="/plants/gone">No longer held</a>.</span></p>{/if}
+  {#if confirmRemove}
+    <div class="dangerrow" role="group" aria-label="Remove this plant">
+      <span class="small muted">Remove is for a record made by mistake. You can bring it back later from its page; its number stays its own, and its record stays in the change log.</span>
+      <span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>
+    </div>
+  {/if}
   {#if lightbox != null && photos.length}
     <Lightbox {photos} bind:index={lightbox} acc={id} onclose={() => (lightbox = null)} />
   {/if}
@@ -1504,7 +1519,6 @@
   a.tlrow:hover .t { color: var(--accent); }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: var(--fs-md); }
   /* The deaccession's line on its own row above the removal's (round eighty-seven, t1). */
-  .deaccrow { flex-basis: 100%; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   .setup { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; } /* wraps at 320 px with 200% text (r62ba N10) */
   .setuprow { flex: 1 1 7.5em; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: max(48px, var(--tap)); padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--sunk); color: var(--ink2); font: inherit; font-size: var(--fs-sm); text-align: center; cursor: pointer; }
@@ -1547,4 +1561,5 @@
   .evk.on { border-color: var(--ink); font-weight: 600; }
   .evk input { margin: 0; accent-color: var(--accent); }
   .measureit { display: grid; align-content: start; gap: 4px; }
+  .quietfoot { margin: 22px 0 6px; }
 </style>
