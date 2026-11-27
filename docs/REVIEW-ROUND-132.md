@@ -36,4 +36,9 @@ latest", and a camera button that adds one. Built in the clone on 27 November 20
 
 ## Gate and deploy
 
-(Written at the gate.)
+- svelte-check 0 errors in 1,926 files. The app gate, Chromium at two workers, WebKit and Firefox at one, three runs: the
+  first found r75h leave 2 at its 2-minute limit in Firefox once (it passed on its retry); the second stopped at its unit
+  tests on the harness's EPERM (above); the third: 6,611 unit tests, 3,100 browser tests, every test first time in every
+  engine.
+- Committed as fa85be4 and pushed on 27 November 2026; `node scripts/deploy.mjs` deployed version 186fa046 on its first
+  try, live check 24 of 24.

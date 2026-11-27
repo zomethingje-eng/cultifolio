@@ -408,7 +408,12 @@ export const Paper = v.object({
   doi: v.optional(v.string()),
   url: v.optional(v.string()),
   authors: v.optional(v.array(v.string())),
-  venue: v.optional(v.string())
+  venue: v.optional(v.string()),
+  /** Round 133 (SPECIES 23): a book chapter or a preprint says so; free to read where OpenAlex's open_access.is_oa says so; the times it is cited; which of the two lists it is in. Absent on papers listed before. */
+  kind: v.optional(v.picklist(['book chapter', 'preprint'])),
+  free: v.optional(v.boolean()),
+  cited: v.optional(v.number()),
+  list: v.optional(v.picklist(['cited', 'newest']))
 });
 
 /**
@@ -612,6 +617,8 @@ export const Dossier = v.object({
   climate: Climate,
   photos: v.array(Photo),
   literature: v.array(Paper),
+  /** Round 133 (SPECIES 23): OpenAlex's count of the works the title rule finds, and by decade ([decade, count], oldest first; the counts sum to the total). Absent: not asked. */
+  literatureCounts: v.optional(v.object({ total: v.number(), decades: v.array(v.tuple([v.number(), v.number()])) })),
   links: v.record(v.string(), v.string()),
   upstream: v.record(v.string(), Upstream),
   /** The day the page's substance last changed and its fingerprint, for the sitemap (src/lib/dossier/changed.ts; round sixty-three). Absent in a dossier built before. */

@@ -34,6 +34,7 @@
   import Provenance from '$lib/ui/Provenance.svelte';
   import RecordParts from '$lib/ui/ref/RecordParts.svelte';
   import YearPanel from '$lib/ui/ref/YearPanel.svelte';
+  import Literature from '$lib/ui/ref/Literature.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import CompareButton from '$lib/ui/CompareButton.svelte';
@@ -321,6 +322,8 @@
   /** The dossier's works without GBIF occurrence downloads: datasets that name the species, not papers about it (the builder drops them at source now; the corpus on disk is filtered here until it is refilled). */
   /** Papers not yet asked for this reference (round seventy-eight): no Papers section or tab while nothing is asked (round eighty-two; the independent review's 23); the record of sources says it. */
   const litOff = $derived(literatureOff(d.upstream['openalex']));
+  /** Round 133: papers read by the title rule (they carry their counts by decade); a page's older papers keep their own block. */
+  const litNew = $derived(!!d.literatureCounts);
   const papers = $derived(d.literature.filter((p) => !isDatasetDoi(p.doi) && !/^Occurrence Download$/i.test(p.title)));
   let active = $state('');
   let tapped: { id: string; at: number } | null = null;
@@ -820,9 +823,10 @@
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Where it grows</a>
     <a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>{photos.length === 1 ? 'Photograph' : 'Photographs'}</a>
-    {#if papers.length || (refused('openalex') && !litOff)}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
+    {#if !litNew && (papers.length || (refused('openalex') && !litOff))}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
     {#if data.siblings.length || data.near.length || unchecked}<a href="#s-related" class:on={active === 's-related'} onclick={(e) => goTab(e, 's-related')}>Related</a>{/if}
     <a href="#s-registers" class:on={active === 's-registers'} onclick={(e) => goTab(e, 's-registers')}>Names</a>
+    {#if litNew && papers.length}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Literature</a>{/if}
   </nav>
 
   <!-- Round 106 (the first hand-off's round 4): the page in the grower's order. What it is (the quoted summary, moved up
@@ -1075,7 +1079,7 @@
     <h2 class="sec" id="s-research">Papers naming this species</h2>
     <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
   {/if}
-  {#if papers.length}
+  {#if papers.length && !litNew}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
     <p class="small muted" style="margin: 0 0 8px">Works whose title or abstract names <i>{d.name.scientific}</i>, most cited first, from OpenAlex (CC0). A mention, not a cultivation source: nothing on this page is drawn from them.</p>
     {#each allPapers ? papers : papers.slice(0, 3) as p}
@@ -1145,6 +1149,10 @@
   </div>
 
   </div>
+  {#if litNew && papers.length}
+    <!-- Literature (round 133; SPECIES 23): after Names, the works whose title names the species, with a DOI. -->
+    <Literature name={d.name.scientific} papers={papers} counts={d.literatureCounts!} at={d.upstream['openalex']?.at} />
+  {/if}
   <!-- The facts that led the page until round fifty, and the sentence about derivation: here, where someone checking the page looks. -->
   <h2 class="sec" id="s-facts">The record</h2>
   <div class="facts">

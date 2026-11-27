@@ -109,6 +109,15 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 133,
+    date: '2026-11-27',
+    reader: 'Literature can come back: no page lists papers yet.',
+    lines: [
+      'The reference can now ask OpenAlex for papers by title.',
+      'A fill must run before any page shows them.'
+    ]
+  },
+  {
     n: 132,
     date: '2026-11-27',
     reader: 'A plant page sets its first photograph beside its latest.',

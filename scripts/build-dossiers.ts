@@ -219,7 +219,7 @@ import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
 import { keptNames, englishNames, indexNames, generaOf, olderNamesOf, kewOlderOf, homonymEntries, mergedNamesOf, oneWordNames, sharedHeadlines, pooledSpellings, searchedAsEnglish, recordLowOf, habitatYearOf, firstSeen, firstsOf, type VernacularName, type HomonymRecord } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
-import { LITERATURE_OFF } from '../src/lib/dossier/sources/openalex';
+import { LITERATURE_OFF, titleLiterature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify } from '../src/lib/core/names';
@@ -997,13 +997,62 @@ async function fillGenera(): Promise<void> {
 }
 
 /**
- * `--fill openalex` asked OpenAlex once a species for every dossier without literature. Literature is off from round
- * seventy-eight (the owner's decision 2): OpenAlex's searches cost $1 a thousand past a free key's $1 a day, so 54,000
- * species are $54 or 54 days. Nothing asks it now; a later round fills the papers from OpenAlex's free snapshot.
+ * `--fill openalex` (round 133; SPECIES 23 with HANDOFF round 8; docs/PLAN-133.md): the papers whose title names the
+ * page's accepted name, with a DOI, as OpenAlex counts them (`titleLiterature`): one request a page where it has 200
+ * works or fewer, three where it has more. Literature was off from round seventy-eight because OpenAlex's searches cost
+ * money past a key's free daily allowance; this fill keeps to a day's allowance of its own (`--openalex-budget`, 1,000 by
+ * default, about the free allowance: nothing is spent), counted in cache/day-budget/ as iNaturalist's and BHL's are, and
+ * at it stops (exit 3) and carries on the next day. The key is read from bulk/openalex-key.txt (or
+ * `--openalex-key-file`), put in the query string as OpenAlex asks, never printed or written. A page asked under this
+ * rule is passed by (`--again` asks every one). A page whose name is not a two-word species name is not asked. No index.
  */
-function fillLiterature(): void {
-  console.error(`--fill openalex: literature is off (round seventy-eight, the owner's decision 2); the build and the fills ask OpenAlex nothing. Pages say "${LITERATURE_OFF}". A later round fills it from OpenAlex's snapshot.`);
-  process.exitCode = 2;
+async function fillLiterature(): Promise<void> {
+  const keyFile = args[args.indexOf('--openalex-key-file') + 1] && args.includes('--openalex-key-file') ? args[args.indexOf('--openalex-key-file') + 1] : `${bulkDir ?? 'bulk'}/openalex-key.txt`;
+  let key = '';
+  try { key = readFileSync(keyFile, 'utf8').trim(); } catch { /* said below */ }
+  if (!key) { console.error(`--fill openalex: no key in ${keyFile}; nothing asked. OpenAlex's searches need one (free, from openalex.org).`); process.exitCode = 2; return; }
+  const budget = Number(args[args.indexOf('--openalex-budget') + 1]) > 0 && args.includes('--openalex-budget') ? Number(args[args.indexOf('--openalex-budget') + 1]) : 1000;
+  const host = 'api.openalex.org';
+  const counts = {
+    read: (d: string) => { try { return Number(readFileSync(`${BUDGET_ROOT}/${d}-${host}.txt`, 'utf8')) || 0; } catch { return 0; } },
+    write: (d: string, n: number) => { try { mkdirSync(BUDGET_ROOT, { recursive: true }); writeFileSync(`${BUDGET_ROOT}/${d}-${host}.txt`, String(n)); } catch { /* not kept: the count starts again */ } }
+  };
+  const f = dayBudget(upstreamApi(), host, budget, counts);
+  const store = diskStore();
+  const again = args.includes('--again');
+  const at = new Date().toISOString();
+  const c = { asked: 0, ok: 0, none: 0, unanswered: 0, passed: 0, notSpecies: 0, papers: 0, requests: 0 };
+  let stopped = '';
+  console.log(`Asking OpenAlex for the papers whose title names each page's species, with a DOI, at most ${budget} requests a UTC day (${f.used()} used today)…`);
+  for (const file of store.files()) {
+    let d: Dossier;
+    try { d = store.read<Dossier>(file); } catch { continue; }
+    if (!again && d.upstream.openalex && /title rule/.test(d.upstream.openalex.detail ?? '') && d.upstream.openalex.status !== 'refused') { c.passed++; continue; }
+    const name = d.name.scientific;
+    if (!/^[A-Z][a-z-]+ [a-z-]+$/.test(name)) { c.notSpecies++; continue; }
+    const r = await titleLiterature(f, name, key);
+    c.asked++;
+    c.requests += 'asked' in r && r.asked ? r.asked : 1;
+    if (r.status === 'refused' && /allowance of \d+ requests is spent/.test(r.detail)) { stopped = r.detail; c.asked--; break; }
+    if (r.status === 'ok') {
+      d.literature = r.data.papers.map(({ title, year, doi, url, authors, venue, kind, free, cited, list }) => ({ title, year, doi, url, authors, venue, kind, free, cited, list }));
+      d.literatureCounts = { total: r.data.total, decades: r.data.decades };
+      d.upstream.openalex = { status: 'ok', at, detail: `title rule: ${r.data.total} works name it in their title, with a DOI` };
+      c.ok++; c.papers += r.data.papers.length;
+    } else if (r.status === 'none') {
+      d.literature = []; d.literatureCounts = { total: 0, decades: [] };
+      d.upstream.openalex = { status: 'none', at, detail: 'title rule: no article, review, book chapter or preprint with a DOI names it in its title' };
+      c.none++;
+    } else {
+      // Not answered: said so on the page (rule 2), and asked again by the next run.
+      d.upstream.openalex = { status: 'refused', at, detail: `title rule: ${'detail' in r && r.detail ? r.detail : 'OpenAlex did not answer'}` };
+      c.unanswered++;
+    }
+    store.write(file, d);
+    if (c.asked % 100 === 0) process.stdout.write(`\r  ${c.asked} asked: ${c.ok} with papers, ${c.none} with none…   `);
+  }
+  console.log(`\r  OpenAlex on ${today()}: ${c.asked} pages asked (${c.requests} requests; ${f.used()} of the day's ${budget} used): ${c.ok} with papers (${c.papers} listed), ${c.none} with none under the title rule${c.unanswered ? `, ${c.unanswered} not answered (asked again by the next run)` : ''}; ${c.passed} asked before and passed by; ${c.notSpecies} not a two-word species name, not asked.${stopped ? ` Stopped at the day's allowance (${stopped}): run --fill openalex again tomorrow; it asks only what is left.` : ''}`);
+  if (stopped || c.unanswered) unfinished();
 }
 
 /**

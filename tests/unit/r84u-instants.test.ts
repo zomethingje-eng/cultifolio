@@ -68,6 +68,7 @@ const ALLOWED: Array<{ file: string; has: string; why: string }> = [
   { file: 'src/lib/import/csv.ts', has: "Date.UTC(1899, 11, 30)", why: 'a spreadsheet\'s day number counted in UTC: a calendar date, not an instant' },
   { file: 'src/lib/ui/Provenance.svelte', has: 'dossier.built.slice(0, 10)', why: 'the reference page\'s build day, a UTC stamp the page states as such' },
   { file: 'src/lib/ui/Provenance.svelte', has: 'u.at.slice(0, 10)', why: 'the day a source was asked during the build, in UTC like the build' },
+  { file: 'src/lib/ui/ref/Literature.svelte', has: 'at.slice(0, 10)', why: 'the day OpenAlex was asked for the page\'s papers, in UTC like the build (round 133)' },
   { file: 'src/lib/ui/ref/upstream.ts', has: "(rec.at ?? '').slice(0, 10)", why: 'the reference build\'s own record of when a source was asked, in UTC' }
 ];
 const SKIP = ['src/lib/server', 'src/lib/dossier', 'src/routes/api'];
