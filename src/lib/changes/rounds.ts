@@ -109,6 +109,15 @@ export function liveLines(lines: readonly StagedLine[], live: number): string[] 
 
 export const ROUNDS: readonly Round[] = [
   {
+    n: 132,
+    date: '2026-11-27',
+    reader: 'A plant page sets its first photograph beside its latest.',
+    lines: [
+      'The strip has First beside latest and + Photo.',
+      'Its months are under each photograph, as before.'
+    ]
+  },
+  {
     n: 131,
     date: '2026-11-27',
     reader: 'A plant page ends with a quiet link, not a red button.',

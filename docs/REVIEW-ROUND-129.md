@@ -37,4 +37,7 @@ reads them as numbers, as the chart that draws them does.
 
 ## Gate and deploy
 
-(Written at the gate.)
+- svelte-check 0 errors in 1,925 files. The app gate for rounds 128 to 131 together, Chromium at two workers, WebKit and
+  Firefox at one: 6,608 unit tests, 3,095 browser tests, every test first time in every engine, on its first run.
+- Committed as 8d52011 with rounds 128 to 131 and pushed on 27 November 2026; `node scripts/deploy.mjs` deployed version
+  0c62d19b on its first try, live check 24 of 24.

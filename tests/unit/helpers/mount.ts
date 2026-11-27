@@ -89,6 +89,10 @@ async function start(): Promise<void> {
       conditions: ['svelte', 'browser', 'module', 'import', 'default']
     },
     optimizeDeps: { noDiscovery: true, include: [] },
+    // Each worker its own cache (round 132): the files' servers shared node_modules/.vite, and two clearing its deps at
+    // once met Windows' EPERM on the folder, so one server failed and its tests read a null browser (r85q-behaviour 2,
+    // r85q-picker and r85q-guards failed so under the full suite's load in rounds 125 to 132; each passed alone).
+    cacheDir: resolve(stubs, 'vite'),
     server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false, watch: null, fs: { strict: false } },
     appType: 'custom'
   });

@@ -8,7 +8,8 @@
   import { daysBetween } from '$core/dates';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import { photoDay, photoLabel } from '$lib/ui/photo-label';
-  let { acc }: { acc: string } = $props();
+  /** `onadd`: the page's own photo box opened (round 132; MYPLANTS 31 item 1, "a camera button adds one"). */
+  let { acc, onadd }: { acc: string; onadd?: () => void } = $props();
   const photos = $derived([...collection.photos(acc)].sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id)));
   let comparing = $state(false);
   let pair = $state<string[]>([]);
@@ -28,7 +29,7 @@
 
 {#if photos.length >= 2}
   <section class="ptl" aria-label="Photographs by date" id="photo-timeline">
-    <div class="ptlhead"><span class="muted small">{photos.length} photographs, {photoDay(photos[0].d)} to {photoDay(photos[photos.length - 1].d)}</span><button class="btn small" type="button" id="ptl-compare" aria-pressed={comparing} onclick={startCompare}>{comparing ? 'Close compare' : 'Compare'}</button></div>
+    <div class="ptlhead"><span class="muted small">{photos.length} photographs, {photoDay(photos[0].d)} to {photoDay(photos[photos.length - 1].d)}</span><span class="ptlbtns">{#if onadd}<button class="btn small" type="button" id="ptl-add" onclick={onadd}>+ Photo</button>{/if}<button class="btn small" type="button" id="ptl-compare" aria-pressed={comparing} onclick={startCompare}>{comparing ? 'Close' : 'First beside latest'}</button></span></div>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <ol class="strip" tabindex="0" aria-label="Photographs, oldest first">
       {#each photos as p (p.id)}
@@ -51,6 +52,7 @@
   .ptl { margin: 10px 0 4px; }
   .ptlhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   .ptlhead .btn { min-height: var(--tap); }
+  .ptlbtns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
   .strip { list-style: none; display: flex; gap: 6px; overflow-x: auto; margin: 6px 0 0; padding: 2px 0 6px; scrollbar-width: thin; }
   .th { position: relative; display: block; width: 72px; height: 72px; padding: 0; border: 2px solid transparent; border-radius: var(--r); overflow: hidden; background: var(--sunk); cursor: pointer; }
   .th.on { border-color: var(--accent); }

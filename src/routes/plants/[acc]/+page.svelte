@@ -1035,7 +1035,7 @@
     <!-- The hero's room while the sheet is asked, unseen and out of the accessibility tree (round seventy-nine; `heroHeld`). -->
     <div class="hero hold" aria-hidden="true"></div>
   {/if}
-  <PhotoTimeline acc={id} />
+  <PhotoTimeline acc={id} onadd={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }} />
   <div class="idcard" class:flat={!heroRoom}>
     {#if !heroRoom}
       <!-- No photograph: a small tile where one would go, beside the name, not a screen-high empty box. The reference's is one line beneath, with what showing it discloses on tap. -->
